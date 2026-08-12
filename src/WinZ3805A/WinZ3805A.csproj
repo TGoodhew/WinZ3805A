@@ -36,6 +36,15 @@
     <Content Include="Assets\Square44x44Logo.targetsize-48_altform-lightunplated.png" />
     <Content Include="Assets\StoreLogo.png" />
     <Content Include="Assets\AppIcon.ico" />
+    <!--
+      §9.5.1: Cascadia Mono is embedded rather than assumed present. It is inbox on
+      Windows 11 but ships with Windows Terminal, so it cannot be relied on for the
+      Windows 10 floor in §6.1. SIL OFL 1.1 permits the redistribution; the licence
+      text ships beside the font and is referenced from the third-party notices.
+      Referenced as ms-appx:///Assets/Fonts/CascadiaMono.ttf#Cascadia Mono.
+    -->
+    <Content Include="Assets\Fonts\CascadiaMono.ttf" />
+    <Content Include="Assets\Fonts\CascadiaMono-OFL.txt" />
     <Content Include="Assets\Wide310x150Logo.scale-200.png" />
   </ItemGroup>
 
