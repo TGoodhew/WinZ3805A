@@ -102,10 +102,10 @@ be enumerable through any public API a view can bind to.
 
 ## Design system
 
-**No hard-coded hex colours outside `Themes/Colors.xaml`** (§9.13 item 2). CI
-greps `Views/` and `Controls/` for `#` colour literals and fails on a hit
-(P0-17). Every brush is referenced by key with `{ThemeResource}` — never
-`{StaticResource}`, which would not re-resolve on theme change.
+**No hard-coded hex colours outside `Themes/Colors.xaml`** (§9.13 item 2). This
+is enforced in CI, not by review (P0-17). Every brush is referenced by key with
+`{ThemeResource}` — never `{StaticResource}`, which would not re-resolve on
+theme change.
 
 Related §9.13 prohibitions worth keeping in view: only the 4 / 8 / circle corner
 radii and the §9.6 spacing scale; severity always renders through `SeverityPill`
@@ -156,6 +156,32 @@ winapp run src\WinZ3805A\bin\x64\Debug\net10.0-windows10.0.26100.0\win-x64 --det
 `TreatWarningsAsErrors` and `EnforceCodeStyleInBuild` are both on, so **the build
 must be clean with zero warnings** — including code-style rules. File-scoped
 namespaces are a build error (`IDE0161`), not a suggestion.
+
+### CI gates — run them before you push
+
+Two of the §9.12 criteria are enforced by CI rather than by review. Both are
+plain scripts, so run them locally and get the answer in a second:
+
+```powershell
+pwsh build/Test-NoHexLiterals.ps1     # P0-17 / §9.13 item 2
+pwsh build/Test-IconOnlyButtons.ps1   # A11Y-3 / §9.9
+```
+
+`.github/workflows/ci.yml` runs both first, before any restore, so a token or
+accessibility regression fails in seconds rather than after a full build. It then
+builds all four Configuration × Platform combinations and runs the tests.
+
+The hex gate implements the broader §9.13 wording rather than P0-17's minimum: it
+scans every `*.xaml` under `src/` except `Themes/Colors.xaml`, plus `*.cs` under
+any `Views/` or `Controls/` folder. The icon gate parses XAML as XML rather than
+grepping, and fails a `Button`-like control that is icon-only and missing
+*either* an `AutomationProperties.Name` or a `ToolTipService.ToolTip` — §9.9
+requires both.
+
+Note CI builds with `dotnet build` while the guidance above prefers MSBuild
+locally. That is deliberate: the hosted runner's Visual Studio MSBuild is too old
+to load `net10.0` projects, so CI uses the SDK's own. The consequence is that a
+XAML failure in CI may not name the file — reproduce it locally with MSBuild.
 
 `PublishReadyToRun` lives in `Properties/PublishProfiles/*.pubxml`, not in the
 csproj: setting it for all non-Debug configurations makes an ordinary Release

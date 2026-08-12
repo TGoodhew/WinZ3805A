@@ -1,0 +1,105 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # The two §9.12 criteria that gate the build rather than a review.
+  # Deliberately first and dependency-free: they need no restore, so a token or
+  # accessibility regression fails in seconds instead of after a full build.
+  # ---------------------------------------------------------------------------
+  design-system-gates:
+    name: Design system gates
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # P0-17 / §9.13 item 2
+      - name: No hex colour literals outside Themes/Colors.xaml
+        shell: pwsh
+        run: ./build/Test-NoHexLiterals.ps1
+
+      # A11Y-3 / §9.9
+      - name: Icon-only controls carry an automation name and a tooltip
+        shell: pwsh
+        run: ./build/Test-IconOnlyButtons.ps1
+
+  # ---------------------------------------------------------------------------
+  # §6.1 requires x64 and ARM64, and forbids AnyCPU. Both architectures build on
+  # an x64 runner because the app is framework-dependent and the RID follows
+  # $(Platform) rather than the building process' architecture.
+  # ---------------------------------------------------------------------------
+  build:
+    name: Build ${{ matrix.configuration }} | ${{ matrix.platform }}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        configuration: [Debug, Release]
+        platform: [x64, ARM64]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      # Restore is per-platform: the RID differs, so the assets file does too.
+      - name: Restore
+        run: dotnet restore WinZ3805A.sln -p:Configuration=${{ matrix.configuration }} -p:Platform=${{ matrix.platform }}
+
+      # NOTE: CI uses `dotnet build`, while CLAUDE.md tells contributors to prefer
+      # MSBuild locally. That is deliberate rather than inconsistent. The .NET 10
+      # SDK ships its own MSBuild, whereas the Visual Studio MSBuild on the hosted
+      # runner is an older major version that cannot load net10.0 projects. The
+      # tradeoff is that a malformed .xaml may fail here without naming the file -
+      # which is exactly why the local guidance points at MSBuild. If a XAML build
+      # failure here is not self-explanatory, reproduce it locally with MSBuild.
+      #
+      # TreatWarningsAsErrors and EnforceCodeStyleInBuild are set in
+      # Directory.Build.props, so this step is the zero-warnings gate as well.
+      - name: Build
+        run: dotnet build WinZ3805A.sln --no-restore -p:Configuration=${{ matrix.configuration }} -p:Platform=${{ matrix.platform }}
+
+  # ---------------------------------------------------------------------------
+  # The Device library and the parser are UI-independent by design (§6.2, §11.1),
+  # so they test headlessly on the runner with no packaged app involved.
+  # ---------------------------------------------------------------------------
+  test:
+    name: Test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore tests/WinZ3805A.Tests/WinZ3805A.Tests.csproj
+
+      - name: Test
+        run: dotnet test tests/WinZ3805A.Tests/WinZ3805A.Tests.csproj --no-restore --logger "trx;LogFileName=test-results.trx" --results-directory ${{ runner.temp }}/testresults
+
+      - name: Upload test results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: ${{ runner.temp }}/testresults
+          if-no-files-found: ignore
