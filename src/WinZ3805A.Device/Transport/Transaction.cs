@@ -45,6 +45,23 @@ public sealed record Transaction
     /// <summary>Wall time from writing the command to the prompt, the timeout, or the fault.</summary>
     public required TimeSpan Elapsed { get; init; }
 
+    /// <summary>
+    /// The error token the receiver put in the prompt, such as <c>E-230</c>, or null for the
+    /// ordinary prompt.
+    /// </summary>
+    /// <remarks>
+    /// The prompt doubles as an error indicator on this firmware: a command it rejects answers with
+    /// the prompt alone, spelled <c>E-nnn&gt;</c>. That makes an empty response self-explaining,
+    /// which matters because §7.2 only queries the error queue after tier-C commands — every other
+    /// failure would otherwise be silent. The token is kept verbatim rather than parsed to a signed
+    /// number: SCPI's standard codes are negative and the prompt prints no sign, and inventing one
+    /// would put a guess into the Diagnostics page.
+    /// </remarks>
+    public string? PromptStatus { get; init; }
+
+    /// <summary>True when the receiver reported an error in the prompt.</summary>
+    public bool HasDeviceError => PromptStatus is not null;
+
     /// <summary>The link failure, when <see cref="Outcome"/> is <see cref="TransactionOutcome.Faulted"/>.</summary>
     public TransportFault Fault { get; init; } = TransportFault.None;
 
