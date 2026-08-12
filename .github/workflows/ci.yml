@@ -38,6 +38,22 @@ jobs:
         run: ./build/Test-IconOnlyButtons.ps1
 
   # ---------------------------------------------------------------------------
+  # P0-7 / §8.4. Separate from the design-system gates because it guards a
+  # different thing: that no excluded command is named anywhere but the single
+  # file holding the exclusion patterns. Also dependency-free, so it answers in
+  # seconds and runs alongside them rather than after a build.
+  # ---------------------------------------------------------------------------
+  safety-gates:
+    name: Safety gates
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: No excluded command is named outside the exclusion patterns
+        shell: pwsh
+        run: ./build/Test-NoBlockedCommands.ps1
+
+  # ---------------------------------------------------------------------------
   # §6.1 requires x64 and ARM64, and forbids AnyCPU. Both architectures build on
   # an x64 runner because the app is framework-dependent and the RID follows
   # $(Platform) rather than the building process' architecture.

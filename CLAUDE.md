@@ -163,12 +163,13 @@ Two of the §9.12 criteria are enforced by CI rather than by review. Both are
 plain scripts, so run them locally and get the answer in a second:
 
 ```powershell
-pwsh build/Test-NoHexLiterals.ps1     # P0-17 / §9.13 item 2
-pwsh build/Test-IconOnlyButtons.ps1   # A11Y-3 / §9.9
+pwsh build/Test-NoHexLiterals.ps1      # P0-17 / §9.13 item 2
+pwsh build/Test-IconOnlyButtons.ps1    # A11Y-3 / §9.9
+pwsh build/Test-NoBlockedCommands.ps1  # P0-7 / §8.4
 ```
 
-`.github/workflows/ci.yml` runs both first, before any restore, so a token or
-accessibility regression fails in seconds rather than after a full build. It then
+`.github/workflows/ci.yml` runs all three first, before any restore, so a token,
+accessibility, or safety regression fails in seconds rather than after a full build. It then
 builds all four Configuration × Platform combinations and runs the tests.
 
 The hex gate implements the broader §9.13 wording rather than P0-17's minimum: it
@@ -177,6 +178,14 @@ any `Views/` or `Controls/` folder. The icon gate parses XAML as XML rather than
 grepping, and fails a `Button`-like control that is icon-only and missing
 *either* an `AutomationProperties.Name` or a `ToolTipService.ToolTip` — §9.9
 requires both.
+
+The blocked-command gate reads its tokens out of
+`src/WinZ3805A.Device/Commands/BlockedCommands.cs` rather than restating them, so
+that file stays the single place in the repository where those names occur. It
+applies §8.4's two rules separately: the named exclusions may not appear at all,
+while an undocumented parser node may appear only in query form, because §8.5
+enables exactly that as an opt-in. `docs/` is not scanned — the specification is
+where §8.4 is written down.
 
 Note CI builds with `dotnet build` while the guidance above prefers MSBuild
 locally. That is deliberate: the hosted runner's Visual Studio MSBuild is too old
