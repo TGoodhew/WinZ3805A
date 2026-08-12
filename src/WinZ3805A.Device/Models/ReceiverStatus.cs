@@ -1,0 +1,307 @@
+namespace WinZ3805A.Device.Models;
+
+/// <summary>How far the receiver's 10 MHz and 1 PPS outputs can be trusted.</summary>
+/// <remarks>
+/// Read from the bracketed annotation on the <c>SYNCHRONIZATION</c> banner. The middle value
+/// exists because a receiver that has lost GPS keeps driving its outputs from the oscillator, and
+/// the distinction between "usable but drifting" and "do not use" is the single most important
+/// thing the main window has to convey.
+/// </remarks>
+public enum OutputValidity
+{
+    /// <summary>The banner carried no recognisable annotation.</summary>
+    Unknown = 0,
+
+    /// <summary>Outputs are not to be trusted.</summary>
+    Invalid,
+
+    /// <summary>Outputs are usable but the accuracy specification no longer holds.</summary>
+    ValidReduced,
+
+    /// <summary>Outputs are within specification.</summary>
+    Valid,
+}
+
+/// <summary>
+/// The receiver's SmartClock mode — HP's own term for the disciplining state machine, kept
+/// verbatim per Appendix B.
+/// </summary>
+/// <remarks>
+/// The status screen prints all four modes as a menu and marks the active one with <c>&gt;&gt;</c>,
+/// so the parser looks for the marker rather than for any particular mode word.
+/// </remarks>
+public enum SmartClockMode
+{
+    /// <summary>No mode line carried the <c>&gt;&gt;</c> marker.</summary>
+    Unknown = 0,
+
+    /// <summary>Locked to GPS and disciplining the oscillator.</summary>
+    Locked,
+
+    /// <summary>Reacquiring after a loss of GPS.</summary>
+    Recovery,
+
+    /// <summary>Running on the oscillator alone, with no GPS discipline.</summary>
+    Holdover,
+
+    /// <summary>Warming up after power was applied.</summary>
+    PowerUp,
+}
+
+/// <summary>Which signal-strength scale the acquisition table is printed on.</summary>
+/// <remarks>
+/// §11.1 is emphatic that the two are not interchangeable: <c>C/N</c> on 58503B-class units runs
+/// 26–55 with 35 and above good, while <c>SS</c> on 59551A-class units runs 0–255 with 20–30 weak.
+/// A strength bar scaled to the wrong one is not merely mislabelled, it is wrong by a factor of
+/// five, so this is recorded from the header the receiver actually printed rather than inferred
+/// from the model number.
+/// </remarks>
+public enum SignalStrengthKind
+{
+    /// <summary>No signal-strength column was found, which is normal when nothing is tracked.</summary>
+    Unknown = 0,
+
+    /// <summary>Carrier-to-noise ratio, printed as <c>C/N</c>.</summary>
+    CarrierToNoise,
+
+    /// <summary>Raw signal strength, printed as <c>SS</c>.</summary>
+    SignalStrength,
+}
+
+/// <summary>The time scale the receiver's clock display is referenced to.</summary>
+public enum TimeScale
+{
+    /// <summary>The time row carried no recognisable scale.</summary>
+    Unknown = 0,
+
+    /// <summary>GPS time, which does not include leap seconds.</summary>
+    Gps,
+
+    /// <summary>Coordinated Universal Time.</summary>
+    Utc,
+
+    /// <summary>Local time derived from GPS time.</summary>
+    LocalGps,
+
+    /// <summary>Local time derived from UTC.</summary>
+    Local,
+}
+
+/// <summary>Whether a leap second is scheduled at the end of the current UTC month.</summary>
+public enum LeapSecondPending
+{
+    /// <summary>No leap second is pending.</summary>
+    None = 0,
+
+    /// <summary>A second will be inserted.</summary>
+    Plus,
+
+    /// <summary>A second will be removed.</summary>
+    Minus,
+}
+
+/// <summary>
+/// The <c>1PPS CLK</c> advisory, as one of the §11.3 strings rather than as free text.
+/// </summary>
+/// <remarks>
+/// <para>
+/// §11.3 requires these to parse to enum values "because the UI branches on them", while §11.2
+/// types the corresponding model member as <c>string?</c>. Both are honoured rather than one
+/// silently winning: <see cref="ReceiverStatus.OnePpsClockAdvisory"/> keeps §11.2's raw string and
+/// this enum sits beside it as <see cref="ReceiverStatus.OnePpsClockAdvisoryKind"/>. The conflict
+/// is recorded against the specification rather than resolved in code alone.
+/// </para>
+/// <para>
+/// <c>Assessing stability</c> arrives with nought to three trailing dots, which animate on the
+/// device's own screen. They carry no information and are stripped before matching.
+/// </para>
+/// </remarks>
+public enum ClockAdvisoryKind
+{
+    /// <summary>No advisory was printed.</summary>
+    None = 0,
+
+    /// <summary>Locked and referenced to UTC.</summary>
+    SynchronizedToUtc,
+
+    /// <summary>Locked and referenced to GPS time.</summary>
+    SynchronizedToGpsTime,
+
+    /// <summary>Hysteresis is being applied before the receiver commits to a lock.</summary>
+    AssessingStability,
+
+    /// <summary>A 1 PPS is present but is not trusted.</summary>
+    QuestionableAccuracy,
+
+    /// <summary>Inaccurate because no satellites are being tracked.</summary>
+    InaccurateNotTracking,
+
+    /// <summary>Inaccurate because the position is not yet known.</summary>
+    InaccurateInaccuratePosition,
+
+    /// <summary>No 1 PPS at all, or the GPS engine is idle.</summary>
+    AbsentOrFrequencyError,
+
+    /// <summary>The GPS receiver engine reported an error.</summary>
+    InvalidGpsReceiverError,
+
+    /// <summary>An advisory this parser does not recognise. The raw text is kept alongside.</summary>
+    Other,
+}
+
+/// <summary>
+/// One decoded <c>:SYST:STAT?</c> status screen — the receiver's entire visible state.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The shape follows §11.2. Almost every member is nullable, and that is the type system carrying
+/// §11.1's central rule: the parser never throws, an unparseable field becomes <see langword="null"/>,
+/// and the UI renders it as an em dash. With nullable reference types and warnings-as-errors, a
+/// consumer that forgets a field cannot compile.
+/// </para>
+/// <para>
+/// A <see langword="record"/> with <c>init</c> accessors per §6.4 — one screen is one immutable
+/// value, and the polling loop replaces it rather than mutating it, which is what makes it safe to
+/// hand to the UI thread without copying.
+/// </para>
+/// </remarks>
+public sealed record ReceiverStatus
+{
+    // ---- SYNCHRONIZATION ----------------------------------------------------------------------
+
+    /// <summary>How far the outputs can be trusted.</summary>
+    public OutputValidity Outputs { get; init; }
+
+    /// <summary>The active SmartClock mode.</summary>
+    public SmartClockMode Mode { get; init; }
+
+    /// <summary>The text after the mode name, such as <c>stabilizing frequency</c>.</summary>
+    public string? ModeDetail { get; init; }
+
+    /// <summary>Time figure of merit, lower being better.</summary>
+    public int? Tfom { get; init; }
+
+    /// <summary>Frequency figure of merit, lower being better.</summary>
+    public int? Ffom { get; init; }
+
+    /// <summary>The 1 PPS time interval against GPS, in nanoseconds.</summary>
+    public double? OnePpsTiNanoseconds { get; init; }
+
+    /// <summary>The holdover threshold, in seconds.</summary>
+    public double? HoldThresholdSeconds { get; init; }
+
+    /// <summary>Predicted holdover uncertainty over the stated initial interval, in seconds.</summary>
+    public double? HoldoverPredictedSeconds { get; init; }
+
+    /// <summary>Present holdover uncertainty, in seconds.</summary>
+    public double? HoldoverPresentSeconds { get; init; }
+
+    /// <summary>How long the receiver has been in holdover.</summary>
+    public TimeSpan? HoldoverDuration { get; init; }
+
+    // ---- ACQUISITION --------------------------------------------------------------------------
+
+    /// <summary>Whether the GPS engine's own 1 PPS is valid, from the acquisition banner.</summary>
+    public bool GpsOnePpsValid { get; init; }
+
+    /// <summary>Satellites currently being tracked.</summary>
+    public IReadOnlyList<TrackedSatellite> Tracked { get; init; } = [];
+
+    /// <summary>Satellites expected to be visible but not tracked.</summary>
+    public IReadOnlyList<PredictedSatellite> NotTracked { get; init; } = [];
+
+    /// <summary>The elevation mask below which satellites are ignored, in degrees.</summary>
+    public int? ElevationMaskDegrees { get; init; }
+
+    /// <summary>Which scale <see cref="TrackedSatellite.SignalStrength"/> is expressed on.</summary>
+    public SignalStrengthKind SignalStrengthKind { get; init; }
+
+    // ---- TIME ---------------------------------------------------------------------------------
+
+    /// <summary>The time scale the clock row is referenced to.</summary>
+    public TimeScale TimeScale { get; init; }
+
+    /// <summary>The date and time exactly as the device reported it, uncorrected.</summary>
+    public DateTimeOffset? DeviceDateTime { get; init; }
+
+    /// <summary>
+    /// How many 1024-week GPS epochs the device's date is behind, per §7.4. Zero on a receiver
+    /// whose firmware has not rolled over.
+    /// </summary>
+    public int WeekRolloverEpochs { get; init; }
+
+    /// <summary>
+    /// <see cref="DeviceDateTime"/> advanced by <see cref="WeekRolloverEpochs"/> epochs, or
+    /// <see langword="null"/> when there is no date to correct.
+    /// </summary>
+    /// <remarks>
+    /// §7.4 forbids silently substituting this for the raw value: the UI shows the corrected date
+    /// with a badge and keeps the device's own date in the tooltip, because a user who sees the
+    /// wrong year and no explanation reasonably assumes the hardware has failed.
+    /// </remarks>
+    public DateTimeOffset? CorrectedDateTime { get; init; }
+
+    /// <summary>The <c>1PPS CLK</c> advisory as printed, per §11.2.</summary>
+    public string? OnePpsClockAdvisory { get; init; }
+
+    /// <summary>The same advisory decoded to one of the §11.3 values.</summary>
+    /// <remarks>See <see cref="ClockAdvisoryKind"/> for why both forms are carried.</remarks>
+    public ClockAdvisoryKind OnePpsClockAdvisoryKind { get; init; }
+
+    /// <summary>The configured antenna cable delay, in nanoseconds.</summary>
+    public double? AntennaDelayNanoseconds { get; init; }
+
+    /// <summary>Whether a leap second is scheduled.</summary>
+    public LeapSecondPending LeapPending { get; init; }
+
+    // ---- POSITION -----------------------------------------------------------------------------
+
+    /// <summary>Whether the receiver is holding a position or surveying for one.</summary>
+    public PositionMode PositionMode { get; init; }
+
+    /// <summary>Survey progress, 0 to 100, when a survey is running.</summary>
+    public double? SurveyPercentComplete { get; init; }
+
+    /// <summary>Why a survey is suspended, as printed.</summary>
+    public string? SurveySuspendedReason { get; init; }
+
+    /// <summary>The same reason decoded to one of the §11.3 values.</summary>
+    public SurveySuspendedReasonKind SurveySuspendedReasonKind { get; init; }
+
+    /// <summary>The reported position.</summary>
+    public GeoPosition? Position { get; init; }
+
+    /// <summary>How much to trust the reported position.</summary>
+    public PositionQualifier PositionQualifier { get; init; }
+
+    /// <summary>Which datum <see cref="GeoPosition.HeightMetres"/> is measured against.</summary>
+    public HeightDatum HeightDatum { get; init; }
+
+    // ---- HEALTH -------------------------------------------------------------------------------
+
+    /// <summary>Whether the health monitor banner read <c>OK</c>.</summary>
+    public bool HealthOk { get; init; }
+
+    /// <summary>Each health item the receiver listed, in screen order, against whether it passed.</summary>
+    /// <remarks>
+    /// A dictionary keyed by the device's own label rather than a fixed set of properties, because
+    /// the item list differs across the family and an unrecognised item must still reach the
+    /// Diagnostics page rather than being dropped.
+    /// </remarks>
+    public IReadOnlyDictionary<string, bool> HealthItems { get; init; } =
+        new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+
+    // ---- PROVENANCE ---------------------------------------------------------------------------
+
+    /// <summary>When this screen was parsed, from the injected <see cref="TimeProvider"/>.</summary>
+    public DateTimeOffset CapturedAt { get; init; }
+
+    /// <summary>
+    /// Everything the parser could not make sense of, in the order it was met.
+    /// </summary>
+    /// <remarks>
+    /// Surfaced on the Diagnostics page so that a field report about an odd firmware revision is
+    /// actionable — "it shows dashes" is not a bug report, "unrecognised health item 'Xtal Pwr'" is.
+    /// </remarks>
+    public IReadOnlyList<string> ParseWarnings { get; init; } = [];
+}
