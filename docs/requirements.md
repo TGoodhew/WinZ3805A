@@ -449,7 +449,7 @@ The ring is **qualitative by design**. It is not a chart and must never be read 
 
 - Mica Alt's stronger tint gives the layered card surfaces more separation from the backdrop than base Mica, which matters because this app is mostly cards on a backdrop with little else.
 - Acrylic is wrong: it is for transient surfaces, and it samples what is *behind* the window, which for a bench user is often another instrument display — visual noise directly behind status data.
-- **Windows 10 degradation:** Mica is unavailable below Windows 11 build 22000. Fall back to `WzPageBackgroundFallbackBrush` (a solid, defined per theme in §9.4). Detect with `MicaBackdrop.IsSupported()`; never let an unsupported backdrop produce a transparent or black window.
+- **Windows 10 degradation:** Mica is unavailable below Windows 11 build 22000. Fall back to `WzPageBackgroundFallbackBrush` (a solid, defined per theme in §9.4). Detect with `MicaController.IsSupported()` (`Microsoft.UI.Composition.SystemBackdrops`); never let an unsupported backdrop produce a transparent or black window. `MicaBackdrop` itself exposes only `Kind` and `KindProperty` — verified against the shipped WinAppSDK 2.3.1 assemblies — so the check cannot be made on the backdrop object.
 
 **Layer hierarchy.**
 
