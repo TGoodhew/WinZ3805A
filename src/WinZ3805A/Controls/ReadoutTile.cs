@@ -1,0 +1,224 @@
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Documents;
+
+namespace WinZ3805A.Controls;
+
+/// <summary>How large a readout is, from the three sizes §9.5.3 defines.</summary>
+/// <remarks>
+/// An enum rather than an injectable <c>Style</c>, so a page can pick one of the three specified
+/// sizes and cannot introduce a fourth.
+/// </remarks>
+public enum ReadoutSize
+{
+    /// <summary>20 / 24. Card-level figures and table numerics.</summary>
+    Small = 0,
+
+    /// <summary>32 / 36. TFOM, FFOM, 1 PPS TI, EFC.</summary>
+    Medium,
+
+    /// <summary>56 / 56. Medallion centre value, satellite count.</summary>
+    Large,
+}
+
+/// <summary>
+/// A label, a number, its unit, and optionally a severity — with §9.5.3's numeric rules enforced
+/// centrally so no page can get them wrong locally (§9.10.2, P0-20).
+/// </summary>
+/// <remarks>
+/// <para>
+/// This is the control that carries the difference between a careful instrument application and a
+/// sloppy one, and it is where most data-dense Windows applications fail. Four things it does that
+/// are easy to leave out:
+/// </para>
+/// <para>
+/// <b>Tabular figures</b> (rule 1), from <c>WzReadout*TextStyle</c>. Without them a value stepping
+/// from −33.1 to −9.8 shifts sideways, and glanced at from across a bench that reads as motion
+/// where there is none.
+/// </para>
+/// <para>
+/// <b>Reserved width</b> (rule 2) from <see cref="MaxIntegerDigits"/>. Tabular figures stop the
+/// digits jostling, but the field itself still resizes when the string gets shorter, and a layout
+/// that reflows on every poll is worse than one that is slightly too wide. Reserved by measuring a
+/// template string of zeros in the same style, which is exact rather than estimated because tabular
+/// digits all share one advance.
+/// </para>
+/// <para>
+/// <b>The unit as a separate run</b> (rule 3), in caption size and secondary colour, after a hair
+/// space. It is not part of the number: it never changes, so giving it the same weight as the digits
+/// makes the digits harder to find.
+/// </para>
+/// <para>
+/// <b>U+2212, not a hyphen</b> (rule 4), and a fixed decimal count per quantity (rule 6). Both live
+/// in <see cref="ReadoutFormatter"/>, which is unit-tested.
+/// </para>
+/// <para>
+/// Nothing here animates. §9.13 item 9 forbids a <c>Storyboard</c> targeting a readout value, and
+/// §9.8.2 gives readout changes <c>WzDurationInstant</c>.
+/// </para>
+/// </remarks>
+public sealed class ReadoutTile : Control
+{
+    private const string ValueRunPart = "PART_ValueRun";
+    private const string SpacerRunPart = "PART_SpacerRun";
+    private const string UnitRunPart = "PART_UnitRun";
+    private const string ReserveValueRunPart = "PART_ReserveValueRun";
+    private const string ReserveSpacerRunPart = "PART_ReserveSpacerRun";
+    private const string ReserveUnitRunPart = "PART_ReserveUnitRun";
+
+    /// <summary>Identifies the <see cref="Label"/> dependency property.</summary>
+    public static readonly DependencyProperty LabelProperty = DependencyProperty.Register(
+        nameof(Label), typeof(string), typeof(ReadoutTile), new PropertyMetadata(string.Empty, OnAnyChanged));
+
+    /// <summary>Identifies the <see cref="Value"/> dependency property.</summary>
+    public static readonly DependencyProperty ValueProperty = DependencyProperty.Register(
+        nameof(Value), typeof(double?), typeof(ReadoutTile), new PropertyMetadata(null, OnAnyChanged));
+
+    /// <summary>Identifies the <see cref="Unit"/> dependency property.</summary>
+    public static readonly DependencyProperty UnitProperty = DependencyProperty.Register(
+        nameof(Unit), typeof(string), typeof(ReadoutTile), new PropertyMetadata(string.Empty, OnAnyChanged));
+
+    /// <summary>Identifies the <see cref="DecimalPlaces"/> dependency property.</summary>
+    public static readonly DependencyProperty DecimalPlacesProperty = DependencyProperty.Register(
+        nameof(DecimalPlaces), typeof(int), typeof(ReadoutTile), new PropertyMetadata(1, OnAnyChanged));
+
+    /// <summary>Identifies the <see cref="MaxIntegerDigits"/> dependency property.</summary>
+    public static readonly DependencyProperty MaxIntegerDigitsProperty = DependencyProperty.Register(
+        nameof(MaxIntegerDigits), typeof(int), typeof(ReadoutTile), new PropertyMetadata(3, OnAnyChanged));
+
+    /// <summary>Identifies the <see cref="AllowNegative"/> dependency property.</summary>
+    public static readonly DependencyProperty AllowNegativeProperty = DependencyProperty.Register(
+        nameof(AllowNegative), typeof(bool), typeof(ReadoutTile), new PropertyMetadata(true, OnAnyChanged));
+
+    /// <summary>Identifies the <see cref="Size"/> dependency property.</summary>
+    public static readonly DependencyProperty SizeProperty = DependencyProperty.Register(
+        nameof(Size), typeof(ReadoutSize), typeof(ReadoutTile), new PropertyMetadata(ReadoutSize.Medium, OnSizeChanged));
+
+    /// <summary>Initialises a new tile.</summary>
+    public ReadoutTile()
+    {
+        DefaultStyleKey = typeof(ReadoutTile);
+    }
+
+    /// <summary>What the number is, in sentence case — "Time interval", "Satellites tracked".</summary>
+    public string Label
+    {
+        get => (string)GetValue(LabelProperty);
+        set => SetValue(LabelProperty, value);
+    }
+
+    /// <summary>The value, or <see langword="null"/> when the device did not report one.</summary>
+    public double? Value
+    {
+        get => (double?)GetValue(ValueProperty);
+        set => SetValue(ValueProperty, value);
+    }
+
+    /// <summary>The unit, typeset separately — "ns", "dB", "°".</summary>
+    public string Unit
+    {
+        get => (string)GetValue(UnitProperty);
+        set => SetValue(UnitProperty, value);
+    }
+
+    /// <summary>Decimal places, fixed for this quantity (§9.5.3 rule 6).</summary>
+    public int DecimalPlaces
+    {
+        get => (int)GetValue(DecimalPlacesProperty);
+        set => SetValue(DecimalPlacesProperty, value);
+    }
+
+    /// <summary>The most whole-number digits this quantity reaches, which sets the reserved width.</summary>
+    public int MaxIntegerDigits
+    {
+        get => (int)GetValue(MaxIntegerDigitsProperty);
+        set => SetValue(MaxIntegerDigitsProperty, value);
+    }
+
+    /// <summary>Whether to reserve a column for the sign. False for counts, which cannot go negative.</summary>
+    public bool AllowNegative
+    {
+        get => (bool)GetValue(AllowNegativeProperty);
+        set => SetValue(AllowNegativeProperty, value);
+    }
+
+    /// <summary>Which of the three §9.5.3 readout sizes to use.</summary>
+    public ReadoutSize Size
+    {
+        get => (ReadoutSize)GetValue(SizeProperty);
+        set => SetValue(SizeProperty, value);
+    }
+
+    /// <inheritdoc />
+    protected override void OnApplyTemplate()
+    {
+        base.OnApplyTemplate();
+        UpdateSizeState(useTransitions: false);
+        Refresh();
+    }
+
+    private static void OnAnyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e) =>
+        ((ReadoutTile)d).Refresh();
+
+    private static void OnSizeChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        var tile = (ReadoutTile)d;
+        tile.UpdateSizeState(useTransitions: false);
+        tile.Refresh();
+    }
+
+    /// <remarks>
+    /// Always without transitions: §9.8.2 gives readout changes <c>WzDurationInstant</c>, and
+    /// §9.13 item 9 forbids animating a readout at all.
+    /// </remarks>
+    private void UpdateSizeState(bool useTransitions) =>
+        VisualStateManager.GoToState(this, Size.ToString(), useTransitions);
+
+    private void Refresh()
+    {
+        string formatted = ReadoutFormatter.Format(Value, DecimalPlaces);
+
+        if (GetTemplateChild(ValueRunPart) is Run valueRun)
+        {
+            valueRun.Text = formatted;
+        }
+
+        // The hair space is dropped along with the unit, so a unitless readout does not carry a
+        // stray sliver of space that shifts it off the reserved width.
+        bool hasUnit = !string.IsNullOrEmpty(Unit);
+        if (GetTemplateChild(SpacerRunPart) is Run spacerRun)
+        {
+            spacerRun.Text = hasUnit ? ReadoutFormatter.HairSpace : string.Empty;
+        }
+
+        if (GetTemplateChild(UnitRunPart) is Run unitRun)
+        {
+            unitRun.Text = hasUnit ? Unit : string.Empty;
+        }
+
+        // The reserve is invisible but measured, so the tile keeps a constant width whatever the
+        // value does. It mirrors the value line run for run — widest number, hair space, unit —
+        // rather than just the number: the unit is set in caption size, so reserving the number
+        // alone leaves the line able to outgrow its own reservation exactly when the value is at
+        // its widest, which is the one case the reservation exists for.
+        if (GetTemplateChild(ReserveValueRunPart) is Run reserveValueRun)
+        {
+            reserveValueRun.Text = ReadoutFormatter.WidestString(MaxIntegerDigits, DecimalPlaces, AllowNegative);
+        }
+
+        if (GetTemplateChild(ReserveSpacerRunPart) is Run reserveSpacerRun)
+        {
+            reserveSpacerRun.Text = hasUnit ? ReadoutFormatter.HairSpace : string.Empty;
+        }
+
+        if (GetTemplateChild(ReserveUnitRunPart) is Run reserveUnitRun)
+        {
+            reserveUnitRun.Text = hasUnit ? Unit : string.Empty;
+        }
+
+        // One phrase rather than three adjacent runs, which a screen reader would otherwise read as
+        // disconnected fragments.
+        AutomationProperties.SetName(this, ReadoutFormatter.ToSpokenText(Label, formatted, Unit));
+    }
+}

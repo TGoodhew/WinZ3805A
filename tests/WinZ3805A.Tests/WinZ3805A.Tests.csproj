@@ -30,4 +30,16 @@
     <ProjectReference Include="..\..\src\WinZ3805A.Device\WinZ3805A.Device.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- §9.5.3's numeric rules are pure string logic and are unit-tested (P0-20), but they live in
+         the app project because they are presentation, not device behaviour. The file is compiled
+         by link rather than reached through a ProjectReference: the app is a Windows-only WinExe on
+         net10.0-windows10.0.26100.0, and referencing it would drag WinUI into a headless test run
+         and force a TFM this project has no reason to carry. The linked file has no UI using at
+         all, which is what makes this safe - if that ever stops being true, the build breaks here
+         rather than silently passing. -->
+    <Compile Include="..\..\src\WinZ3805A\Controls\ReadoutFormatter.cs"
+             Link="Formatting\ReadoutFormatter.cs" />
+  </ItemGroup>
+
 </Project>
