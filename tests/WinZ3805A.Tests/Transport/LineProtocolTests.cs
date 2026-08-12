@@ -247,12 +247,17 @@ public class LineProtocolTests
     public async Task TruncatedResponseIsKeptWhenTheTransactionTimesOut()
     {
         FakeTimeProvider time = new();
-        await using FakeTransport transport = new();
+
+        // The emit has to be consumed before the clock moves, or the timeout races the reader and
+        // the assertion below depends on which won. Waiting for the reader removes the race rather
+        // than making it rare: this test failed on CI and passed locally, which is the same lesson
+        // the CRLF-boundary test taught.
+        await using FakeTransport transport = new() { WaitForReaderToConsume = true };
         LineProtocol protocol = await ConnectAsync(transport, time);
 
         Task<Transaction> pending = protocol.ExecuteAsync(":SYST:STAT?");
         await transport.ReadCommandAsync().AsTask().WaitAsync(s_testTimeout);
-        await transport.EmitAsync(":SYST:STAT?\r\nSmartClock Mode\r\n");
+        await transport.EmitAsync(":SYST:STAT?\r\nSmartClock Mode\r\n").AsTask().WaitAsync(s_testTimeout);
 
         time.Advance(TransactionTimeouts.StatusScreen);
         Transaction transaction = await pending.WaitAsync(s_testTimeout);
