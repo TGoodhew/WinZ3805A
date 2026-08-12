@@ -51,9 +51,11 @@ public enum HeightDatum
 /// <remarks>
 /// An enum rather than free text because the UI branches on it: "fewer than four satellites" and
 /// "poor geometry" want different advice, and matching on a display string would break the day a
-/// firmware revision rewords one.
+/// firmware revision rewords one. §11.3 keeps no string form on the model for that reason — when
+/// the text does not match the table the value is <see cref="Other"/> and the device's exact
+/// wording goes to <see cref="ReceiverStatus.ParseWarnings"/>.
 /// </remarks>
-public enum SurveySuspendedReasonKind
+public enum SurveySuspendedReason
 {
     /// <summary>The survey is not suspended.</summary>
     None = 0,
@@ -67,7 +69,10 @@ public enum SurveySuspendedReasonKind
     /// <summary>No tracking data available at all.</summary>
     NoTrackData,
 
-    /// <summary>Suspended for a reason this parser does not recognise. The raw text is kept alongside.</summary>
+    /// <summary>
+    /// Suspended for a reason this table does not cover. The device's wording is recorded in
+    /// <see cref="ReceiverStatus.ParseWarnings"/>.
+    /// </summary>
     Other,
 }
 

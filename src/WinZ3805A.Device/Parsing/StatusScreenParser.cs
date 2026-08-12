@@ -110,10 +110,10 @@ public sealed partial class StatusScreenParser(TimeProvider timeProvider)
 
         (DateTimeOffset? deviceTime, TimeScale timeScale) = ParseDeviceTime(lines, warnings);
         (int epochs, DateTimeOffset? corrected) = ApplyWeekRollover(deviceTime, capturedAt);
-        (string? advisoryText, ClockAdvisoryKind advisoryKind) = ParseClockAdvisory(lines);
+        ClockAdvisory advisory = ParseClockAdvisory(lines, warnings);
         (GeoPosition? position, HeightDatum datum) = ParsePosition(lines, warnings);
-        (PositionMode positionMode, double? surveyPercent, string? suspendedText, SurveySuspendedReasonKind suspendedKind) =
-            ParsePositionMode(lines);
+        (PositionMode positionMode, double? surveyPercent, SurveySuspendedReason suspended) =
+            ParsePositionMode(lines, warnings);
 
         return new ReceiverStatus
         {
@@ -144,15 +144,13 @@ public sealed partial class StatusScreenParser(TimeProvider timeProvider)
             DeviceDateTime = deviceTime,
             WeekRolloverEpochs = epochs,
             CorrectedDateTime = corrected,
-            OnePpsClockAdvisory = advisoryText,
-            OnePpsClockAdvisoryKind = advisoryKind,
+            OnePpsClockAdvisory = advisory,
             AntennaDelayNanoseconds = FindScaledValue(lines, AntennaDelayPattern(), UnitScale.Nanoseconds),
             LeapPending = ParseLeapPending(lines),
 
             PositionMode = positionMode,
             SurveyPercentComplete = surveyPercent,
-            SurveySuspendedReason = suspendedText,
-            SurveySuspendedReasonKind = suspendedKind,
+            SurveySuspendedReason = suspended,
             Position = position,
             PositionQualifier = ParsePositionQualifier(lines),
             HeightDatum = datum,
@@ -603,7 +601,7 @@ public sealed partial class StatusScreenParser(TimeProvider timeProvider)
     /// <summary>
     /// Reads the <c>1PPS CLK</c> advisory and decodes it to one of the §11.3 values.
     /// </summary>
-    private static (string? Text, ClockAdvisoryKind Kind) ParseClockAdvisory(string[] lines)
+    private static ClockAdvisory ParseClockAdvisory(string[] lines, List<string> warnings)
     {
         foreach (string line in lines)
         {
@@ -627,13 +625,23 @@ public sealed partial class StatusScreenParser(TimeProvider timeProvider)
                 continue;
             }
 
-            return (text, ClassifyAdvisory(text));
+            ClockAdvisory advisory = ClassifyAdvisory(text);
+            if (advisory == ClockAdvisory.Other)
+            {
+                // §11.3 keeps no string form of the advisory on the model, so this is the only
+                // place the device's own wording survives — and it is the only place it is worth
+                // having, because an advisory the table does not cover is exactly what a field
+                // report about an unfamiliar firmware revision needs to quote.
+                warnings.Add($"Unrecognised 1PPS advisory: '{text}'.");
+            }
+
+            return advisory;
         }
 
-        return (null, ClockAdvisoryKind.None);
+        return ClockAdvisory.None;
     }
 
-    private static ClockAdvisoryKind ClassifyAdvisory(string text)
+    private static ClockAdvisory ClassifyAdvisory(string text)
     {
         // "Assessing stability" animates with nought to three trailing dots on the device's own
         // screen. They carry no information and would otherwise make four distinct strings of one
@@ -642,15 +650,15 @@ public sealed partial class StatusScreenParser(TimeProvider timeProvider)
 
         return normalised switch
         {
-            _ when Has(normalised, "Synchronized to UTC") => ClockAdvisoryKind.SynchronizedToUtc,
-            _ when Has(normalised, "Synchronized to GPS") => ClockAdvisoryKind.SynchronizedToGpsTime,
-            _ when Has(normalised, "Assessing stability") => ClockAdvisoryKind.AssessingStability,
-            _ when Has(normalised, "Questionable accuracy") => ClockAdvisoryKind.QuestionableAccuracy,
-            _ when Has(normalised, "not tracking") => ClockAdvisoryKind.InaccurateNotTracking,
-            _ when Has(normalised, "inacc position") => ClockAdvisoryKind.InaccurateInaccuratePosition,
-            _ when Has(normalised, "Absent or freq error") => ClockAdvisoryKind.AbsentOrFrequencyError,
-            _ when Has(normalised, "GPS rcvr err") => ClockAdvisoryKind.InvalidGpsReceiverError,
-            _ => ClockAdvisoryKind.Other,
+            _ when Has(normalised, "Synchronized to UTC") => ClockAdvisory.SynchronizedToUtc,
+            _ when Has(normalised, "Synchronized to GPS") => ClockAdvisory.SynchronizedToGpsTime,
+            _ when Has(normalised, "Assessing stability") => ClockAdvisory.AssessingStability,
+            _ when Has(normalised, "Questionable accuracy") => ClockAdvisory.QuestionableAccuracy,
+            _ when Has(normalised, "not tracking") => ClockAdvisory.InaccurateNotTracking,
+            _ when Has(normalised, "inacc position") => ClockAdvisory.InaccurateInaccuratePosition,
+            _ when Has(normalised, "Absent or freq error") => ClockAdvisory.AbsentOrFrequencyError,
+            _ when Has(normalised, "GPS rcvr err") => ClockAdvisory.InvalidGpsReceiverError,
+            _ => ClockAdvisory.Other,
         };
 
         static bool Has(string haystack, string needle) =>
@@ -765,8 +773,8 @@ public sealed partial class StatusScreenParser(TimeProvider timeProvider)
     }
 
     /// <summary>Reads the position mode row and any survey progress or suspension it carries.</summary>
-    private static (PositionMode Mode, double? Percent, string? SuspendedText, SurveySuspendedReasonKind SuspendedKind)
-        ParsePositionMode(string[] lines)
+    private static (PositionMode Mode, double? Percent, SurveySuspendedReason Suspended)
+        ParsePositionMode(string[] lines, List<string> warnings)
     {
         PositionMode mode = PositionMode.Unknown;
         double? percent = null;
@@ -805,11 +813,10 @@ public sealed partial class StatusScreenParser(TimeProvider timeProvider)
             break;
         }
 
-        (string? suspendedText, SurveySuspendedReasonKind suspendedKind) = ParseSurveySuspension(lines);
-        return (mode, percent, suspendedText, suspendedKind);
+        return (mode, percent, ParseSurveySuspension(lines, warnings));
     }
 
-    private static (string? Text, SurveySuspendedReasonKind Kind) ParseSurveySuspension(string[] lines)
+    private static SurveySuspendedReason ParseSurveySuspension(string[] lines, List<string> warnings)
     {
         foreach (string line in lines)
         {
@@ -825,17 +832,22 @@ public sealed partial class StatusScreenParser(TimeProvider timeProvider)
                 continue;
             }
 
-            SurveySuspendedReasonKind kind =
+            SurveySuspendedReason reason =
                 text.Contains("sats", StringComparison.OrdinalIgnoreCase)
-                || text.Contains("track <", StringComparison.OrdinalIgnoreCase) ? SurveySuspendedReasonKind.TooFewSatellites :
-                text.Contains("geometry", StringComparison.OrdinalIgnoreCase) ? SurveySuspendedReasonKind.PoorGeometry :
-                text.Contains("no track data", StringComparison.OrdinalIgnoreCase) ? SurveySuspendedReasonKind.NoTrackData :
-                SurveySuspendedReasonKind.Other;
+                || text.Contains("track <", StringComparison.OrdinalIgnoreCase) ? SurveySuspendedReason.TooFewSatellites :
+                text.Contains("geometry", StringComparison.OrdinalIgnoreCase) ? SurveySuspendedReason.PoorGeometry :
+                text.Contains("no track data", StringComparison.OrdinalIgnoreCase) ? SurveySuspendedReason.NoTrackData :
+                SurveySuspendedReason.Other;
 
-            return (text, kind);
+            if (reason == SurveySuspendedReason.Other)
+            {
+                warnings.Add($"Unrecognised survey suspension: '{text}'.");
+            }
+
+            return reason;
         }
 
-        return (null, SurveySuspendedReasonKind.None);
+        return SurveySuspendedReason.None;
     }
 
     /// <summary>

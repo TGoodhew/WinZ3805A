@@ -101,22 +101,21 @@ public enum LeapSecondPending
 }
 
 /// <summary>
-/// The <c>1PPS CLK</c> advisory, as one of the §11.3 strings rather than as free text.
+/// The <c>1PPS CLK</c> advisory as one of the §11.3 values.
 /// </summary>
 /// <remarks>
 /// <para>
-/// §11.3 requires these to parse to enum values "because the UI branches on them", while §11.2
-/// types the corresponding model member as <c>string?</c>. Both are honoured rather than one
-/// silently winning: <see cref="ReceiverStatus.OnePpsClockAdvisory"/> keeps §11.2's raw string and
-/// this enum sits beside it as <see cref="ReceiverStatus.OnePpsClockAdvisoryKind"/>. The conflict
-/// is recorded against the specification rather than resolved in code alone.
+/// §11.3 requires an enum here "because the UI branches on them", and keeps no string form of the
+/// advisory on the model at all: the mapping from the device's text lives entirely in the parser,
+/// so no view is able to branch on a display string even by accident.
 /// </para>
 /// <para>
-/// <c>Assessing stability</c> arrives with nought to three trailing dots, which animate on the
-/// device's own screen. They carry no information and are stripped before matching.
+/// <c>Assessing stability</c> is the case that shows why. It arrives with nought to three trailing
+/// dots, which animate on the device's own screen — four spellings of one state to a string
+/// comparison. The dots carry no information and are stripped before matching.
 /// </para>
 /// </remarks>
-public enum ClockAdvisoryKind
+public enum ClockAdvisory
 {
     /// <summary>No advisory was printed.</summary>
     None = 0,
@@ -145,7 +144,10 @@ public enum ClockAdvisoryKind
     /// <summary>The GPS receiver engine reported an error.</summary>
     InvalidGpsReceiverError,
 
-    /// <summary>An advisory this parser does not recognise. The raw text is kept alongside.</summary>
+    /// <summary>
+    /// An advisory this table does not cover. The device's wording is recorded in
+    /// <see cref="ReceiverStatus.ParseWarnings"/>.
+    /// </summary>
     Other,
 }
 
@@ -241,12 +243,8 @@ public sealed record ReceiverStatus
     /// </remarks>
     public DateTimeOffset? CorrectedDateTime { get; init; }
 
-    /// <summary>The <c>1PPS CLK</c> advisory as printed, per §11.2.</summary>
-    public string? OnePpsClockAdvisory { get; init; }
-
-    /// <summary>The same advisory decoded to one of the §11.3 values.</summary>
-    /// <remarks>See <see cref="ClockAdvisoryKind"/> for why both forms are carried.</remarks>
-    public ClockAdvisoryKind OnePpsClockAdvisoryKind { get; init; }
+    /// <summary>The <c>1PPS CLK</c> advisory, decoded (§11.3).</summary>
+    public ClockAdvisory OnePpsClockAdvisory { get; init; }
 
     /// <summary>The configured antenna cable delay, in nanoseconds.</summary>
     public double? AntennaDelayNanoseconds { get; init; }
@@ -262,11 +260,8 @@ public sealed record ReceiverStatus
     /// <summary>Survey progress, 0 to 100, when a survey is running.</summary>
     public double? SurveyPercentComplete { get; init; }
 
-    /// <summary>Why a survey is suspended, as printed.</summary>
-    public string? SurveySuspendedReason { get; init; }
-
-    /// <summary>The same reason decoded to one of the §11.3 values.</summary>
-    public SurveySuspendedReasonKind SurveySuspendedReasonKind { get; init; }
+    /// <summary>Why a survey is suspended, decoded (§11.3).</summary>
+    public SurveySuspendedReason SurveySuspendedReason { get; init; }
 
     /// <summary>The reported position.</summary>
     public GeoPosition? Position { get; init; }
