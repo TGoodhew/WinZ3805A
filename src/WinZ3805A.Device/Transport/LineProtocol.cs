@@ -40,13 +40,23 @@ public sealed class LineProtocol
     private const byte Cr = (byte)'\r';
     private const byte Lf = (byte)'\n';
 
+    /// <summary>The word the ordinary prompt is built from.</summary>
+    private const string PromptWord = "scpi";
+
+    /// <summary>What the prompt shows instead of <see cref="PromptWord"/> when the last command errored.</summary>
+    private const string ErrorPromptPrefix = "E-";
+
     /// <summary>
-    /// The prompt, without its trailing space. §7.2 describes the sentinel as <c>"scpi&gt; "</c>, but
-    /// ending the transaction on the <c>&gt;</c> means a firmware that omits the space still works,
-    /// and the orphaned space is cleared by the stale-input discard at the start of the next
-    /// transaction.
+    /// The longest tail worth testing against the prompt grammar. Anything longer is a response line
+    /// that has not finished arriving, and testing it would only waste the decode.
     /// </summary>
-    private static ReadOnlySpan<byte> PromptSentinel => "scpi>"u8;
+    private const int MaxPromptLength = 32;
+
+    /// <summary>Stands in for a command in the <see cref="Transaction"/> returned by <see cref="SynchroniseAsync"/>.</summary>
+    private const string ConnectLabel = "(connect)";
+
+    /// <summary>Tier S (§8.2), clears the status registers, and answers with nothing worth keeping.</summary>
+    private const string ClearStatusCommand = "*CLS";
 
     /// <summary>
     /// CR and LF. §6.4 nominates <see cref="SearchValues{T}"/> for this scan, but .NET 10 ships no
@@ -104,7 +114,7 @@ public sealed class LineProtocol
             await _transport.WriteAsync(Encoding.ASCII.GetBytes($"{sent}\r\n"), linked.Token).ConfigureAwait(false);
             TransportLog.CommandSent(_logger, sent);
 
-            await ReadUntilPromptAsync(lines, linked.Token).ConfigureAwait(false);
+            string? promptStatus = await ReadUntilPromptAsync(lines, linked.Token).ConfigureAwait(false);
             echoDiscarded = TryDiscardEcho(sent, lines);
 
             TimeSpan elapsed = _timeProvider.GetElapsedTime(startedAt);
@@ -117,6 +127,7 @@ public sealed class LineProtocol
                 Lines = lines,
                 EchoDiscarded = echoDiscarded,
                 Elapsed = elapsed,
+                PromptStatus = promptStatus,
             };
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -157,6 +168,115 @@ public sealed class LineProtocol
     }
 
     /// <summary>
+    /// Listens, without sending anything, until the receiver's first prompt or the timeout.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Call once after opening the port and before the first command. Asserting DTR makes this
+    /// receiver announce itself — a Z3805A emits its identity string and a prompt with nothing asked
+    /// of it — and the announcement takes long enough to arrive that it lands *after* the first
+    /// command has gone out. The first transaction then reads the banner as its own response, and
+    /// every reply after that is one behind: <c>*IDN?</c> answers with the banner, the next query
+    /// answers with the identity, and nothing ever reports an error because every transaction does
+    /// complete. Absorbing the banner first is what keeps the session aligned.
+    /// </para>
+    /// <para>
+    /// The returned <see cref="Transaction"/> carries the banner text, which is worth keeping: it
+    /// names the model and firmware revision before a single command has been sent, and §8.6 needs
+    /// the model to decide which commands exist. A receiver that says nothing costs one timeout here
+    /// and nothing afterwards, so keep the timeout short.
+    /// </para>
+    /// </remarks>
+    public async Task<Transaction> SynchroniseAsync(TimeSpan timeout, CancellationToken cancellationToken = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(timeout, TimeSpan.Zero);
+
+        long startedAt = _timeProvider.GetTimestamp();
+        List<string> lines = [];
+
+        using CancellationTokenSource timeoutSource = new(timeout, _timeProvider);
+        using CancellationTokenSource linked =
+            CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutSource.Token);
+
+        try
+        {
+            string? promptStatus = await ReadUntilPromptAsync(lines, linked.Token).ConfigureAwait(false);
+            await ClearStatusAsync(cancellationToken).ConfigureAwait(false);
+
+            return new Transaction
+            {
+                Command = ConnectLabel,
+                Outcome = TransactionOutcome.Completed,
+                Lines = lines,
+                EchoDiscarded = false,
+                Elapsed = _timeProvider.GetElapsedTime(startedAt),
+                PromptStatus = promptStatus,
+            };
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            // Silence is a perfectly good answer: this receiver announces itself, a sibling model
+            // may not, and neither case is a failure to connect.
+            await ClearStatusAsync(cancellationToken).ConfigureAwait(false);
+
+            return new Transaction
+            {
+                Command = ConnectLabel,
+                Outcome = TransactionOutcome.TimedOut,
+                Lines = lines,
+                EchoDiscarded = false,
+                Elapsed = _timeProvider.GetElapsedTime(startedAt),
+            };
+        }
+        catch (Exception ex) when (TransportFaults.IsTransportFault(ex))
+        {
+            TransportFault fault = TransportFaults.Classify(ex);
+            TransportLog.TransactionFaulted(_logger, ConnectLabel, fault, ex);
+
+            return new Transaction
+            {
+                Command = ConnectLabel,
+                Outcome = TransactionOutcome.Faulted,
+                Lines = lines,
+                EchoDiscarded = false,
+                Elapsed = _timeProvider.GetElapsedTime(startedAt),
+                Fault = fault,
+                FaultMessage = ex.Message,
+            };
+        }
+    }
+
+    /// <summary>
+    /// Sends the status-clear command and throws the answer away, twice if the first one is refused.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The first command after the port opens is unreliable on this hardware. Asserting DTR and RTS
+    /// puts a glitch on the line that the receiver reads as a character, and it answers the next
+    /// thing it is asked with <c>E-362&gt;</c> — SCPI's framing error — having discarded that command
+    /// unexecuted. Left alone, the cost is a mystifying failure on whatever the app happens to send
+    /// first, which during auto-detect is the identity query that decides whether a receiver is
+    /// there at all.
+    /// </para>
+    /// <para>
+    /// So the connect sequence spends the glitch deliberately, on the one command in tier S (§8.2)
+    /// whose whole purpose is to clear status and whose response nobody wants. Twice, because the
+    /// first attempt is the one being sacrificed.
+    /// </para>
+    /// </remarks>
+    private async Task ClearStatusAsync(CancellationToken cancellationToken)
+    {
+        Transaction cleared = await ExecuteAsync(ClearStatusCommand, TransactionTimeouts.AutoDetectProbe, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!cleared.Succeeded || cleared.HasDeviceError)
+        {
+            await ExecuteAsync(ClearStatusCommand, TransactionTimeouts.AutoDetectProbe, cancellationToken)
+                .ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
     /// Empties the driver buffer and the pipe before writing.
     /// </summary>
     /// <remarks>
@@ -188,8 +308,11 @@ public sealed class LineProtocol
         }
     }
 
-    /// <summary>Reads until the prompt sentinel, appending each complete line to <paramref name="lines"/>.</summary>
-    private async Task ReadUntilPromptAsync(List<string> lines, CancellationToken cancellationToken)
+    /// <summary>
+    /// Reads until the prompt, appending each complete line to <paramref name="lines"/> and
+    /// returning the prompt's error token, or null when the prompt was the ordinary one.
+    /// </summary>
+    private async Task<string?> ReadUntilPromptAsync(List<string> lines, CancellationToken cancellationToken)
     {
         PipeReader reader = _transport.Input;
 
@@ -198,9 +321,10 @@ public sealed class LineProtocol
         // and near-certain at 9600 baud where a 1900-byte screen is split into dozens of reads.
         bool pendingLineFeed = false;
 
-        // SerialPort's base stream does not honour a CancellationToken on a read already in flight, so
-        // the token alone cannot enforce a timeout. Cancelling the pending pipe read does: ReadAsync
-        // returns with IsCanceled set even while the underlying stream read is still outstanding.
+        // Belt and braces on the timeout. The token alone is enough for a Pipe — which is what both
+        // transports expose, SerialTransport deliberately so — but cancelling the pending read as
+        // well means a reader implementation that treats its token loosely still cannot hang a
+        // transaction past its §7.2 deadline.
         using CancellationTokenRegistration registration = cancellationToken.UnsafeRegister(
             static state => ((PipeReader)state!).CancelPendingRead(), reader);
 
@@ -212,12 +336,14 @@ public sealed class LineProtocol
             SequencePosition consumed = buffer.Start;
             SequencePosition examined = buffer.Start;
             bool promptFound = false;
+            string? promptStatus = null;
 
             try
             {
                 if (!result.IsCanceled)
                 {
-                    promptFound = TryReadTransaction(buffer, lines, ref pendingLineFeed, out consumed, out examined);
+                    promptFound = TryReadTransaction(
+                        buffer, lines, ref pendingLineFeed, out consumed, out examined, out promptStatus);
                 }
             }
             finally
@@ -229,7 +355,7 @@ public sealed class LineProtocol
 
             if (promptFound)
             {
-                return;
+                return promptStatus;
             }
 
             if (result.IsCanceled)
@@ -262,13 +388,16 @@ public sealed class LineProtocol
     /// How far this pass looked. When no prompt was found this is the end of the buffer, so the next
     /// read waits for genuinely new bytes rather than spinning on the same partial sentinel.
     /// </param>
+    /// <param name="promptStatus">The prompt's error token when it carried one, otherwise null.</param>
     private static bool TryReadTransaction(
         in ReadOnlySequence<byte> buffer,
         List<string> lines,
         ref bool pendingLineFeed,
         out SequencePosition consumed,
-        out SequencePosition examined)
+        out SequencePosition examined,
+        out string? promptStatus)
     {
+        promptStatus = null;
         SequenceReader<byte> reader = new(buffer);
 
         if (pendingLineFeed && reader.TryPeek(out byte leading))
@@ -308,32 +437,112 @@ public sealed class LineProtocol
             lines.Add(Decode(line));
         }
 
-        // The prompt carries no line ending, so it is always in the unterminated tail.
-        SequenceReader<byte> tail = new(reader.UnreadSequence);
-        if (!tail.TryReadTo(out ReadOnlySequence<byte> beforePrompt, PromptSentinel, advancePastDelimiter: true))
+        // Whatever is left has no CR or LF in it — the loop above consumed every one. The prompt
+        // never contains a line ending, so the prompt, if it has arrived, is exactly this tail.
+        consumed = reader.Position;
+        examined = buffer.End;
+
+        ReadOnlySequence<byte> unread = reader.UnreadSequence;
+        if (unread.Length is 0 or > MaxPromptLength)
         {
-            consumed = reader.Position;
-            examined = buffer.End;
             return false;
         }
 
-        // Some firmware ends the last response line at the prompt rather than at a CRLF; keep it.
-        if (!beforePrompt.IsEmpty)
+        if (!TryMatchPrompt(Decode(unread), out int promptLength, out string? status))
         {
-            string trailing = Decode(beforePrompt);
-            if (!string.IsNullOrWhiteSpace(trailing))
+            return false;
+        }
+
+        promptStatus = status;
+        consumed = unread.GetPosition(promptLength);
+        examined = consumed;
+        return true;
+    }
+
+    /// <summary>
+    /// Matches a complete prompt at the start of <paramref name="tail"/>.
+    /// </summary>
+    /// <param name="tail">The unterminated remainder of the buffer, which contains no line ending.</param>
+    /// <param name="promptLength">How many characters the prompt occupies.</param>
+    /// <param name="status">
+    /// The error token when the receiver is reporting one — <c>E-230</c> and the like — or null for
+    /// the ordinary prompt.
+    /// </param>
+    /// <remarks>
+    /// <para>
+    /// §7.2 describes one fixed sentinel, <c>"scpi&gt; "</c>. The receiver has two departures from
+    /// that, both observed on a Z3805A running firmware 1.01.03-A:
+    /// </para>
+    /// <para>
+    /// It writes <c>"scpi &gt; "</c>, with a space before the bracket. And when the last command
+    /// errored it replaces the word entirely, writing <c>"E-230&gt; "</c> — the prompt doubles as the
+    /// error indicator. A command that errors answers with *only* that prompt, so a protocol looking
+    /// for the literal string waits out its full timeout on every failed command and then does it
+    /// again on the next one.
+    /// </para>
+    /// <para>
+    /// Matching is deliberately narrow rather than "anything ending in &gt;": the tail is also where
+    /// a half-arrived response line sits, and a status screen line containing a bracket must not be
+    /// mistaken for the end of the transaction.
+    /// </para>
+    /// </remarks>
+    private static bool TryMatchPrompt(ReadOnlySpan<char> tail, out int promptLength, out string? status)
+    {
+        promptLength = 0;
+        status = null;
+
+        int index = 0;
+        while (index < tail.Length && tail[index] == ' ')
+        {
+            index++;
+        }
+
+        int tokenStart = index;
+        if (tail[index..].StartsWith(PromptWord, StringComparison.Ordinal))
+        {
+            index += PromptWord.Length;
+        }
+        else if (tail[index..].StartsWith(ErrorPromptPrefix, StringComparison.Ordinal))
+        {
+            index += ErrorPromptPrefix.Length;
+            int digits = index;
+            while (index < tail.Length && char.IsAsciiDigit(tail[index]))
             {
-                lines.Add(trailing);
+                index++;
+            }
+
+            if (index == digits)
+            {
+                // "E-" with nothing after it yet: either a truncated prompt or not one at all. Both
+                // mean wait, so neither needs distinguishing.
+                return false;
             }
         }
-
-        if (tail.TryPeek(out byte space) && space == (byte)' ')
+        else
         {
-            tail.Advance(1);
+            return false;
         }
 
-        consumed = tail.Position;
-        examined = consumed;
+        int tokenEnd = index;
+        while (index < tail.Length && tail[index] == ' ')
+        {
+            index++;
+        }
+
+        if (index >= tail.Length || tail[index] != '>')
+        {
+            return false;
+        }
+
+        index++;
+        if (index < tail.Length && tail[index] == ' ')
+        {
+            index++;
+        }
+
+        promptLength = index;
+        ReadOnlySpan<char> token = tail[tokenStart..tokenEnd];
+        status = token.Equals(PromptWord, StringComparison.Ordinal) ? null : token.ToString();
         return true;
     }
 

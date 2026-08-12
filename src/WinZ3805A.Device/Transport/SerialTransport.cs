@@ -6,21 +6,32 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace WinZ3805A.Device.Transport;
 
 /// <summary>
-/// The real RS-232 link, a <see cref="SerialPort"/> with a <see cref="PipeReader"/> over its base
-/// stream.
+/// The real RS-232 link: a <see cref="SerialPort"/> whose base stream is pumped into a
+/// <see cref="Pipe"/> that the transaction loop reads from.
 /// </summary>
 /// <remarks>
 /// <para>
-/// All four §6.4 surprise-removal mitigations live here. In particular this type never subscribes to
-/// <c>DataReceived</c>, <c>ErrorReceived</c> or <c>PinChanged</c>: those events raise on an internal
-/// thread that can take the process down when a USB-serial adapter is pulled, which is precisely the
-/// P0-14 case. Reading <see cref="SerialPort.BaseStream"/> asynchronously keeps every failure on a
-/// thread that has a <c>try</c> around it.
+/// The pump is not decoration, and this is worth knowing before anyone simplifies it back to
+/// <c>PipeReader.Create(port.BaseStream)</c>. <see cref="SerialPort"/>'s base stream <b>ignores the
+/// CancellationToken</b> passed to <c>ReadAsync</c>: with <see cref="SerialPort.InfiniteTimeout"/>
+/// the read completes when bytes arrive and at no other time. Reading the stream directly from the
+/// transaction loop therefore makes §7.2's timeouts unenforceable — the await never returns, and
+/// <c>CancelPendingRead</c> cannot help because the wait is inside the stream, not the pipe. Measured
+/// on a Z3805A: one command that answered with an error prompt hung the process indefinitely.
 /// </para>
 /// <para>
-/// Nor is a read ever wrapped in <c>Task.Run</c>. The one <c>Task.Run</c> in this file is around
-/// <see cref="SerialPort.Dispose(bool)"/>, which is a blocking call that can hang indefinitely on a
-/// removed device — a different problem with a different answer.
+/// With the pump, the uncancellable read belongs to a background loop that nobody waits on, and the
+/// transaction loop waits on a real <see cref="Pipe"/>, where cancellation works. The pump also means
+/// bytes are collected whether or not a transaction is in flight, which matters because this receiver
+/// announces itself the moment DTR is asserted.
+/// </para>
+/// <para>
+/// All four §6.4 surprise-removal mitigations live here. In particular this type never subscribes to
+/// <c>DataReceived</c>, <c>ErrorReceived</c> or <c>PinChanged</c>: those events raise on an internal
+/// thread that can take the process down when a USB-serial adapter is pulled, which is the P0-14 case.
+/// Nor is a read wrapped in <c>Task.Run</c> — the pump is a genuine async loop and burns no thread.
+/// The one <c>Task.Run</c> here is around <see cref="SerialPort.Dispose(bool)"/>, which is a blocking
+/// call that can hang forever on a removed device: a different problem with a different answer.
 /// </para>
 /// </remarks>
 public sealed class SerialTransport : ITransport
@@ -31,12 +42,19 @@ public sealed class SerialTransport : ITransport
     /// </summary>
     private static readonly TimeSpan s_closeTimeout = TimeSpan.FromSeconds(2);
 
+    /// <summary>Read granularity. A status screen is ~1900 bytes; nothing is gained by asking for more at once.</summary>
+    private const int ReadBufferSize = 1024;
+
+    /// <summary>How long the pump pauses after a zero-byte read on an open port, so it cannot spin.</summary>
+    private static readonly TimeSpan ZeroReadBackoff = TimeSpan.FromMilliseconds(10);
+
     private readonly string _portName;
     private readonly SerialSettings _settings;
     private readonly ILogger _logger;
 
     private SerialPort? _port;
-    private PipeReader? _input;
+    private Pipe? _pipe;
+    private Task? _pump;
     private bool _disposed;
 
     public SerialTransport(string portName, SerialSettings settings, ILogger<SerialTransport>? logger = null)
@@ -56,7 +74,7 @@ public sealed class SerialTransport : ITransport
     public bool IsOpen => !_disposed && _port?.IsOpen == true;
 
     /// <inheritdoc />
-    public PipeReader Input => _input ?? throw new TransportException(TransportFault.NotOpen, $"{Description} is not open.");
+    public PipeReader Input => _pipe?.Reader ?? throw new TransportException(TransportFault.NotOpen, $"{Description} is not open.");
 
     /// <inheritdoc />
     /// <remarks>
@@ -82,10 +100,12 @@ public sealed class SerialTransport : ITransport
             DtrEnable = true,
             RtsEnable = true,
 
-            // The transaction loop owns every timeout (§7.2). Leaving these at their 500 ms default
-            // would abort the 15 s status-screen read from underneath it.
+            // The pump owns the read and never wants it to fail on a quiet line — a TimeoutException
+            // from the stream would complete the pipe and end the session. Transaction timeouts are
+            // enforced on the pipe instead (§7.2). The write is bounded, because a write that cannot
+            // complete is a broken link rather than an idle one.
             ReadTimeout = SerialPort.InfiniteTimeout,
-            WriteTimeout = SerialPort.InfiniteTimeout,
+            WriteTimeout = 2000,
         };
 
         try
@@ -101,7 +121,9 @@ public sealed class SerialTransport : ITransport
         }
 
         _port = port;
-        _input = PipeReader.Create(port.BaseStream, new StreamPipeReaderOptions(leaveOpen: true));
+        _pipe = new Pipe();
+        _pump = PumpAsync(port, _pipe.Writer);
+
         TransportLog.PortOpened(_logger, Description);
         return ValueTask.CompletedTask;
     }
@@ -149,45 +171,124 @@ public sealed class SerialTransport : ITransport
 
         _disposed = true;
 
-        PipeReader? input = _input;
-        _input = null;
-        try
-        {
-            input?.Complete();
-        }
-        catch (Exception ex) when (TransportFaults.IsTransportFault(ex))
-        {
-            TransportLog.PortCloseFailed(_logger, Description, ex);
-        }
-
-        SerialPort? port = Interlocked.Exchange(ref _port, null);
-        if (port is null)
-        {
-            return;
-        }
-
         // §6.4 mitigation 3: a dedicated path that tolerates an already-faulted port. Dispose blocks,
         // and on a device that has been unplugged mid-transaction it can block for a long time, so it
-        // runs off this thread and is given a deadline rather than being trusted.
-        Task closing = Task.Run(() =>
+        // runs off this thread and is given a deadline rather than being trusted. It also has to come
+        // first: disposing the port is what ends the pump's otherwise uncancellable read.
+        SerialPort? port = Interlocked.Exchange(ref _port, null);
+        if (port is not null)
+        {
+            Task closing = Task.Run(() =>
+            {
+                try
+                {
+                    port.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    TransportLog.PortCloseFailed(_logger, Description, ex);
+                }
+            });
+
+            try
+            {
+                await closing.WaitAsync(s_closeTimeout).ConfigureAwait(false);
+            }
+            catch (TimeoutException)
+            {
+                TransportLog.PortCloseTimedOut(_logger, Description, s_closeTimeout.TotalMilliseconds);
+            }
+        }
+
+        Task? pump = _pump;
+        _pump = null;
+        if (pump is not null)
         {
             try
             {
-                port.Dispose();
+                await pump.WaitAsync(s_closeTimeout).ConfigureAwait(false);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is TimeoutException || TransportFaults.IsTransportFault(ex))
             {
                 TransportLog.PortCloseFailed(_logger, Description, ex);
             }
-        });
+        }
+
+        Pipe? pipe = _pipe;
+        _pipe = null;
+        if (pipe is not null)
+        {
+            await pipe.Reader.CompleteAsync().ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Reads the port into the pipe until the link ends, then completes the pipe with whatever ended
+    /// it so a waiting transaction sees a fault rather than silence.
+    /// </summary>
+    private async Task PumpAsync(SerialPort port, PipeWriter writer)
+    {
+        Exception? failure = null;
+        Stream stream = port.BaseStream;
 
         try
         {
-            await closing.WaitAsync(s_closeTimeout).ConfigureAwait(false);
+            while (true)
+            {
+                Memory<byte> buffer = writer.GetMemory(ReadBufferSize);
+
+                // Deliberately no CancellationToken: SerialPort's stream ignores it, so passing one
+                // would only suggest a cancellation guarantee that does not exist. Disposing the port
+                // is what ends this read.
+                int read;
+                try
+                {
+                    read = await stream.ReadAsync(buffer).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    // Not the end of anything. DiscardInput calls DiscardInBuffer, and purging the
+                    // driver buffer aborts the read already in flight — measured on a Prolific
+                    // adapter, where every transaction after the first one failed as DeviceRemoved
+                    // because the pipe had been completed by this. The port, not the read, decides
+                    // whether the link is over.
+                    read = 0;
+                }
+
+                if (read == 0)
+                {
+                    // Zero bytes does not always mean end of stream either: the same purge completes
+                    // a pending read empty-handed on some drivers. Only a closed port ends the pump.
+                    if (!port.IsOpen)
+                    {
+                        break;
+                    }
+
+                    await Task.Delay(ZeroReadBackoff).ConfigureAwait(false);
+                    continue;
+                }
+
+                writer.Advance(read);
+
+                FlushResult flush = await writer.FlushAsync().ConfigureAwait(false);
+                if (flush.IsCompleted)
+                {
+                    break;
+                }
+            }
         }
-        catch (TimeoutException)
+        catch (ObjectDisposedException)
         {
-            TransportLog.PortCloseTimedOut(_logger, Description, s_closeTimeout.TotalMilliseconds);
+            // The ordinary end of this loop: the port was disposed underneath the read. Nothing is
+            // waiting on the pipe by then, and a disposal is not a fault worth reporting upwards.
         }
+        catch (Exception ex) when (TransportFaults.IsTransportFault(ex))
+        {
+            // The other end on Windows: the adapter was pulled and the handle went with it. That one
+            // travels up the pipe, because a transaction in flight has to report it (P0-14).
+            failure = ex;
+        }
+
+        await writer.CompleteAsync(failure).ConfigureAwait(false);
     }
 }

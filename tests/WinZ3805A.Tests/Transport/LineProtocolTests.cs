@@ -18,7 +18,8 @@ public class LineProtocolTests
     /// <summary>How long a test waits for a transaction that ought to finish immediately.</summary>
     private static readonly TimeSpan s_testTimeout = TimeSpan.FromSeconds(10);
 
-    private const string IdentityResponse = "HEWLETT-PACKARD,Z3805A,0,3646";
+    // The real thing, from the receiver on COM3: manufacturer, model, serial, firmware.
+    private const string IdentityResponse = "SYMMETRICOM,Z3805A,3625A02931,1.01.03-A";
 
     [Fact]
     public async Task EchoedCommandIsDiscardedAndOnlyTheResponseSurvives()
@@ -84,13 +85,53 @@ public class LineProtocolTests
         await transport.EmitAsync(IdentityResponse + "\r\n");
         await transport.EmitAsync("sc");
         await transport.EmitAsync("pi");
-        await transport.EmitAsync("> ");
+        await transport.EmitAsync(" > ");
 
         Transaction transaction = await pending.WaitAsync(s_testTimeout);
 
         Assert.Equal(TransactionOutcome.Completed, transaction.Outcome);
         Assert.True(transaction.EchoDiscarded);
         Assert.Equal(new[] { IdentityResponse }, transaction.Lines);
+    }
+
+    /// <summary>
+    /// Every spelling of the prompt ends the transaction.
+    /// </summary>
+    /// <remarks>
+    /// §7.2 says the sentinel is <c>"scpi&gt; "</c>. The receiver on the bench — a Z3805A running
+    /// firmware 1.01.03-A — emits <c>"scpi &gt; "</c>, with a space before the bracket. Matching the
+    /// specified spelling literally means no transaction ever completes and the app never connects,
+    /// so the protocol matches the word and steps over whatever spacing follows.
+    /// </remarks>
+    [Theory]
+    [InlineData("scpi > ")]
+    [InlineData("scpi> ")]
+    [InlineData("scpi>")]
+    [InlineData("scpi   >   ")]
+    public async Task EveryObservedSpellingOfThePromptEndsTheTransaction(string prompt)
+    {
+        await using FakeTransport transport = new(_ => IdentityResponse) { Prompt = prompt };
+        LineProtocol protocol = await ConnectAsync(transport);
+
+        Transaction transaction = await protocol.ExecuteAsync("*IDN?").WaitAsync(s_testTimeout);
+
+        Assert.Equal(TransactionOutcome.Completed, transaction.Outcome);
+        Assert.Equal(new[] { IdentityResponse }, transaction.Lines);
+    }
+
+    /// <summary>
+    /// The prompt word appearing in response text is not a prompt. Only the bracket makes it one.
+    /// </summary>
+    [Fact]
+    public async Task ThePromptWordWithoutItsBracketIsTreatedAsResponseText()
+    {
+        await using FakeTransport transport = new(_ => "scpi is the parser\r\nsecond line");
+        LineProtocol protocol = await ConnectAsync(transport);
+
+        Transaction transaction = await protocol.ExecuteAsync(":SYST:STAT?").WaitAsync(s_testTimeout);
+
+        Assert.Equal(TransactionOutcome.Completed, transaction.Outcome);
+        Assert.Equal(new[] { "scpi is the parser", "second line" }, transaction.Lines);
     }
 
     /// <summary>A response line split across reads is reassembled, not truncated at the boundary.</summary>
@@ -104,7 +145,7 @@ public class LineProtocolTests
 
         await transport.ReadCommandAsync().AsTask().WaitAsync(s_testTimeout);
         await transport.EmitAsync(":SYNC:TINT?\r\n-3.3");
-        await transport.EmitAsync("1E-008\r\nscpi> ");
+        await transport.EmitAsync("1E-008\r\nscpi > ");
 
         Transaction transaction = await pending.WaitAsync(s_testTimeout);
 
@@ -160,7 +201,7 @@ public class LineProtocolTests
         // Each emit only returns once the protocol has consumed it, so the boundary lands between
         // the CR and the LF every run rather than whenever the scheduler happens to put it there.
         await transport.EmitAsync(":SYST:STAT?\r\nfirst\r").AsTask().WaitAsync(s_testTimeout);
-        await transport.EmitAsync("\nsecond\r\nscpi> ").AsTask().WaitAsync(s_testTimeout);
+        await transport.EmitAsync("\nsecond\r\nscpi > ").AsTask().WaitAsync(s_testTimeout);
 
         Transaction transaction = await pending.WaitAsync(s_testTimeout);
 
@@ -252,7 +293,7 @@ public class LineProtocolTests
         await using FakeTransport transport = new(_ => IdentityResponse);
         LineProtocol protocol = await ConnectAsync(transport);
 
-        await transport.EmitAsync("0,\"No error\"\r\nscpi> ");
+        await transport.EmitAsync("0,\"No error\"\r\nscpi > ");
 
         Transaction transaction = await protocol.ExecuteAsync("*IDN?").WaitAsync(s_testTimeout);
 
@@ -287,7 +328,7 @@ public class LineProtocolTests
         Task<Transaction> pending = protocol.ExecuteAsync(":SYNC:TINT?");
         Assert.Equal(":SYNC:TINT?", await transport.ReadCommandAsync().AsTask().WaitAsync(s_testTimeout));
 
-        await transport.EmitAsync("scpi> ");
+        await transport.EmitAsync("scpi > ");
         await pending.WaitAsync(s_testTimeout);
     }
 

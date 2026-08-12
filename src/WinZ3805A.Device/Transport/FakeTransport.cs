@@ -64,6 +64,12 @@ public sealed class FakeTransport : ITransport
     /// <summary>Whether to terminate each response with the prompt sentinel. False models a device that has stopped answering.</summary>
     public bool EmitPrompt { get; init; } = true;
 
+    /// <summary>
+    /// The prompt text. The default is what a Z3805A running firmware 1.01.03-A actually emits,
+    /// which is not the spelling §7.2 gives — the space before the bracket is real.
+    /// </summary>
+    public string Prompt { get; init; } = "scpi > ";
+
     /// <summary>When true the responder is never called and nothing is written back, so the transaction times out.</summary>
     public bool Silent { get; init; }
 
@@ -260,7 +266,7 @@ public sealed class FakeTransport : ITransport
 
         if (EmitPrompt)
         {
-            response.Append("scpi> ");
+            response.Append(Prompt);
         }
 
         byte[] payload = Encoding.Latin1.GetBytes(response.ToString());

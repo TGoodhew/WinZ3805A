@@ -20,6 +20,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Captured device output (§11.1). Copied verbatim: .gitattributes keeps these files free of
+         end-of-line conversion because the parser derives satellite columns from token positions,
+         and MSBuild must not undo that on the way to the output folder. -->
+    <Content Include="Fixtures\**\*.txt" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\WinZ3805A.Device\WinZ3805A.Device.csproj" />
   </ItemGroup>
 
