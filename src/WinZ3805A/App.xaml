@@ -7,10 +7,27 @@
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
+                <!--
+                    XamlControlsResources first: the §9 token layer maps onto stock WinUI
+                    colours and styles (§9.4.1, §9.5.2), so those keys have to exist before
+                    anything references them.
+                -->
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
-                <!-- Other merged dictionaries here -->
+
+                <!--
+                    §9 design tokens. Order matters below this line: Colors, Spacing and
+                    Typography declare tokens, and Controls composes styles out of them, so
+                    Controls must come last.
+
+                    §15 step 5 puts this whole layer before the first page on purpose —
+                    retrofitting tokens onto finished XAML is where design systems die.
+                -->
+                <ResourceDictionary Source="ms-appx:///Themes/Colors.xaml" />
+                <ResourceDictionary Source="ms-appx:///Themes/Spacing.xaml" />
+                <ResourceDictionary Source="ms-appx:///Themes/Typography.xaml" />
+                <ResourceDictionary Source="ms-appx:///Themes/Motion.xaml" />
+                <ResourceDictionary Source="ms-appx:///Themes/Controls.xaml" />
             </ResourceDictionary.MergedDictionaries>
-            <!-- Other app resources here -->
         </ResourceDictionary>
     </Application.Resources>
 </Application>

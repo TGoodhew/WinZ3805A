@@ -1,0 +1,292 @@
+<?xml version="1.0" encoding="utf-8" ?>
+
+<!--
+    §9.4 — every colour in the application, and the only file permitted to contain a
+    literal hex value. build/Test-NoHexLiterals.ps1 enforces that, so a colour that
+    appears anywhere else fails CI in seconds rather than at review.
+
+    Three theme dictionaries, always all three. Every brush is referenced elsewhere by
+    key with {ThemeResource} and never {StaticResource} — the latter resolves once and
+    would not re-resolve when the user switches theme, which is a bug that only shows
+    up after the app has been running a while.
+
+    Where §9.4.1 maps a token onto a stock WinUI colour, the mapping is written as
+    Color="{ThemeResource StockColorName}" rather than as an alias to the stock *brush*.
+    An alias would capture whichever brush instance was current at load; going through
+    the colour re-resolves per theme dictionary, which is the behaviour §9.4 asks for.
+    The custom name still exists so a later divergence has exactly one place to happen.
+-->
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <ResourceDictionary.ThemeDictionaries>
+
+        <!-- ================================================================= -->
+        <!-- Light                                                              -->
+        <!-- ================================================================= -->
+        <ResourceDictionary x:Key="Light">
+
+            <!-- §9.4.1 Surface and text -->
+            <SolidColorBrush x:Key="WzPageBackgroundFallbackBrush" Color="#F3F3F3" />
+            <SolidColorBrush x:Key="WzLayerFillBrush" Color="{ThemeResource LayerFillColorDefault}" />
+            <SolidColorBrush x:Key="WzCardFillBrush" Color="{ThemeResource CardBackgroundFillColorDefault}" />
+            <SolidColorBrush x:Key="WzCardFillSecondaryBrush" Color="{ThemeResource CardBackgroundFillColorSecondary}" />
+            <SolidColorBrush x:Key="WzOverlayFillBrush" Color="{ThemeResource SolidBackgroundFillColorBase}" />
+            <SolidColorBrush x:Key="WzStrokeSubtleBrush" Color="{ThemeResource CardStrokeColorDefault}" />
+            <SolidColorBrush x:Key="WzStrokeDefaultBrush" Color="{ThemeResource ControlStrokeColorDefault}" />
+            <SolidColorBrush x:Key="WzTextPrimaryBrush" Color="{ThemeResource TextFillColorPrimary}" />
+            <SolidColorBrush x:Key="WzTextSecondaryBrush" Color="{ThemeResource TextFillColorSecondary}" />
+            <SolidColorBrush x:Key="WzTextTertiaryBrush" Color="{ThemeResource TextFillColorTertiary}" />
+            <SolidColorBrush x:Key="WzTextDisabledBrush" Color="{ThemeResource TextFillColorDisabled}" />
+
+            <!--
+                §9.4.2 Brand accent ramp. The same seven steps in both themes — only which
+                step is the resolved base changes, so a colour never shifts meaning between
+                themes. Deliberately NOT the system accent: a user with a red Windows accent
+                would otherwise see "selected nav item" and "critical alarm" in one colour.
+                System accent opt-in is P1-11 and substitutes into this ramp; the semantic
+                brushes below are never derived from it under any setting.
+            -->
+            <Color x:Key="WzAccentDark3">#052F33</Color>
+            <Color x:Key="WzAccentDark2">#08474D</Color>
+            <Color x:Key="WzAccentDark1">#0B6C74</Color>
+            <Color x:Key="WzAccentBase">#0E7C86</Color>
+            <Color x:Key="WzAccentLight1">#189AA6</Color>
+            <Color x:Key="WzAccentLight2">#3FB8C4</Color>
+            <Color x:Key="WzAccentLight3">#7FD4DC</Color>
+
+            <SolidColorBrush x:Key="WzAccentDark3Brush" Color="{StaticResource WzAccentDark3}" />
+            <SolidColorBrush x:Key="WzAccentDark2Brush" Color="{StaticResource WzAccentDark2}" />
+            <SolidColorBrush x:Key="WzAccentDark1Brush" Color="{StaticResource WzAccentDark1}" />
+            <SolidColorBrush x:Key="WzAccentBaseBrush" Color="{StaticResource WzAccentBase}" />
+            <SolidColorBrush x:Key="WzAccentLight1Brush" Color="{StaticResource WzAccentLight1}" />
+            <SolidColorBrush x:Key="WzAccentLight2Brush" Color="{StaticResource WzAccentLight2}" />
+            <SolidColorBrush x:Key="WzAccentLight3Brush" Color="{StaticResource WzAccentLight3}" />
+
+            <!-- Light-theme base is Dark1: 6.16:1 on white, so accent text is legal at body size. -->
+            <SolidColorBrush x:Key="WzAccentFillBrush" Color="{StaticResource WzAccentDark1}" />
+            <SolidColorBrush x:Key="WzAccentFillHoverBrush" Color="{StaticResource WzAccentDark2}" />
+            <SolidColorBrush x:Key="WzAccentFillPressedBrush" Color="{StaticResource WzAccentDark3}" />
+            <SolidColorBrush x:Key="WzAccentForegroundBrush" Color="#FFFFFF" />
+
+            <!--
+                §9.4.3 Semantic. Meaning is never carried by colour alone: every severity
+                indication is colour + shape + text, implemented once in SeverityPill.
+                Success and Critical converge under deuteranopia — a circle and a hexagon
+                do not, which is what the shape channel is for.
+            -->
+            <SolidColorBrush x:Key="WzSuccessBrush" Color="#0F7B3C" />
+            <SolidColorBrush x:Key="WzCautionBrush" Color="#8A5300" />
+            <SolidColorBrush x:Key="WzCriticalBrush" Color="#B22B2B" />
+            <SolidColorBrush x:Key="WzInfoBrush" Color="{StaticResource WzAccentDark1}" />
+            <SolidColorBrush x:Key="WzNeutralBrush" Color="#616161" />
+
+            <!--
+                §9.4.4 Data visualisation. A separate namespace from the semantic tokens
+                on purpose: a trace coloured as critical implies an alarm nobody asserted.
+                Assign by index in PRN order, never by hash — a satellite keeps its colour
+                across sessions.
+            -->
+            <SolidColorBrush x:Key="WzSeries1Brush" Color="#0072B2" />
+            <SolidColorBrush x:Key="WzSeries2Brush" Color="#D55E00" />
+            <SolidColorBrush x:Key="WzSeries3Brush" Color="#009E73" />
+            <SolidColorBrush x:Key="WzSeries4Brush" Color="#CC79A7" />
+            <SolidColorBrush x:Key="WzSeries5Brush" Color="#56B4E9" />
+            <SolidColorBrush x:Key="WzSeries6Brush" Color="#8C6D1F" />
+            <SolidColorBrush x:Key="WzSeries7Brush" Color="#6E4B9E" />
+            <SolidColorBrush x:Key="WzSeries8Brush" Color="#4A4A4A" />
+
+            <!-- Sequential: signal strength. Read by lightness, so the ramp is monotonic. -->
+            <SolidColorBrush x:Key="WzSequential1Brush" Color="#DFF1F3" />
+            <SolidColorBrush x:Key="WzSequential2Brush" Color="#A8DDE3" />
+            <SolidColorBrush x:Key="WzSequential3Brush" Color="#6FC5CE" />
+            <SolidColorBrush x:Key="WzSequential4Brush" Color="#3FB8C4" />
+            <SolidColorBrush x:Key="WzSequential5Brush" Color="#189AA6" />
+            <SolidColorBrush x:Key="WzSequential6Brush" Color="#0B6C74" />
+            <SolidColorBrush x:Key="WzSequential7Brush" Color="#08474D" />
+
+            <!--
+                Diverging: 1 PPS time interval. The neutral midpoint maps to exactly 0 ns,
+                never to the data midpoint — a colour break that drifts with the data is
+                actively misleading on a timing instrument.
+            -->
+            <SolidColorBrush x:Key="WzDivergingNegativeStrongBrush" Color="#08474D" />
+            <SolidColorBrush x:Key="WzDivergingNegativeBrush" Color="#3FB8C4" />
+            <SolidColorBrush x:Key="WzDivergingZeroBrush" Color="#DDE4E5" />
+            <SolidColorBrush x:Key="WzDivergingPositiveBrush" Color="#F0A882" />
+            <SolidColorBrush x:Key="WzDivergingPositiveStrongBrush" Color="#B23A00" />
+
+        </ResourceDictionary>
+
+        <!-- ================================================================= -->
+        <!-- Dark                                                               -->
+        <!-- ================================================================= -->
+        <ResourceDictionary x:Key="Dark">
+
+            <SolidColorBrush x:Key="WzPageBackgroundFallbackBrush" Color="#202020" />
+            <SolidColorBrush x:Key="WzLayerFillBrush" Color="{ThemeResource LayerFillColorDefault}" />
+            <SolidColorBrush x:Key="WzCardFillBrush" Color="{ThemeResource CardBackgroundFillColorDefault}" />
+            <SolidColorBrush x:Key="WzCardFillSecondaryBrush" Color="{ThemeResource CardBackgroundFillColorSecondary}" />
+            <SolidColorBrush x:Key="WzOverlayFillBrush" Color="{ThemeResource SolidBackgroundFillColorBase}" />
+
+            <!--
+                §9.2: in dark theme CardStrokeColorDefault is LIGHTER than the fill it
+                borders. That is correct and intentional — it is how the card edge reads
+                as a raised lip rather than a cut. Do not "fix" it by inverting.
+            -->
+            <SolidColorBrush x:Key="WzStrokeSubtleBrush" Color="{ThemeResource CardStrokeColorDefault}" />
+            <SolidColorBrush x:Key="WzStrokeDefaultBrush" Color="{ThemeResource ControlStrokeColorDefault}" />
+
+            <SolidColorBrush x:Key="WzTextPrimaryBrush" Color="{ThemeResource TextFillColorPrimary}" />
+            <SolidColorBrush x:Key="WzTextSecondaryBrush" Color="{ThemeResource TextFillColorSecondary}" />
+            <SolidColorBrush x:Key="WzTextTertiaryBrush" Color="{ThemeResource TextFillColorTertiary}" />
+            <SolidColorBrush x:Key="WzTextDisabledBrush" Color="{ThemeResource TextFillColorDisabled}" />
+
+            <Color x:Key="WzAccentDark3">#052F33</Color>
+            <Color x:Key="WzAccentDark2">#08474D</Color>
+            <Color x:Key="WzAccentDark1">#0B6C74</Color>
+            <Color x:Key="WzAccentBase">#0E7C86</Color>
+            <Color x:Key="WzAccentLight1">#189AA6</Color>
+            <Color x:Key="WzAccentLight2">#3FB8C4</Color>
+            <Color x:Key="WzAccentLight3">#7FD4DC</Color>
+
+            <SolidColorBrush x:Key="WzAccentDark3Brush" Color="{StaticResource WzAccentDark3}" />
+            <SolidColorBrush x:Key="WzAccentDark2Brush" Color="{StaticResource WzAccentDark2}" />
+            <SolidColorBrush x:Key="WzAccentDark1Brush" Color="{StaticResource WzAccentDark1}" />
+            <SolidColorBrush x:Key="WzAccentBaseBrush" Color="{StaticResource WzAccentBase}" />
+            <SolidColorBrush x:Key="WzAccentLight1Brush" Color="{StaticResource WzAccentLight1}" />
+            <SolidColorBrush x:Key="WzAccentLight2Brush" Color="{StaticResource WzAccentLight2}" />
+            <SolidColorBrush x:Key="WzAccentLight3Brush" Color="{StaticResource WzAccentLight3}" />
+
+            <!-- Dark-theme base is Light2: 6.31:1 on #272727, so accent text is legal at body size. -->
+            <SolidColorBrush x:Key="WzAccentFillBrush" Color="{StaticResource WzAccentLight2}" />
+            <SolidColorBrush x:Key="WzAccentFillHoverBrush" Color="{StaticResource WzAccentLight1}" />
+            <SolidColorBrush x:Key="WzAccentFillPressedBrush" Color="{StaticResource WzAccentLight3}" />
+            <SolidColorBrush x:Key="WzAccentForegroundBrush" Color="#000000" />
+
+            <SolidColorBrush x:Key="WzSuccessBrush" Color="#4CC38A" />
+            <SolidColorBrush x:Key="WzCautionBrush" Color="#F2B155" />
+            <SolidColorBrush x:Key="WzCriticalBrush" Color="#FF6B6B" />
+            <SolidColorBrush x:Key="WzInfoBrush" Color="{StaticResource WzAccentLight2}" />
+            <SolidColorBrush x:Key="WzNeutralBrush" Color="#9A9A9A" />
+
+            <SolidColorBrush x:Key="WzSeries1Brush" Color="#56B4E9" />
+            <SolidColorBrush x:Key="WzSeries2Brush" Color="#E69F00" />
+            <SolidColorBrush x:Key="WzSeries3Brush" Color="#3FD9A8" />
+            <SolidColorBrush x:Key="WzSeries4Brush" Color="#E0A3C8" />
+            <SolidColorBrush x:Key="WzSeries5Brush" Color="#0072B2" />
+            <SolidColorBrush x:Key="WzSeries6Brush" Color="#D9C36B" />
+            <SolidColorBrush x:Key="WzSeries7Brush" Color="#B79CE0" />
+            <SolidColorBrush x:Key="WzSeries8Brush" Color="#C4C4C4" />
+
+            <SolidColorBrush x:Key="WzSequential1Brush" Color="#DFF1F3" />
+            <SolidColorBrush x:Key="WzSequential2Brush" Color="#A8DDE3" />
+            <SolidColorBrush x:Key="WzSequential3Brush" Color="#6FC5CE" />
+            <SolidColorBrush x:Key="WzSequential4Brush" Color="#3FB8C4" />
+            <SolidColorBrush x:Key="WzSequential5Brush" Color="#189AA6" />
+            <SolidColorBrush x:Key="WzSequential6Brush" Color="#0B6C74" />
+            <SolidColorBrush x:Key="WzSequential7Brush" Color="#08474D" />
+
+            <SolidColorBrush x:Key="WzDivergingNegativeStrongBrush" Color="#08474D" />
+            <SolidColorBrush x:Key="WzDivergingNegativeBrush" Color="#3FB8C4" />
+            <SolidColorBrush x:Key="WzDivergingZeroBrush" Color="#DDE4E5" />
+            <SolidColorBrush x:Key="WzDivergingPositiveBrush" Color="#F0A882" />
+            <SolidColorBrush x:Key="WzDivergingPositiveStrongBrush" Color="#B23A00" />
+
+        </ResourceDictionary>
+
+        <!-- ================================================================= -->
+        <!-- High contrast                                                      -->
+        <!--                                                                    -->
+        <!-- §9.2: fills collapse to the system window colour, so the 1 px      -->
+        <!-- stroke becomes the ONLY separator between layers. Nothing here     -->
+        <!-- invents a colour — every value is a system one the user chose, and -->
+        <!-- overriding any of them would defeat the point of the theme.        -->
+        <!-- ================================================================= -->
+        <ResourceDictionary x:Key="HighContrast">
+
+            <SolidColorBrush x:Key="WzPageBackgroundFallbackBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="WzLayerFillBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="WzCardFillBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="WzCardFillSecondaryBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="WzOverlayFillBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="WzStrokeSubtleBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="WzStrokeDefaultBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+
+            <SolidColorBrush x:Key="WzTextPrimaryBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="WzTextSecondaryBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="WzTextTertiaryBrush" Color="{ThemeResource SystemColorGrayTextColor}" />
+            <SolidColorBrush x:Key="WzTextDisabledBrush" Color="{ThemeResource SystemColorGrayTextColor}" />
+
+            <!--
+                The ramp keys still exist so that any style referencing a step resolves in
+                this theme too, but every step is the system highlight: high contrast has
+                no room for a brand ramp, and inventing one would override a user choice
+                made for medical reasons.
+            -->
+            <Color x:Key="WzAccentDark3">#000000</Color>
+            <Color x:Key="WzAccentDark2">#000000</Color>
+            <Color x:Key="WzAccentDark1">#000000</Color>
+            <Color x:Key="WzAccentBase">#000000</Color>
+            <Color x:Key="WzAccentLight1">#000000</Color>
+            <Color x:Key="WzAccentLight2">#000000</Color>
+            <Color x:Key="WzAccentLight3">#000000</Color>
+
+            <SolidColorBrush x:Key="WzAccentDark3Brush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="WzAccentDark2Brush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="WzAccentDark1Brush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="WzAccentBaseBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="WzAccentLight1Brush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="WzAccentLight2Brush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="WzAccentLight3Brush" Color="{ThemeResource SystemColorHighlightColor}" />
+
+            <SolidColorBrush x:Key="WzAccentFillBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="WzAccentFillHoverBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="WzAccentFillPressedBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="WzAccentForegroundBrush" Color="{ThemeResource SystemColorHighlightTextColor}" />
+
+            <!--
+                Severity collapses to window text here. This is exactly why §9.4.3 requires
+                colour + shape + text: in this theme the colour channel carries nothing at
+                all, and the SeverityPill's Path geometry and label carry the whole meaning.
+            -->
+            <SolidColorBrush x:Key="WzSuccessBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="WzCautionBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="WzCriticalBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="WzInfoBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="WzNeutralBrush" Color="{ThemeResource SystemColorGrayTextColor}" />
+
+            <!--
+                Chart series alternate window text and highlight. Two colours cannot separate
+                eight traces, so a chart in this theme must additionally distinguish series by
+                dash pattern and direct labelling — recorded here because the constraint lives
+                with the palette, not with whichever control draws it.
+            -->
+            <SolidColorBrush x:Key="WzSeries1Brush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="WzSeries2Brush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="WzSeries3Brush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="WzSeries4Brush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="WzSeries5Brush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="WzSeries6Brush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="WzSeries7Brush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="WzSeries8Brush" Color="{ThemeResource SystemColorHighlightColor}" />
+
+            <SolidColorBrush x:Key="WzSequential1Brush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="WzSequential2Brush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="WzSequential3Brush" Color="{ThemeResource SystemColorGrayTextColor}" />
+            <SolidColorBrush x:Key="WzSequential4Brush" Color="{ThemeResource SystemColorGrayTextColor}" />
+            <SolidColorBrush x:Key="WzSequential5Brush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="WzSequential6Brush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="WzSequential7Brush" Color="{ThemeResource SystemColorWindowTextColor}" />
+
+            <SolidColorBrush x:Key="WzDivergingNegativeStrongBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="WzDivergingNegativeBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="WzDivergingZeroBrush" Color="{ThemeResource SystemColorGrayTextColor}" />
+            <SolidColorBrush x:Key="WzDivergingPositiveBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="WzDivergingPositiveStrongBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+
+        </ResourceDictionary>
+
+    </ResourceDictionary.ThemeDictionaries>
+</ResourceDictionary>

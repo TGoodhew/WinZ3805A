@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8" ?>
+
+<!--
+    §9.8.1 — four durations and three easings. Nothing animates in this application
+    without a row in §9.8.2, which is a short table; if a moment is not in it, the
+    answer is that it does not animate.
+
+    WzDurationInstant is 0 ms and is not a placeholder. §9.8.2 gives it to readout value
+    changes, the medallion ring redraw, and severity state changes — the things a bench
+    user reads at a glance from across a room. An animated readout turns "the number
+    changed" into "something is moving", and on an instrument that is a lie. Naming zero
+    as a token rather than leaving those cases untokenised is what makes the decision
+    visible to the next person.
+-->
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- ============================================================ -->
+    <!-- Durations                                                     -->
+    <!-- ============================================================ -->
+
+    <!-- Readout value changes, medallion ring redraw, severity state changes. -->
+    <Duration x:Key="WzDurationInstant">0:0:0</Duration>
+
+    <!-- Hover, pressed, checked, focus visual. -->
+    <Duration x:Key="WzDurationFast">0:0:0.15</Duration>
+
+    <!-- Page transition, expand/collapse, InfoBar in and out, flyout. -->
+    <Duration x:Key="WzDurationNormal">0:0:0.25</Duration>
+
+    <!-- Window first-run entrance, and nothing else. -->
+    <Duration x:Key="WzDurationSlow">0:0:0.4</Duration>
+
+    <!--
+        §9.8.2 card enter: 30 ms stagger, at most four cards.
+
+        Milliseconds as a Double rather than a TimeSpan because WinUI's x: namespace has
+        no x:TimeSpan — that is a WPF intrinsic, and asking for it is a XAML compiler
+        error rather than anything the C# compiler would catch. Code that needs a
+        TimeSpan builds one with TimeSpan.FromMilliseconds; the four Durations above are
+        already the right type for everything declared in markup.
+    -->
+    <x:Double x:Key="WzStaggerIntervalMilliseconds">30</x:Double>
+
+    <!-- ============================================================ -->
+    <!-- Easings                                                       -->
+    <!--                                                               -->
+    <!-- KeySpline control points from §9.8.1. Declared as             -->
+    <!-- KeySpline resources so a storyboard references the token      -->
+    <!-- rather than retyping four numbers, which is how easing        -->
+    <!-- curves drift apart across a codebase.                         -->
+    <!-- ============================================================ -->
+
+    <!-- Two-way transitions, expand and collapse. -->
+    <KeySpline x:Key="WzEaseStandard" ControlPoint1="0.8,0" ControlPoint2="0.2,1" />
+
+    <!-- Entrances. -->
+    <KeySpline x:Key="WzEaseDecelerate" ControlPoint1="0.1,0.9" ControlPoint2="0.2,1" />
+
+    <!-- Exits. -->
+    <KeySpline x:Key="WzEaseAccelerate" ControlPoint1="0.7,0" ControlPoint2="1,0.5" />
+
+</ResourceDictionary>
