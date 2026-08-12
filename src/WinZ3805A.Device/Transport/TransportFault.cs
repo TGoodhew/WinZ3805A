@@ -35,10 +35,17 @@ public enum TransportFault
 }
 
 /// <summary>Maps the exceptions <c>SerialPort</c> can raise onto <see cref="TransportFault"/>.</summary>
-internal static class TransportFaults
+/// <remarks>
+/// Public rather than internal because §6.4's rule — that these four exception types are all
+/// reachable when a USB-serial adapter is pulled and every one must be survived — applies to
+/// anything that owns a transport, not only to the transport itself. <c>DeviceSessionService</c>
+/// needs the same predicate to decide when to start reconnecting, and a second hand-written copy
+/// of the list is precisely the drift this type exists to prevent.
+/// </remarks>
+public static class TransportFaults
 {
     /// <summary>True for every exception type §6.4 requires the read and write paths to survive.</summary>
-    internal static bool IsTransportFault(Exception exception) => exception is
+    public static bool IsTransportFault(Exception exception) => exception is
         TransportException or
         IOException or
         UnauthorizedAccessException or
@@ -46,7 +53,7 @@ internal static class TransportFaults
         ObjectDisposedException;
 
     /// <summary>Classifies an exception raised by the port, the base stream, or the pipe over it.</summary>
-    internal static TransportFault Classify(Exception exception) => exception switch
+    public static TransportFault Classify(Exception exception) => exception switch
     {
         TransportException transport => transport.Fault,
 
