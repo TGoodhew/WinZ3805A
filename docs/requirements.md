@@ -1423,14 +1423,14 @@ public sealed record ReceiverStatus
     public DateTimeOffset? DeviceDateTime { get; init; }
     public int WeekRolloverEpochs { get; init; }
     public DateTimeOffset? CorrectedDateTime { get; init; }
-    public string? OnePpsClockAdvisory { get; init; }     // "Questionable accuracy"
+    public ClockAdvisory OnePpsClockAdvisory { get; init; }    // §11.3
     public double? AntennaDelayNanoseconds { get; init; }
     public LeapSecondPending LeapPending { get; init; }   // None|Plus|Minus
 
     // POSITION
     public PositionMode PositionMode { get; init; }       // Hold|Survey
     public double? SurveyPercentComplete { get; init; }
-    public string? SurveySuspendedReason { get; init; }
+    public SurveySuspendedReason SurveySuspendedReason { get; init; }  // §11.3
     public GeoPosition? Position { get; init; }
     public PositionQualifier PositionQualifier { get; init; }  // Init|Average|Held
     public HeightDatum HeightDatum { get; init; }         // GpsEllipsoid | Msl
@@ -1460,6 +1460,17 @@ The parser must recognise these `1PPS CLK` / position advisories as enum values,
 | `Absent or freq error` | No 1 PPS, or engine idle |
 | `Invalid: GPS rcvr err` | Receiver engine error |
 | `Suspended: track <4 sats` / `poor geometry` / `no track data` | Survey stalled |
+
+These decode to the `ClockAdvisory` and `SurveySuspendedReason` enums named in §11.2, and the
+model carries **no string form of either**. The mapping from the device's text belongs entirely to
+the parser, so no view can branch on a display string: `Assessing stability` alone arrives with
+nought to three animated trailing dots, which a string comparison sees as four distinct states,
+and any firmware reword would drop a `switch` silently into its default arm.
+
+Both enums carry an `Other` member for text this table does not cover. When the parser reaches it,
+the device's exact wording goes into `ReceiverStatus.ParseWarnings`, which is what makes a field
+report about an unfamiliar firmware revision actionable without keeping a string on the model that
+something might later branch on.
 
 ---
 

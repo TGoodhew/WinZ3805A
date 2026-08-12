@@ -55,8 +55,12 @@ tests/WinZ3805A.Tests/Fixtures/** -text
 # ---------------------------------------------------------------------------
 # docs/requirements.md was verified on delivery at 149,558 bytes / 1,660 lines,
 # SHA-256 aa77b0b11d0e6186e580d9fcb95323f471be7437e85a7e6bdd1218f1d24a4680.
-# This machine has core.autocrlf=true, which would check the file out with CRLF
-# endings and change every one of those figures on a fresh clone. Marking it
-# -text disables all EOL conversion in both directions, so the file that lands
-# in a clone is the file that was verified. Do not remove this line.
+# It has been amended in the repository since, deliberately and under review, so
+# those figures describe the delivered baseline rather than the current file -
+# git history is the record of what changed and why.
+# What has not changed is why this line is here. This machine has
+# core.autocrlf=true, which would check the file out with CRLF endings and alter
+# every byte count, hash, and column position in it on a fresh clone. Marking it
+# -text disables EOL conversion in both directions, so the file that lands in a
+# clone is the file that was committed. Do not remove this line.
 docs/requirements.md -text

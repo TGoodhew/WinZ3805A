@@ -138,8 +138,7 @@ public class StatusScreenParserTests
 
         Assert.Equal(TimeScale.Utc, status.TimeScale);
         Assert.Equal(new DateTimeOffset(2006, 12, 27, 14, 45, 2, TimeSpan.Zero), status.DeviceDateTime);
-        Assert.Equal("Synchronized to UTC", status.OnePpsClockAdvisory);
-        Assert.Equal(ClockAdvisoryKind.SynchronizedToUtc, status.OnePpsClockAdvisoryKind);
+        Assert.Equal(ClockAdvisory.SynchronizedToUtc, status.OnePpsClockAdvisory);
         Assert.Equal(LeapSecondPending.None, status.LeapPending);
     }
 
@@ -167,8 +166,7 @@ public class StatusScreenParserTests
 
         Assert.Equal(PositionMode.Hold, status.PositionMode);
         Assert.Null(status.SurveyPercentComplete);
-        Assert.Null(status.SurveySuspendedReason);
-        Assert.Equal(SurveySuspendedReasonKind.None, status.SurveySuspendedReasonKind);
+        Assert.Equal(SurveySuspendedReason.None, status.SurveySuspendedReason);
 
         Assert.NotNull(status.Position);
         Assert.NotNull(status.Position.LatitudeDegrees);
@@ -283,31 +281,45 @@ public class StatusScreenParserTests
     }
 
     [Theory]
-    [InlineData("Synchronized to UTC", ClockAdvisoryKind.SynchronizedToUtc)]
-    [InlineData("Synchronized to GPS Time", ClockAdvisoryKind.SynchronizedToGpsTime)]
-    [InlineData("Assessing stability", ClockAdvisoryKind.AssessingStability)]
-    [InlineData("Assessing stability...", ClockAdvisoryKind.AssessingStability)]
-    [InlineData("Questionable accuracy", ClockAdvisoryKind.QuestionableAccuracy)]
-    [InlineData("Inaccurate: not tracking", ClockAdvisoryKind.InaccurateNotTracking)]
-    [InlineData("Inaccurate: inacc position", ClockAdvisoryKind.InaccurateInaccuratePosition)]
-    [InlineData("Absent or freq error", ClockAdvisoryKind.AbsentOrFrequencyError)]
-    [InlineData("Invalid: GPS rcvr err", ClockAdvisoryKind.InvalidGpsReceiverError)]
-    [InlineData("Something no firmware has printed yet", ClockAdvisoryKind.Other)]
-    public void EveryAdvisoryInTheSpecificationDecodesToItsOwnValue(string advisory, ClockAdvisoryKind expected)
+    [InlineData("Synchronized to UTC", ClockAdvisory.SynchronizedToUtc)]
+    [InlineData("Synchronized to GPS Time", ClockAdvisory.SynchronizedToGpsTime)]
+    [InlineData("Assessing stability", ClockAdvisory.AssessingStability)]
+    [InlineData("Assessing stability...", ClockAdvisory.AssessingStability)]
+    [InlineData("Questionable accuracy", ClockAdvisory.QuestionableAccuracy)]
+    [InlineData("Inaccurate: not tracking", ClockAdvisory.InaccurateNotTracking)]
+    [InlineData("Inaccurate: inacc position", ClockAdvisory.InaccurateInaccuratePosition)]
+    [InlineData("Absent or freq error", ClockAdvisory.AbsentOrFrequencyError)]
+    [InlineData("Invalid: GPS rcvr err", ClockAdvisory.InvalidGpsReceiverError)]
+    public void EveryAdvisoryInTheSpecificationDecodesToItsOwnValue(string advisory, ClockAdvisory expected)
     {
         ReceiverStatus status = ParserAt(s_captureInstant).Parse($"GPS 1PPS {advisory}");
 
-        Assert.Equal(expected, status.OnePpsClockAdvisoryKind);
+        Assert.Equal(expected, status.OnePpsClockAdvisory);
 
-        // §11.2's raw string is kept alongside the decoded value, dots and all.
-        Assert.Equal(advisory, status.OnePpsClockAdvisory);
+        // A recognised advisory is not an anomaly. The other warnings this one-line screen raises
+        // — no health banner, no table, no clock row — are all correct and beside the point.
+        Assert.DoesNotContain(status.ParseWarnings, w => w.Contains("advisory", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// §11.3 keeps no string form of the advisory on the model, so an unfamiliar one would vanish
+    /// entirely if the parser did not quote it. That warning is what makes a field report about an
+    /// odd firmware revision answerable.
+    /// </summary>
+    [Fact]
+    public void AnUnrecognisedAdvisoryIsQuotedInTheWarnings()
+    {
+        ReceiverStatus status = ParserAt(s_captureInstant).Parse("GPS 1PPS Assessing drift");
+
+        Assert.Equal(ClockAdvisory.Other, status.OnePpsClockAdvisory);
+        Assert.Contains(status.ParseWarnings, w => w.Contains("Assessing drift", StringComparison.Ordinal));
     }
 
     [Theory]
-    [InlineData("Suspended: track <4 sats", SurveySuspendedReasonKind.TooFewSatellites)]
-    [InlineData("Suspended: poor geometry", SurveySuspendedReasonKind.PoorGeometry)]
-    [InlineData("Suspended: no track data", SurveySuspendedReasonKind.NoTrackData)]
-    public void ASuspendedSurveyReportsWhy(string line, SurveySuspendedReasonKind expected)
+    [InlineData("Suspended: track <4 sats", SurveySuspendedReason.TooFewSatellites)]
+    [InlineData("Suspended: poor geometry", SurveySuspendedReason.PoorGeometry)]
+    [InlineData("Suspended: no track data", SurveySuspendedReason.NoTrackData)]
+    public void ASuspendedSurveyReportsWhy(string line, SurveySuspendedReason expected)
     {
         ReceiverStatus status = ParserAt(s_captureInstant).Parse(string.Join("\r\n",
         [
@@ -317,7 +329,7 @@ public class StatusScreenParserTests
 
         Assert.Equal(PositionMode.Survey, status.PositionMode);
         Assert.Equal(45d, status.SurveyPercentComplete);
-        Assert.Equal(expected, status.SurveySuspendedReasonKind);
+        Assert.Equal(expected, status.SurveySuspendedReason);
     }
 
     /// <summary>
