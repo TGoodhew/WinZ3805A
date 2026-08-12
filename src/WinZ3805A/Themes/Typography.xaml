@@ -37,11 +37,13 @@
         cannot be relied on for Windows 10. The URI is written in that form here so that
         landing the font is dropping a file into Assets/Fonts and nothing else.
 
-        The binary is not in the repository yet — that is OQ-D2 (#43), whose recorded
-        assumption is to embed. Until it lands this resolves down the chain to Consolas,
-        which is present on every supported version and is the specified fallback either
-        way. Do not "fix" this by deleting the URI; that would make adding the font a
-        code change instead of an asset change.
+        The font is embedded: Assets/Fonts/CascadiaMono.ttf, the variable face from
+        microsoft/cascadia-code v2407.24, 714,804 bytes, whose family name really is
+        "Cascadia Mono" so the fragment above resolves. SIL OFL 1.1 permits the
+        redistribution and the licence ships beside it (OQ-D2, #43).
+
+        Consolas remains in the chain and is present on every supported version, so a
+        packaging mistake degrades rather than showing squares.
     -->
     <FontFamily x:Key="WzMonoFontFamily">ms-appx:///Assets/Fonts/CascadiaMono.ttf#Cascadia Mono, Consolas, Courier New</FontFamily>
 
