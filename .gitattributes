@@ -1,0 +1,62 @@
+# Normalise line endings so the repository content is stable regardless of the
+# contributor's core.autocrlf setting.
+* text=auto
+
+# ---------------------------------------------------------------------------
+# Windows-native tooling that expects CRLF
+# ---------------------------------------------------------------------------
+*.sln       text eol=crlf
+*.csproj    text eol=crlf
+*.props     text eol=crlf
+*.targets   text eol=crlf
+*.pubxml    text eol=crlf
+*.ps1       text eol=crlf
+*.cmd       text eol=crlf
+*.bat       text eol=crlf
+
+# ---------------------------------------------------------------------------
+# Source
+# ---------------------------------------------------------------------------
+*.cs             text diff=csharp
+*.xaml           text
+*.appxmanifest   text
+*.manifest       text
+*.json           text
+*.config         text
+*.md             text
+*.yml            text
+*.yaml           text
+*.editorconfig   text
+
+# ---------------------------------------------------------------------------
+# Binary - never convert, never diff as text
+# ---------------------------------------------------------------------------
+*.png   binary
+*.ico   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ttf   binary
+*.otf   binary
+*.pfx   binary
+*.snk   binary
+*.cer   binary
+*.msix  binary
+*.appx  binary
+*.db    binary
+*.sqlite binary
+
+# Captured status screens are parser fixtures. They are device output reproduced
+# verbatim (§11.1) and their exact bytes, including line endings, are the point.
+tests/WinZ3805A.Tests/Fixtures/** -text
+
+# ---------------------------------------------------------------------------
+# The specification is byte-exact and must stay that way.
+# ---------------------------------------------------------------------------
+# docs/requirements.md was verified on delivery at 149,558 bytes / 1,660 lines,
+# SHA-256 aa77b0b11d0e6186e580d9fcb95323f471be7437e85a7e6bdd1218f1d24a4680.
+# This machine has core.autocrlf=true, which would check the file out with CRLF
+# endings and change every one of those figures on a fresh clone. Marking it
+# -text disables all EOL conversion in both directions, so the file that lands
+# in a clone is the file that was verified. Do not remove this line.
+docs/requirements.md -text

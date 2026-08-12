@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "WinZ3805A (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "WinZ3805A (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "dotnet.defaultSolution": "WinZ3805A.sln",
+
+  "files.trimTrailingWhitespace": true,
+  "files.insertFinalNewline": true,
+  "editor.formatOnSave": true,
+
+  // Markdown keeps its trailing double-space hard line breaks, so the
+  // requirements document is never reformatted by an editor save.
+  "[markdown]": {
+    "files.trimTrailingWhitespace": false
+  },
+
+  "editor.codeActionsOnSave": {
+    "source.organizeImports": "explicit"
+  },
+
+  "omnisharp.enableEditorConfigSupport": true,
+  "dotnet.completion.showCompletionItemsFromUnimportedNamespaces": true,
+
+  "files.associations": {
+    "*.xaml": "xml",
+    "*.appxmanifest": "xml"
+  },
+
+  "search.exclude": {
+    "**/bin": true,
+    "**/obj": true,
+    "**/AppPackages": true,
+    "**/BundleArtifacts": true
+  }
+}

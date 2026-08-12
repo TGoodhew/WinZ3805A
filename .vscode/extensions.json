@@ -1,0 +1,29 @@
+{
+  // Prompted on a fresh clone. See docs/requirements.md §6.1 for the toolchain.
+  "recommendations": [
+    // Solution explorer, test runner, IntelliSense.
+    "ms-dotnettools.csdevkit",
+
+    // C# language server. Dependency of C# Dev Kit.
+    "ms-dotnettools.csharp",
+
+    // Init, run, debug, package and sign from the editor.
+    // Requires the WinApp CLI to be installed separately:
+    //   winget install Microsoft.WinAppCLI
+    "microsoft-winappcli.winapp",
+
+    // Enforces the repository .editorconfig.
+    "editorconfig.editorconfig",
+
+    // CI workflow authoring.
+    "github.vscode-github-actions",
+
+    // XAML formatting - attribute ordering and wrapping. Framework-agnostic.
+    "dabbinavo.xamlstyler",
+
+    // WinUI 3 XAML design surface, native preview, MSIX debug and packaging.
+    // Preview-quality and community-published, not a Microsoft extension.
+    "alvinashcraft.windev-helper"
+  ],
+  "unwantedRecommendations": []
+}

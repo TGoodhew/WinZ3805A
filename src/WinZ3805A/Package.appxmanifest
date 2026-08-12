@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:mp="http://schemas.microsoft.com/appx/2014/phone/manifest"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap rescap">
+
+  <!--
+    TODO (blocked by OQ-6): replace Name and Publisher with the values Partner
+    Center issues. Identity/@Name is effectively permanent - changing it later
+    creates a new app with a new listing and no upgrade path for existing users.
+    Properties/DisplayName below is deliberately decoupled from it (§6.3) and can
+    be changed at any time without consequence.
+  -->
+  <Identity
+    Name="WinZ3805A"
+    Publisher="CN=AppPublisher"
+    Version="1.0.0.0" />
+
+  <mp:PhoneIdentity PhoneProductId="DB5D1AF4-65FD-41CA-91F9-D83D5ACEB3B0" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
+
+  <Properties>
+    <!-- TODO (OQ-8): decide whether this survives Store certification as-is, or
+         becomes descriptive (e.g. "GPSDO Monitor for Z3805A"). Read at runtime
+         via Package.Current.DisplayName; never hard-coded in XAML or tests. -->
+    <DisplayName>WinZ3805A</DisplayName>
+    <!-- TODO (blocked by OQ-6): Partner Center publisher display name. -->
+    <PublisherDisplayName>AppPublisher</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Universal" MinVersion="10.0.17763.0" MaxVersionTested="10.0.26226.0" />
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.26226.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="x-generate"/>
+  </Resources>
+
+  <Applications>
+    <Application Id="App"
+      Executable="$targetnametoken$.exe"
+      EntryPoint="$targetentrypoint$">
+      <uap:VisualElements
+        DisplayName="WinZ3805A"
+        Description="Monitor and control application for SCPI GPS-disciplined oscillators."
+        BackgroundColor="transparent"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png">
+        <uap:DefaultTile Wide310x150Logo="Assets\Wide310x150Logo.png" />
+        <uap:SplashScreen Image="Assets\SplashScreen.png" />
+      </uap:VisualElements>
+    </Application>
+  </Applications>
+
+  <!--
+    §6.3: runFullTrust only. It is what permits System.IO.Ports, which opens
+    \\.\COMn through Win32. It is a restricted capability and needs justification
+    at submission:
+      "Desktop application requiring Win32 serial port access to communicate with
+       user-attached RS-232 laboratory instruments."
+
+    Do NOT declare the serialcommunication DeviceCapability - that is for the UWP
+    Windows.Devices.SerialCommunication API, which this app does not use.
+    Unnecessary capabilities add certification friction. The template's
+    systemAIModels capability was removed for the same reason.
+  -->
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+  </Capabilities>
+</Package>

@@ -1,0 +1,29 @@
+<Project>
+
+  <!-- Applies to every project in the solution.
+       See docs/requirements.md §6.4 for the rationale behind each setting. -->
+  <PropertyGroup>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+
+    <!-- Makes the IDE* code-style analyzers run during build rather than only
+         in the editor. Combined with TreatWarningsAsErrors above, this is what
+         turns the file-scoped-namespace rule in .editorconfig into a genuine
+         build gate instead of an editor suggestion. -->
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+
+    <!-- IDE0005 (unnecessary using directive) only reports reliably during
+         build when the documentation file is generated. -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+
+    <!-- CS1591 is the missing-XML-comment warning that GenerateDocumentationFile
+         switches on. Requiring doc comments on every public member is not a
+         project convention, and with TreatWarningsAsErrors it would fail the
+         build on every placeholder. -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+</Project>
