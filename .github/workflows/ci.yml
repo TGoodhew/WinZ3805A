@@ -37,6 +37,14 @@ jobs:
         shell: pwsh
         run: ./build/Test-IconOnlyButtons.ps1
 
+      # §9.4 / A11Y-8. Light and Dark get exercised whenever anyone runs the app;
+      # HighContrast does not, because testing it means switching the whole
+      # desktop over. A token missing from one theme fails only for the user who
+      # needs that theme, so it is checked here instead.
+      - name: Theme dictionaries define the same tokens in all three themes
+        shell: pwsh
+        run: ./build/Test-ThemeDictionaryParity.ps1
+
   # ---------------------------------------------------------------------------
   # P0-7 / §8.4. Separate from the design-system gates because it guards a
   # different thing: that no excluded command is named anywhere but the single

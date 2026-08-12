@@ -163,12 +163,13 @@ Two of the §9.12 criteria are enforced by CI rather than by review. Both are
 plain scripts, so run them locally and get the answer in a second:
 
 ```powershell
-pwsh build/Test-NoHexLiterals.ps1      # P0-17 / §9.13 item 2
-pwsh build/Test-IconOnlyButtons.ps1    # A11Y-3 / §9.9
-pwsh build/Test-NoBlockedCommands.ps1  # P0-7 / §8.4
+pwsh build/Test-NoHexLiterals.ps1        # P0-17 / §9.13 item 2
+pwsh build/Test-IconOnlyButtons.ps1      # A11Y-3 / §9.9
+pwsh build/Test-ThemeDictionaryParity.ps1  # §9.4 / A11Y-8
+pwsh build/Test-NoBlockedCommands.ps1    # P0-7 / §8.4
 ```
 
-`.github/workflows/ci.yml` runs all three first, before any restore, so a token,
+`.github/workflows/ci.yml` runs all four first, before any restore, so a token,
 accessibility, or safety regression fails in seconds rather than after a full build. It then
 builds all four Configuration × Platform combinations and runs the tests.
 
@@ -178,6 +179,11 @@ any `Views/` or `Controls/` folder. The icon gate parses XAML as XML rather than
 grepping, and fails a `Button`-like control that is icon-only and missing
 *either* an `AutomationProperties.Name` or a `ToolTipService.ToolTip` — §9.9
 requires both.
+
+The theme-parity gate exists because Light and Dark are exercised every time anyone
+runs the app and HighContrast is not — testing it means switching the whole
+desktop over. A token defined in one theme and not another compiles, passes
+review, and then fails at run time for precisely the user who needs that theme.
 
 The blocked-command gate reads its tokens out of
 `src/WinZ3805A.Device/Commands/BlockedCommands.cs` rather than restating them, so

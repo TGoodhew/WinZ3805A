@@ -6,13 +6,37 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:local="using:WinZ3805A.Views"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    mc:Ignorable="d">
+    mc:Ignorable="d"
+    Background="{ThemeResource WzLayerFillBrush}">
 
     <!--
-        This is the main content area of your application.
-        Add your UI elements here — for example, controls, layouts, and data-bound views.
-        Use 'dotnet new winui-page' to create additional pages and navigate to them via
-        the Frame in MainWindow (RootFrame).
+        Scaffolding, still. The §10.3 main window is a medallion surface and is P0-3;
+        this page is what the Frame shows until that lands.
+
+        What it does carry is a live reference to the §9 token layer, and that is
+        deliberate. A resource dictionary that nothing binds to is a dictionary nobody
+        knows is broken: a mistyped key or a dictionary left out of App.xaml fails at
+        run time, not at build time. Exercising one brush, one type style, one spacing
+        value, and one radius means launching the app proves the layer resolves.
+
+        Everything here is {ThemeResource} rather than {StaticResource} for brushes, so
+        it re-resolves when the user switches theme — which is the rule the whole colour
+        section rests on (§9.4).
     -->
-    <Grid />
+    <Grid Padding="{StaticResource WzPageMarginThickness}">
+        <Border Style="{StaticResource WzCardStyle}"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center">
+            <StackPanel Spacing="{StaticResource WzSpaceXs}">
+                <TextBlock Style="{StaticResource WzSubtitleTextStyle}"
+                           Foreground="{ThemeResource WzTextPrimaryBrush}"
+                           Text="No receiver connected" />
+                <TextBlock Style="{StaticResource WzBodyTextStyle}"
+                           Foreground="{ThemeResource WzTextSecondaryBrush}"
+                           MaxWidth="{StaticResource WzProseMaxWidth}"
+                           TextWrapping="Wrap"
+                           Text="Connect a SmartClock receiver over RS-232 to begin monitoring." />
+            </StackPanel>
+        </Border>
+    </Grid>
 </Page>
