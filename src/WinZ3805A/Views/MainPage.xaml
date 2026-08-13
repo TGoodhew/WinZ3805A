@@ -11,40 +11,149 @@
     Background="{ThemeResource WzLayerFillBrush}">
 
     <!--
-        Scaffolding, still. The §10.3 main window is a medallion surface and is P0-3; this page
-        is what the Frame shows until that lands.
+        The §10.3 main window: the surface a lab user leaves on a second monitor for weeks. Its job
+        is answered in two seconds from across a room — what state the receiver is in, and how many
+        satellites it can see.
 
-        It carries live references to the §9 token layer and to SeverityPill on purpose. A
-        resource dictionary nothing binds to, and a control template nothing instantiates, both
-        fail at run time rather than at build time — so a mistyped key or a broken template would
-        sit undiscovered until the first real page. Exercising one of each means launching the app
-        proves both resolve.
-
-        The pill is not a placeholder: "Not connected" at Neutral severity is the true state of
-        this window right now, and §9.13 item 10 requires that it be said through this control
-        rather than as a coloured dot.
+        Every colour, size, radius and gap is a §9 token. Severity is never carried by colour alone:
+        each one goes through SeverityPill, which adds shape and text (§9.13 item 10).
     -->
-    <Grid Padding="{StaticResource WzPageMarginThickness}">
-        <Border Style="{StaticResource WzCardStyle}"
-                HorizontalAlignment="Center"
-                VerticalAlignment="Center">
-            <StackPanel Spacing="{StaticResource WzSpaceXs}">
-                <!--
-                    Disconnected with no samples, which is the truth right now. It also keeps the
-                    medallion template instantiated: a control template nothing creates fails at run
-                    time rather than at build time.
-                -->
-                <controls:StatusMedallion Mode="Disconnected" Size="Standard" HorizontalAlignment="Center" />
-                <TextBlock Style="{StaticResource WzSubtitleTextStyle}"
-                           Foreground="{ThemeResource WzTextPrimaryBrush}"
-                           Text="No receiver connected" />
-                <TextBlock Style="{StaticResource WzBodyTextStyle}"
-                           Foreground="{ThemeResource WzTextSecondaryBrush}"
-                           MaxWidth="{StaticResource WzProseMaxWidth}"
-                           TextWrapping="Wrap"
-                           Text="Connect a SmartClock receiver over RS-232 to begin monitoring." />
-                <controls:SeverityPill Severity="Neutral" Text="Not connected" />
+    <Grid Padding="{StaticResource WzPageMarginThickness}" RowSpacing="{StaticResource WzSpaceXl}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- Medallion and mode -->
+        <StackPanel x:Name="HeaderRow" Orientation="Horizontal" Spacing="{StaticResource WzSpaceXl}">
+            <controls:StatusMedallion x:Name="Medallion"
+                                      Size="Large"
+                                      DoubleTapped="OnMedallionDoubleTapped" />
+            <StackPanel VerticalAlignment="Center" Spacing="{StaticResource WzSpaceXxs}">
+                <TextBlock x:Name="ModeText"
+                           Style="{StaticResource WzSubtitleTextStyle}"
+                           Foreground="{ThemeResource WzTextPrimaryBrush}" />
+                <TextBlock x:Name="ModeDetailText"
+                           Style="{StaticResource WzBodyTextStyle}"
+                           Foreground="{ThemeResource WzTextSecondaryBrush}" />
+                <controls:SeverityPill x:Name="CoastingPill"
+                                       Severity="Caution"
+                                       Text="coasting"
+                                       Visibility="Collapsed" />
             </StackPanel>
-        </Border>
+        </StackPanel>
+
+        <!-- The two figures that share top billing (§10.3) -->
+        <StackPanel x:Name="ReadoutRow"
+                    Grid.Row="1"
+                    Orientation="Horizontal"
+                    Spacing="{StaticResource WzSpaceXxl}">
+            <controls:ReadoutTile x:Name="Satellites"
+                                  Label="satellites"
+                                  Size="Large"
+                                  DecimalPlaces="0"
+                                  MaxIntegerDigits="2"
+                                  AllowNegative="False" />
+            <controls:ReadoutTile x:Name="TimeInterval"
+                                  Label="1 PPS TI"
+                                  Unit="ns"
+                                  Size="Large"
+                                  DecimalPlaces="1"
+                                  MaxIntegerDigits="4" />
+        </StackPanel>
+
+        <!-- Figures of merit, through SeverityPill so shape and text travel with the colour -->
+        <StackPanel x:Name="MeritRow"
+                    Grid.Row="2"
+                    Orientation="Horizontal"
+                    Spacing="{StaticResource WzSpaceMd}">
+            <controls:SeverityPill x:Name="TfomPill" />
+            <controls:SeverityPill x:Name="FfomPill" />
+        </StackPanel>
+
+        <!-- Device clock, set in the mono face because it is what the machine said (§9.5.1) -->
+        <StackPanel x:Name="ClockRow"
+                    Grid.Row="3"
+                    Orientation="Horizontal"
+                    Spacing="{StaticResource WzSpaceXxs}"
+                    VerticalAlignment="Top">
+            <TextBlock x:Name="ClockText"
+                       Style="{StaticResource WzMonoTextStyle}"
+                       Foreground="{ThemeResource WzTextPrimaryBrush}" />
+            <TextBlock x:Name="RolloverBadge"
+                       FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                       FontSize="12"
+                       VerticalAlignment="Center"
+                       Foreground="{ThemeResource WzInfoBrush}"
+                       Visibility="Collapsed"
+                       Text="&#xE946;" />
+        </StackPanel>
+
+        <!-- Footer: what we are talking to, and how old what it said is -->
+        <Grid Grid.Row="4" ColumnSpacing="{StaticResource WzSpaceMd}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <TextBlock x:Name="FooterText"
+                       Style="{StaticResource WzCaptionTextStyle}"
+                       Foreground="{ThemeResource WzTextTertiaryBrush}"
+                       VerticalAlignment="Center"
+                       TextWrapping="NoWrap"
+                       TextTrimming="CharacterEllipsis" />
+
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="{StaticResource WzSpaceXs}">
+                <Button x:Name="DetailsButton"
+                        Content="Details"
+                        IsEnabled="False"
+                        ToolTipService.ToolTip="The Receiver Details window is not built yet." />
+                <Button x:Name="ConnectButton"
+                        Style="{StaticResource AccentButtonStyle}"
+                        Click="OnConnectClicked" />
+            </StackPanel>
+        </Grid>
+
+        <VisualStateManager.VisualStateGroups>
+            <!--
+                §10.3's footer staleness. Driven from the view model rather than from a converter so
+                the thresholds live in one tested place, and set through ThemeResource so the colours
+                re-resolve on a theme change.
+            -->
+            <VisualStateGroup x:Name="StalenessStates">
+                <VisualState x:Name="AgeFresh" />
+                <VisualState x:Name="AgeCaution">
+                    <VisualState.Setters>
+                        <Setter Target="FooterText.Foreground" Value="{ThemeResource WzCautionBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="AgeCritical">
+                    <VisualState.Setters>
+                        <Setter Target="FooterText.Foreground" Value="{ThemeResource WzCriticalBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+
+            <!--
+                §10.3's compact mode, 380 x 120: the medallion drops to 64 px and everything below
+                the mode line goes away. Type sizes, targets and focus visuals are unchanged (§9.6.3)
+                — this is less content, not smaller content.
+            -->
+            <VisualStateGroup x:Name="DensityStates">
+                <VisualState x:Name="Normal" />
+                <VisualState x:Name="CompactDensity">
+                    <VisualState.Setters>
+                        <Setter Target="Medallion.Size" Value="Compact" />
+                        <Setter Target="ReadoutRow.Visibility" Value="Collapsed" />
+                        <Setter Target="MeritRow.Visibility" Value="Collapsed" />
+                        <Setter Target="ClockRow.Visibility" Value="Collapsed" />
+                        <Setter Target="CoastingPill.Visibility" Value="Collapsed" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
     </Grid>
 </Page>
