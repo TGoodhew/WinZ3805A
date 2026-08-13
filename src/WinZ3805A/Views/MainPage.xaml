@@ -29,6 +29,12 @@
                 HorizontalAlignment="Center"
                 VerticalAlignment="Center">
             <StackPanel Spacing="{StaticResource WzSpaceXs}">
+                <!--
+                    Disconnected with no samples, which is the truth right now. It also keeps the
+                    medallion template instantiated: a control template nothing creates fails at run
+                    time rather than at build time.
+                -->
+                <controls:StatusMedallion Mode="Disconnected" Size="Standard" HorizontalAlignment="Center" />
                 <TextBlock Style="{StaticResource WzSubtitleTextStyle}"
                            Foreground="{ThemeResource WzTextPrimaryBrush}"
                            Text="No receiver connected" />

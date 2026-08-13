@@ -202,4 +202,137 @@
         </Setter>
     </Style>
 
+    <!-- =========================================================================== -->
+    <!-- StatusMedallion (§9.10.2, §10.3, P0-18)                                      -->
+    <!--                                                                              -->
+    <!-- The circle is reserved to this control alone (§9.3). Nothing here animates:   -->
+    <!-- §9.8.2 gives the ring redraw WzDurationInstant and §9.13 item 7 forbids it    -->
+    <!-- pulsing in holdover. It changes colour, glyph and shape at once instead,      -->
+    <!-- which is louder because everything else on the window is still.               -->
+    <!-- =========================================================================== -->
+
+    <Style TargetType="controls:StatusMedallion">
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+        <Setter Property="VerticalAlignment" Value="Top" />
+        <!--
+            0 in Light and Dark, 2 in HighContrast. This is how §9.10.2's high-contrast rule
+            reaches the control without it asking the system what theme is in force.
+        -->
+        <Setter Property="PlainRingThickness" Value="{ThemeResource WzMedallionPlainRingThickness}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="controls:StatusMedallion">
+                    <Grid x:Name="MedallionRoot" Background="Transparent">
+
+                        <!-- The face. A circle, and the only one in the application. -->
+                        <Ellipse x:Name="Face"
+                                 Fill="{ThemeResource WzCardFillBrush}"
+                                 Stroke="{ThemeResource WzStrokeSubtleBrush}"
+                                 StrokeThickness="{ThemeResource WzHairlineThickness}" />
+
+                        <!--
+                            Raw to assistive technology, per §9.10.2: the ring is a qualitative
+                            restatement of a number the control already announces in its name, and
+                            sixty unnamed marks would bury the meaning rather than add to it.
+                        -->
+                        <Path x:Name="PART_Ring"
+                              Stroke="{ThemeResource WzNeutralBrush}"
+                              StrokeStartLineCap="Round"
+                              StrokeEndLineCap="Round"
+                              AutomationProperties.AccessibilityView="Raw" />
+
+                        <!-- Replaces the sparkline under high contrast. -->
+                        <Ellipse x:Name="PART_PlainRing"
+                                 Margin="{ThemeResource WzSpaceXxsThickness}"
+                                 Stroke="{ThemeResource WzTextPrimaryBrush}"
+                                 Visibility="Collapsed"
+                                 AutomationProperties.AccessibilityView="Raw" />
+
+                        <TextBlock x:Name="Glyph"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                   Foreground="{ThemeResource WzNeutralBrush}"
+                                   AutomationProperties.AccessibilityView="Raw"
+                                   Text="&#xE8CD;" />
+
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="ModeStates">
+                                <VisualState x:Name="Locked">
+                                    <VisualState.Setters>
+                                        <Setter Target="Glyph.Text" Value="&#xE73E;" />
+                                        <Setter Target="Glyph.Foreground" Value="{ThemeResource WzSuccessBrush}" />
+                                        <Setter Target="PART_Ring.Stroke" Value="{ThemeResource WzSuccessBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Recovering">
+                                    <VisualState.Setters>
+                                        <Setter Target="Glyph.Text" Value="&#xE72C;" />
+                                        <Setter Target="Glyph.Foreground" Value="{ThemeResource WzCautionBrush}" />
+                                        <Setter Target="PART_Ring.Stroke" Value="{ThemeResource WzCautionBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Waiting">
+                                    <VisualState.Setters>
+                                        <Setter Target="Glyph.Text" Value="&#xE769;" />
+                                        <Setter Target="Glyph.Foreground" Value="{ThemeResource WzCautionBrush}" />
+                                        <Setter Target="PART_Ring.Stroke" Value="{ThemeResource WzCautionBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Holdover">
+                                    <VisualState.Setters>
+                                        <Setter Target="Glyph.Text" Value="&#xE7BA;" />
+                                        <Setter Target="Glyph.Foreground" Value="{ThemeResource WzCriticalBrush}" />
+                                        <Setter Target="PART_Ring.Stroke" Value="{ThemeResource WzCriticalBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="PowerUp">
+                                    <VisualState.Setters>
+                                        <Setter Target="Glyph.Text" Value="&#xE823;" />
+                                        <Setter Target="Glyph.Foreground" Value="{ThemeResource WzNeutralBrush}" />
+                                        <Setter Target="PART_Ring.Stroke" Value="{ThemeResource WzNeutralBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Off">
+                                    <VisualState.Setters>
+                                        <Setter Target="Glyph.Text" Value="&#xE7E8;" />
+                                        <Setter Target="Glyph.Foreground" Value="{ThemeResource WzNeutralBrush}" />
+                                        <Setter Target="PART_Ring.Stroke" Value="{ThemeResource WzNeutralBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Disconnected">
+                                    <VisualState.Setters>
+                                        <Setter Target="Glyph.Text" Value="&#xE8CD;" />
+                                        <Setter Target="Glyph.Foreground" Value="{ThemeResource WzNeutralBrush}" />
+                                        <Setter Target="PART_Ring.Stroke" Value="{ThemeResource WzNeutralBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+
+                            <!-- §10.3 sets the glyph at 56 px in the 160 px medallion. -->
+                            <VisualStateGroup x:Name="SizeStates">
+                                <VisualState x:Name="Compact">
+                                    <VisualState.Setters>
+                                        <Setter Target="Glyph.FontSize" Value="28" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Standard">
+                                    <VisualState.Setters>
+                                        <Setter Target="Glyph.FontSize" Value="36" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Large">
+                                    <VisualState.Setters>
+                                        <Setter Target="Glyph.FontSize" Value="56" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
 </ResourceDictionary>

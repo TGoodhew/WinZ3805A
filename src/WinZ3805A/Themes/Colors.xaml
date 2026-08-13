@@ -117,6 +117,14 @@
             <SolidColorBrush x:Key="WzDivergingPositiveBrush" Color="#F0A882" />
             <SolidColorBrush x:Key="WzDivergingPositiveStrongBrush" Color="#B23A00" />
 
+            <!--
+                §9.10.2's high-contrast rule, expressed as a token so the medallion never has to ask
+                the system what theme it is in. Zero means "draw the sparkline"; a positive value is
+                the stroke width of the plain ring that replaces it. Going through a theme resource
+                means it re-resolves on a theme change like everything else.
+            -->
+            <x:Double x:Key="WzMedallionPlainRingThickness">0</x:Double>
+
         </ResourceDictionary>
 
         <!-- ================================================================= -->
@@ -193,6 +201,14 @@
             <SolidColorBrush x:Key="WzDivergingZeroBrush" Color="#DDE4E5" />
             <SolidColorBrush x:Key="WzDivergingPositiveBrush" Color="#F0A882" />
             <SolidColorBrush x:Key="WzDivergingPositiveStrongBrush" Color="#B23A00" />
+
+            <!--
+                §9.10.2's high-contrast rule, expressed as a token so the medallion never has to ask
+                the system what theme it is in. Zero means "draw the sparkline"; a positive value is
+                the stroke width of the plain ring that replaces it. Going through a theme resource
+                means it re-resolves on a theme change like everything else.
+            -->
+            <x:Double x:Key="WzMedallionPlainRingThickness">0</x:Double>
 
         </ResourceDictionary>
 
@@ -285,6 +301,13 @@
             <SolidColorBrush x:Key="WzDivergingZeroBrush" Color="{ThemeResource SystemColorGrayTextColor}" />
             <SolidColorBrush x:Key="WzDivergingPositiveBrush" Color="{ThemeResource SystemColorHighlightColor}" />
             <SolidColorBrush x:Key="WzDivergingPositiveStrongBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+
+            <!--
+                Non-zero here: sixty small marks all in the system window colour would be noise
+                rather than information, so high contrast gets a plain 2 px ring and severity is
+                carried by the glyph and the label instead (§9.10.2).
+            -->
+            <x:Double x:Key="WzMedallionPlainRingThickness">2</x:Double>
 
         </ResourceDictionary>
 
