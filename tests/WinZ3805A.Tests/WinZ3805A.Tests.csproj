@@ -65,6 +65,23 @@
              Link="ViewModels\DisplayTime.cs" />
     <Compile Include="..\..\src\WinZ3805A\ViewModels\MainViewModel.cs"
              Link="ViewModels\MainViewModel.cs" />
+
+    <!-- P0-1's §10.12 dialog. The registry walk and the LocalSettings container behind these are
+         Windows-only and stay in the app; what is linked is the part with the decisions in it -
+         which port comes back selected after a refresh, what the progress line says on the fifth of
+         eight probes, and which row of §9.11 a failure belongs to. -->
+    <Compile Include="..\..\src\WinZ3805A\Services\SerialPortInfo.cs"
+             Link="Services\SerialPortInfo.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Services\ConnectionPreferences.cs"
+             Link="Services\ConnectionPreferences.cs" />
+    <Compile Include="..\..\src\WinZ3805A\ViewModels\ConnectionViewModel.cs"
+             Link="ViewModels\ConnectionViewModel.cs" />
+
+    <!-- The preference store is linked because it no longer speaks WinRT. It was written over
+         ApplicationData.Current.LocalSettings, which killed the process outright; a JSON file has
+         no such problem and, unlike the container, can be round-tripped in a headless test. -->
+    <Compile Include="..\..\src\WinZ3805A\Services\LocalConnectionPreferenceStore.cs"
+             Link="Services\LocalConnectionPreferenceStore.cs" />
   </ItemGroup>
 
 </Project>

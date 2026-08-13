@@ -33,9 +33,12 @@ public sealed partial class MainPage : Page
     private readonly ReceiverStateStore _store;
     private readonly PollingService _poller;
     private readonly MainViewModel _model;
+    private readonly SerialPortEnumerator _ports = new();
+    private readonly IConnectionPreferenceStore _preferences = new LocalConnectionPreferenceStore();
     private readonly DispatcherTimer _stalenessTicker = new() { Interval = TimeSpan.FromSeconds(1) };
 
     private bool _compact;
+    private bool _launchAttempted;
 
     /// <summary>
     /// False until the constructor has finished building the view model.
@@ -79,7 +82,11 @@ public sealed partial class MainPage : Page
 
         _ready = true;
 
-        Loaded += (_, _) => Render();
+        Loaded += async (_, _) =>
+        {
+            Render();
+            await ConnectOnLaunchAsync();
+        };
         Unloaded += async (_, _) =>
         {
             _stalenessTicker.Stop();
@@ -162,12 +169,11 @@ public sealed partial class MainPage : Page
             return;
         }
 
-        // Auto-detect rather than a fixed rate: §10.12 puts 9600-8-N-1 first, so a Z3805A answers
-        // on the first attempt and a sibling on the second. The connection dialog proper is P0-1.
         ConnectButton.IsEnabled = false;
         try
         {
-            await _session.AutoDetectAsync(FirstAvailablePort());
+            ConnectionDialog dialog = new(NewConnectionViewModel()) { XamlRoot = XamlRoot };
+            await dialog.ShowAsync();
         }
         finally
         {
@@ -175,15 +181,34 @@ public sealed partial class MainPage : Page
         }
     }
 
+    /// <summary>
+    /// Honours §10.12's "Connect to this device on launch" without showing the dialog.
+    /// </summary>
     /// <remarks>
-    /// A placeholder for §10.12's port picker: it takes the first port the system reports. The real
-    /// dialog, with enumeration, friendly names and the manual settings, is P0-1.
+    /// Awaited rather than fired and forgotten, so an exception has somewhere to surface, but not
+    /// blocking: <c>Loaded</c> has already returned by the time the first probe goes out, and the
+    /// window paints its disconnected state while the port opens behind it. Guarded because
+    /// <c>Loaded</c> raises again if the page is ever re-parented, and a second attempt would tear
+    /// down a session that is already working.
     /// </remarks>
-    private static string FirstAvailablePort()
+    private async Task ConnectOnLaunchAsync()
     {
-        string[] ports = System.IO.Ports.SerialPort.GetPortNames();
-        return ports.Length > 0 ? ports[0] : "COM1";
+        if (_launchAttempted)
+        {
+            return;
+        }
+
+        _launchAttempted = true;
+        if (!await NewConnectionViewModel().ConnectOnLaunchAsync())
+        {
+            // §9.11 keeps "Disconnected" and "Connection lost" apart, and the session reports a
+            // failed attempt as a fault. A remembered port that did not answer at start-up has lost
+            // nothing — the window must not open claiming it has.
+            await _session.DisconnectAsync();
+        }
     }
+
+    private ConnectionViewModel NewConnectionViewModel() => new(_session, _ports, _preferences);
 
     /// <summary>Pushes the view model onto the surface.</summary>
     private void Render()
