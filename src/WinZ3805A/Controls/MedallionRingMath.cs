@@ -1,0 +1,112 @@
+namespace WinZ3805A.Controls;
+
+/// <summary>
+/// The scaling behind the medallion ring (§9.10.2), as pure arithmetic.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Separated from the control, and free of every WinUI type, so the one part of the ring that can
+/// be quietly wrong is testable. A ring that draws is easy to see; a ring that draws at the wrong
+/// scale looks entirely plausible and misleads exactly the user who trusts it most.
+/// </para>
+/// <para>
+/// The ring is <b>qualitative by design</b>. It answers "is the loop calm or is it hunting" at a
+/// glance and must never be read for values — the figure itself is always set beside it in
+/// <c>WzReadoutMedium</c>. That is why the scale adapts: absolute nanoseconds would make a
+/// well-behaved receiver draw a flat line forever and a poor one clip.
+/// </para>
+/// </remarks>
+public static class MedallionRingMath
+{
+    /// <summary>
+    /// The smallest half-range the ring will ever use, in nanoseconds (§9.10.2).
+    /// </summary>
+    /// <remarks>
+    /// This floor is the whole reason the ring is trustworthy. A receiver holding to a few
+    /// nanoseconds has a standard deviation of almost nothing, and a purely relative scale would
+    /// amplify that into a ring full of teeth — showing alarm where there is none. Below this
+    /// threshold the ring simply goes quiet, which is the honest rendering of a calm loop.
+    /// </remarks>
+    public const double MinimumHalfRangeNanoseconds = 50d;
+
+    /// <summary>How many standard deviations the ring spans before the floor takes over.</summary>
+    public const double SigmaSpan = 3d;
+
+    /// <summary>
+    /// The half-range the ring should use for a window of samples: three sigma, or the floor,
+    /// whichever is larger.
+    /// </summary>
+    /// <param name="samples">
+    /// The window, oldest first. Nulls are gaps — polls that did not land — and are excluded from
+    /// the statistics rather than counted as zero, which would drag sigma down and make a hunting
+    /// loop look calmer than it is.
+    /// </param>
+    public static double HalfRange(IReadOnlyList<double?>? samples)
+    {
+        if (samples is null)
+        {
+            return MinimumHalfRangeNanoseconds;
+        }
+
+        double sum = 0;
+        int count = 0;
+        foreach (double? sample in samples)
+        {
+            if (sample is double value && !double.IsNaN(value) && !double.IsInfinity(value))
+            {
+                sum += value;
+                count++;
+            }
+        }
+
+        // One sample has no spread, so there is nothing to scale to yet.
+        if (count < 2)
+        {
+            return MinimumHalfRangeNanoseconds;
+        }
+
+        double mean = sum / count;
+        double squares = 0;
+        foreach (double? sample in samples)
+        {
+            if (sample is double value && !double.IsNaN(value) && !double.IsInfinity(value))
+            {
+                double delta = value - mean;
+                squares += delta * delta;
+            }
+        }
+
+        double sigma = Math.Sqrt(squares / count);
+        return Math.Max(SigmaSpan * sigma, MinimumHalfRangeNanoseconds);
+    }
+
+    /// <summary>
+    /// Maps one sample onto the ring, as a signed fraction of the ring's amplitude.
+    /// </summary>
+    /// <param name="sample">The sample, or <see langword="null"/> for a gap.</param>
+    /// <param name="halfRange">The half-range from <see cref="HalfRange"/>.</param>
+    /// <returns>
+    /// −1 to +1, or <see langword="null"/> for a gap so the caller can leave a space rather than
+    /// draw a zero. A gap and a reading of zero mean opposite things — "we did not hear" against
+    /// "we heard, and it was perfect" — and drawing them alike would be a lie about the second.
+    /// </returns>
+    /// <remarks>
+    /// Zero-anchored, not mean-anchored. The time interval is an error signal against GPS, so zero
+    /// is the meaningful centre; centring on the window's own mean would hide a receiver sitting
+    /// steadily 40 ns off, which is precisely the fault worth seeing.
+    /// </remarks>
+    public static double? Fraction(double? sample, double halfRange)
+    {
+        if (sample is not double value || double.IsNaN(value) || double.IsInfinity(value))
+        {
+            return null;
+        }
+
+        if (halfRange <= 0)
+        {
+            return 0;
+        }
+
+        return Math.Clamp(value / halfRange, -1d, 1d);
+    }
+}

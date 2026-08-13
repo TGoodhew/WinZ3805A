@@ -12,8 +12,8 @@ namespace WinZ3805A.Controls;
 /// prevent.
 /// </para>
 /// <para>
-/// <see cref="SeverityPill"/> takes this enum and never a brush. That is what makes the
-/// colour-blindness guarantee structural rather than something each page has to remember:
+/// <c>SeverityPill</c> takes this enum and never a brush. That is what makes the
+/// colour-blindness guarantee structural rather than something each page has to remember (named in plain text rather than with a cref, because this file is also compiled into the headless test assembly where the control does not exist):
 /// a caller cannot pass "red" because there is no way to say it.
 /// </para>
 /// </remarks>
