@@ -102,6 +102,20 @@ public sealed class DeviceSessionService : IAsyncDisposable
     public SerialSettings Settings { get; private set; } = SerialSettings.Default;
 
     /// <summary>
+    /// Why the last attempt to open the port failed, or <see cref="TransportFault.None"/> if it did
+    /// not fail that way.
+    /// </summary>
+    /// <remarks>
+    /// The connect path deliberately returns <see langword="false"/> rather than throwing, because
+    /// auto-detect walks eight settings and seven of them are expected to fail. That collapses two
+    /// outcomes §9.11 gives different copy to: a port that answered nothing, and a port Windows
+    /// would not open at all. This carries the distinction out without reintroducing the exception —
+    /// <see cref="TransportFault.AccessDenied"/> is the "No permission" row, and
+    /// <see cref="TransportFault.PortNotFound"/> on ARM64 is usually the missing driver of §6.1.
+    /// </remarks>
+    public TransportFault LastFault { get; private set; }
+
+    /// <summary>
     /// Whether a dropped link is retried. Corresponds to "Reconnect automatically" in §10.12.
     /// </summary>
     public bool StayConnected { get; set; } = true;
@@ -177,6 +191,15 @@ public sealed class DeviceSessionService : IAsyncDisposable
                 }
 
                 await TearDownAsync().ConfigureAwait(false);
+
+                // A port Windows will not open, or one that is not there, fails identically at
+                // every baud rate. Walking the remaining seven only delays the message §9.11 has
+                // for that case, and its copy is nothing like "no receiver answered".
+                if (LastFault is TransportFault.AccessDenied or TransportFault.PortNotFound)
+                {
+                    SetStatus(ConnectionStatus.Faulted, $"Could not open {portName}.");
+                    return null;
+                }
             }
 
             SetStatus(ConnectionStatus.Faulted, $"No receiver answered on {portName} at any supported setting.");
@@ -256,6 +279,7 @@ public sealed class DeviceSessionService : IAsyncDisposable
 
     private async Task<bool> OpenAndSynchroniseAsync(CancellationToken cancellationToken)
     {
+        LastFault = TransportFault.None;
         try
         {
             _transport = _transportFactory(PortName!, Settings);
@@ -297,6 +321,7 @@ public sealed class DeviceSessionService : IAsyncDisposable
         }
         catch (Exception exception) when (TransportFaults.IsTransportFault(exception))
         {
+            LastFault = TransportFaults.Classify(exception);
             _logger.LogDebug(exception, "Opening {Port} at {Settings} failed.", PortName, Settings);
             return false;
         }
