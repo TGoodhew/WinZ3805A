@@ -90,6 +90,47 @@
                        Foreground="{ThemeResource WzInfoBrush}"
                        Visibility="Collapsed"
                        Text="&#xE946;" />
+
+            <!--
+                The zone picker. Its long-term home is Settings -> Time, a page in the Details
+                window (§10.2), which is #5 in M4; until that exists it lives here so the setting is
+                reachable at all. Icon-only, so §9.9 requires both an automation name and a tooltip.
+            -->
+            <Button x:Name="ZoneButton"
+                    Padding="{StaticResource WzSpaceXxsThickness}"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    VerticalAlignment="Center"
+                    AutomationProperties.Name="Time zone settings"
+                    ToolTipService.ToolTip="Choose the time zone times are shown in">
+                <TextBlock FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                           FontSize="12"
+                           Foreground="{ThemeResource WzTextSecondaryBrush}"
+                           Text="&#xE774;" />
+                <Button.Flyout>
+                    <Flyout>
+                        <StackPanel Width="360" Spacing="{StaticResource WzSpaceXs}">
+                            <TextBlock Style="{StaticResource WzBodyStrongTextStyle}"
+                                       Foreground="{ThemeResource WzTextPrimaryBrush}"
+                                       Text="Time zone" />
+                            <ToggleSwitch x:Name="UseMachineZone"
+                                          Header="Use this computer's time zone"
+                                          IsOn="True"
+                                          Toggled="OnUseMachineZoneToggled" />
+                            <ComboBox x:Name="ZonePicker"
+                                      Header="Time zone"
+                                      HorizontalAlignment="Stretch"
+                                      IsEnabled="False"
+                                      SelectionChanged="OnZoneSelected" />
+                            <TextBlock Style="{StaticResource WzCaptionTextStyle}"
+                                       Foreground="{ThemeResource WzTextTertiaryBrush}"
+                                       TextWrapping="Wrap"
+                                       Text="This changes what is displayed only. The receiver keeps its own time zone setting." />
+                        </StackPanel>
+                    </Flyout>
+                </Button.Flyout>
+            </Button>
+
         </StackPanel>
 
         <!-- Footer: what we are talking to, and how old what it said is -->

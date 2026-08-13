@@ -32,6 +32,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     private ConnectionStatus _connection = ConnectionStatus.Disconnected;
     private string? _portDescription;
+    private TimeZoneInfo _displayZone = TimeZoneInfo.Local;
 
     /// <summary>Creates a view model over a store.</summary>
     public MainViewModel(ReceiverStateStore store, TimeProvider timeProvider)
@@ -146,8 +147,43 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public Severity AgeSeverity => Staleness.SeverityOf(Age);
 
     /// <summary>
-    /// The date and time to show, rollover-corrected where §7.4 applies.
+    /// The zone times are shown in. Defaults to this computer, per #95.
     /// </summary>
+    /// <remarks>
+    /// Setting this changes only what is displayed. The receiver has its own offset, set by a tier-C
+    /// command, and a display preference must never reconfigure an instrument to satisfy itself.
+    /// </remarks>
+    public TimeZoneInfo DisplayZone
+    {
+        get => _displayZone;
+        set
+        {
+            ArgumentNullException.ThrowIfNull(value);
+            if (_displayZone.Id == value.Id)
+            {
+                return;
+            }
+
+            _displayZone = value;
+            RaiseAll();
+        }
+    }
+
+    /// <summary>
+    /// The date and time to show: rollover-corrected where §7.4 applies, then converted into
+    /// <see cref="DisplayZone"/>.
+    /// </summary>
+    /// <remarks>
+    /// Correction first, conversion second. §7.4 fixes which 1024-week epoch the reading belongs to,
+    /// which is a question about the instant; the zone is a question about how to render it. Doing
+    /// them the other way round would convert a date two decades out and then move it.
+    /// </remarks>
+    public DisplayTime? ShownTime => DisplayTimeConverter.Convert(
+        _store.Status?.CorrectedDateTime ?? _store.Status?.DeviceDateTime,
+        TimeScale,
+        DisplayZone);
+
+    /// <summary>The uncorrected, unconverted value, kept for the §7.4 tooltip.</summary>
     public DateTimeOffset? DisplayTime => _store.Status?.CorrectedDateTime ?? _store.Status?.DeviceDateTime;
 
     /// <summary>Whether the shown date has been corrected, which earns the §7.4 info glyph.</summary>
