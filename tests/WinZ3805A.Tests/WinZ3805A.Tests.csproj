@@ -61,6 +61,8 @@
              Link="Services\PollingService.cs" />
     <Compile Include="..\..\src\WinZ3805A\ViewModels\Staleness.cs"
              Link="ViewModels\Staleness.cs" />
+    <Compile Include="..\..\src\WinZ3805A\ViewModels\DisplayTime.cs"
+             Link="ViewModels\DisplayTime.cs" />
     <Compile Include="..\..\src\WinZ3805A\ViewModels\MainViewModel.cs"
              Link="ViewModels\MainViewModel.cs" />
   </ItemGroup>

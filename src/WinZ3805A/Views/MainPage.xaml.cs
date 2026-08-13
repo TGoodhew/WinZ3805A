@@ -37,6 +37,17 @@ public sealed partial class MainPage : Page
 
     private bool _compact;
 
+    /// <summary>
+    /// False until the constructor has finished building the view model.
+    /// </summary>
+    /// <remarks>
+    /// <c>IsOn="True"</c> on the toggle raises <c>Toggled</c> during <c>InitializeComponent</c>,
+    /// which is before any of the fields below exist. Without this guard the handler dereferences a
+    /// null view model and the process exits before a window is ever shown — a failure that builds
+    /// cleanly and passes every test.
+    /// </remarks>
+    private readonly bool _ready;
+
     /// <summary>Creates the page and its session.</summary>
     public MainPage()
     {
@@ -66,6 +77,8 @@ public sealed partial class MainPage : Page
         _stalenessTicker.Tick += (_, _) => _model.RaiseAll();
         _stalenessTicker.Start();
 
+        _ready = true;
+
         Loaded += (_, _) => Render();
         Unloaded += async (_, _) =>
         {
@@ -90,6 +103,55 @@ public sealed partial class MainPage : Page
     public void ToggleCompact() => IsCompact = !IsCompact;
 
     private void OnMedallionDoubleTapped(object sender, DoubleTappedRoutedEventArgs e) => ToggleCompact();
+
+    /// <remarks>
+    /// Populated once, on first open, rather than in the constructor: enumerating every system zone
+    /// costs more than a window that may never have its picker opened should pay at start-up.
+    /// </remarks>
+    private void EnsureZonesLoaded()
+    {
+        if (ZonePicker.Items.Count > 0)
+        {
+            return;
+        }
+
+        foreach (TimeZoneInfo zone in TimeZoneInfo.GetSystemTimeZones())
+        {
+            ZonePicker.Items.Add(zone);
+        }
+
+        ZonePicker.DisplayMemberPath = nameof(TimeZoneInfo.DisplayName);
+        ZonePicker.SelectedItem = TimeZoneInfo.GetSystemTimeZones()
+            .FirstOrDefault(z => z.Id == _model.DisplayZone.Id);
+    }
+
+    private void OnUseMachineZoneToggled(object sender, RoutedEventArgs e)
+    {
+        if (!_ready)
+        {
+            return;
+        }
+
+        EnsureZonesLoaded();
+        ZonePicker.IsEnabled = !UseMachineZone.IsOn;
+
+        if (UseMachineZone.IsOn)
+        {
+            _model.DisplayZone = TimeZoneInfo.Local;
+        }
+        else if (ZonePicker.SelectedItem is TimeZoneInfo chosen)
+        {
+            _model.DisplayZone = chosen;
+        }
+    }
+
+    private void OnZoneSelected(object sender, SelectionChangedEventArgs e)
+    {
+        if (_ready && !UseMachineZone.IsOn && ZonePicker.SelectedItem is TimeZoneInfo chosen)
+        {
+            _model.DisplayZone = chosen;
+        }
+    }
 
     private async void OnConnectClicked(object sender, RoutedEventArgs e)
     {
@@ -182,20 +244,18 @@ public sealed partial class MainPage : Page
 
     private void RenderClock()
     {
-        if (_model.DisplayTime is not DateTimeOffset shown)
+        if (_model.ShownTime is not DisplayTime shown)
         {
             ClockText.Text = "—";
             RolloverBadge.Visibility = Visibility.Collapsed;
             return;
         }
 
-        string scale = _model.TimeScale == Device.Models.TimeScale.Unknown
-            ? string.Empty
-            : $" {_model.TimeScale.ToString().ToUpperInvariant()}";
-
-        ClockText.Text = shown.ToString("HH:mm:ss", CultureInfo.InvariantCulture)
-            + scale
-            + shown.ToString(" · dd MMM yyyy", CultureInfo.CurrentCulture);
+        // The zone label is never omitted. A time without one invites the reader to assume it is
+        // theirs, and near local midnight the date is a whole day out if it is not (#95).
+        ClockText.Text = shown.Value.ToString("HH:mm:ss", CultureInfo.InvariantCulture)
+            + $" {shown.ZoneLabel}"
+            + shown.Value.ToString(" · dd MMM yyyy", CultureInfo.CurrentCulture);
 
         // §7.4: show the corrected date, flag it, and keep what the hardware said in the tooltip.
         // Never substitute silently — a user who sees the wrong year and no explanation reasonably
