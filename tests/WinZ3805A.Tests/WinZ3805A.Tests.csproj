@@ -49,6 +49,10 @@
              Link="Services\ConnectionStatus.cs" />
     <Compile Include="..\..\src\WinZ3805A\Services\DeviceSessionService.cs"
              Link="Services\DeviceSessionService.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Services\ReceiverStateStore.cs"
+             Link="Services\ReceiverStateStore.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Services\PollingService.cs"
+             Link="Services\PollingService.cs" />
   </ItemGroup>
 
 </Project>
