@@ -114,6 +114,47 @@
     </Style>
 
     <!-- =========================================================================== -->
+    <!-- SatelliteStrengthBar (§9.10.2, §11.1)                                        -->
+    <!--                                                                              -->
+    <!-- Bar plus number, never bar alone. The two scales it may be asked to draw      -->
+    <!-- differ by a factor of five, so the number is what a reader can actually       -->
+    <!-- trust, and an unknown scale draws no bar at all.                              -->
+    <!-- =========================================================================== -->
+
+    <Style TargetType="controls:SatelliteStrengthBar">
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="controls:SatelliteStrengthBar">
+                    <Grid ColumnSpacing="{ThemeResource WzSpaceXs}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <ProgressBar x:Name="PART_Bar"
+                                     Grid.Column="0"
+                                     MinWidth="60"
+                                     VerticalAlignment="Center"
+                                     AutomationProperties.AccessibilityView="Raw"
+                                     Foreground="{ThemeResource WzAccentFillBrush}" />
+
+                        <!-- Tabular figures so a column of readings stays aligned (§9.5.3). -->
+                        <TextBlock x:Name="PART_Value"
+                                   Grid.Column="1"
+                                   Style="{ThemeResource WzMonoTextStyle}"
+                                   MinWidth="28"
+                                   TextAlignment="Right"
+                                   VerticalAlignment="Center"
+                                   AutomationProperties.AccessibilityView="Raw" />
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- =========================================================================== -->
     <!-- ConnectionStatusPill (§9.7.3, §9.10.2)                                       -->
     <!--                                                                              -->
     <!-- The title bar's centre content. It composes SeverityPill rather than drawing  -->

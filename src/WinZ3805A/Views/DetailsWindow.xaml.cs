@@ -123,6 +123,7 @@ public sealed partial class DetailsWindow : Window
     private static readonly IReadOnlyDictionary<string, Type> Pages = new Dictionary<string, Type>
     {
         ["overview"] = typeof(OverviewPage),
+        ["satellites"] = typeof(SatellitesPage),
     };
 
     private OverlappedPresenter? Presenter => AppWindow.Presenter as OverlappedPresenter;
