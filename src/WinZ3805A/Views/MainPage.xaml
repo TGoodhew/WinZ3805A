@@ -27,6 +27,20 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
+        <!--
+            A11Y-9's live region. It has no visual job at all: the states it announces are already
+            on screen in the medallion, the mode text and the coasting pill, and repeating them
+            visibly would be noise. Opacity rather than Visibility.Collapsed, and a real height
+            rather than zero, because a collapsed or zero-sized element is pruned out of the
+            automation tree and takes the announcement with it.
+        -->
+        <TextBlock x:Name="Announcer"
+                   Grid.Row="0"
+                   Height="1"
+                   Opacity="0"
+                   IsHitTestVisible="False"
+                   AutomationProperties.LiveSetting="Polite" />
+
         <!-- Medallion and mode -->
         <StackPanel x:Name="HeaderRow" Orientation="Horizontal" Spacing="{StaticResource WzSpaceXl}">
             <controls:StatusMedallion x:Name="Medallion"

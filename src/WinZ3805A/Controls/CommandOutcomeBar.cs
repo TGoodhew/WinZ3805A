@@ -1,4 +1,6 @@
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
+using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 
 using WinZ3805A.Services;
@@ -67,10 +69,40 @@ public sealed partial class CommandOutcomeBar : InfoBar
         Title = outcome.Succeeded ? string.Empty : outcome.Command.DisplayName;
         IsOpen = true;
 
+        Announce(outcome);
+
         if (outcome.Succeeded)
         {
             _dismiss.Start();
         }
+    }
+
+    /// <summary>Reads the outcome out loud, which is A11Y-9's third case.</summary>
+    /// <remarks>
+    /// <para>
+    /// A tier C command has just changed the instrument, and whether it worked is not something the
+    /// user should have to go and look for. An error is assertive because §9.11 leaves it on screen
+    /// until dismissed precisely because it matters; a success is polite because it removes itself
+    /// after five seconds and nothing is lost by hearing it a moment late.
+    /// </para>
+    /// <para>
+    /// Raised explicitly rather than left to <c>InfoBar</c>. Opening one is not what needs
+    /// announcing here — the bar is reused, so the second failure of the same command changes only
+    /// the message, and a listener told nothing would believe the first result still stood.
+    /// </para>
+    /// </remarks>
+    private void Announce(CommandOutcome outcome)
+    {
+        AutomationProperties.SetLiveSetting(
+            this,
+            outcome.Succeeded ? AutomationLiveSetting.Polite : AutomationLiveSetting.Assertive);
+
+        AutomationProperties.SetName(
+            this,
+            string.IsNullOrEmpty(Title) ? Message : $"{Title}. {Message}");
+
+        FrameworkElementAutomationPeer.CreatePeerForElement(this)
+            ?.RaiseAutomationEvent(AutomationEvents.LiveRegionChanged);
     }
 
     /// <summary>Closes the bar and stops any dwell in progress.</summary>
