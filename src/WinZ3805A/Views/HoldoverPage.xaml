@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="WinZ3805A.Views.HoldoverPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:WinZ3805A.Controls"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <!--
+        §10.8, read-only. Applying a threshold, forcing holdover, recovering and ignoring the
+        recovery limit are all §8.3 tier C, and forcing holdover carries a guard of its own that
+        §15 step 10 has to build alongside the dialog.
+    -->
+    <ScrollViewer HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Padding="{ThemeResource WzPageMarginThickness}"
+                    MaxWidth="{ThemeResource WzContentMaxWidth}"
+                    HorizontalAlignment="Left"
+                    Spacing="{ThemeResource WzSpaceXl}">
+
+            <TextBlock Style="{ThemeResource WzTitleTextStyle}" Text="Holdover" />
+
+            <!-- ================================= State ================================= -->
+            <Border Style="{ThemeResource WzCardStyle}">
+                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                    <controls:SeverityPill x:Name="StatePill" />
+
+                    <Grid RowSpacing="{ThemeResource WzSpaceXs}" ColumnSpacing="{ThemeResource WzSpaceXl}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" MinWidth="220" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Grid.Row="0" Grid.Column="0"
+                                   Style="{ThemeResource WzBodyTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   Text="Predicted 24 h uncertainty" />
+                        <TextBlock x:Name="PredictedText" Grid.Row="0" Grid.Column="1"
+                                   Style="{ThemeResource WzMonoTextStyle}" />
+
+                        <TextBlock Grid.Row="1" Grid.Column="0"
+                                   Style="{ThemeResource WzBodyTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   Text="Present time error" />
+                        <TextBlock x:Name="PresentErrorText" Grid.Row="1" Grid.Column="1"
+                                   Style="{ThemeResource WzMonoTextStyle}" />
+
+                        <TextBlock Grid.Row="2" Grid.Column="0"
+                                   Style="{ThemeResource WzBodyTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   Text="Duration" />
+                        <TextBlock x:Name="DurationText" Grid.Row="2" Grid.Column="1"
+                                   Style="{ThemeResource WzBodyTextStyle}" />
+
+                        <TextBlock Grid.Row="3" Grid.Column="0"
+                                   Style="{ThemeResource WzBodyTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   Text="Waiting reason" />
+                        <TextBlock x:Name="WaitingReasonText" Grid.Row="3" Grid.Column="1"
+                                   Style="{ThemeResource WzBodyTextStyle}"
+                                   TextWrapping="Wrap" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- =============================== Threshold =============================== -->
+            <Border Style="{ThemeResource WzCardStyle}">
+                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Threshold" />
+
+                    <Grid RowSpacing="{ThemeResource WzSpaceXs}" ColumnSpacing="{ThemeResource WzSpaceXl}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" MinWidth="220" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Grid.Row="0" Grid.Column="0"
+                                   Style="{ThemeResource WzBodyTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   Text="Enter holdover above" />
+                        <TextBlock x:Name="ThresholdText" Grid.Row="0" Grid.Column="1"
+                                   Style="{ThemeResource WzMonoTextStyle}" />
+
+                        <TextBlock Grid.Row="1" Grid.Column="0"
+                                   Style="{ThemeResource WzBodyTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   Text="Currently exceeded" />
+                        <controls:SeverityPill x:Name="ThresholdPill" Grid.Row="1" Grid.Column="1" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- ============================ Manual control ============================= -->
+            <Border Style="{ThemeResource WzCardStyle}">
+                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Manual control" />
+
+                    <!--
+                        §10.8's warning, kept in full. This is the one place in the application
+                        where an action is harmful without being destructive - nothing is lost, but
+                        the oscillator's learning is corrupted and takes days to rebuild.
+                    -->
+                    <InfoBar IsOpen="True"
+                             IsClosable="False"
+                             Severity="Warning"
+                             Title="Not available yet"
+                             Message="Forcing holdover within 24 hours of power-up corrupts the SmartClock oscillator learning process. The guard that checks this reads the receiver's power-on log, and it arrives with the confirmation dialogs in §15 step 10 — along with Force holdover, Recover now, and Ignore recovery limit." />
+                </StackPanel>
+            </Border>
+
+            <TextBlock x:Name="FooterText"
+                       Style="{ThemeResource WzCaptionTextStyle}"
+                       Foreground="{ThemeResource WzTextTertiaryBrush}" />
+        </StackPanel>
+    </ScrollViewer>
+</Page>
