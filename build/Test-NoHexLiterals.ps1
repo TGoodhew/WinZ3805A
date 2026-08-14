@@ -63,7 +63,13 @@ $blockComment = '(?s)<!--.*?-->|/\*.*?\*/'
 
 # Everything before a '//' on the line is kept, so a '//' inside a string or a URL does not
 # blank the rest of it. .NET has no \K, hence the capture group.
-$lineComment = '(?m)^((?:[^"''\r\n]|"[^"\r\n]*"|''[^''\r\n]*'')*?)//[^\r\n]*$'
+#
+# No '$' anchor, deliberately. .NET's multiline '$' matches only immediately before '\n', so
+# against a CRLF checkout '[^\r\n]*$' can never match - the class stops before the '\r' and the
+# anchor is looking one character further on. CI checks out CRLF while this repository's working
+# copies are LF, so that spelling passed locally and failed only on the runner. '[^\r\n]*' already
+# stops at the line end on its own and needs no anchor to do it.
+$lineComment = '(?m)^((?:[^"''\r\n]|"[^"\r\n]*"|''[^''\r\n]*'')*?)//[^\r\n]*'
 
 function Remove-Comments {
     param([string] $Text)
