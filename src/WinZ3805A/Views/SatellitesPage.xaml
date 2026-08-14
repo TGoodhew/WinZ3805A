@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="WinZ3805A.Views.SatellitesPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:WinZ3805A.Controls"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:vm="using:WinZ3805A.ViewModels"
+    mc:Ignorable="d">
+
+    <!--
+        §10.5, without the sky plot. SkyPlotControl is §15 step 9 and arrives with its own keyboard
+        model and automation peers (A11Y-10, A11Y-11); the tables are what step 8 builds, and they
+        are the alternate view the plot will need anyway.
+
+        The elevation mask is shown, not set: :GPS:SAT:TRAC:EMANgle needs confirmation and the
+        dialog infrastructure is §15 step 10. Same for Manage.
+    -->
+    <ScrollViewer HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Padding="{ThemeResource WzPageMarginThickness}"
+                    MaxWidth="{ThemeResource WzContentMaxWidth}"
+                    HorizontalAlignment="Left"
+                    Spacing="{ThemeResource WzSpaceXl}">
+
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <TextBlock Grid.Column="0" Style="{ThemeResource WzTitleTextStyle}" Text="Satellites" />
+                <TextBlock x:Name="CountSummaryText"
+                           Grid.Column="1"
+                           Style="{ThemeResource WzBodyTextStyle}"
+                           Foreground="{ThemeResource WzTextSecondaryBrush}"
+                           VerticalAlignment="Bottom" />
+            </Grid>
+
+            <!-- ================================ Tracked ================================ -->
+            <Border Style="{ThemeResource WzCardStyle}">
+                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Tracked" />
+
+                    <Grid ColumnSpacing="{ThemeResource WzSpaceMd}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="56" />
+                            <ColumnDefinition Width="64" />
+                            <ColumnDefinition Width="64" />
+                            <ColumnDefinition Width="180" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Column="0" Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}" Text="PRN" />
+                        <TextBlock Grid.Column="1" Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}" Text="El" />
+                        <TextBlock Grid.Column="2" Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}" Text="Az" />
+                        <TextBlock x:Name="StrengthHeader" Grid.Column="3"
+                                   Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}" />
+                    </Grid>
+
+                    <ItemsControl x:Name="TrackedRows">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:TrackedSatelliteRow">
+                                <Grid ColumnSpacing="{ThemeResource WzSpaceMd}"
+                                      Padding="0,4"
+                                      AutomationProperties.Name="{x:Bind Description}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="56" />
+                                        <ColumnDefinition Width="64" />
+                                        <ColumnDefinition Width="64" />
+                                        <ColumnDefinition Width="180" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock Grid.Column="0" Style="{ThemeResource WzMonoTextStyle}"
+                                               Text="{x:Bind PrnText}" />
+                                    <TextBlock Grid.Column="1" Style="{ThemeResource WzMonoTextStyle}"
+                                               Text="{x:Bind ElevationText}" />
+                                    <TextBlock Grid.Column="2" Style="{ThemeResource WzMonoTextStyle}"
+                                               Text="{x:Bind AzimuthText}" />
+                                    <controls:SatelliteStrengthBar Grid.Column="3"
+                                                                   Strength="{x:Bind SignalStrength}"
+                                                                   Kind="{x:Bind Kind}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBlock x:Name="TrackedEmptyText"
+                               Style="{ThemeResource WzBodyTextStyle}"
+                               Foreground="{ThemeResource WzTextSecondaryBrush}"
+                               TextWrapping="Wrap"
+                               MaxWidth="{ThemeResource WzProseMaxWidth}"
+                               Visibility="Collapsed" />
+                </StackPanel>
+            </Border>
+
+            <!-- ============================== Not tracked ============================== -->
+            <Border Style="{ThemeResource WzCardStyle}">
+                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Not tracked" />
+
+                    <Grid ColumnSpacing="{ThemeResource WzSpaceMd}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="56" />
+                            <ColumnDefinition Width="64" />
+                            <ColumnDefinition Width="64" />
+                            <ColumnDefinition Width="180" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Column="0" Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}" Text="PRN" />
+                        <TextBlock Grid.Column="1" Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}" Text="El" />
+                        <TextBlock Grid.Column="2" Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}" Text="Az" />
+                    </Grid>
+
+                    <ItemsControl x:Name="NotTrackedRows">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:PredictedSatelliteRow">
+                                <Grid ColumnSpacing="{ThemeResource WzSpaceMd}"
+                                      Padding="0,4"
+                                      AutomationProperties.Name="{x:Bind Description}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="56" />
+                                        <ColumnDefinition Width="64" />
+                                        <ColumnDefinition Width="64" />
+                                        <ColumnDefinition Width="180" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock Grid.Column="0" Style="{ThemeResource WzMonoTextStyle}"
+                                               Text="{x:Bind PrnText}" />
+                                    <TextBlock Grid.Column="1" Style="{ThemeResource WzMonoTextStyle}"
+                                               Text="{x:Bind ElevationText}" />
+                                    <TextBlock Grid.Column="2" Style="{ThemeResource WzMonoTextStyle}"
+                                               Text="{x:Bind AzimuthText}" />
+                                    <TextBlock Grid.Column="3" Style="{ThemeResource WzCaptionTextStyle}"
+                                               Foreground="{ThemeResource WzTextTertiaryBrush}"
+                                               VerticalAlignment="Center"
+                                               Text="{x:Bind StatusText}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBlock x:Name="NotTrackedEmptyText"
+                               Style="{ThemeResource WzBodyTextStyle}"
+                               Foreground="{ThemeResource WzTextSecondaryBrush}"
+                               TextWrapping="Wrap"
+                               MaxWidth="{ThemeResource WzProseMaxWidth}"
+                               Visibility="Collapsed" />
+                </StackPanel>
+            </Border>
+
+            <!-- ============================ Elevation mask ============================= -->
+            <Border Style="{ThemeResource WzCardStyle}">
+                <StackPanel Spacing="{ThemeResource WzSpaceXs}">
+                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Elevation mask" />
+                    <TextBlock x:Name="ElevationMaskText" Style="{ThemeResource WzBodyTextStyle}" />
+                    <TextBlock Style="{ThemeResource WzCaptionTextStyle}"
+                               Foreground="{ThemeResource WzTextTertiaryBrush}"
+                               TextWrapping="Wrap"
+                               MaxWidth="{ThemeResource WzProseMaxWidth}"
+                               Text="Setting the mask, and choosing which satellites to track, both need a confirmation dialog and arrive with §15 step 10." />
+                </StackPanel>
+            </Border>
+
+            <TextBlock x:Name="FooterText"
+                       Style="{ThemeResource WzCaptionTextStyle}"
+                       Foreground="{ThemeResource WzTextTertiaryBrush}" />
+        </StackPanel>
+    </ScrollViewer>
+</Page>

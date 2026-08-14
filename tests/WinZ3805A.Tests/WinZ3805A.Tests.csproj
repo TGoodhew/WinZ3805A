@@ -47,6 +47,11 @@
              Link="Controls\Severity.cs" />
     <Compile Include="..\..\src\WinZ3805A\Controls\ReceiverMode.cs"
              Link="Controls\ReceiverMode.cs" />
+    <!-- §11.1's two signal-strength scales differ by a factor of five, so which one a reading is on
+         is not a detail a control may guess. Split out of SatelliteStrengthBar precisely so it can
+         be linked here: the control speaks WinUI, the scale is arithmetic. -->
+    <Compile Include="..\..\src\WinZ3805A\Controls\SignalStrengthScale.cs"
+             Link="Controls\SignalStrengthScale.cs" />
 
     <!-- Same reasoning for the session layer. §6.2 places these under the app's Services/, but
          neither touches a UI type: they compose the Device library, Channels, and TimeProvider.
@@ -68,6 +73,8 @@
              Link="ViewModels\MainViewModel.cs" />
     <Compile Include="..\..\src\WinZ3805A\ViewModels\OverviewViewModel.cs"
              Link="ViewModels\OverviewViewModel.cs" />
+    <Compile Include="..\..\src\WinZ3805A\ViewModels\SatellitesViewModel.cs"
+             Link="ViewModels\SatellitesViewModel.cs" />
 
     <!-- P0-1's §10.12 dialog. The registry walk and the LocalSettings container behind these are
          Windows-only and stay in the app; what is linked is the part with the decisions in it -
