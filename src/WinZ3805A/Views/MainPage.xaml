@@ -150,8 +150,8 @@
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="{StaticResource WzSpaceXs}">
                 <Button x:Name="DetailsButton"
                         Content="Details"
-                        IsEnabled="False"
-                        ToolTipService.ToolTip="The Receiver Details window is not built yet." />
+                        Click="OnDetailsClicked"
+                        ToolTipService.ToolTip="Open the Receiver Details window (Ctrl+D)" />
                 <Button x:Name="ConnectButton"
                         Style="{StaticResource AccentButtonStyle}"
                         Click="OnConnectClicked" />

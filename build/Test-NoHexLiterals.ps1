@@ -15,6 +15,11 @@
     'CascadiaMono.ttf#Cascadia Mono' do not match, because 'Ca' is only two hex digits
     before a non-hex character.
 
+    A '#' preceded by '&' is an XML character reference, not a colour: '&#183;' for a
+    middle dot, '&#xE80F;' for a Segoe Fluent glyph. Those are the ordinary way to write
+    a nav icon or a typographic mark in XAML and there is no hex-colour spelling that
+    begins '&#', so the lookbehind excludes them without weakening the rule.
+
 .PARAMETER Root
     Repository root. Defaults to the parent of this script's directory.
 
@@ -37,7 +42,7 @@ if (-not (Test-Path $src)) {
 # The one file permitted to declare colour.
 $allowed = [System.IO.Path]::GetFullPath((Join-Path $src 'WinZ3805A\Themes\Colors.xaml'))
 
-$pattern = '#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})(?![0-9a-fA-F])'
+$pattern = '(?<!&)#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})(?![0-9a-fA-F])'
 
 $targets = @()
 $targets += Get-ChildItem -Path $src -Recurse -Filter '*.xaml' -File |

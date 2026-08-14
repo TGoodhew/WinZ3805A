@@ -54,6 +54,7 @@ public sealed class PollingService : IAsyncDisposable
     private CancellationTokenSource? _cts;
     private Task? _loop;
     private bool _disposed;
+    private int _fullRequested;
 
     /// <summary>Creates a poller for one session.</summary>
     public PollingService(
@@ -78,6 +79,23 @@ public sealed class PollingService : IAsyncDisposable
 
     /// <summary>The full-screen cadence (§7.3 default 10 s, user-settable).</summary>
     public TimeSpan FullInterval { get; init; } = TimeSpan.FromSeconds(10);
+
+    /// <summary>
+    /// Asks for a full status screen at the next fast tick, ahead of its cadence.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// §9.7.4's <c>F5</c>, "Refresh full status now". A flag rather than a direct call, because the
+    /// poller owns both cadences (§12) and a screen issued from the UI thread alongside a sweep
+    /// already in flight is the overlap the single-timer design exists to prevent. The wait is at
+    /// most one fast tick.
+    /// </para>
+    /// <para>
+    /// Setting it twice before the next tick asks once. There is nothing a user gains from two
+    /// screens back to back, and the second would starve the fast tier for another three seconds.
+    /// </para>
+    /// </remarks>
+    public void RequestFullSweep() => Volatile.Write(ref _fullRequested, 1);
 
     /// <summary>True while the loop is running.</summary>
     public bool IsRunning => _loop is { IsCompleted: false };
@@ -159,22 +177,34 @@ public sealed class PollingService : IAsyncDisposable
         {
             while (!cancellationToken.IsCancellationRequested)
             {
-                if (_timeProvider.GetUtcNow() >= nextFull)
+                bool requested = Interlocked.Exchange(ref _fullRequested, 0) == 1;
+
+                if (requested || _timeProvider.GetUtcNow() >= nextFull)
                 {
                     await PollFullAsync(cancellationToken).ConfigureAwait(false);
 
-                    // Advance from the time it was *due*, not from the time it finished. The screen
-                    // takes about 3.5 s to arrive on a 9600 baud link, so scheduling from completion
-                    // silently stretches §7.3's 10 s cadence to 13.5 s — a drift that compounds and
-                    // that nobody would think to look for.
-                    nextFull += FullInterval;
-
-                    // Unless it has fallen so far behind that catching up would mean two screens
-                    // back to back, which would starve the fast tier for seven seconds to recover
-                    // time that is already lost.
-                    if (nextFull <= _timeProvider.GetUtcNow())
+                    if (requested)
                     {
+                        // A screen the user asked for resets the cadence rather than advancing it.
+                        // Advancing would leave the scheduled sweep still due, and they would get a
+                        // second screen moments after the one they pressed F5 for.
                         nextFull = _timeProvider.GetUtcNow() + FullInterval;
+                    }
+                    else
+                    {
+                        // Advance from the time it was *due*, not from the time it finished. The
+                        // screen takes about 3.5 s to arrive on a 9600 baud link, so scheduling from
+                        // completion silently stretches §7.3's 10 s cadence to 13.5 s — a drift that
+                        // compounds and that nobody would think to look for.
+                        nextFull += FullInterval;
+
+                        // Unless it has fallen so far behind that catching up would mean two screens
+                        // back to back, which would starve the fast tier for seven seconds to
+                        // recover time that is already lost.
+                        if (nextFull <= _timeProvider.GetUtcNow())
+                        {
+                            nextFull = _timeProvider.GetUtcNow() + FullInterval;
+                        }
                     }
                 }
 

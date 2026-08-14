@@ -41,6 +41,15 @@
             <SolidColorBrush x:Key="WzTextDisabledBrush" Color="{ThemeResource TextFillColorDisabled}" />
 
             <!--
+                Interaction fills for controls that are transparent at rest - the §9.7.3 title-bar
+                pill, and card-header commands. Mapped from the stock subtle fills, which is what
+                every other quiet control in Fluent hovers to, so a Wz control and a stock control
+                sitting in the same row respond identically.
+            -->
+            <SolidColorBrush x:Key="WzSurfaceHoverBrush" Color="{ThemeResource SubtleFillColorSecondary}" />
+            <SolidColorBrush x:Key="WzSurfacePressedBrush" Color="{ThemeResource SubtleFillColorTertiary}" />
+
+            <!--
                 §9.4.2 Brand accent ramp. The same seven steps in both themes — only which
                 step is the resolved base changes, so a colour never shifts meaning between
                 themes. Deliberately NOT the system accent: a user with a red Windows accent
@@ -151,6 +160,15 @@
             <SolidColorBrush x:Key="WzTextTertiaryBrush" Color="{ThemeResource TextFillColorTertiary}" />
             <SolidColorBrush x:Key="WzTextDisabledBrush" Color="{ThemeResource TextFillColorDisabled}" />
 
+            <!--
+                Interaction fills for controls that are transparent at rest - the §9.7.3 title-bar
+                pill, and card-header commands. Mapped from the stock subtle fills, which is what
+                every other quiet control in Fluent hovers to, so a Wz control and a stock control
+                sitting in the same row respond identically.
+            -->
+            <SolidColorBrush x:Key="WzSurfaceHoverBrush" Color="{ThemeResource SubtleFillColorSecondary}" />
+            <SolidColorBrush x:Key="WzSurfacePressedBrush" Color="{ThemeResource SubtleFillColorTertiary}" />
+
             <Color x:Key="WzAccentDark3">#052F33</Color>
             <Color x:Key="WzAccentDark2">#08474D</Color>
             <Color x:Key="WzAccentDark1">#0B6C74</Color>
@@ -234,6 +252,13 @@
             <SolidColorBrush x:Key="WzTextSecondaryBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
             <SolidColorBrush x:Key="WzTextTertiaryBrush" Color="{ThemeResource SystemColorGrayTextColor}" />
             <SolidColorBrush x:Key="WzTextDisabledBrush" Color="{ThemeResource SystemColorGrayTextColor}" />
+
+            <!--
+                High contrast hovers to the system highlight, which is the one colour a user in
+                this theme has said means "the thing under the pointer".
+            -->
+            <SolidColorBrush x:Key="WzSurfaceHoverBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="WzSurfacePressedBrush" Color="{ThemeResource SystemColorHighlightColor}" />
 
             <!--
                 The ramp keys still exist so that any style referencing a step resolves in

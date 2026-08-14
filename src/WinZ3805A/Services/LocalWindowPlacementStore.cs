@@ -37,11 +37,26 @@ public sealed class LocalWindowPlacementStore : IWindowPlacementStore
         _path = path;
     }
 
-    /// <summary>Where the placement lives.</summary>
-    public static string DefaultPath() => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "WinZ3805A",
-        "window.json");
+    /// <summary>Where the main window's placement lives.</summary>
+    public static string DefaultPath() => PathFor("window");
+
+    /// <summary>
+    /// Where a named window's placement lives.
+    /// </summary>
+    /// <param name="window">
+    /// Identifies the window, and becomes the file name. Each window keeps its own file: the
+    /// §10.4 Details window is a different size on a different part of the desktop, and the two
+    /// are moved and closed independently.
+    /// </param>
+    public static string PathFor(string window)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(window);
+
+        return Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "WinZ3805A",
+            $"{window}.json");
+    }
 
     /// <inheritdoc />
     public WindowPlacement? Load()

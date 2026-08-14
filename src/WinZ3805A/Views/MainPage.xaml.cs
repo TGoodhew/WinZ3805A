@@ -123,10 +123,27 @@ public sealed partial class MainPage : Page
         }
     }
 
+    /// <summary>Raised when the user asks for the §10.4 Details window.</summary>
+    /// <remarks>
+    /// The page asks; the window opens it. A page that owned a second top-level window would have
+    /// to close it, and it is not told when its own window closes.
+    /// </remarks>
+    public event EventHandler? DetailsRequested;
+
+    /// <summary>Opens the connection dialog, which §10.12 puts on this window.</summary>
+    public async Task ShowConnectionDialogAsync()
+    {
+        ConnectionDialog dialog = new(NewConnectionViewModel()) { XamlRoot = XamlRoot };
+        await dialog.ShowAsync();
+    }
+
     /// <summary>Toggles compact mode, which §10.3 binds to double-click and Ctrl+Shift+M.</summary>
     public void ToggleCompact() => IsCompact = !IsCompact;
 
     private void OnMedallionDoubleTapped(object sender, DoubleTappedRoutedEventArgs e) => ToggleCompact();
+
+    private void OnDetailsClicked(object sender, RoutedEventArgs e) =>
+        DetailsRequested?.Invoke(this, EventArgs.Empty);
 
     /// <remarks>
     /// Populated once, on first open, rather than in the constructor: enumerating every system zone
@@ -189,8 +206,7 @@ public sealed partial class MainPage : Page
         ConnectButton.IsEnabled = false;
         try
         {
-            ConnectionDialog dialog = new(NewConnectionViewModel()) { XamlRoot = XamlRoot };
-            await dialog.ShowAsync();
+            await ShowConnectionDialogAsync();
         }
         finally
         {

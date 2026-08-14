@@ -114,6 +114,77 @@
     </Style>
 
     <!-- =========================================================================== -->
+    <!-- ConnectionStatusPill (§9.7.3, §9.10.2)                                       -->
+    <!--                                                                              -->
+    <!-- The title bar's centre content. It composes SeverityPill rather than drawing  -->
+    <!-- its own indicator, which is what P0-19 requires and what leaves this control  -->
+    <!-- with no way to express a colour of its own.                                   -->
+    <!--                                                                              -->
+    <!-- Deliberately quiet: transparent until pointed at. It sits in a 48 px bar for  -->
+    <!-- weeks at a time, and a filled button there would read as the loudest thing on -->
+    <!-- screen. It never dims with the rest of the bar on deactivation (§9.7.3).      -->
+    <!-- =========================================================================== -->
+
+    <Style TargetType="controls:ConnectionStatusPill">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="{ThemeResource WzSpaceXsThickness}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="UseSystemFocusVisuals" Value="True" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="controls:ConnectionStatusPill">
+                    <Border x:Name="PillRoot"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="{ThemeResource WzControlCornerRadius}"
+                            Padding="{TemplateBinding Padding}">
+                        <StackPanel Orientation="Horizontal"
+                                    Spacing="{ThemeResource WzSpaceXxs}"
+                                    VerticalAlignment="Center">
+                            <controls:SeverityPill Severity="{TemplateBinding Severity}"
+                                                   Text="{TemplateBinding StateText}" />
+
+                            <StackPanel x:Name="PART_PortGroup"
+                                        Orientation="Horizontal"
+                                        Spacing="{ThemeResource WzSpaceXxs}"
+                                        VerticalAlignment="Center">
+                                <TextBlock Style="{ThemeResource WzBodyTextStyle}"
+                                           Foreground="{ThemeResource WzTextTertiaryBrush}"
+                                           VerticalAlignment="Center"
+                                           AutomationProperties.AccessibilityView="Raw"
+                                           Text="&#183;" />
+                                <TextBlock Style="{ThemeResource WzBodyTextStyle}"
+                                           Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                           VerticalAlignment="Center"
+                                           AutomationProperties.AccessibilityView="Raw"
+                                           Text="{TemplateBinding PortName}" />
+                            </StackPanel>
+                        </StackPanel>
+
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="CommonStates">
+                                <VisualState x:Name="Normal" />
+                                <VisualState x:Name="PointerOver">
+                                    <VisualState.Setters>
+                                        <Setter Target="PillRoot.Background" Value="{ThemeResource WzSurfaceHoverBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Pressed">
+                                    <VisualState.Setters>
+                                        <Setter Target="PillRoot.Background" Value="{ThemeResource WzSurfacePressedBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Disabled" />
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- =========================================================================== -->
     <!-- ReadoutTile (§9.5.3, §9.10.2, P0-20)                                         -->
     <!--                                                                              -->
     <!-- The value and the reserve string share one Grid cell. The reserve is          -->

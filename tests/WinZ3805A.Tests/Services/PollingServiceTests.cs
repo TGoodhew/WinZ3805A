@@ -121,6 +121,79 @@ public class PollingServiceTests
     }
 
     /// <summary>
+    /// §9.7.4's F5 takes a full screen ahead of the 10 s cadence.
+    /// </summary>
+    /// <remarks>
+    /// The flag is read on the next fast tick rather than acted on where it is set, because the UI
+    /// thread issuing a screen alongside a sweep already in flight is the overlap the single-timer
+    /// design exists to prevent. What that costs is at most one fast interval, and what it buys is
+    /// that "refresh now" cannot corrupt the cadence it interrupts.
+    /// </remarks>
+    [Fact]
+    public async Task RequestingAFullSweepTakesOneAheadOfTheCadence()
+    {
+        FakeTimeProvider clock = new();
+        (DeviceSessionService session, ReceiverStateStore store) = await ConnectedAsync(Receiver(), clock);
+        await using DeviceSessionService _ = session;
+
+        // A cadence long enough that a second scheduled screen cannot explain the result.
+        await using PollingService poller = new(session, store, clock)
+        {
+            FullInterval = TimeSpan.FromMinutes(5),
+        };
+
+        poller.Start();
+        await WaitFor(clock, () => poller.FullSweeps >= 1);
+        Assert.Equal(1, poller.FullSweeps);
+
+        poller.RequestFullSweep();
+        await WaitFor(clock, () => poller.FullSweeps >= 2);
+        await poller.StopAsync();
+
+        Assert.Equal(2, poller.FullSweeps);
+    }
+
+    /// <summary>
+    /// Asking twice before the next tick asks once.
+    /// </summary>
+    /// <remarks>
+    /// Two screens back to back would starve the fast tier for about seven seconds on a 9600 baud
+    /// link, and there is nothing the second one tells the user that the first did not. A user
+    /// leaning on F5 must not be able to do that.
+    /// </remarks>
+    [Fact]
+    public async Task AskingTwiceBeforeTheNextTickAsksOnce()
+    {
+        FakeTimeProvider clock = new();
+        (DeviceSessionService session, ReceiverStateStore store) = await ConnectedAsync(Receiver(), clock);
+        await using DeviceSessionService _ = session;
+        await using PollingService poller = new(session, store, clock)
+        {
+            FullInterval = TimeSpan.FromMinutes(5),
+        };
+
+        poller.Start();
+        await WaitFor(clock, () => poller.FullSweeps >= 1);
+
+        poller.RequestFullSweep();
+        poller.RequestFullSweep();
+        poller.RequestFullSweep();
+
+        await WaitFor(clock, () => poller.FullSweeps >= 2);
+
+        // Several more ticks with nothing outstanding.
+        for (int i = 0; i < 5; i++)
+        {
+            clock.Advance(TimeSpan.FromSeconds(1));
+            await Task.Delay(5, CancellationToken.None);
+        }
+
+        await poller.StopAsync();
+
+        Assert.Equal(2, poller.FullSweeps);
+    }
+
+    /// <summary>
     /// The first screen arrives with the first readings rather than a full interval later. The
     /// satellite table is most of what a user is waiting to see, and ten seconds of an empty table
     /// on connect reads as a broken app.
