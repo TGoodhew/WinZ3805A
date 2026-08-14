@@ -129,6 +129,7 @@ public sealed partial class DetailsWindow : Window
         ["holdover"] = typeof(HoldoverPage),
         ["registers"] = typeof(StatusRegistersPage),
         ["diagnostics"] = typeof(DiagnosticsPage),
+        ["time"] = typeof(TimePage),
     };
 
     private OverlappedPresenter? Presenter => AppWindow.Presenter as OverlappedPresenter;
