@@ -124,6 +124,7 @@ public sealed partial class DetailsWindow : Window
     {
         ["overview"] = typeof(OverviewPage),
         ["satellites"] = typeof(SatellitesPage),
+        ["position"] = typeof(PositionPage),
     };
 
     private OverlappedPresenter? Presenter => AppWindow.Presenter as OverlappedPresenter;
