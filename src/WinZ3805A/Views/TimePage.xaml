@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="WinZ3805A.Views.TimePage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:WinZ3805A.Controls"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <!--
+        §10.2 requires this destination and no §10.x section describes it - the numbered sections
+        run 10.9 Diagnostics, 10.10 Status Registers, 10.11 Advanced Console with nothing between.
+        Filed rather than invented around; the content here comes from what the specification does
+        define for this data: §7.4's week rollover, §11.2's time fields, and #95's display zone.
+    -->
+    <ScrollViewer HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Padding="{ThemeResource WzPageMarginThickness}"
+                    MaxWidth="{ThemeResource WzContentMaxWidth}"
+                    HorizontalAlignment="Left"
+                    Spacing="{ThemeResource WzSpaceXl}">
+
+            <TextBlock Style="{ThemeResource WzTitleTextStyle}" Text="Time" />
+
+            <!-- ================================== Clock ================================ -->
+            <Border Style="{ThemeResource WzCardStyle}">
+                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Receiver clock" />
+
+                    <TextBlock x:Name="ShownTimeText"
+                               Style="{ThemeResource WzReadoutMediumTextStyle}"
+                               IsTextSelectionEnabled="True" />
+
+                    <ComboBox x:Name="ZonePicker"
+                              MinWidth="320"
+                              HorizontalAlignment="Left"
+                              Header="Show times in"
+                              SelectionChanged="OnZoneSelected" />
+
+                    <Grid RowSpacing="{ThemeResource WzSpaceXs}" ColumnSpacing="{ThemeResource WzSpaceXl}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" MinWidth="180" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Grid.Row="0" Grid.Column="0"
+                                   Style="{ThemeResource WzBodyTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   Text="Time scale" />
+                        <TextBlock x:Name="TimeScaleText" Grid.Row="0" Grid.Column="1"
+                                   Style="{ThemeResource WzBodyTextStyle}" />
+
+                        <TextBlock Grid.Row="1" Grid.Column="0"
+                                   Style="{ThemeResource WzBodyTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   Text="Reported by the receiver" />
+                        <TextBlock x:Name="DeviceTimeText" Grid.Row="1" Grid.Column="1"
+                                   Style="{ThemeResource WzMonoTextStyle}" IsTextSelectionEnabled="True" />
+                    </Grid>
+
+                    <TextBlock x:Name="TimeScaleNoteText"
+                               Style="{ThemeResource WzCaptionTextStyle}"
+                               Foreground="{ThemeResource WzTextTertiaryBrush}"
+                               TextWrapping="Wrap"
+                               MaxWidth="{ThemeResource WzProseMaxWidth}"
+                               Visibility="Collapsed" />
+                </StackPanel>
+            </Border>
+
+            <!-- =============================== Week rollover =========================== -->
+            <Border Style="{ThemeResource WzCardStyle}">
+                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Week rollover correction" />
+                    <controls:SeverityPill x:Name="RolloverPill" />
+                    <TextBlock x:Name="RolloverText"
+                               Style="{ThemeResource WzBodyTextStyle}"
+                               Foreground="{ThemeResource WzTextSecondaryBrush}"
+                               TextWrapping="Wrap"
+                               MaxWidth="{ThemeResource WzProseMaxWidth}" />
+                </StackPanel>
+            </Border>
+
+            <!-- ================================ Leap second ============================ -->
+            <Border Style="{ThemeResource WzCardStyle}">
+                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Leap second" />
+                    <controls:SeverityPill x:Name="LeapPill" />
+                    <TextBlock Style="{ThemeResource WzCaptionTextStyle}"
+                               Foreground="{ThemeResource WzTextTertiaryBrush}"
+                               TextWrapping="Wrap"
+                               MaxWidth="{ThemeResource WzProseMaxWidth}"
+                               Text="The receiver announces a pending leap second in its status screen. Anything downstream counting seconds needs to expect the step." />
+                </StackPanel>
+            </Border>
+
+            <TextBlock x:Name="FooterText"
+                       Style="{ThemeResource WzCaptionTextStyle}"
+                       Foreground="{ThemeResource WzTextTertiaryBrush}" />
+        </StackPanel>
+    </ScrollViewer>
+</Page>
