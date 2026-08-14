@@ -77,6 +77,18 @@
     <Compile Include="..\..\src\WinZ3805A\ViewModels\ConnectionViewModel.cs"
              Link="ViewModels\ConnectionViewModel.cs" />
 
+    <!-- P0-3's window-state persistence. The window is what talks to AppWindow and DisplayArea;
+         what is linked is the decision it delegates - given a saved rectangle and the displays
+         attached now, where does the window open? The display topologies that make that question
+         worth asking (a monitor removed, a monitor at negative coordinates, a resolution reduced
+         under the window) are reachable here and not on a bench with one screen. -->
+    <Compile Include="..\..\src\WinZ3805A\Services\WindowPlacement.cs"
+             Link="Services\WindowPlacement.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Services\WindowPlacementPolicy.cs"
+             Link="Services\WindowPlacementPolicy.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Services\LocalWindowPlacementStore.cs"
+             Link="Services\LocalWindowPlacementStore.cs" />
+
     <!-- The preference store is linked because it no longer speaks WinRT. It was written over
          ApplicationData.Current.LocalSettings, which killed the process outright; a JSON file has
          no such problem and, unlike the container, can be round-tripped in a headless test. -->

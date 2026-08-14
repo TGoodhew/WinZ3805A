@@ -95,14 +95,31 @@ public sealed partial class MainPage : Page
         };
     }
 
+    /// <summary>
+    /// Raised when <see cref="IsCompact"/> changes.
+    /// </summary>
+    /// <remarks>
+    /// The window owns the consequences of the toggle that the page cannot reach: §10.3 gives the
+    /// two layouts different minimum heights, and the compact state is part of what persists across
+    /// launches. An event rather than a call back into the window keeps the page usable on its own,
+    /// which is what the §9.8.2 Details transition will need.
+    /// </remarks>
+    public event EventHandler? CompactChanged;
+
     /// <summary>Whether the window is in the §10.3 compact layout.</summary>
     public bool IsCompact
     {
         get => _compact;
         set
         {
+            if (_compact == value)
+            {
+                return;
+            }
+
             _compact = value;
             VisualStateManager.GoToState(this, value ? "CompactDensity" : "Normal", useTransitions: false);
+            CompactChanged?.Invoke(this, EventArgs.Empty);
         }
     }
 
