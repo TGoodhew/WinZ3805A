@@ -34,6 +34,7 @@ public sealed partial class MainPage : Page
     private readonly SerialPortEnumerator _ports;
     private readonly IConnectionPreferenceStore _preferences;
     private readonly DispatcherTimer _stalenessTicker = new() { Interval = TimeSpan.FromSeconds(1) };
+    private readonly StateAnnouncer _announcer = new();
 
     private bool _compact;
     private bool _launchAttempted;
@@ -282,6 +283,16 @@ public sealed partial class MainPage : Page
         }, useTransitions: false);
 
         ConnectButton.Content = _model.CanConnect ? "Connect" : "Disconnect";
+
+        // A11Y-9. Last, so that the announcement is never made about a surface that has not been
+        // written yet: a reader that follows it straight to the medallion must find the state it
+        // was just told about. The announcer returns null on the staleness tick, which is most of
+        // the calls into this method.
+        if (_announcer.Observe(_model.Connection, _model.Mode, _model.IsCoasting, _device.Session.PortName)
+            is Announcement announcement)
+        {
+            LiveRegion.Announce(Announcer, announcement);
+        }
     }
 
     /// <remarks>
