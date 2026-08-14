@@ -2,6 +2,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
 
+using WinZ3805A.Device.Commands;
 using WinZ3805A.Services;
 using WinZ3805A.ViewModels;
 
@@ -12,8 +13,12 @@ namespace WinZ3805A.Views;
 /// </summary>
 public sealed partial class DiagnosticsPage : Page
 {
+    /// <summary>§8.3's log clear — the one tier C command on this page.</summary>
+    private static readonly ScpiCommand ClearLog = CommandConfirmation.Require(":DIAG:LOG:CLEar");
+
     private DiagnosticsViewModel? _model;
     private DeviceContext? _device;
+    private CommandInvoker? _invoker;
     private CancellationTokenSource? _reading;
     private bool _ready;
 
@@ -46,6 +51,7 @@ public sealed partial class DiagnosticsPage : Page
         }
 
         _device = device;
+        _invoker = new CommandInvoker(device.Session);
         _model = new DiagnosticsViewModel(device.Session);
         _model.PropertyChanged += (_, _) => DispatcherQueue.TryEnqueue(Render);
         device.Session.StatusChanged += OnStatusChanged;
@@ -119,8 +125,39 @@ public sealed partial class DiagnosticsPage : Page
         ReadingRing.IsActive = model.IsReading;
         RefreshButton.IsEnabled = model.CanRead;
         ReadErrorsButton.IsEnabled = model.CanRead;
+        ClearLogButton.IsEnabled = model.CanRead;
 
         FaultBar.IsOpen = model.Fault is not null;
         FaultBar.Message = model.Fault ?? string.Empty;
+    }
+
+    /// <summary>
+    /// §8.3's log clear. Nothing is re-read afterwards on purpose: the log is now empty, and a
+    /// refresh that showed the empty state would look like the read failing.
+    /// </summary>
+    private async void OnClearLogClicked(object sender, RoutedEventArgs e)
+    {
+        if (_invoker is not CommandInvoker invoker || _model is not DiagnosticsViewModel model || !model.CanRead)
+        {
+            return;
+        }
+
+        ClearLogButton.IsEnabled = false;
+        LogOutcome.Clear();
+
+        try
+        {
+            CommandOutcome? outcome = await CommandConfirmation.RunAsync(XamlRoot, invoker, ClearLog);
+            LogOutcome.Show(outcome);
+
+            if (outcome is { Succeeded: true })
+            {
+                model.ForgetLog();
+            }
+        }
+        finally
+        {
+            Render();
+        }
     }
 }

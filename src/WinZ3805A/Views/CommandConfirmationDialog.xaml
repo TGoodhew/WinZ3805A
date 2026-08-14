@@ -37,6 +37,24 @@
                    MaxWidth="{ThemeResource WzProseMaxWidth}" />
 
         <!--
+            Only for the §8.3 entries that are a bare question. Under a title carrying the same
+            verb, those state no consequence at all, and #8 is explicit that a tier C dialog is not
+            a generic "are you sure". Nothing in §8.3 is dropped to make room - this only adds.
+        -->
+        <TextBlock x:Name="ExplanationText"
+                   Style="{ThemeResource WzBodyTextStyle}"
+                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                   TextWrapping="Wrap"
+                   MaxWidth="{ThemeResource WzProseMaxWidth}"
+                   Visibility="Collapsed" />
+
+        <!-- The number about to be sent, where §8.3's own sentence has no place for it. -->
+        <TextBlock x:Name="ValueText"
+                   Style="{ThemeResource WzBodyStrongTextStyle}"
+                   TextWrapping="Wrap"
+                   Visibility="Collapsed" />
+
+        <!--
             What the page knows and the catalog cannot — §10.8's time since power-up is the case
             this exists for. Warning rather than Error: the command is still offered.
         -->

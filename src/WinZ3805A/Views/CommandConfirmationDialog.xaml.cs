@@ -31,6 +31,18 @@ public sealed partial class CommandConfirmationDialog : ContentDialog
         PrimaryButtonText = model.ConfirmLabel;
         MessageText.Text = model.Message;
 
+        if (model.Explanation is string explanation)
+        {
+            ExplanationText.Text = explanation;
+            ExplanationText.Visibility = Visibility.Visible;
+        }
+
+        if (model.ValueSummary is string value)
+        {
+            ValueText.Text = value;
+            ValueText.Visibility = Visibility.Visible;
+        }
+
         if (model.HasCaution)
         {
             CautionBar.Message = model.Caution;

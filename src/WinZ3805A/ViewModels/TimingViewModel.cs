@@ -24,6 +24,8 @@ public sealed class TimingViewModel : INotifyPropertyChanged
     private double _lengthMetres = 20;
     private double _velocityFactor = 0.85;
     private bool _useVelocityFactor;
+    private bool _useDirectEntry;
+    private double _directDelayNanoseconds;
 
     /// <summary>Creates a view model over the shared store.</summary>
     public TimingViewModel(ReceiverStateStore store)
@@ -127,6 +129,36 @@ public sealed class TimingViewModel : INotifyPropertyChanged
         }
     }
 
+    /// <summary>
+    /// Whether the delay is being typed in rather than calculated (§10.7's first radio).
+    /// </summary>
+    public bool UseDirectEntry
+    {
+        get => _useDirectEntry;
+        set
+        {
+            if (_useDirectEntry != value)
+            {
+                _useDirectEntry = value;
+                RaiseAll();
+            }
+        }
+    }
+
+    /// <summary>The delay typed in directly, in nanoseconds.</summary>
+    public double DirectDelayNanoseconds
+    {
+        get => _directDelayNanoseconds;
+        set
+        {
+            if (!_directDelayNanoseconds.Equals(value))
+            {
+                _directDelayNanoseconds = value;
+                RaiseAll();
+            }
+        }
+    }
+
     /// <summary>The cable the calculation is actually using.</summary>
     public AntennaCable? EffectiveCable => UseVelocityFactor
         ? AntennaCable.FromVelocityFactor(VelocityFactor)
@@ -144,6 +176,28 @@ public sealed class TimingViewModel : INotifyPropertyChanged
     public string CableSourceText => EffectiveCable is AntennaCable cable
         ? $"{ReadoutFormatter.Format(cable.DelayNanosecondsPerMetre, 2)} ns/m — {cable.Source}"
         : "Enter a velocity factor between 0 and 1.";
+
+    /// <summary>
+    /// The delay <em>Apply</em> would send, from whichever of §10.7's two routes is selected.
+    /// </summary>
+    public double? DelayToApplyNanoseconds => UseDirectEntry
+        ? DirectDelayNanoseconds
+        : ComputedDelayNanoseconds;
+
+    /// <summary>
+    /// Whether <em>Apply</em> may be offered at all.
+    /// </summary>
+    /// <remarks>
+    /// The range check is here as well as on the field, because the calculator can produce an
+    /// unsendable number from two perfectly valid inputs — a 300 m run of RG-213 is 1515 ns, which
+    /// is fine, but nothing stops a length that computes past the receiver's ceiling. §9.11's
+    /// "Apply stays disabled while any field in its card is invalid" has to cover the derived
+    /// value too, or the one number actually being sent is the one nothing checked.
+    /// </remarks>
+    public bool CanApplyDelay =>
+        Connection == ConnectionStatus.Connected
+        && DelayToApplyNanoseconds is double delay
+        && AntennaCable.IsAcceptableDelay(delay);
 
     /// <summary>Whether the receiver would accept the computed delay.</summary>
     /// <remarks>

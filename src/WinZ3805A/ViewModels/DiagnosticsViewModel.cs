@@ -54,6 +54,21 @@ public sealed class DiagnosticsViewModel : INotifyPropertyChanged
         ? "Not read"
         : _selfTestResult;
 
+    /// <summary>
+    /// Drops the log this page is holding, after the receiver has been told to clear its own.
+    /// </summary>
+    /// <remarks>
+    /// Rather than re-reading. The log is empty now, and a read that came back with nothing would
+    /// be indistinguishable from a read that failed — §9.11's empty state says what <em>will</em>
+    /// appear there, which is the honest thing to show and costs no traffic to show it.
+    /// </remarks>
+    public void ForgetLog()
+    {
+        _log = [];
+        _logCount = 0;
+        RaiseAll();
+    }
+
     /// <summary>How many entries the receiver says its log holds.</summary>
     public int? LogCount => _logCount;
 

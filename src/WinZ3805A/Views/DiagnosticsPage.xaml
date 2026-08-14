@@ -3,13 +3,14 @@
     x:Class="WinZ3805A.Views.DiagnosticsPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:WinZ3805A.Controls"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:models="using:WinZ3805A.Device.Models"
     mc:Ignorable="d">
 
     <!--
-        §10.9, read-only. Run test and Clear are both confirmation-gated and arrive with §15 step 10.
+        §10.9. Clear is tier C and goes through the §8.3 confirmation; the reads are on demand.
         Reading the error queue REMOVES what it returns, which is why it is a button rather than
         something this page does on arrival.
     -->
@@ -59,7 +60,28 @@
             <!-- ============================= Diagnostic log ============================= -->
             <Border Style="{ThemeResource WzCardStyle}">
                 <StackPanel Spacing="{ThemeResource WzSpaceSm}">
-                    <TextBlock x:Name="LogHeaderText" Style="{ThemeResource WzBodyStrongTextStyle}" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock x:Name="LogHeaderText"
+                                   Grid.Column="0"
+                                   VerticalAlignment="Center"
+                                   Style="{ThemeResource WzBodyStrongTextStyle}" />
+
+                        <!-- §9.7.4 scopes the command to the card it empties. -->
+                        <Button x:Name="ClearLogButton"
+                                Grid.Column="1"
+                                Content="Clear log"
+                                Style="{ThemeResource WzDestructiveButtonStyle}"
+                                IsEnabled="False"
+                                ToolTipService.ToolTip="Delete every entry in the receiver&apos;s diagnostic log"
+                                Click="OnClearLogClicked" />
+                    </Grid>
+
+                    <controls:CommandOutcomeBar x:Name="LogOutcome" />
 
                     <TextBox x:Name="FilterBox"
                              MinWidth="280"
@@ -91,7 +113,7 @@
                                Foreground="{ThemeResource WzTextTertiaryBrush}"
                                TextWrapping="Wrap"
                                MaxWidth="{ThemeResource WzProseMaxWidth}"
-                               Text="Timestamps are on the receiver's own time scale and are subject to the §7.4 week rollover. CSV export and Clear arrive with P0-13 and §15 step 10." />
+                               Text="Timestamps are on the receiver's own time scale and are subject to the §7.4 week rollover. CSV export arrives with P0-13." />
                 </StackPanel>
             </Border>
 

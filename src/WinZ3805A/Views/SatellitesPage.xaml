@@ -160,11 +160,40 @@
                 <StackPanel Spacing="{ThemeResource WzSpaceXs}">
                     <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Elevation mask" />
                     <TextBlock x:Name="ElevationMaskText" Style="{ThemeResource WzBodyTextStyle}" />
+
+                    <Grid ColumnSpacing="{ThemeResource WzSpaceMd}" Margin="0,8,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" Spacing="{ThemeResource WzSpaceXxs}">
+                            <NumberBox x:Name="MaskBox"
+                                       MinWidth="220"
+                                       Header="New mask (degrees)"
+                                       SmallChange="1"
+                                       SpinButtonPlacementMode="Compact" />
+                            <controls:FieldErrorText x:Name="MaskError" />
+                        </StackPanel>
+
+                        <Button x:Name="ApplyMaskButton"
+                                Grid.Column="1"
+                                Content="Apply mask"
+                                Style="{ThemeResource WzDestructiveButtonStyle}"
+                                VerticalAlignment="Center"
+                                Margin="0,24,0,0"
+                                IsEnabled="False"
+                                ToolTipService.ToolTip="Send this elevation mask to the receiver"
+                                Click="OnApplyMaskClicked" />
+                    </Grid>
+
+                    <controls:CommandOutcomeBar x:Name="MaskOutcome" />
+
                     <TextBlock Style="{ThemeResource WzCaptionTextStyle}"
                                Foreground="{ThemeResource WzTextTertiaryBrush}"
                                TextWrapping="Wrap"
                                MaxWidth="{ThemeResource WzProseMaxWidth}"
-                               Text="Setting the mask, and choosing which satellites to track, both need a confirmation dialog and arrive with §15 step 10." />
+                               Text="Choosing which individual satellites to track is the Manage dialog, which is P1-3." />
                 </StackPanel>
             </Border>
 

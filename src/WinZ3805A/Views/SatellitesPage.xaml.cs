@@ -1,8 +1,11 @@
+using System.Globalization;
+
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
 
 using WinZ3805A.Controls;
+using WinZ3805A.Device.Commands;
 using WinZ3805A.Services;
 using WinZ3805A.ViewModels;
 
@@ -18,14 +21,26 @@ namespace WinZ3805A.Views;
 /// </remarks>
 public sealed partial class SatellitesPage : Page
 {
+    /// <summary>§8.3's elevation mask, with its 0-90 range taken from the catalog.</summary>
+    private static readonly ScpiCommand SetMask = CommandConfirmation.Require(":GPS:SAT:TRAC:EMANgle");
+
     private SatellitesViewModel? _model;
     private DeviceContext? _device;
+    private CommandInvoker? _invoker;
+    private readonly NumberFieldValidator _mask;
+    private bool _busy;
     private readonly DispatcherTimer _stalenessTicker = new() { Interval = TimeSpan.FromSeconds(1) };
 
     /// <summary>Creates the page.</summary>
     public SatellitesPage()
     {
         InitializeComponent();
+
+        // Assigned here, not in XAML: the parser widens the literal and 10 arrives with a tail.
+        MaskBox.Value = 10;
+
+        _mask = new NumberFieldValidator(MaskBox, MaskError, SetMask.Parameters[0]);
+        _mask.ValidityChanged += (_, _) => Render();
 
         _stalenessTicker.Tick += (_, _) => _model?.RaiseAll();
         Unloaded += (_, _) =>
@@ -49,6 +64,7 @@ public sealed partial class SatellitesPage : Page
         }
 
         _device = device;
+        _invoker = new CommandInvoker(device.Session);
         _model = new SatellitesViewModel(device.Store) { Connection = device.Session.Status };
         _model.PropertyChanged += (_, _) => DispatcherQueue.TryEnqueue(Render);
         device.Session.StatusChanged += OnStatusChanged;
@@ -90,7 +106,38 @@ public sealed partial class SatellitesPage : Page
             ? $"{mask}° — satellites below this are not used"
             : ReadoutFormatter.NoValue;
 
+        ApplyMaskButton.IsEnabled =
+            !_busy && _mask.IsValid && model.Connection == ConnectionStatus.Connected;
+
         FooterText.Text = $"Satellite table {model.AgeDescription}";
+    }
+
+    /// <summary>
+    /// §8.3's elevation mask. Degrees on both sides, so the number the user typed is the number
+    /// that goes on the wire and the one §8.3's sentence quotes.
+    /// </summary>
+    private async void OnApplyMaskClicked(object sender, RoutedEventArgs e)
+    {
+        if (_invoker is not CommandInvoker invoker || _mask.Value is not double degrees || _busy)
+        {
+            return;
+        }
+
+        _busy = true;
+        MaskOutcome.Clear();
+        Render();
+
+        try
+        {
+            string value = degrees.ToString("0.###", CultureInfo.InvariantCulture);
+            MaskOutcome.Show(await CommandConfirmation.RunAsync(
+                XamlRoot, invoker, SetMask, argument: value, displayValue: value));
+        }
+        finally
+        {
+            _busy = false;
+            Render();
+        }
     }
 
     private static void ShowEmpty(TextBlock block, bool isEmpty, string message)

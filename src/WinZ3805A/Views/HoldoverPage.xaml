@@ -98,6 +98,36 @@
                                    Text="Currently exceeded" />
                         <controls:SeverityPill x:Name="ThresholdPill" Grid.Row="1" Grid.Column="1" />
                     </Grid>
+
+                    <!-- §9.7.4 puts Apply inline with the value it affects. -->
+                    <Grid ColumnSpacing="{ThemeResource WzSpaceMd}" VerticalAlignment="Bottom">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" Spacing="{ThemeResource WzSpaceXxs}">
+                            <NumberBox x:Name="ThresholdBox"
+                                       MinWidth="240"
+                                       Header="New threshold (seconds)"
+                                       SmallChange="1"
+                                       LargeChange="60"
+                                       SpinButtonPlacementMode="Compact" />
+                            <controls:FieldErrorText x:Name="ThresholdError" />
+                        </StackPanel>
+
+                        <Button x:Name="ApplyThresholdButton"
+                                Grid.Column="1"
+                                Content="Apply threshold"
+                                Style="{ThemeResource WzDestructiveButtonStyle}"
+                                VerticalAlignment="Center"
+                                Margin="0,24,0,0"
+                                IsEnabled="False"
+                                ToolTipService.ToolTip="Send this holdover threshold to the receiver"
+                                Click="OnApplyThresholdClicked" />
+                    </Grid>
+
+                    <controls:CommandOutcomeBar x:Name="ThresholdOutcome" />
                 </StackPanel>
             </Border>
 
