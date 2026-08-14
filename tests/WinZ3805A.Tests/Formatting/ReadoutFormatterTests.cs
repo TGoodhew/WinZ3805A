@@ -216,4 +216,50 @@ public class ReadoutFormatterTests
         Assert.Equal("Satellites: 6", ReadoutFormatter.ToSpokenText("Satellites", "6", null));
         Assert.Equal("6 dB", ReadoutFormatter.ToSpokenText(string.Empty, "6", "dB"));
     }
+
+    // ---- Engineering units -----------------------------------------------------------------
+
+    /// <summary>
+    /// A duration in seconds picks the unit that suits its magnitude, stepping in thousands.
+    /// </summary>
+    /// <remarks>
+    /// The receiver reports every interval in seconds, and 2.7E-006 beside 1.0E-006 does not read
+    /// as one being nearly three times the other. Only ns, µs, ms and s are produced, so a growing
+    /// value never passes through a unit a reader has to stop and think about.
+    /// </remarks>
+    [Theory]
+    [InlineData(2.7e-6, "2.7", "µs")]
+    [InlineData(1.0e-6, "1.0", "µs")]
+    [InlineData(3.31e-8, "33.1", "ns")]
+    [InlineData(9.99e-10, "1.0", "ns")]
+    [InlineData(4.5e-3, "4.5", "ms")]
+    [InlineData(12.34, "12.3", "s")]  // Not a midpoint: half-way rounding is unspecified and is the plain formatter's business, not this one's.
+    [InlineData(0.0, "0.0", "ns")]
+    public void SecondsPicksTheEngineeringUnit(double seconds, string value, string unit) =>
+        Assert.Equal((value, unit), ReadoutFormatter.Seconds(seconds));
+
+    /// <remarks>
+    /// A threshold is a setting rather than a measurement, so it shows the decimals it was set
+    /// with — "1 µs" would hide the difference between what was asked for and what took effect.
+    /// </remarks>
+    [Fact]
+    public void SecondsHonoursTheRequestedPrecision() =>
+        Assert.Equal(("1.000", "µs"), ReadoutFormatter.Seconds(1.0e-6, decimalPlaces: 3));
+
+    /// <remarks>U+2212, not a hyphen — the same §9.5.3 rule 4 the plain formatter follows.</remarks>
+    [Fact]
+    public void ANegativeIntervalUsesTheMinusSign()
+    {
+        (string value, string unit) = ReadoutFormatter.Seconds(-3.31e-8);
+
+        Assert.StartsWith(ReadoutFormatter.MinusSign, value, StringComparison.Ordinal);
+        Assert.Equal("ns", unit);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    public void AnUnreadableIntervalHasNoUnit(double? seconds) =>
+        Assert.Equal((ReadoutFormatter.NoValue, string.Empty), ReadoutFormatter.Seconds(seconds));
 }

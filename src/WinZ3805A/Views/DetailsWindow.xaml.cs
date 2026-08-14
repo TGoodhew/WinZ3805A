@@ -119,6 +119,12 @@ public sealed partial class DetailsWindow : Window
     /// </remarks>
     public event EventHandler? ConnectionRequested;
 
+    /// <summary>The destinations whose real page exists, by tag. The rest fall back to a placeholder.</summary>
+    private static readonly IReadOnlyDictionary<string, Type> Pages = new Dictionary<string, Type>
+    {
+        ["overview"] = typeof(OverviewPage),
+    };
+
     private OverlappedPresenter? Presenter => AppWindow.Presenter as OverlappedPresenter;
 
     /// <summary>Selects a destination by its one-based §9.7.5 accelerator number.</summary>
@@ -213,7 +219,19 @@ public sealed partial class DetailsWindow : Window
             return;
         }
 
-        if (DetailsDestinations.ByTag((string?)item.Tag) is DetailsDestination destination)
+        if (DetailsDestinations.ByTag((string?)item.Tag) is not DetailsDestination destination)
+        {
+            return;
+        }
+
+        // A page that has been built takes the shared DeviceContext; one that has not shows what it
+        // will hold. The mapping lives here rather than on the destination record because that
+        // record is compiled into a headless test run, where no View type exists.
+        if (Pages.TryGetValue(destination.Tag, out Type? page))
+        {
+            ContentFrame.Navigate(page, _device);
+        }
+        else
         {
             ContentFrame.Navigate(typeof(DetailsPlaceholderPage), destination);
         }

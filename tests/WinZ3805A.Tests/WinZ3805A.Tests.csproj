@@ -66,6 +66,8 @@
              Link="ViewModels\DisplayTime.cs" />
     <Compile Include="..\..\src\WinZ3805A\ViewModels\MainViewModel.cs"
              Link="ViewModels\MainViewModel.cs" />
+    <Compile Include="..\..\src\WinZ3805A\ViewModels\OverviewViewModel.cs"
+             Link="ViewModels\OverviewViewModel.cs" />
 
     <!-- P0-1's §10.12 dialog. The registry walk and the LocalSettings container behind these are
          Windows-only and stay in the app; what is linked is the part with the decisions in it -
