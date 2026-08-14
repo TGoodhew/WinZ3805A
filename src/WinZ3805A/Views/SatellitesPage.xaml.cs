@@ -29,6 +29,10 @@ public sealed partial class SatellitesPage : Page
     private CommandInvoker? _invoker;
     private readonly NumberFieldValidator _mask;
     private bool _busy;
+
+    /// <summary>True while the code is writing the selections, so its own writes do not echo back.</summary>
+    private bool _syncing;
+
     private readonly DispatcherTimer _stalenessTicker = new() { Interval = TimeSpan.FromSeconds(1) };
 
     /// <summary>Creates the page.</summary>
@@ -96,8 +100,18 @@ public sealed partial class SatellitesPage : Page
         SignalStrengthScale scale = SignalStrengthScale.For(model.SignalStrengthKind);
         StrengthHeader.Text = scale.IsKnown ? scale.Label : "Signal";
 
-        TrackedRows.ItemsSource = model.Tracked;
-        NotTrackedRows.ItemsSource = model.NotTracked;
+        // Only when the rows have actually changed. The view model hands back the same instances
+        // between screens, and reassigning ItemsSource rebuilds every container - which would
+        // discard the user's selection on every staleness tick.
+        if (!ReferenceEquals(TrackedRows.ItemsSource, model.Tracked))
+        {
+            TrackedRows.ItemsSource = model.Tracked;
+        }
+
+        if (!ReferenceEquals(NotTrackedRows.ItemsSource, model.NotTracked))
+        {
+            NotTrackedRows.ItemsSource = model.NotTracked;
+        }
 
         ShowEmpty(TrackedEmptyText, model.Tracked.Count == 0, model.EmptyMessage);
         ShowEmpty(NotTrackedEmptyText, model.NotTracked.Count == 0, "Nothing else is expected in view.");
@@ -105,6 +119,16 @@ public sealed partial class SatellitesPage : Page
         ElevationMaskText.Text = model.ElevationMaskDegrees is int mask
             ? $"{mask}° — satellites below this are not used"
             : ReadoutFormatter.NoValue;
+
+        SkyPlot.Satellites = model.SkyPlotSatellites;
+        SkyPlot.ElevationMaskDegrees = model.ElevationMaskDegrees;
+
+        // The plot draws rings whether or not there is anything on them, so an empty one looks like
+        // a plot that failed rather than a receiver that can see nothing (§9.11).
+        ShowEmpty(SkyPlotEmptyText, model.SkyPlotEmptyMessage is not null, model.SkyPlotEmptyMessage ?? string.Empty);
+        SkyPlot.Visibility = model.SkyPlotEmptyMessage is null ? Visibility.Visible : Visibility.Collapsed;
+
+        SkyPlotSelectionText.Text = DescribeSelection();
 
         ApplyMaskButton.IsEnabled =
             !_busy && _mask.IsValid && model.Connection == ConnectionStatus.Connected;
@@ -138,6 +162,114 @@ public sealed partial class SatellitesPage : Page
             _busy = false;
             Render();
         }
+    }
+
+    /// <summary>
+    /// §10.5: tapping a marker selects the matching table row.
+    /// </summary>
+    /// <remarks>
+    /// The satellite may be in either table, and which one is the interesting part of the answer —
+    /// a user clicking a hollow marker is usually asking "why is that one not being used", and the
+    /// row it lands on is where that is answered.
+    /// </remarks>
+    private void OnSkyPlotSatelliteInvoked(object? sender, int prn)
+    {
+        if (_model is not SatellitesViewModel model)
+        {
+            return;
+        }
+
+        _syncing = true;
+        try
+        {
+            TrackedSatelliteRow? tracked = model.Tracked.FirstOrDefault(row => row.Prn == prn);
+            if (tracked is not null)
+            {
+                NotTrackedRows.SelectedItem = null;
+                TrackedRows.SelectedItem = tracked;
+                TrackedRows.ScrollIntoView(tracked);
+                return;
+            }
+
+            PredictedSatelliteRow? predicted = model.NotTracked.FirstOrDefault(row => row.Prn == prn);
+            if (predicted is not null)
+            {
+                TrackedRows.SelectedItem = null;
+                NotTrackedRows.SelectedItem = predicted;
+                NotTrackedRows.ScrollIntoView(predicted);
+            }
+        }
+        finally
+        {
+            _syncing = false;
+            SkyPlotSelectionText.Text = DescribeSelection();
+        }
+    }
+
+    /// <summary>And the other way: picking a row rings its marker.</summary>
+    private void OnTrackedSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_syncing)
+        {
+            return;
+        }
+
+        _syncing = true;
+        try
+        {
+            if (TrackedRows.SelectedItem is TrackedSatelliteRow row)
+            {
+                NotTrackedRows.SelectedItem = null;
+                SkyPlot.SelectedPrn = row.Prn;
+            }
+        }
+        finally
+        {
+            _syncing = false;
+            SkyPlotSelectionText.Text = DescribeSelection();
+        }
+    }
+
+    private void OnNotTrackedSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_syncing)
+        {
+            return;
+        }
+
+        _syncing = true;
+        try
+        {
+            if (NotTrackedRows.SelectedItem is PredictedSatelliteRow row)
+            {
+                TrackedRows.SelectedItem = null;
+                SkyPlot.SelectedPrn = row.Prn;
+            }
+        }
+        finally
+        {
+            _syncing = false;
+            SkyPlotSelectionText.Text = DescribeSelection();
+        }
+    }
+
+    /// <summary>
+    /// The line under the plot naming what is selected.
+    /// </summary>
+    /// <remarks>
+    /// A ring on a marker says <em>which</em> without saying <em>what</em>, and it is 12 px across.
+    /// This is the same sentence the marker carries for assistive technology, put on screen — which
+    /// is the cheapest way for the two to stay in step.
+    /// </remarks>
+    private string DescribeSelection()
+    {
+        if (_model is not SatellitesViewModel model || SkyPlot.SelectedPrn is not int prn)
+        {
+            return "Select a satellite on the plot or in a table to see it in both.";
+        }
+
+        SkyPlotSatellite? satellite = model.SkyPlotSatellites.FirstOrDefault(candidate => candidate.Prn == prn);
+        return satellite?.Description ?? string.Empty;
     }
 
     private static void ShowEmpty(TextBlock block, bool isEmpty, string message)

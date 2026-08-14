@@ -123,7 +123,8 @@ public sealed class SatellitesViewModelTests
         Assert.Equal("79°", model.Tracked[0].ElevationText);
         Assert.Equal("2°", model.Tracked[0].AzimuthText);
         Assert.All(model.Tracked, row => Assert.Equal(SignalStrengthKind.CarrierToNoise, row.Kind));
-        Assert.Contains("c/n 32 of 55", model.Tracked[0].Description);
+        // C/N keeps its case: it is an abbreviation, and the sky plot puts this sentence on screen.
+        Assert.Contains("C/N 32 of 55", model.Tracked[0].Description);
     }
 
     /// <remarks>
@@ -244,5 +245,136 @@ public sealed class SatellitesViewModelTests
         Assert.Empty(model.NotTracked);
         Assert.Equal("Not connected", model.CountSummary);
         Assert.Null(model.ElevationMaskDegrees);
+    }
+
+    // -------------------------------------------------------------------------------------
+    // §10.5's sky plot
+    // -------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Both tables feed one plot. A satellite predicted but not tracked is exactly what the plot is
+    /// for — it is how a user sees that the sky is full and the receiver is holding two.
+    /// </summary>
+    [Fact]
+    public void ThePlotCarriesTrackedAndPredictedTogether()
+    {
+        SatellitesViewModel model = Connected(Screen(
+            tracked: [new() { Prn = 17, ElevationDegrees = 63, AzimuthDegrees = 64, SignalStrength = 35 }],
+            notTracked: [new() { Prn = 6, ElevationDegrees = 21, AzimuthDegrees = 153 }]));
+
+        Assert.Equal([17, 6], model.SkyPlotSatellites.Select(satellite => satellite.Prn));
+        Assert.Equal(SkyPlotMarkerKind.Tracked, model.SkyPlotSatellites[0].Marker);
+        Assert.Equal(SkyPlotMarkerKind.Predicted, model.SkyPlotSatellites[1].Marker);
+    }
+
+    /// <summary>
+    /// A tracked marker keeps its scale, so the plot can size and colour it against the right range
+    /// — the mistake §9.10.2 warns about for the strength bar, which the plot would otherwise repeat.
+    /// </summary>
+    [Fact]
+    public void ATrackedMarkerCarriesItsReadingAndItsScale()
+    {
+        SkyPlotSatellite marker = Connected(Screen(
+            tracked: [new() { Prn = 17, ElevationDegrees = 63, AzimuthDegrees = 64, SignalStrength = 35 }]))
+            .SkyPlotSatellites[0];
+
+        Assert.Equal(35, marker.SignalStrength);
+        Assert.Equal(SignalStrengthKind.CarrierToNoise, marker.Kind);
+    }
+
+    /// <summary>
+    /// Below the mask is a third marker kind, judged by the same rule the table uses. It is the one
+    /// of §10.5's three legend entries that is actually derivable — the receiver prints no status
+    /// column, so "acquiring" and "trying" are not on the wire.
+    /// </summary>
+    [Fact]
+    public void APredictedSatelliteBelowTheMaskIsDrawnDifferently()
+    {
+        SatellitesViewModel model = Connected(Screen(
+            mask: 20,
+            notTracked:
+            [
+                new() { Prn = 3, ElevationDegrees = 10, AzimuthDegrees = 172 },
+                new() { Prn = 4, ElevationDegrees = 61, AzimuthDegrees = 109 },
+            ]));
+
+        Assert.Equal(SkyPlotMarkerKind.BelowMask, model.SkyPlotSatellites[0].Marker);
+        Assert.Equal(SkyPlotMarkerKind.Predicted, model.SkyPlotSatellites[1].Marker);
+    }
+
+    /// <summary>
+    /// The marker and the table row say the same thing, because the marker's sentence is built from
+    /// the row's. §9.10.2 requires the peer to name PRN, elevation, azimuth, strength and state.
+    /// </summary>
+    [Fact]
+    public void AMarkersSentenceNamesEverythingAndMatchesItsRow()
+    {
+        SatellitesViewModel model = Connected(Screen(
+            tracked: [new() { Prn = 19, ElevationDegrees = 65, AzimuthDegrees = 52, SignalStrength = 49 }]));
+
+        string sentence = model.SkyPlotSatellites[0].Description;
+
+        Assert.StartsWith(model.Tracked[0].Description, sentence, StringComparison.Ordinal);
+        Assert.Contains("PRN 19", sentence, StringComparison.Ordinal);
+        Assert.Contains("elevation 65 degrees", sentence, StringComparison.Ordinal);
+        Assert.Contains("azimuth 52 degrees", sentence, StringComparison.Ordinal);
+        Assert.Contains("C/N 49 of 55", sentence, StringComparison.Ordinal);
+        Assert.EndsWith("tracked", sentence, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A satellite missing either angle is carried but not plotted. A marker at a guessed position
+    /// is worse than an absent one on a plot that is read for geometry.
+    /// </summary>
+    [Fact]
+    public void ASatelliteWithoutBothAnglesCannotBePlotted()
+    {
+        SatellitesViewModel model = Connected(Screen(
+            tracked: [new() { Prn = 8, ElevationDegrees = 40, AzimuthDegrees = null, SignalStrength = 44 }]));
+
+        Assert.False(model.SkyPlotSatellites[0].CanPlot);
+    }
+
+    /// <summary>
+    /// <b>The row objects have to survive between reads.</b> They are what the two ListViews hold
+    /// and what SelectedItem is compared against, so a property that rebuilt them on every read
+    /// gave the page nothing it could select — and the staleness tick raises every property once a
+    /// second, which would have discarded the selection with them.
+    /// </summary>
+    [Fact]
+    public void TheRowsAreTheSameObjectsUntilTheScreenChanges()
+    {
+        SatellitesViewModel model = Connected(Screen(
+            tracked: [new() { Prn = 17, ElevationDegrees = 63, AzimuthDegrees = 64, SignalStrength = 35 }],
+            notTracked: [new() { Prn = 6, ElevationDegrees = 21, AzimuthDegrees = 153 }]));
+
+        Assert.Same(model.Tracked, model.Tracked);
+        Assert.Same(model.NotTracked, model.NotTracked);
+        Assert.Same(model.SkyPlotSatellites, model.SkyPlotSatellites);
+        Assert.Same(model.Tracked[0], model.Tracked[0]);
+
+        // And a raise that changes nothing must not quietly replace them either.
+        model.RaiseAll();
+        Assert.Same(model.Tracked, model.Tracked);
+    }
+
+    /// <summary>An empty plot says what will appear there rather than drawing bare rings (§9.11).</summary>
+    [Fact]
+    public void AnEmptyPlotExplainsItself()
+    {
+        SatellitesViewModel model = Connected(Screen());
+
+        Assert.NotNull(model.SkyPlotEmptyMessage);
+        Assert.Contains("appear here", model.SkyPlotEmptyMessage, StringComparison.Ordinal);
+    }
+
+    /// <summary>And says something different when it has satellites it cannot place.</summary>
+    [Fact]
+    public void APlotWithNothingPlaceableSaysSo()
+    {
+        SatellitesViewModel model = Connected(Screen(
+            tracked: [new() { Prn = 8, ElevationDegrees = null, AzimuthDegrees = null, SignalStrength = 44 }]));
+
+        Assert.Contains("none can be placed", model.SkyPlotEmptyMessage!, StringComparison.Ordinal);
     }
 }

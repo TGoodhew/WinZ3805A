@@ -10,12 +10,12 @@
     mc:Ignorable="d">
 
     <!--
-        §10.5, without the sky plot. SkyPlotControl is §15 step 9 and arrives with its own keyboard
-        model and automation peers (A11Y-10, A11Y-11); the tables are what step 8 builds, and they
-        are the alternate view the plot will need anyway.
+        §10.5. The plot and the tables carry the same data in two forms, which is A11Y-11's
+        non-spatial alternate: the tables are not a fallback bolted on for it, they are the half
+        that works without a mouse or a working sense of the sky. Selection is shared both ways -
+        clicking a marker highlights its row, and picking a row rings its marker.
 
-        The elevation mask is shown, not set: :GPS:SAT:TRAC:EMANgle needs confirmation and the
-        dialog infrastructure is §15 step 10. Same for Manage.
+        Manage is P1-3 (#51), the only satellite command not yet reachable.
     -->
     <ScrollViewer HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
         <StackPanel Padding="{ThemeResource WzPageMarginThickness}"
@@ -36,6 +36,31 @@
                            Foreground="{ThemeResource WzTextSecondaryBrush}"
                            VerticalAlignment="Bottom" />
             </Grid>
+
+            <!-- ================================ Sky plot =============================== -->
+            <Border Style="{ThemeResource WzCardStyle}">
+                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Sky plot" />
+
+                    <controls:SkyPlotControl x:Name="SkyPlot"
+                                             MaxPlotSize="360"
+                                             AutomationProperties.Name="Sky plot. Arrow keys move between satellites, Enter selects."
+                                             SatelliteInvoked="OnSkyPlotSatelliteInvoked" />
+
+                    <TextBlock x:Name="SkyPlotEmptyText"
+                               Style="{ThemeResource WzBodyTextStyle}"
+                               Foreground="{ThemeResource WzTextSecondaryBrush}"
+                               TextWrapping="Wrap"
+                               MaxWidth="{ThemeResource WzProseMaxWidth}"
+                               Visibility="Collapsed" />
+
+                    <TextBlock x:Name="SkyPlotSelectionText"
+                               Style="{ThemeResource WzCaptionTextStyle}"
+                               Foreground="{ThemeResource WzTextTertiaryBrush}"
+                               TextWrapping="Wrap"
+                               MaxWidth="{ThemeResource WzProseMaxWidth}" />
+                </StackPanel>
+            </Border>
 
             <!-- ================================ Tracked ================================ -->
             <Border Style="{ThemeResource WzCardStyle}">
@@ -61,11 +86,14 @@
                                    Foreground="{ThemeResource WzTextSecondaryBrush}" />
                     </Grid>
 
-                    <ItemsControl x:Name="TrackedRows">
-                        <ItemsControl.ItemTemplate>
+                    <ListView x:Name="TrackedRows"
+                              SelectionMode="Single"
+                              ItemContainerStyle="{ThemeResource WzDenseListItemStyle}"
+                              AutomationProperties.Name="Tracked satellites"
+                              SelectionChanged="OnTrackedSelectionChanged">
+                        <ListView.ItemTemplate>
                             <DataTemplate x:DataType="vm:TrackedSatelliteRow">
                                 <Grid ColumnSpacing="{ThemeResource WzSpaceMd}"
-                                      Padding="0,4"
                                       AutomationProperties.Name="{x:Bind Description}">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="56" />
@@ -85,8 +113,8 @@
                                                                    Kind="{x:Bind Kind}" />
                                 </Grid>
                             </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
+                        </ListView.ItemTemplate>
+                    </ListView>
 
                     <TextBlock x:Name="TrackedEmptyText"
                                Style="{ThemeResource WzBodyTextStyle}"
@@ -118,11 +146,14 @@
                                    Foreground="{ThemeResource WzTextSecondaryBrush}" Text="Az" />
                     </Grid>
 
-                    <ItemsControl x:Name="NotTrackedRows">
-                        <ItemsControl.ItemTemplate>
+                    <ListView x:Name="NotTrackedRows"
+                              SelectionMode="Single"
+                              ItemContainerStyle="{ThemeResource WzDenseListItemStyle}"
+                              AutomationProperties.Name="Satellites not being tracked"
+                              SelectionChanged="OnNotTrackedSelectionChanged">
+                        <ListView.ItemTemplate>
                             <DataTemplate x:DataType="vm:PredictedSatelliteRow">
                                 <Grid ColumnSpacing="{ThemeResource WzSpaceMd}"
-                                      Padding="0,4"
                                       AutomationProperties.Name="{x:Bind Description}">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="56" />
@@ -143,8 +174,8 @@
                                                Text="{x:Bind StatusText}" />
                                 </Grid>
                             </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
+                        </ListView.ItemTemplate>
+                    </ListView>
 
                     <TextBlock x:Name="NotTrackedEmptyText"
                                Style="{ThemeResource WzBodyTextStyle}"

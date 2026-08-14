@@ -52,6 +52,10 @@
          be linked here: the control speaks WinUI, the scale is arithmetic. -->
     <Compile Include="..\..\src\WinZ3805A\Controls\SignalStrengthScale.cs"
              Link="Controls\SignalStrengthScale.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Controls\SkyPlotGeometry.cs"
+             Link="Controls\SkyPlotGeometry.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Controls\SkyPlotSatellite.cs"
+             Link="Controls\SkyPlotSatellite.cs" />
 
     <!-- Same reasoning for the session layer. §6.2 places these under the app's Services/, but
          neither touches a UI type: they compose the Device library, Channels, and TimeProvider.
