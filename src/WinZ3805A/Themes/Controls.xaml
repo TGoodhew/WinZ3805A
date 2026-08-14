@@ -58,6 +58,30 @@
         <Setter Property="BorderBrush" Value="{ThemeResource WzStrokeDefaultBrush}" />
         <Setter Property="BorderThickness" Value="{StaticResource WzHairlineThickness}" />
         <Setter Property="CornerRadius" Value="{StaticResource WzControlCornerRadius}" />
+
+        <!--
+            The glyph the comment above promises, applied once here rather than at each call site.
+            ContentDialog sets its primary button's Content to the PrimaryButtonText string, and an
+            ordinary page button sets it to a string too, so one template covers both.
+
+            16 px, from §9.9's "inline with body text" row rather than its "buttons" row: this is
+            a glyph set inline with the button label, not the button icon, and the 20 px figure
+            beside a 14 px label reads as a mismatch. DetailsWindow sizes its glyphs the same way.
+        -->
+        <Setter Property="ContentTemplate">
+            <Setter.Value>
+                <DataTemplate>
+                    <StackPanel Orientation="Horizontal"
+                                Spacing="{StaticResource WzSpaceXs}"
+                                VerticalAlignment="Center">
+                        <FontIcon Glyph="&#xE7BA;"
+                                  FontSize="16"
+                                  VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding}" VerticalAlignment="Center" />
+                    </StackPanel>
+                </DataTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
 </ResourceDictionary>

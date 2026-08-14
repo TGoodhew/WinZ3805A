@@ -1,9 +1,12 @@
+using System.Globalization;
+
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
 
 using WinZ3805A.Controls;
+using WinZ3805A.Device.Commands;
 using WinZ3805A.Services;
 using WinZ3805A.ViewModels;
 
@@ -19,9 +22,16 @@ namespace WinZ3805A.Views;
 /// </remarks>
 public sealed partial class OverviewPage : Page
 {
+    /// <summary>The one tier C command on this page (§8.3), resolved from the catalog once.</summary>
+    private static readonly ScpiCommand SelfTest = CommandConfirmation.Require("*TST?");
+
     private OverviewViewModel? _model;
     private DeviceContext? _device;
+    private CommandInvoker? _invoker;
     private readonly DispatcherTimer _stalenessTicker = new() { Interval = TimeSpan.FromSeconds(1) };
+
+    /// <summary>True while the self-test is running, so a second click cannot queue a second one.</summary>
+    private bool _testRunning;
 
     /// <summary>Creates the page.</summary>
     public OverviewPage()
@@ -51,6 +61,7 @@ public sealed partial class OverviewPage : Page
         }
 
         _device = device;
+        _invoker = new CommandInvoker(device.Session);
         _model = new OverviewViewModel(device.Store) { Connection = device.Session.Status };
         _model.PropertyChanged += (_, _) => DispatcherQueue.TryEnqueue(Render);
         device.Session.StatusChanged += OnStatusChanged;
@@ -108,6 +119,53 @@ public sealed partial class OverviewPage : Page
         OscillatorControl.Value = model.OscillatorControl;
 
         FooterText.Text = model.AgeDescription;
+
+        RunTestButton.IsEnabled = !_testRunning && model.Connection == ConnectionStatus.Connected;
+    }
+
+    /// <summary>
+    /// §8.3's self-test. Everything about what the user is told, and whether it runs at all, is
+    /// <see cref="CommandConfirmation"/>'s; this only knows how to read the number that comes back.
+    /// </summary>
+    private async void OnRunTestClicked(object sender, RoutedEventArgs e)
+    {
+        if (_invoker is not CommandInvoker invoker || _testRunning)
+        {
+            return;
+        }
+
+        _testRunning = true;
+        RunTestButton.IsEnabled = false;
+        SelfTestOutcome.Clear();
+
+        try
+        {
+            CommandOutcome? outcome = await CommandConfirmation.RunAsync(XamlRoot, invoker, SelfTest);
+            SelfTestOutcome.Show(outcome, DescribeSelfTest(outcome));
+        }
+        finally
+        {
+            _testRunning = false;
+            Render();
+        }
+    }
+
+    /// <summary>
+    /// Reads <c>*TST?</c>'s answer. IEEE 488.2 defines zero as "no fault found" and leaves every
+    /// other value to the instrument, so a non-zero result is reported as the number it was rather
+    /// than translated into a fault this application cannot name.
+    /// </summary>
+    private static string? DescribeSelfTest(CommandOutcome? outcome)
+    {
+        if (outcome is not { Succeeded: true } result || result.Lines.Count == 0)
+        {
+            return null;
+        }
+
+        string answer = result.Lines[0].Trim();
+        return int.TryParse(answer, NumberStyles.Integer, CultureInfo.InvariantCulture, out int code)
+            ? code == 0 ? "It reported no faults." : $"It reported result {code}, which is a fault."
+            : $"It answered \"{answer}\".";
     }
 
     /// <remarks>

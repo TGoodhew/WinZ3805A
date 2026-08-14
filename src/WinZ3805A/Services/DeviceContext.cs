@@ -1,3 +1,7 @@
+using System.ComponentModel;
+
+using WinZ3805A.Device.Models;
+
 namespace WinZ3805A.Services;
 
 /// <summary>
@@ -24,17 +28,26 @@ public sealed class DeviceContext : IAsyncDisposable
         string key,
         DeviceSessionService session,
         ReceiverStateStore store,
-        PollingService poller)
+        PollingService poller,
+        TimeProvider timeProvider)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(key);
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(poller);
+        ArgumentNullException.ThrowIfNull(timeProvider);
 
         Key = key;
         Session = session;
         Store = store;
         Poller = poller;
+        PowerUp = new PowerUpGuard(timeProvider);
+
+        // The guard is fed here rather than by the page that reads it, because §10.8's figure is
+        // accumulated over the whole session and a page that only started watching when the user
+        // navigated to it would report a lower bound of a few seconds after a week of uptime.
+        Store.PropertyChanged += OnStoreChanged;
+        Session.StatusChanged += OnStatusChanged;
     }
 
     /// <summary>Which device this is. v1 uses <see cref="DeviceKeys.Primary"/> and only that.</summary>
@@ -49,11 +62,34 @@ public sealed class DeviceContext : IAsyncDisposable
     /// <summary>The two §7.3 cadences. View models never touch this.</summary>
     public PollingService Poller { get; }
 
+    /// <summary>§10.8's manual-holdover guard, accumulated across the whole session.</summary>
+    public PowerUpGuard PowerUp { get; }
+
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
+        Store.PropertyChanged -= OnStoreChanged;
+        Session.StatusChanged -= OnStatusChanged;
+
         await Poller.DisposeAsync().ConfigureAwait(false);
         await Session.DisposeAsync().ConfigureAwait(false);
+    }
+
+    private void OnStoreChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (Store.Status?.Mode is SmartClockMode mode)
+        {
+            PowerUp.Observe(mode);
+        }
+    }
+
+    private void OnStatusChanged(object? sender, ConnectionStatusChanged e)
+    {
+        // Anything short of connected is a gap in observation, and a gap could hide a power cycle.
+        if (e.Status != ConnectionStatus.Connected)
+        {
+            PowerUp.ObservationBroken();
+        }
     }
 }
 

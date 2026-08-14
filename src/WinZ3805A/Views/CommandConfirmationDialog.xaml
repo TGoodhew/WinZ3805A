@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentDialog
+    x:Class="WinZ3805A.Views.CommandConfirmationDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    CloseButtonText="Cancel"
+    DefaultButton="Close"
+    PrimaryButtonStyle="{ThemeResource WzDestructiveButtonStyle}">
+
+    <!--
+        The tier C confirmation, built from §9.7.4 rather than from the end of §8.3, which it
+        amends 450 lines later (#84).
+
+        Three things here are the requirement rather than a preference, and all three are easy to
+        undo by accident:
+
+          · The destructive action is the PrimaryButton in WzDestructiveButtonStyle. Never
+            AccentButtonStyle — accent means "the safe thing to do next".
+          · Cancel is the CloseButton and DefaultButton, so Enter and initial focus land on the
+            safe option. Escape cancels, which ContentDialog gives for free.
+          · No PrimaryButtonText here: it is the command's own display name, set in code, because
+            §9.11 requires the verb on the button the user clicked to survive into this dialog and
+            on into the result sentence.
+    -->
+    <StackPanel Width="400" Spacing="{StaticResource WzSpaceMd}">
+
+        <!--
+            The §8.3 consequence, verbatim from the catalog. Capped at the §9.5.3 prose width so a
+            four-line warning does not become a two-line one nobody reads to the end of.
+        -->
+        <TextBlock x:Name="MessageText"
+                   Style="{ThemeResource WzBodyTextStyle}"
+                   TextWrapping="Wrap"
+                   MaxWidth="{ThemeResource WzProseMaxWidth}" />
+
+        <!--
+            What the page knows and the catalog cannot — §10.8's time since power-up is the case
+            this exists for. Warning rather than Error: the command is still offered.
+        -->
+        <InfoBar x:Name="CautionBar"
+                 IsOpen="False"
+                 IsClosable="False"
+                 Severity="Warning" />
+
+        <!--
+            §9.7.4's gate on the four strong variants, and on anything a page asks to be gated.
+            Bound in code-behind to CanConfirm rather than to the CheckBox directly, so the one
+            rule that decides whether a destructive command may run lives in a class that can be
+            tested without a window.
+        -->
+        <CheckBox x:Name="AcknowledgeCheck"
+                  Visibility="Collapsed"
+                  Checked="OnAcknowledgementChanged"
+                  Unchecked="OnAcknowledgementChanged" />
+    </StackPanel>
+</ContentDialog>

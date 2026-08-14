@@ -240,6 +240,65 @@ public class CommandCatalogTests
             command => Assert.NotEmpty(command.Parameters));
     }
 
+    /// <summary>
+    /// §9.11 gives every tier C command a success line, because every tier C command is
+    /// consequential by definition — that is what put it in tier C. A missing one would leave the
+    /// user having confirmed something destructive and then told nothing at all.
+    /// </summary>
+    [Fact]
+    public void EveryConfirmCommandCarriesASuccessSentence()
+    {
+        Assert.All(
+            CommandCatalog.Confirm,
+            command => Assert.False(string.IsNullOrWhiteSpace(command.SuccessText)));
+    }
+
+    /// <summary>
+    /// The converse, and the same reasoning as the confirmation text: §9.11 gives a routine success
+    /// no UI at all, so a safe command with a success line is one that would produce a toast the
+    /// specification says not to show.
+    /// </summary>
+    [Fact]
+    public void NoSafeCommandCarriesASuccessSentence()
+    {
+        Assert.All(CommandCatalog.Safe, command => Assert.Null(command.SuccessText));
+    }
+
+    /// <summary>A success line with a value in it needs somewhere for the value to come from.</summary>
+    [Fact]
+    public void SuccessTextWithAPlaceholderHasAParameterToFillIt()
+    {
+        Assert.All(
+            CommandCatalog.Confirm.Where(c => c.SuccessText!.Contains("{0}", StringComparison.Ordinal)),
+            command => Assert.NotEmpty(command.Parameters));
+    }
+
+    /// <summary>
+    /// §9.11: a verb keeps its identity end to end. The success line is past tense and the display
+    /// name is imperative, so they cannot be compared word for word — but a success line that
+    /// shares no significant word with its own button is one that drifted.
+    /// </summary>
+    [Fact]
+    public void EverySuccessSentenceSharesAWordWithItsButton()
+    {
+        Assert.All(CommandCatalog.Confirm, command =>
+        {
+            HashSet<string> success = Significant(command.SuccessText!);
+            Assert.True(
+                Significant(command.DisplayName).Any(word => success.Contains(word)),
+                $"{command.Mnemonic}: \"{command.DisplayName}\" and \"{command.SuccessText}\" share no word.");
+        });
+
+        // Stems rather than whole words, so "Clear" matches "Cleared" and "Adopt" matches "Adopted"
+        // without a stemmer: four characters is enough to separate these verbs from each other and
+        // short enough to survive an -ed or an -s.
+        static HashSet<string> Significant(string text) =>
+            text.Split([' ', ',', '.', '?', '—', '-'], StringSplitOptions.RemoveEmptyEntries)
+                .Where(word => word.Length >= 4)
+                .Select(word => word[..4].ToLowerInvariant())
+                .ToHashSet(StringComparer.Ordinal);
+    }
+
     // -------------------------------------------------------------------------------------------
     // §8.5 — opt-in queries
     // -------------------------------------------------------------------------------------------
