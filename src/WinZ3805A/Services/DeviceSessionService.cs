@@ -407,13 +407,18 @@ public sealed class DeviceSessionService : IAsyncDisposable
     /// time alone, and the self-tests 30 s because they genuinely take that long. Everything else
     /// gets the 3 s default.
     /// </remarks>
-    private static TimeSpan TimeoutFor(ScpiCommand command) => command.ResponseFormat switch
-    {
-        ResponseFormat.StatusScreen => TransactionTimeouts.StatusScreen,
-        _ when command.Mnemonic is "*TST?" || command.Mnemonic.StartsWith(":DIAG:TEST", StringComparison.OrdinalIgnoreCase)
-            => TransactionTimeouts.SelfTest,
-        _ => TransactionTimeouts.Default,
-    };
+    /// <summary>
+    /// The §7.2 timeout for one command.
+    /// </summary>
+    /// <remarks>
+    /// <b>Delegates to <see cref="TransactionTimeouts.For"/> and must keep doing so.</b> This used
+    /// to carry its own switch — status screen by response format, self-test by a mnemonic prefix,
+    /// default for everything else — which was a second timeout policy beside the tested one, and
+    /// it silently diverged: <c>TransactionTimeouts</c> grew a class for the whole diagnostic log
+    /// and the session never consulted it, so a 15 kB read kept failing on a 3 s timeout while the
+    /// table said 60 s and its tests passed. One table, one lookup.
+    /// </remarks>
+    private static TimeSpan TimeoutFor(ScpiCommand command) => TransactionTimeouts.For(command.Mnemonic);
 
     /// <summary>
     /// Counts consecutive timeouts toward the §7.2 reconnect trigger, and resets on any success.

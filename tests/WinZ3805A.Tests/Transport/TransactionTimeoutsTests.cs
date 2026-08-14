@@ -60,4 +60,30 @@ public class TransactionTimeoutsTests
     [InlineData("   ")]
     public void AnEmptyCommandIsRejected(string command)
         => Assert.Throws<ArgumentException>(() => TransactionTimeouts.For(command));
+
+    /// <summary>
+    /// The whole diagnostic log gets a minute, because it is far larger than anything else.
+    /// </summary>
+    /// <remarks>
+    /// Found by the 3 s default timing out against the reference unit, whose log was full at the
+    /// documented maximum of 222 entries — about 15 kB, or 16 seconds at 9600 baud. §7.2 names
+    /// three timeout classes and none of them covers this.
+    /// </remarks>
+    [Theory]
+    [InlineData(":DIAG:LOG:READ:ALL?")]
+    [InlineData(":DIAGNOSTIC:LOG:READ:ALL?")]
+    [InlineData("diag:log:read:all?")]
+    public void TheWholeLogReadGetsItsOwnTimeout(string command) =>
+        Assert.Equal(TransactionTimeouts.DiagnosticLog, TransactionTimeouts.For(command));
+
+    /// <remarks>
+    /// Reading one entry is a scalar by any measure. Sharing the whole-log class would give a cheap
+    /// query a minute to hang the caller in — the same trap :SYST:STAT:LENG? is kept out of.
+    /// </remarks>
+    [Fact]
+    public void ASingleLogEntryKeepsTheDefault()
+    {
+        Assert.Equal(TransactionTimeouts.Default, TransactionTimeouts.For(":DIAG:LOG:READ?"));
+        Assert.Equal(TransactionTimeouts.Default, TransactionTimeouts.For(":DIAG:LOG:COUN?"));
+    }
 }

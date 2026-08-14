@@ -22,6 +22,27 @@ public static class TransactionTimeouts
     /// <summary>30000 ms — self-test and the diagnostic test, which exercise hardware before answering.</summary>
     public static TimeSpan SelfTest { get; } = TimeSpan.FromMilliseconds(30000);
 
+    /// <summary>
+    /// 60000 ms — reading the whole diagnostic log, which is far larger than anything else on the wire.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Measured, after the 3 s default timed out against the reference unit.</b> The log holds up
+    /// to 222 entries (58503A guide, <c>:DIAG:LOG:COUNt?</c>) and the unit on the bench was full at
+    /// exactly that. At roughly 70 bytes an entry that is about 15 kB, or <b>16 seconds</b> at 9600
+    /// baud — five times the whole status screen, and the reason this needs a class of its own that
+    /// §7.2's three do not provide.
+    /// </para>
+    /// <para>
+    /// 60 s gives that nearly four times over, which covers longer messages — the guide allows 255
+    /// characters each — without waiting minutes on a link that has genuinely died. It does not
+    /// cover the worst case at 1200 baud, where a full log of maximum-length entries would take
+    /// most of nine minutes; that is the same baud-rate assumption already recorded against §7.3,
+    /// and no timeout is the right answer to it.
+    /// </para>
+    /// </remarks>
+    public static TimeSpan DiagnosticLog { get; } = TimeSpan.FromMilliseconds(60000);
+
     /// <summary>2000 ms — one identity probe during auto-detect (§10.12), where eight of these must fit inside 20 s.</summary>
     public static TimeSpan AutoDetectProbe { get; } = TimeSpan.FromMilliseconds(2000);
 
@@ -50,6 +71,10 @@ public static class TransactionTimeouts
 
         AddSpellings(lookup, StatusScreen, ["SYST", "SYSTEM"], ["STAT", "STATUS"]);
         AddSpellings(lookup, SelfTest, ["DIAG", "DIAGNOSTIC"], ["TEST"]);
+
+        // Only the whole-log read. :DIAG:LOG:READ? returns one entry and is a scalar by any measure,
+        // so it keeps the default rather than being given a minute to hang in.
+        AddSpellings(lookup, DiagnosticLog, ["DIAG", "DIAGNOSTIC"], ["LOG"], ["READ"], ["ALL"]);
 
         // *TST? is IEEE 488.2 common syntax: no node structure and no long form.
         lookup["*TST?"] = SelfTest;
