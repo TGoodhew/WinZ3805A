@@ -447,4 +447,41 @@
         </Setter>
     </Style>
 
+    <!-- =========================================================================== -->
+    <!-- FieldErrorText (§9.11)                                                       -->
+    <!--                                                                              -->
+    <!-- Glyph plus text plus the field's own border, never border colour alone. The   -->
+    <!-- caller sets the border; this is the other two thirds of the rule.             -->
+    <!-- =========================================================================== -->
+
+    <Style TargetType="controls:FieldErrorText">
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="controls:FieldErrorText">
+                    <StackPanel Orientation="Horizontal"
+                                Spacing="{ThemeResource WzSpaceXxs}">
+                        <!--
+                            Raw to assistive technology: the control carries the message on its own
+                            AutomationProperties.Name, and an unnamed glyph beside it would be
+                            announced as a second, meaningless element.
+                        -->
+                        <FontIcon Glyph="&#xEA39;"
+                                  FontSize="16"
+                                  VerticalAlignment="Top"
+                                  Foreground="{ThemeResource WzCriticalBrush}"
+                                  AutomationProperties.AccessibilityView="Raw" />
+                        <TextBlock Text="{TemplateBinding Message}"
+                                   Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzCriticalBrush}"
+                                   TextWrapping="Wrap"
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}"
+                                   AutomationProperties.AccessibilityView="Raw" />
+                    </StackPanel>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
 </ResourceDictionary>

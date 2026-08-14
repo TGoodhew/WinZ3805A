@@ -28,9 +28,13 @@ public sealed partial class HoldoverPage : Page
     private static readonly ScpiCommand Recover = CommandConfirmation.Require(":SYNC:HOLD:REC:INIT");
     private static readonly ScpiCommand IgnoreLimit = CommandConfirmation.Require(":SYNC:HOLD:REC:LIM:IGN");
 
+    /// <summary>§8.3's holdover threshold, with its range taken from the catalog.</summary>
+    private static readonly ScpiCommand SetThreshold = CommandConfirmation.Require(":SYNC:HOLD:DUR:THReshold");
+
     private HoldoverViewModel? _model;
     private DeviceContext? _device;
     private CommandInvoker? _invoker;
+    private readonly NumberFieldValidator _threshold;
     private bool _busy;
     private readonly DispatcherTimer _stalenessTicker = new() { Interval = TimeSpan.FromSeconds(1) };
 
@@ -38,6 +42,13 @@ public sealed partial class HoldoverPage : Page
     public HoldoverPage()
     {
         InitializeComponent();
+
+        // Assigned here rather than in XAML: the parser reads a NumberBox.Value literal as a float
+        // and widens it, so a round number arrives with a tail of decimals.
+        ThresholdBox.Value = 1;
+
+        _threshold = new NumberFieldValidator(ThresholdBox, ThresholdError, SetThreshold.Parameters[0]);
+        _threshold.ValidityChanged += (_, _) => Render();
 
         _stalenessTicker.Tick += (_, _) => _model?.RaiseAll();
         Unloaded += (_, _) =>
@@ -106,6 +117,9 @@ public sealed partial class HoldoverPage : Page
         PowerUpPill.Severity = model.PowerUpSeverity;
         PowerUpPill.Text = model.PowerUpVerdictText;
 
+        ApplyThresholdButton.IsEnabled =
+            !_busy && _threshold.IsValid && model.Connection == ConnectionStatus.Connected;
+
         ForceHoldoverButton.IsEnabled = !_busy && model.CanForceHoldover;
         RecoverButton.IsEnabled = !_busy && model.CanRecover;
         IgnoreLimitButton.IsEnabled = !_busy && model.CanRecover;
@@ -130,6 +144,25 @@ public sealed partial class HoldoverPage : Page
             invoker,
             ForceHoldover,
             caution: model.PowerUpCaution));
+    }
+
+    /// <summary>§8.3's holdover threshold. Seconds on both sides, so nothing is scaled.</summary>
+    private async void OnApplyThresholdClicked(object sender, RoutedEventArgs e)
+    {
+        if (_invoker is not CommandInvoker invoker || _threshold.Value is not double seconds || _busy)
+        {
+            return;
+        }
+
+        ThresholdOutcome.Clear();
+
+        await RunAsync(async () => await CommandConfirmation.RunAsync(
+            XamlRoot,
+            invoker,
+            SetThreshold,
+            argument: seconds.ToString("0.###", CultureInfo.InvariantCulture),
+            displayValue: seconds.ToString("0.###", CultureInfo.CurrentCulture)),
+            ThresholdOutcome);
     }
 
     private async void OnRecoverClicked(object sender, RoutedEventArgs e) => await RunSafeAsync(Recover);
@@ -166,16 +199,18 @@ public sealed partial class HoldoverPage : Page
         });
     }
 
-    /// <summary>Runs one command with the button row disabled and the result on the card.</summary>
-    private async Task RunAsync(Func<Task<CommandOutcome?>> operation)
+    /// <summary>Runs one command with the card's controls disabled and the result on that card.</summary>
+    private async Task RunAsync(Func<Task<CommandOutcome?>> operation, CommandOutcomeBar? bar = null)
     {
+        CommandOutcomeBar target = bar ?? ManualOutcome;
+
         _busy = true;
-        ManualOutcome.Clear();
+        target.Clear();
         Render();
 
         try
         {
-            ManualOutcome.Show(await operation());
+            target.Show(await operation());
         }
         finally
         {

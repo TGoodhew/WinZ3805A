@@ -94,6 +94,59 @@ public sealed class CommandConfirmationViewModel : INotifyPropertyChanged
             ? string.Format(CultureInfo.CurrentCulture, text, DisplayValue ?? "the requested value")
             : text;
 
+    /// <summary>
+    /// What the command does, for the §8.3 entries whose consequence text is a bare question.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Roughly a third of §8.3's table is a single question and nothing else — "Set holdover
+    /// threshold?", "Reset alarm masks to defaults?", "Change power-up behaviour?" — and under a
+    /// title carrying the same verb, that dialog states no consequence at all. #8 is explicit that
+    /// a tier C dialog gives "the specific consequence of the action in the words given in §8.3 —
+    /// <b>not a generic 'are you sure'</b>", and a bare question under its own echo is exactly the
+    /// generic one.
+    /// </para>
+    /// <para>
+    /// So where §8.3 supplies a second sentence, that sentence is the whole of the body and this is
+    /// null. Where it does not, the catalog's own one-line description fills the gap. Nothing in
+    /// §8.3 is paraphrased or dropped either way — this only ever adds.
+    /// </para>
+    /// </remarks>
+    public string? Explanation =>
+        Command.ConfirmationText is string text && CarriesAConsequence(text)
+            ? null
+            : Command.Description;
+
+    /// <summary>
+    /// The value about to be sent, for the commands whose §8.3 sentence has no <c>{0}</c> to put it
+    /// in.
+    /// </summary>
+    /// <remarks>
+    /// A confirmation that does not say what it is about to set is asking the user to take the
+    /// field on trust — and the field is behind the dialog. Where §8.3's text already names the
+    /// value this is null, because repeating it would be the redundancy this exists to avoid.
+    /// </remarks>
+    public string? ValueSummary
+    {
+        get
+        {
+            if (DisplayValue is not string value || value.Length == 0)
+            {
+                return null;
+            }
+
+            if (Command.ConfirmationText?.Contains("{0}", StringComparison.Ordinal) == true)
+            {
+                return null;
+            }
+
+            ParameterSpec? parameter = Command.Parameters.Count == 1 ? Command.Parameters[0] : null;
+            string unit = string.IsNullOrEmpty(parameter?.Unit) ? string.Empty : $" {parameter.Unit}";
+
+            return $"{parameter?.Name ?? "Value"}: {value}{unit}";
+        }
+    }
+
     /// <summary>The confirm button's label — the same verb the user clicked to get here.</summary>
     public string ConfirmLabel => Command.DisplayName;
 
@@ -125,4 +178,19 @@ public sealed class CommandConfirmationViewModel : INotifyPropertyChanged
     /// require one — §9.7.4 gates the PrimaryButton on it, and P0-8 is the acceptance test.
     /// </summary>
     public bool CanConfirm => !RequiresAcknowledgement || IsAcknowledged;
+
+    /// <summary>
+    /// Whether a §8.3 sentence says anything beyond asking the question.
+    /// </summary>
+    /// <remarks>
+    /// A consequence is a second sentence. Every entry in §8.3's table that carries one is written
+    /// as "&lt;question&gt;? &lt;what will happen&gt;.", so the test is whether anything follows the
+    /// question mark — which is cheaper and steadier than trying to judge the sentence itself, and
+    /// wrong only in the direction of showing one extra line.
+    /// </remarks>
+    private static bool CarriesAConsequence(string text)
+    {
+        int question = text.IndexOf('?', StringComparison.Ordinal);
+        return question >= 0 && text.AsSpan(question + 1).Trim().Length > 0;
+    }
 }

@@ -36,9 +36,20 @@ public enum ParameterKind
 /// </summary>
 /// <param name="Name">The parameter's name, used for the field label and in confirmation text.</param>
 /// <param name="Kind">What sort of value it takes.</param>
-/// <param name="Unit">The unit the receiver expects, if any — seconds, degrees, and so on.</param>
-/// <param name="Minimum">The smallest value the receiver accepts, where the manual gives one.</param>
-/// <param name="Maximum">The largest value the receiver accepts, where the manual gives one.</param>
+/// <param name="Unit">
+/// The unit the value is expressed in, if any — seconds, degrees, and so on — and the unit
+/// <see cref="Minimum"/> and <see cref="Maximum"/> are stated in.
+/// <para>
+/// This is the unit the <b>user</b> works in, which is almost always the one the receiver takes as
+/// well. <c>:GPS:REF:ADELay</c> is the exception: §8.3 writes its confirmation in nanoseconds and
+/// §10.7 labels its field in nanoseconds, while the receiver takes seconds. The parameter follows
+/// the two sections that are user-facing, and the caller scales on the way out — which it has to
+/// do regardless, since no range expressed in seconds would produce §9.11's own example sentence,
+/// "Enter a value between 0 and 999,999 ns."
+/// </para>
+/// </param>
+/// <param name="Minimum">The smallest acceptable value, in <see cref="Unit"/>, where one is documented.</param>
+/// <param name="Maximum">The largest acceptable value, in <see cref="Unit"/>, where one is documented.</param>
 /// <param name="Choices">
 /// The permitted keywords when <see cref="Kind"/> is <see cref="ParameterKind.Keyword"/>.
 /// </param>

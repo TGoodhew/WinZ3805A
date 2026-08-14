@@ -10,8 +10,8 @@
 
     <!--
         §10.7. The calculator computes; it does not apply. :GPS:REF:ADEL can put a locked receiver
-        into holdover, so Apply needs the §15 step 10 confirmation dialog. Computing is still the
-        useful half - it is the part a user cannot do in their head, and P0-11 is the arithmetic.
+        into holdover, so Apply goes through the §8.3 confirmation like every other tier C write.
+        The calculator is the part a user cannot do in their head, and P0-11 is the arithmetic.
     -->
     <ScrollViewer HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
         <StackPanel Padding="{ThemeResource WzPageMarginThickness}"
@@ -40,7 +40,37 @@
                                    Style="{ThemeResource WzMonoTextStyle}" />
                     </Grid>
 
-                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Calculate from cable" />
+                    <!--
+                        §10.7's two ways in. Direct entry first, as the wireframe draws it: a user
+                        who already knows their delay should not have to work through a calculator
+                        to type it, and the surplus-equipment buyer (§3) usually does not know it
+                        and needs the calculator. Both feed the same Apply.
+                    -->
+                    <RadioButton x:Name="EnterDirectlyRadio"
+                                 Content="Enter delay directly"
+                                 GroupName="DelaySource"
+                                 Checked="OnDelaySourceChanged" />
+
+                    <StackPanel Margin="28,0,0,0" Spacing="{ThemeResource WzSpaceXxs}">
+                        <NumberBox x:Name="DirectDelayBox"
+                                   MinWidth="240"
+                                   HorizontalAlignment="Left"
+                                   Header="Delay (nanoseconds)"
+                                   SmallChange="1"
+                                   LargeChange="100"
+                                   SpinButtonPlacementMode="Compact"
+                                   ValueChanged="OnDirectDelayChanged" />
+                        <controls:FieldErrorText x:Name="DirectDelayError" />
+                    </StackPanel>
+
+                    <RadioButton x:Name="CalculateRadio"
+                                 Content="Calculate from cable"
+                                 GroupName="DelaySource"
+                                 IsChecked="True"
+                                 Checked="OnDelaySourceChanged" />
+
+                    <StackPanel Margin="28,0,0,0"
+                                Spacing="{ThemeResource WzSpaceMd}">
 
                     <StackPanel Spacing="{ThemeResource WzSpaceXs}">
                         <RadioButton x:Name="UsePresetRadio"
@@ -74,16 +104,16 @@
                                    ValueChanged="OnVelocityFactorChanged" />
                     </StackPanel>
 
-                    <NumberBox x:Name="LengthBox"
-                               MinWidth="240"
-                               HorizontalAlignment="Left"
-                               Header="Cable length (metres)"
-                               Minimum="0"
-                               Maximum="10000"
-                               SmallChange="1"
-                               SpinButtonPlacementMode="Compact"
-                               ValidationMode="InvalidInputOverwritten"
-                               ValueChanged="OnLengthChanged" />
+                    <StackPanel Spacing="{ThemeResource WzSpaceXxs}">
+                        <NumberBox x:Name="LengthBox"
+                                   MinWidth="240"
+                                   HorizontalAlignment="Left"
+                                   Header="Cable length (metres)"
+                                   SmallChange="1"
+                                   SpinButtonPlacementMode="Compact"
+                                   ValueChanged="OnLengthChanged" />
+                        <controls:FieldErrorText x:Name="LengthError" />
+                    </StackPanel>
 
                     <StackPanel Spacing="{ThemeResource WzSpaceXxs}">
                         <controls:ReadoutTile x:Name="ComputedDelay"
@@ -95,16 +125,37 @@
                         <TextBlock x:Name="CableSourceText"
                                    Style="{ThemeResource WzCaptionTextStyle}"
                                    Foreground="{ThemeResource WzTextTertiaryBrush}" />
+                        <controls:FieldErrorText x:Name="ComputedDelayError" />
                     </StackPanel>
 
                     <controls:SeverityPill x:Name="DifferencePill" Visibility="Collapsed" />
+                    </StackPanel>
 
-                    <InfoBar x:Name="ApplyNotice"
-                             IsOpen="True"
+                    <!--
+                        §10.7's warning, which is the reason the command is tier C in the first
+                        place. It stays visible rather than appearing on hover: the consequence is
+                        the same every time, so hiding it until the user is already committing is
+                        the wrong moment to mention it.
+                    -->
+                    <InfoBar IsOpen="True"
                              IsClosable="False"
-                             Severity="Informational"
-                             Title="Not applied"
-                             Message="Changing the antenna delay while locked can send the receiver into holdover, so it needs a confirmation dialog. Those arrive with §15 step 10." />
+                             Severity="Warning"
+                             Title="Before applying"
+                             Message="Changing the antenna delay while the receiver is locked can send it into holdover." />
+
+                    <controls:CommandOutcomeBar x:Name="DelayOutcome" />
+
+                    <!--
+                        §9.7.4 puts Apply inline with the values it affects, never in a page-level
+                        bar. §9.11 keeps it disabled while any field in this card is invalid.
+                    -->
+                    <Button x:Name="ApplyDelayButton"
+                            HorizontalAlignment="Right"
+                            Content="Apply delay"
+                            Style="{ThemeResource WzDestructiveButtonStyle}"
+                            IsEnabled="False"
+                            ToolTipService.ToolTip="Send this delay to the receiver"
+                            Click="OnApplyDelayClicked" />
                 </StackPanel>
             </Border>
 

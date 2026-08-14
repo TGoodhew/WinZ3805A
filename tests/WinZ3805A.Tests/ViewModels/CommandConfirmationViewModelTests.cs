@@ -167,6 +167,80 @@ public class CommandConfirmationViewModelTests
         Assert.False(new CommandConfirmationViewModel(Command(":DIAG:LOG:CLEar"), caution: "   ").HasCaution);
 
     // -------------------------------------------------------------------------------------
+    // The §8.3 entries that are a bare question
+    // -------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Where §8.3 supplies a consequence, that sentence is the whole of the body and nothing is
+    /// added beside it.
+    /// </summary>
+    [Fact]
+    public void AConsequenceInSection83LeavesNothingToExplain() =>
+        Assert.Null(new CommandConfirmationViewModel(Command(":SYNC:IMMediate")).Explanation);
+
+    /// <summary>
+    /// Where it does not, the dialog would otherwise be a title and its own echo — which is the
+    /// generic "are you sure" #8 says a tier C dialog must not be. The catalog's description fills
+    /// the gap, and §8.3's words are still there in full.
+    /// </summary>
+    [Fact]
+    public void ABareQuestionGetsTheCommandsDescription()
+    {
+        CommandConfirmationViewModel model = new(Command(":SYNC:HOLD:DUR:THReshold"));
+
+        Assert.Equal("Set holdover threshold?", model.Message);
+        Assert.Equal("Sets how long holdover may run before it is reported as exceeded.", model.Explanation);
+    }
+
+    /// <summary>
+    /// A confirmation that does not say what it is about to set asks the user to take the field on
+    /// trust, and the field is behind the dialog.
+    /// </summary>
+    [Fact]
+    public void AValueWithNowhereInTheSentenceToGoIsShownSeparately()
+    {
+        CommandConfirmationViewModel model = new(
+            Command(":SYNC:HOLD:DUR:THReshold"), argument: "3600", displayValue: "3600");
+
+        Assert.Equal("Threshold: 3600 s", model.ValueSummary);
+    }
+
+    /// <summary>And where §8.3's sentence already names it, repeating it would be the redundancy.</summary>
+    [Fact]
+    public void AValueAlreadyInTheSentenceIsNotRepeated()
+    {
+        CommandConfirmationViewModel model = new(
+            Command(":GPS:SAT:TRAC:EMANgle"), argument: "15", displayValue: "15");
+
+        Assert.Contains("15°", model.Message, StringComparison.Ordinal);
+        Assert.Null(model.ValueSummary);
+    }
+
+    /// <summary>A command that takes no value has none to summarise.</summary>
+    [Fact]
+    public void ACommandWithNoValueSummarisesNothing() =>
+        Assert.Null(new CommandConfirmationViewModel(Command(":DIAG:LOG:CLEar")).ValueSummary);
+
+    /// <summary>
+    /// Every tier C dialog says something beyond restating its own title — either §8.3 gives it a
+    /// consequence, or the description does. This is the property #8 actually asks for, so it is
+    /// asserted over the whole table rather than on the two entries that prompted it.
+    /// </summary>
+    [Fact]
+    public void NoTierCDialogIsJustItsOwnTitleTwice()
+    {
+        Assert.All(CommandCatalog.Confirm, command =>
+        {
+            CommandConfirmationViewModel model = new(command);
+            string body = $"{model.Message} {model.Explanation}".Trim();
+
+            Assert.True(
+                body.Length > model.Title.Length + 8,
+                $"{command.Mnemonic}: \"{model.Title}\" over \"{body}\" says nothing extra.");
+        });
+    }
+
+    // -------------------------------------------------------------------------------------
     // The tier boundary
     // -------------------------------------------------------------------------------------
 

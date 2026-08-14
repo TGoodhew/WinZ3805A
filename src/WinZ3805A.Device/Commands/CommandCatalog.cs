@@ -236,7 +236,11 @@ public static class CommandCatalog
                 "Sets the compensation for the delay through the antenna cable.",
                 "Set antenna delay to {0} ns? Changing this while locked can push the receiver into holdover.",
                 "Set the antenna delay to {0} ns.",
-                parameters: [new ParameterSpec("Delay", ParameterKind.Decimal, Unit: "s")]),
+                // Nanoseconds, not the seconds the receiver takes on the wire. §8.3's own
+                // confirmation text is written in ns ("Set antenna delay to {0} ns?") and §10.7's
+                // field is labelled 0 - 999 999 ns, so the parameter describes what the user
+                // enters and the caller scales it. See ParameterSpec.Unit.
+                parameters: [new ParameterSpec("Delay", ParameterKind.Decimal, Unit: "ns", Minimum: 0, Maximum: 999999)]),
 
             NeedsConfirmation(":GPS:POSition", "Set fixed position",
                 "Sets the antenna position the receiver uses for all timing solutions.",

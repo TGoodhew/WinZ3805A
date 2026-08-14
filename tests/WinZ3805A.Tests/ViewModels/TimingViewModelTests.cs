@@ -207,4 +207,65 @@ public sealed class TimingViewModelTests
         // user planning an installation has no reason to be denied it.
         Assert.NotNull(model.ComputedDelayNanoseconds);
     }
+
+    // -------------------------------------------------------------------------------------
+    // §10.7's two routes to a delay, and what Apply would send
+    // -------------------------------------------------------------------------------------
+
+    /// <summary>By default the card is calculating, and Apply would send what it computed.</summary>
+    [Fact]
+    public void TheCalculatorFeedsApplyByDefault()
+    {
+        (TimingViewModel model, _) = Connected();
+
+        Assert.False(model.UseDirectEntry);
+        Assert.Equal(model.ComputedDelayNanoseconds, model.DelayToApplyNanoseconds);
+        Assert.True(model.CanApplyDelay);
+    }
+
+    /// <summary>Switching to direct entry switches what Apply sends, and nothing else.</summary>
+    [Fact]
+    public void DirectEntryFeedsApplyInstead()
+    {
+        (TimingViewModel model, _) = Connected();
+
+        model.UseDirectEntry = true;
+        model.DirectDelayNanoseconds = 250;
+
+        Assert.Equal(250, model.DelayToApplyNanoseconds);
+        Assert.True(model.CanApplyDelay);
+
+        // The calculator has not been reset by being deselected — a user toggling back should find
+        // their cable and length where they left them.
+        Assert.NotNull(model.ComputedDelayNanoseconds);
+    }
+
+    /// <summary>
+    /// <b>The case the field validator cannot catch.</b> A 300 m run and an ordinary cable are each
+    /// perfectly valid, and the delay they produce is not — so §9.11's "Apply stays disabled while
+    /// any field is invalid" has to cover the derived value, or the one number actually being sent
+    /// is the one nothing checked.
+    /// </summary>
+    [Fact]
+    public void AComputedDelayPastTheReceiversCeilingBlocksApply()
+    {
+        (TimingViewModel model, _) = Connected();
+
+        model.Cable = AntennaCable.Presets.First(cable => cable.Name.Contains("RG-213", StringComparison.Ordinal));
+        model.LengthMetres = 300000;
+
+        Assert.NotNull(model.DelayToApplyNanoseconds);
+        Assert.False(model.IsComputedDelayAcceptable);
+        Assert.False(model.CanApplyDelay);
+    }
+
+    /// <summary>Nothing is sent to a receiver that is not there.</summary>
+    [Fact]
+    public void ApplyIsNotOfferedWhileDisconnected()
+    {
+        (TimingViewModel model, _) = Connected();
+        model.Connection = ConnectionStatus.Disconnected;
+
+        Assert.False(model.CanApplyDelay);
+    }
 }
