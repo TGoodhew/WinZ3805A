@@ -148,17 +148,20 @@
                                    Text="Health monitor" />
 
                         <!--
-                            §9.7.4 scopes commands to the card they affect. Disabled until §15
-                            step 10: *TST? needs confirmation, and the dialog infrastructure is
-                            step 10's whole subject. Wiring it early would be the one thing §8
-                            is most careful about.
+                            §9.7.4 scopes commands to the card they affect. *TST? is tier C, so it
+                            goes through CommandConfirmation and nowhere else - the button knows
+                            the mnemonic and nothing about what running it means.
                         -->
                         <Button x:Name="RunTestButton"
                                 Grid.Column="1"
                                 Content="Run test"
                                 IsEnabled="False"
-                                ToolTipService.ToolTip="The self-test needs a confirmation dialog, which arrives with §15 step 10." />
+                                ToolTipService.ToolTip="Run the receiver&apos;s built-in self-test"
+                                Click="OnRunTestClicked" />
                     </Grid>
+
+                    <!-- §9.11 puts the result of a card-scoped command at the top of its card. -->
+                    <controls:CommandOutcomeBar x:Name="SelfTestOutcome" />
 
                     <TextBlock x:Name="HealthSummaryText"
                                Style="{ThemeResource WzBodyTextStyle}"

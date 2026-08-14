@@ -166,6 +166,75 @@ public sealed class HoldoverViewModel : INotifyPropertyChanged
     /// <summary>How old these readings are — they arrive on the full sweep.</summary>
     public TimeSpan? Age => _store.AgeOf(_store.LastFullPoll);
 
+    /// <summary>The guard §10.8 puts above the manual-control buttons, or null when there is none.</summary>
+    public PowerUpGuard? PowerUp { get; init; }
+
+    /// <summary>
+    /// §10.8's "time since power-up" line — the figure, and how much of a figure it is.
+    /// </summary>
+    /// <remarks>
+    /// A lower bound is labelled as one rather than rounded off into a plain duration. "At least
+    /// 3 h" and "3 h" look alike and mean quite different things here: the first is compatible with
+    /// a receiver that came up a year ago, and it is the second that would justify the word "safe".
+    /// </remarks>
+    public string PowerUpText
+    {
+        get
+        {
+            if (PowerUp is not PowerUpGuard guard || guard.Elapsed is not TimeSpan elapsed)
+            {
+                return "Unknown";
+            }
+
+            string duration = Staleness.DescribeDuration(elapsed);
+            return guard.IsLowerBound ? $"At least {duration}" : duration;
+        }
+    }
+
+    /// <summary>Whether forcing holdover is known to be safe, known to be too soon, or neither.</summary>
+    public PowerUpSafety PowerUpSafety => PowerUp?.Safety ?? Services.PowerUpSafety.Unknown;
+
+    /// <summary>§9.4.3 needs the guard's verdict in words as well as in colour.</summary>
+    public string PowerUpVerdictText => PowerUpSafety switch
+    {
+        Services.PowerUpSafety.Safe => "Safe",
+        Services.PowerUpSafety.TooSoon => "Too soon",
+        _ => "Unverified",
+    };
+
+    /// <summary>The pill beside the verdict.</summary>
+    public Severity PowerUpSeverity => PowerUpSafety switch
+    {
+        Services.PowerUpSafety.Safe => Severity.Success,
+        Services.PowerUpSafety.TooSoon => Severity.Critical,
+        _ => Severity.Caution,
+    };
+
+    /// <summary>
+    /// The extra warning the confirmation dialog carries, or null when the guard is satisfied.
+    /// </summary>
+    /// <remarks>
+    /// §10.8 requires the extra acknowledgement whenever the elapsed time cannot be determined.
+    /// <c>:SYNC:HOLDover:INITiate</c> is one of §9.7.4's four strong variants and so always carries
+    /// a tick regardless — this only changes what the user is ticking against.
+    /// </remarks>
+    public string? PowerUpCaution => PowerUpSafety switch
+    {
+        Services.PowerUpSafety.Safe => null,
+        Services.PowerUpSafety.TooSoon =>
+            $"This receiver powered up {PowerUpText.ToLowerInvariant()} ago, inside the 24-hour "
+            + "SmartClock learning period. Forcing holdover now corrupts that learning.",
+        _ =>
+            "How long this receiver has been powered up could not be determined, so the 24-hour "
+            + "SmartClock learning period cannot be ruled out.",
+    };
+
+    /// <summary>Whether the receiver can be asked to recover, per §10.8's button row.</summary>
+    public bool CanRecover => Connection == ConnectionStatus.Connected && IsInHoldover;
+
+    /// <summary>Whether holdover can be forced — which is to say, whether it is not already in it.</summary>
+    public bool CanForceHoldover => Connection == ConnectionStatus.Connected && !IsInHoldover;
+
     /// <summary>That age in words (§9.11).</summary>
     public string AgeDescription => Staleness.Describe(Age);
 

@@ -11,8 +11,11 @@ namespace WinZ3805A.Device.Commands;
 /// The shape follows §8.1, with two members appended. §8.1's record predates §8.3's "stronger
 /// variant" rule and §8.5's opt-in queries, neither of which it has anywhere to record, so
 /// <see cref="RequiresAcknowledgement"/> and <see cref="IsExperimental"/> are added at the end
-/// where they are source-compatible with the declared shape. Both are noted against the
-/// specification rather than resolved silently.
+/// where they are source-compatible with the declared shape. <see cref="SuccessText"/> is a third
+/// of the same kind, required by §9.11's rule that a verb keeps its identity from button to dialog
+/// to result and unobtainable from the other members, since no rule turns "Force holdover" into
+/// "Forced holdover". All three are noted against the specification rather than resolved silently
+/// (#85).
 /// </para>
 /// <para>
 /// Instances exist only inside <see cref="CommandCatalog"/>. Nothing else constructs one, because
@@ -38,6 +41,14 @@ namespace WinZ3805A.Device.Commands;
 /// Null for <see cref="SafetyTier.Safe"/>. Where a value appears in the sentence it is a
 /// <c>{0}</c> placeholder, so the dialog states the number the user is actually about to send.
 /// </param>
+/// <param name="SuccessText">
+/// For <see cref="SafetyTier.Confirm"/>, the sentence §9.11 shows in the success
+/// <c>InfoBar</c> once the command has run. Past tense, and carrying the same verb as
+/// <paramref name="DisplayName"/> and the confirmation, because §9.11's copy rules require a verb
+/// to keep its identity from button to dialog to result. <c>{0}</c> takes the value, as in
+/// <paramref name="ConfirmationText"/>. Null for <see cref="SafetyTier.Safe"/>, which §9.11 says
+/// gets no UI at all — a setter that worked needs no toast.
+/// </param>
 /// <param name="RequiresAcknowledgement">
 /// True for the four commands §9.7.4 names as strong variants, where a checkbox gates the confirm
 /// button. Not in §8.1's record; see the remarks.
@@ -56,6 +67,7 @@ public sealed record ScpiCommand(
     IReadOnlyList<ParameterSpec> Parameters,
     ResponseFormat ResponseFormat,
     string? ConfirmationText = null,
+    string? SuccessText = null,
     bool RequiresAcknowledgement = false,
     bool IsExperimental = false)
 {

@@ -224,89 +224,108 @@ public static class CommandCatalog
             NeedsConfirmation(":SYST:PRESet", "Reset to factory defaults",
                 "Restores every receiver setting to its factory value.",
                 "Reset all receiver settings to factory defaults? Antenna delay, position, elevation mask, and satellite selections will be lost. Serial port settings are not affected.",
+                "Reset the receiver to factory defaults.",
                 acknowledge: true),
 
             NeedsConfirmation(":SYST:COMM:SER1:PRESet", "Restore serial defaults",
                 "Returns the serial port to its factory configuration.",
-                "Restore serial port to factory defaults (9600-8-N-1)? The connection will drop and reconnect."),
+                "Restore serial port to factory defaults (9600-8-N-1)? The connection will drop and reconnect.",
+                "Restored the serial port to 9600-8-N-1."),
 
             NeedsConfirmation(":GPS:REF:ADELay", "Set antenna delay",
                 "Sets the compensation for the delay through the antenna cable.",
                 "Set antenna delay to {0} ns? Changing this while locked can push the receiver into holdover.",
+                "Set the antenna delay to {0} ns.",
                 parameters: [new ParameterSpec("Delay", ParameterKind.Decimal, Unit: "s")]),
 
             NeedsConfirmation(":GPS:POSition", "Set fixed position",
                 "Sets the antenna position the receiver uses for all timing solutions.",
                 "Set fixed antenna position? This cancels any survey in progress and the receiver will use these coordinates for all timing solutions. An incorrect position degrades timing accuracy.",
+                "Set the fixed antenna position.",
                 parameters: [new ParameterSpec("Position", ParameterKind.Coordinates)]),
 
             NeedsConfirmation(":GPS:POSition LAST", "Restore last position",
                 "Cancels a survey and returns to the previously held position.",
-                "Cancel survey and restore the last held position?"),
+                "Cancel survey and restore the last held position?",
+                "Restored the last held position."),
 
             NeedsConfirmation(":GPS:POSition SURVey", "Adopt surveyed position",
                 "Ends the survey and holds the average position it computed.",
-                "Stop surveying and adopt the computed average position?"),
+                "Stop surveying and adopt the computed average position?",
+                "Adopted the surveyed position."),
 
             NeedsConfirmation(":GPS:POSition:SURVey:STATe ONCE", "Start position survey",
                 "Starts a single position survey.",
-                "Start a position survey? This takes approximately two hours with four or more satellites tracked."),
+                "Start a position survey? This takes approximately two hours with four or more satellites tracked.",
+                "Started the position survey. This usually takes about two hours."),
 
             NeedsConfirmation(":GPS:POS:SURV:STAT:POWerup", "Survey at power-up",
                 "Sets whether a survey starts automatically when the receiver powers up.",
                 "Change power-up behaviour?",
+                "Changed the power-up survey behaviour to {0}.",
                 parameters: [Switch("State")]),
 
             NeedsConfirmation(":GPS:SAT:TRAC:EMANgle", "Set elevation mask",
                 "Sets the elevation below which satellites are ignored.",
                 "Set elevation mask to {0}°? Values above 15° during survey may prevent position determination; above 40° severely limits availability.",
+                "Set the elevation mask to {0}°.",
                 parameters: [new ParameterSpec("Angle", ParameterKind.Decimal, Unit: "°", Minimum: 0, Maximum: 90)]),
 
             NeedsConfirmation(":GPS:SAT:TRAC:IGNore", "Exclude satellites",
                 "Excludes the selected satellites from tracking.",
                 "Exclude the selected satellites from tracking?",
+                "Excluded satellites {0} from tracking.",
                 parameters: [new ParameterSpec("Satellites", ParameterKind.PrnList)]),
 
             NeedsConfirmation(":GPS:SAT:TRAC:IGNore ALL", "Exclude all satellites",
                 "Excludes every satellite from tracking.",
                 "Exclude all satellites? The receiver will lose lock and enter holdover.",
+                "Excluded every satellite from tracking.",
                 acknowledge: true),
 
             NeedsConfirmation(":GPS:SAT:TRAC:IGNore NONE", "Exclude no satellites",
                 "Clears the exclusion list so no satellite is excluded.",
-                "Exclude the selected satellites from tracking?"),
+                "Exclude the selected satellites from tracking?",
+                "Cleared the exclusion list."),
 
             NeedsConfirmation(":GPS:SAT:TRAC:INCLude", "Include satellites",
                 "Sets which satellites are on the tracking inclusion list.",
                 "Update the tracking inclusion list?",
+                "Set the inclusion list to satellites {0}.",
                 parameters: [new ParameterSpec("Satellites", ParameterKind.PrnList)]),
 
             NeedsConfirmation(":GPS:SAT:TRAC:INCLude ALL", "Include all satellites",
                 "Puts every satellite on the tracking inclusion list.",
-                "Update the tracking inclusion list?"),
+                "Update the tracking inclusion list?",
+                "Put every satellite on the inclusion list."),
 
             NeedsConfirmation(":GPS:SAT:TRAC:INCLude NONE", "Include no satellites",
                 "Empties the tracking inclusion list.",
                 "Update the tracking inclusion list?",
+                "Emptied the inclusion list.",
                 acknowledge: true),
 
             NeedsConfirmation(":SYNC:HOLDover:INITiate", "Force holdover",
                 "Stops disciplining to GPS until recovery is started explicitly.",
                 "Force manual holdover? The receiver will stop disciplining to GPS until you explicitly recover. Do not do this within the first 24 hours after power-up — it corrupts SmartClock oscillator learning.",
+                "Forced holdover. The receiver will not discipline to GPS until you recover it.",
                 acknowledge: true),
 
             NeedsConfirmation(":SYNC:HOLD:DUR:THReshold", "Set holdover threshold",
                 "Sets how long holdover may run before it is reported as exceeded.",
                 "Set holdover threshold?",
+                "Set the holdover threshold to {0} s.",
                 parameters: [new ParameterSpec("Threshold", ParameterKind.Decimal, Unit: "s", Minimum: 0)]),
 
             NeedsConfirmation(":SYNC:IMMediate", "Force resynchronisation",
                 "Resynchronises immediately rather than steering gradually.",
-                "Force immediate resynchronisation? This causes a step change in the 1 PPS output."),
+                "Force immediate resynchronisation? This causes a step change in the 1 PPS output.",
+                "Forced an immediate resynchronisation."),
 
             NeedsConfirmation(":PTIM:TZONe", "Set time zone",
                 "Sets the offset applied to every reported time.",
                 "Change time zone offset? All reported times change, including the timecode output.",
+                "Set the time zone offset the receiver reports in to {0}.",
                 parameters:
                 [
                     new ParameterSpec("Hours", ParameterKind.Integer, Unit: "h", Minimum: -12, Maximum: 13),
@@ -315,40 +334,48 @@ public static class CommandCatalog
 
             NeedsConfirmation(":DIAG:LOG:CLEar", "Clear diagnostic log",
                 "Deletes every entry in the diagnostic log.",
-                "Clear the diagnostic log? This cannot be undone."),
+                "Clear the diagnostic log? This cannot be undone.",
+                "Cleared the diagnostic log."),
 
             NeedsConfirmation(":STAT:PRESet:ALARm", "Reset alarm masks",
                 "Returns the alarm masks to their default values.",
-                "Reset alarm masks to defaults?"),
+                "Reset alarm masks to defaults?",
+                "Reset the alarm masks to their defaults."),
 
             NeedsConfirmation(":STAT:QUES:COND:USER", "Set user status bit",
                 "Sets or clears the user-defined bit in the questionable condition register.",
                 "Change user-defined questionable status bit?",
+                "Set the user-defined questionable status bit to {0}.",
                 parameters: [new ParameterSpec("Action", ParameterKind.Keyword, Choices: ["SET", "CLEar"])]),
 
             NeedsConfirmation(":STAT:QUES:EVEN:USER", "Set user event bit",
                 "Chooses which transition sets the user-defined questionable event bit.",
                 "Change user-defined questionable status bit?",
+                "Set the user-defined questionable event bit to trigger on {0}.",
                 parameters: [new ParameterSpec("Transition", ParameterKind.Keyword, Choices: ["PTR", "NTR"])]),
 
             NeedsConfirmation("*ESE", "Set event enable mask",
                 "Sets the standard event status enable mask.",
                 "Change event/service-request enable mask?",
+                "Set the event enable mask to {0}.",
                 parameters: [Mask()]),
 
             NeedsConfirmation("*SRE", "Set service request mask",
                 "Sets the service request enable mask.",
                 "Change event/service-request enable mask?",
+                "Set the service request enable mask to {0}.",
                 parameters: [Mask()]),
 
             NeedsConfirmation("*TST?", "Run self-test",
                 "Runs the receiver's built-in self-test.",
                 "Run receiver self-test? This takes up to 30 seconds and may briefly interrupt normal operation.",
+                "Ran the receiver self-test.",
                 isQuery: true, format: ResponseFormat.Integer),
 
             NeedsConfirmation(":DIAG:TEST?", "Run subsystem diagnostic",
                 "Runs the diagnostic for one subsystem.",
                 "Run {0} diagnostic? This may briefly interrupt normal operation.",
+                "Ran the {0} diagnostic.",
                 parameters: [new ParameterSpec("Subsystem", ParameterKind.Keyword)],
                 isQuery: true, format: ResponseFormat.ValueList),
         ];
@@ -366,6 +393,7 @@ public static class CommandCatalog
                 label,
                 description,
                 SerialConfirmation,
+                $"Changed the serial port {label.ToLowerInvariant()}. Reconnecting.",
                 parameters: [parameter]));
         }
 
@@ -377,6 +405,7 @@ public static class CommandCatalog
                 label,
                 description,
                 "Send initial acquisition aid? Only valid before the first satellite is tracked; the receiver will return error −221 otherwise.",
+                $"Sent the {label.ToLowerInvariant()} acquisition aid.",
                 parameters: [new ParameterSpec(label, kind)]));
         }
 
@@ -390,6 +419,7 @@ public static class CommandCatalog
                     $"{label} — set {fieldLabel}",
                     $"Sets the {label.ToLowerInvariant()} register's {fieldLabel} mask.",
                     "Change status register mask?",
+                    $"Set the {label.ToLowerInvariant()} register's {fieldLabel} mask to {{0}}.",
                     parameters: [Mask()]));
             }
         }
@@ -495,10 +525,11 @@ public static class CommandCatalog
         string displayName,
         string description,
         string confirmationText,
+        string successText,
         IReadOnlyList<ParameterSpec>? parameters = null,
         bool acknowledge = false,
         bool isQuery = false,
         ResponseFormat format = ResponseFormat.None) =>
         new(mnemonic, ScpiCommand.ToShortForm(mnemonic), SafetyTier.Confirm, isQuery,
-            displayName, description, parameters ?? [], format, confirmationText, acknowledge);
+            displayName, description, parameters ?? [], format, confirmationText, successText, acknowledge);
 }

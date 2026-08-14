@@ -114,8 +114,58 @@
                     <InfoBar IsOpen="True"
                              IsClosable="False"
                              Severity="Warning"
-                             Title="Not available yet"
-                             Message="Forcing holdover within 24 hours of power-up corrupts the SmartClock oscillator learning process. The guard that checks this reads the receiver's power-on log, and it arrives with the confirmation dialogs in §15 step 10 — along with Force holdover, Recover now, and Ignore recovery limit." />
+                             Title="Before forcing holdover"
+                             Message="Do not force holdover within 24 hours of power-up. Doing so corrupts the SmartClock oscillator learning process, which then takes days to rebuild." />
+
+                    <!--
+                        The guard §10.8 puts under that warning. The verdict is a pill rather than
+                        a coloured word, so it carries shape and text as well as colour (§9.4.3) -
+                        "Unverified" is a third state and not a quieter "Too soon".
+                    -->
+                    <Grid ColumnSpacing="{ThemeResource WzSpaceMd}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Column="0"
+                                   Style="{ThemeResource WzBodyTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   VerticalAlignment="Center"
+                                   Text="Time since power-up" />
+
+                        <TextBlock x:Name="PowerUpText"
+                                   Grid.Column="1"
+                                   Style="{ThemeResource WzBodyStrongTextStyle}"
+                                   VerticalAlignment="Center" />
+
+                        <controls:SeverityPill x:Name="PowerUpPill" Grid.Column="2" />
+                    </Grid>
+
+                    <!-- §9.7.4's card-scoped commands. The row §10.8 draws, in its order. -->
+                    <StackPanel Orientation="Horizontal" Spacing="{ThemeResource WzSpaceXs}">
+                        <Button x:Name="ForceHoldoverButton"
+                                Content="Force holdover"
+                                Style="{ThemeResource WzDestructiveButtonStyle}"
+                                IsEnabled="False"
+                                ToolTipService.ToolTip="Stop disciplining to GPS until you recover manually"
+                                Click="OnForceHoldoverClicked" />
+
+                        <Button x:Name="RecoverButton"
+                                Content="Recover now"
+                                IsEnabled="False"
+                                ToolTipService.ToolTip="Start recovery and return the receiver toward lock"
+                                Click="OnRecoverClicked" />
+
+                        <Button x:Name="IgnoreLimitButton"
+                                Content="Ignore recovery limit"
+                                IsEnabled="False"
+                                ToolTipService.ToolTip="Continue recovery past the point it would normally stop"
+                                Click="OnIgnoreLimitClicked" />
+                    </StackPanel>
+
+                    <controls:CommandOutcomeBar x:Name="ManualOutcome" />
                 </StackPanel>
             </Border>
 

@@ -19,7 +19,8 @@ public sealed class HoldoverViewModelTests
         double? predicted = 2.0e-6,
         double? threshold = 1.0e-6,
         double? present = null,
-        string? modeDetail = null)
+        string? modeDetail = null,
+        PowerUpGuard? powerUp = null)
     {
         FakeTimeProvider clock = new(Captured);
         ReceiverStateStore store = new(clock);
@@ -35,7 +36,7 @@ public sealed class HoldoverViewModelTests
 
         store.UpdateFast(syncState, 3, 0, -10.0, 1.0, 6);
 
-        return new HoldoverViewModel(store) { Connection = ConnectionStatus.Connected };
+        return new HoldoverViewModel(store) { Connection = ConnectionStatus.Connected, PowerUp = powerUp };
     }
 
     /// <remarks>
@@ -148,5 +149,128 @@ public sealed class HoldoverViewModelTests
         Assert.Equal("Not connected", model.StateText);
         Assert.Equal(ReadoutFormatter.NoValue, model.Predicted.Value);
         Assert.Null(model.IsThresholdExceeded);
+    }
+
+    // -------------------------------------------------------------------------------------
+    // §10.8's manual-control card
+    // -------------------------------------------------------------------------------------
+
+    private static HoldoverViewModel WithGuard(PowerUpGuard guard) => Connected(powerUp: guard);
+
+    /// <summary>With no guard at all the page says so rather than implying safety.</summary>
+    [Fact]
+    public void WithoutAGuardThePowerUpLineIsUnknown()
+    {
+        HoldoverViewModel model = Connected();
+
+        Assert.Equal("Unknown", model.PowerUpText);
+        Assert.Equal(PowerUpSafety.Unknown, model.PowerUpSafety);
+        Assert.Equal(Severity.Caution, model.PowerUpSeverity);
+        Assert.NotNull(model.PowerUpCaution);
+    }
+
+    /// <summary>
+    /// A floor is labelled as one. "3 h" and "At least 3 h" look alike and mean different things:
+    /// the second is compatible with a receiver that came up a year ago.
+    /// </summary>
+    [Fact]
+    public void ALowerBoundIsLabelledAsOne()
+    {
+        FakeTimeProvider clock = new(Captured);
+        PowerUpGuard guard = new(clock);
+        guard.Observe(SmartClockMode.Locked);
+        clock.Advance(TimeSpan.FromHours(3));
+
+        Assert.StartsWith("At least ", WithGuard(guard).PowerUpText, StringComparison.Ordinal);
+    }
+
+    /// <summary>A watched power-up gives a figure with no hedge on it.</summary>
+    [Fact]
+    public void AWatchedPowerUpIsReportedPlainly()
+    {
+        FakeTimeProvider clock = new(Captured);
+        PowerUpGuard guard = new(clock);
+        guard.Observe(SmartClockMode.PowerUp);
+        clock.Advance(TimeSpan.FromDays(6) + TimeSpan.FromHours(14));
+
+        HoldoverViewModel model = WithGuard(guard);
+
+        Assert.Equal("6 d 14 h", model.PowerUpText);
+        Assert.Equal(PowerUpSafety.Safe, model.PowerUpSafety);
+        Assert.Equal(Severity.Success, model.PowerUpSeverity);
+    }
+
+    /// <summary>Past the learning period there is nothing left to warn the dialog about.</summary>
+    [Fact]
+    public void ASafeGuardAddsNoCautionToTheDialog()
+    {
+        FakeTimeProvider clock = new(Captured);
+        PowerUpGuard guard = new(clock);
+        guard.Observe(SmartClockMode.PowerUp);
+        clock.Advance(TimeSpan.FromDays(2));
+
+        Assert.Null(WithGuard(guard).PowerUpCaution);
+    }
+
+    /// <summary>Inside it, the dialog says which of the two problems this is.</summary>
+    [Fact]
+    public void TooSoonAndUnverifiedAreDifferentWarnings()
+    {
+        FakeTimeProvider clock = new(Captured);
+        PowerUpGuard tooSoon = new(clock);
+        tooSoon.Observe(SmartClockMode.PowerUp);
+        clock.Advance(TimeSpan.FromHours(3));
+
+        HoldoverViewModel inside = WithGuard(tooSoon);
+
+        Assert.Equal(PowerUpSafety.TooSoon, inside.PowerUpSafety);
+        Assert.Equal(Severity.Critical, inside.PowerUpSeverity);
+        Assert.Contains("inside the 24-hour", inside.PowerUpCaution!, StringComparison.Ordinal);
+        Assert.DoesNotContain("could not be determined", inside.PowerUpCaution!, StringComparison.Ordinal);
+    }
+
+    /// <summary>§9.4.3: the verdict is in words, not only in the pill's colour.</summary>
+    [Theory]
+    [InlineData(0, "Unverified")]
+    [InlineData(3, "Unverified")]
+    [InlineData(30, "Safe")]
+    public void TheVerdictIsAlwaysAlsoText(int hoursWatched, string expected)
+    {
+        FakeTimeProvider clock = new(Captured);
+        PowerUpGuard guard = new(clock);
+
+        if (hoursWatched > 0)
+        {
+            guard.Observe(SmartClockMode.Locked);
+            clock.Advance(TimeSpan.FromHours(hoursWatched));
+        }
+
+        Assert.Equal(expected, WithGuard(guard).PowerUpVerdictText);
+    }
+
+    /// <summary>
+    /// §10.8's button row. Forcing holdover is meaningless while already in it, and recovering is
+    /// meaningless while locked — so the two are never both offered.
+    /// </summary>
+    [Theory]
+    [InlineData("LOCK", true, false)]
+    [InlineData("HOLD", false, true)]
+    public void TheButtonRowFollowsTheReceiversState(string syncState, bool canForce, bool canRecover)
+    {
+        HoldoverViewModel model = Connected(syncState: syncState);
+
+        Assert.Equal(canForce, model.CanForceHoldover);
+        Assert.Equal(canRecover, model.CanRecover);
+    }
+
+    /// <summary>Disconnected, neither is offered whatever the last reading said.</summary>
+    [Fact]
+    public void NothingIsOfferedWhileDisconnected()
+    {
+        HoldoverViewModel model = Connected();
+        model.Connection = ConnectionStatus.Disconnected;
+
+        Assert.False(model.CanForceHoldover);
+        Assert.False(model.CanRecover);
     }
 }

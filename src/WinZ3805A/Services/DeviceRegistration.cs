@@ -55,7 +55,7 @@ public static class DeviceRegistration
                 time,
                 loggers?.CreateLogger<PollingService>());
 
-            return new DeviceContext((string)resolvedKey!, session, store, poller);
+            return new DeviceContext((string)resolvedKey!, session, store, poller, time);
         });
 
         return services;

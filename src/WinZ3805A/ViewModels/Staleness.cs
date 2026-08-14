@@ -92,4 +92,42 @@ public static class Staleness
 
         return "updated more than a day ago";
     }
+
+    /// <summary>
+    /// An elapsed time in the two-unit form §10.8's wireframe uses — <em>6 d 14 h</em>.
+    /// </summary>
+    /// <remarks>
+    /// Two units and never three. The figure this formats is read against a 24-hour threshold, and
+    /// the minutes on the end of "6 d 14 h 12 min" carry nothing for that decision while making the
+    /// two units that do matter harder to find. Distinct from <see cref="Describe"/>, which is
+    /// about a reading going stale and rounds far harder near the top of its range.
+    /// </remarks>
+    public static string DescribeDuration(TimeSpan elapsed)
+    {
+        if (elapsed < TimeSpan.Zero)
+        {
+            elapsed = TimeSpan.Zero;
+        }
+
+        if (elapsed < TimeSpan.FromMinutes(1))
+        {
+            return $"{(int)elapsed.TotalSeconds} s";
+        }
+
+        if (elapsed < TimeSpan.FromHours(1))
+        {
+            return $"{elapsed.Minutes} min";
+        }
+
+        if (elapsed < TimeSpan.FromDays(1))
+        {
+            return elapsed.Minutes == 0
+                ? $"{(int)elapsed.TotalHours} h"
+                : $"{(int)elapsed.TotalHours} h {elapsed.Minutes} min";
+        }
+
+        return elapsed.Hours == 0
+            ? $"{(int)elapsed.TotalDays} d"
+            : $"{(int)elapsed.TotalDays} d {elapsed.Hours} h";
+    }
 }
