@@ -1,6 +1,10 @@
+using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 
 using Windows.ApplicationModel;
+using Windows.Graphics;
+
+using WinZ3805A.Services;
 
 namespace WinZ3805A.Views;
 
@@ -11,6 +15,29 @@ namespace WinZ3805A.Views;
 /// </summary>
 public sealed partial class MainWindow : Window
 {
+    /// <summary>The §10.3 floor: 380 x 240 standard, 380 x 120 in the compact layout.</summary>
+    private const int MinimumWidth = 380;
+    private const int MinimumStandardHeight = 240;
+    private const int MinimumCompactHeight = 120;
+
+    private readonly IWindowPlacementStore _placements = new LocalWindowPlacementStore();
+
+    /// <summary>
+    /// Coalesces the burst of <c>AppWindow.Changed</c> events a single drag produces into one write.
+    /// </summary>
+    private readonly DispatcherTimer _saveAfterIdle = new() { Interval = TimeSpan.FromSeconds(1) };
+
+    private readonly MainPage? _page;
+
+    /// <summary>
+    /// The last bounds seen while the window was neither maximised nor minimised.
+    /// </summary>
+    /// <remarks>
+    /// Not read from <c>AppWindow</c> at save time: while maximised it reports the maximised
+    /// rectangle, and storing that would leave the next launch with nowhere to un-maximise to.
+    /// </remarks>
+    private WindowRect? _restoredBounds;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -27,35 +54,182 @@ public sealed partial class MainWindow : Window
 
         AppWindow.SetIcon("Assets/AppIcon.ico");
 
-        // §10.3 / P0-3: the window never gets smaller than the compact layout needs. Enforced on
-        // the AppWindow rather than by a MinWidth on the content, because the user drags the frame,
-        // not the page.
-        AppWindow.Changed += OnAppWindowChanged;
-
         RootFrame.Navigate(typeof(MainPage));
+        if (RootFrame.Content is MainPage page)
+        {
+            _page = page;
+            page.CompactChanged += OnCompactChanged;
+        }
+
+        RestorePlacement();
+
+        AppWindow.Changed += OnAppWindowChanged;
+        _saveAfterIdle.Tick += (_, _) =>
+        {
+            _saveAfterIdle.Stop();
+            SavePlacement();
+        };
+
+        Closed += (_, _) =>
+        {
+            _saveAfterIdle.Stop();
+            SavePlacement();
+        };
     }
 
-    /// <summary>The §10.3 floor: 380 x 240, which is what the compact layout needs to stay legible.</summary>
-    private const int MinimumWidth = 380;
-    private const int MinimumHeight = 240;
+    private OverlappedPresenter? Presenter => AppWindow.Presenter as OverlappedPresenter;
 
+    private int MinimumHeight => _page?.IsCompact == true ? MinimumCompactHeight : MinimumStandardHeight;
+
+    /// <summary>
+    /// Puts the window back where it was left, if that is still somewhere the user can see it.
+    /// </summary>
     /// <remarks>
-    /// WinUI has no MinWidth on AppWindow, so the size is corrected after the fact. Comparing before
-    /// resizing matters: assigning the same size again inside the change handler would recurse.
+    /// The compact state is applied to the page <i>before</i> the size, because the §10.3 floor
+    /// depends on it — restoring a 380 x 120 compact window against the standard 240 floor would
+    /// silently double its height on every launch.
     /// </remarks>
-    private void OnAppWindowChanged(Microsoft.UI.Windowing.AppWindow sender, Microsoft.UI.Windowing.AppWindowChangedEventArgs args)
+    private void RestorePlacement()
     {
-        if (!args.DidSizeChange)
+        WindowPlacement? stored = _placements.Load();
+
+        if (stored is not null && _page is not null)
+        {
+            _page.IsCompact = stored.IsCompact;
+        }
+
+        ApplyMinimumSize();
+
+        WindowPlacement? placement = WindowPlacementPolicy.Restore(
+            stored,
+            WorkAreas(),
+            MinimumWidth,
+            MinimumHeight);
+
+        if (placement is null)
         {
             return;
         }
 
-        int width = Math.Max(sender.Size.Width, MinimumWidth);
-        int height = Math.Max(sender.Size.Height, MinimumHeight);
+        AppWindow.MoveAndResize(new RectInt32(
+            placement.Left,
+            placement.Top,
+            placement.Width,
+            placement.Height));
 
-        if (width != sender.Size.Width || height != sender.Size.Height)
+        _restoredBounds = placement.Bounds;
+
+        if (placement.IsMaximized)
         {
-            sender.Resize(new Windows.Graphics.SizeInt32(width, height));
+            Presenter?.Maximize();
         }
+    }
+
+    /// <summary>The desktop area of every attached display, taskbar excluded.</summary>
+    /// <remarks>
+    /// <b>Indexed, never enumerated.</b> The <c>IReadOnlyList</c> that <c>FindAll</c> returns is a
+    /// WinRT vector view that does not implement <c>IIterable</c>, so asking it for an enumerator —
+    /// <c>foreach</c>, LINQ, a spread into a collection expression — fails the interface query and
+    /// terminates the process: <c>0xc000027b</c> raised inside <c>Microsoft.UI.Xaml.dll</c> over
+    /// <c>E_NOINTERFACE</c> from <c>combase.dll</c>, with nothing managed to catch, exactly like
+    /// <c>ApplicationData.Current</c> before it. The app builds clean, every test passes, and it
+    /// exits before showing a window. Reading it by index is fine.
+    /// </remarks>
+    private static IReadOnlyList<WindowRect> WorkAreas()
+    {
+        IReadOnlyList<DisplayArea> displays = DisplayArea.FindAll();
+        List<WindowRect> areas = new(displays.Count);
+
+        for (int i = 0; i < displays.Count; i++)
+        {
+            RectInt32 work = displays[i].WorkArea;
+            areas.Add(new WindowRect(work.X, work.Y, work.Width, work.Height));
+        }
+
+        return areas;
+    }
+
+    /// <summary>Applies the §10.3 minimum size for the layout the page is currently showing.</summary>
+    /// <remarks>
+    /// <c>OverlappedPresenter</c> enforces the floor while the frame is being dragged, which is
+    /// what §9.6.2 asks for and what the previous implementation — resizing back after the fact
+    /// from inside the change handler — could not do without fighting the user's mouse.
+    /// </remarks>
+    private void ApplyMinimumSize()
+    {
+        if (Presenter is not OverlappedPresenter presenter)
+        {
+            return;
+        }
+
+        presenter.PreferredMinimumWidth = MinimumWidth;
+        presenter.PreferredMinimumHeight = MinimumHeight;
+
+        // Raising the floor does not grow a window that is already under it, which is the case
+        // every time the user leaves compact mode.
+        int width = Math.Max(AppWindow.Size.Width, MinimumWidth);
+        int height = Math.Max(AppWindow.Size.Height, MinimumHeight);
+
+        if (width != AppWindow.Size.Width || height != AppWindow.Size.Height)
+        {
+            AppWindow.Resize(new SizeInt32(width, height));
+        }
+    }
+
+    private void OnCompactChanged(object? sender, EventArgs e)
+    {
+        ApplyMinimumSize();
+        ScheduleSave();
+    }
+
+    private void OnAppWindowChanged(AppWindow sender, AppWindowChangedEventArgs args)
+    {
+        if (!args.DidSizeChange && !args.DidPositionChange)
+        {
+            return;
+        }
+
+        if (Presenter?.State == OverlappedPresenterState.Restored)
+        {
+            _restoredBounds = new WindowRect(
+                sender.Position.X,
+                sender.Position.Y,
+                sender.Size.Width,
+                sender.Size.Height);
+        }
+
+        ScheduleSave();
+    }
+
+    /// <remarks>
+    /// Restarting the timer on each change is the debounce: a drag raises dozens of events and
+    /// writes one file, a second after the user lets go.
+    /// </remarks>
+    private void ScheduleSave()
+    {
+        _saveAfterIdle.Stop();
+        _saveAfterIdle.Start();
+    }
+
+    private void SavePlacement()
+    {
+        WindowRect bounds = _restoredBounds ?? new WindowRect(
+            AppWindow.Position.X,
+            AppWindow.Position.Y,
+            AppWindow.Size.Width,
+            AppWindow.Size.Height);
+
+        _placements.Save(new WindowPlacement
+        {
+            Left = bounds.Left,
+            Top = bounds.Top,
+            Width = bounds.Width,
+            Height = bounds.Height,
+
+            // Minimised is not a state worth restoring into — the user would launch the app and get
+            // nothing. It is stored as the maximised or restored state it was in before.
+            IsMaximized = Presenter?.State == OverlappedPresenterState.Maximized,
+            IsCompact = _page?.IsCompact == true,
+        });
     }
 }
