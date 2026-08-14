@@ -1,0 +1,89 @@
+using WinZ3805A.ViewModels;
+
+namespace WinZ3805A.Tests.ViewModels;
+
+/// <summary>
+/// The counting rules §10.2 and §9.7.5 put on the navigation pane.
+/// </summary>
+/// <remarks>
+/// None of these can be checked by looking at the window. A ninth destination looks perfectly
+/// reasonable in the pane and is simply unreachable from the keyboard, and a duplicated tag shows
+/// two identical-looking items that both navigate to the first one.
+/// </remarks>
+public sealed class DetailsDestinationTests
+{
+    /// <remarks>
+    /// §10.2 caps the numbered set at eight so <c>Ctrl+1</c>…<c>Ctrl+8</c> stays complete. The
+    /// Advanced Console sits below Settings for the same reason and is not a destination here.
+    /// </remarks>
+    [Fact]
+    public void ThereAreEightNumberedDestinations()
+    {
+        Assert.Equal(DetailsDestinations.MaxNumbered, DetailsDestinations.Numbered.Count);
+        Assert.Equal(DetailsDestinations.MaxNumbered + 1, DetailsDestinations.All.Count);
+    }
+
+    /// <remarks>
+    /// Settings has its own accelerator, <c>Ctrl+,</c>. If it ever joined the numbered list it
+    /// would take the eighth slot and push Diagnostics out of keyboard reach.
+    /// </remarks>
+    [Fact]
+    public void SettingsIsNotNumbered()
+    {
+        Assert.DoesNotContain(DetailsDestinations.Settings, DetailsDestinations.Numbered);
+        Assert.Same(DetailsDestinations.Settings, DetailsDestinations.All[^1]);
+    }
+
+    /// <remarks>The §9.7.1 wireframe's order, which is the one the user sees.</remarks>
+    [Fact]
+    public void ThePaneIsInWireframeOrder() =>
+        Assert.Equal(
+            ["overview", "satellites", "position", "timing", "holdover", "time", "registers", "diagnostics"],
+            DetailsDestinations.Numbered.Select(destination => destination.Tag));
+
+    [Fact]
+    public void EveryDestinationIsDistinctAndComplete()
+    {
+        Assert.Equal(
+            DetailsDestinations.All.Count,
+            DetailsDestinations.All.Select(destination => destination.Tag).Distinct().Count());
+
+        Assert.All(DetailsDestinations.All, destination =>
+        {
+            Assert.False(string.IsNullOrWhiteSpace(destination.Label));
+            Assert.False(string.IsNullOrWhiteSpace(destination.Summary));
+
+            // A Segoe Fluent Icons code point, which is one private-use character. An empty glyph
+            // renders as nothing and a multi-character one as a run of tofu.
+            Assert.Single(destination.Glyph);
+            Assert.InRange(destination.Glyph[0], '\uE000', '\uF8FF');
+        });
+    }
+
+    /// <remarks>
+    /// The accelerators are one-based, as §9.7.5 writes them. Off by one here would put every page
+    /// under the wrong key and leave the eighth unreachable.
+    /// </remarks>
+    [Theory]
+    [InlineData(1, "overview")]
+    [InlineData(6, "time")]
+    [InlineData(8, "diagnostics")]
+    public void CtrlNumberReachesTheNthDestination(int number, string tag) =>
+        Assert.Equal(tag, DetailsDestinations.ByNumber(number)?.Tag);
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(9)]
+    [InlineData(-1)]
+    public void NoOtherNumberReachesAnything(int number) =>
+        Assert.Null(DetailsDestinations.ByNumber(number));
+
+    [Fact]
+    public void DestinationsAreFoundByTag()
+    {
+        Assert.Equal("Status Registers", DetailsDestinations.ByTag("registers")?.Label);
+        Assert.Same(DetailsDestinations.Settings, DetailsDestinations.ByTag("settings"));
+        Assert.Null(DetailsDestinations.ByTag("console"));
+        Assert.Null(DetailsDestinations.ByTag(null));
+    }
+}

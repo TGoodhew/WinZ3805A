@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="WinZ3805A.Views.DetailsPlaceholderPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <!--
+        Stands in for a §10.4-§10.13 page until that page is built. It carries the §9.7 page
+        header, which is what tells the user where they are in a two-level hierarchy with no
+        breadcrumbs, and says plainly that the content is not here yet.
+
+        §9.11's empty state is "an invitation, never a shrug" - but this is not an empty state,
+        it is an unbuilt one, and pretending otherwise by dressing it as a first-run prompt would
+        promise a button that does nothing.
+    -->
+    <ScrollViewer HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Padding="{ThemeResource WzPageMarginThickness}"
+                    MaxWidth="{ThemeResource WzContentMaxWidth}"
+                    HorizontalAlignment="Left"
+                    Spacing="{ThemeResource WzSpaceSm}">
+
+            <TextBlock x:Name="PageTitle"
+                       Style="{ThemeResource WzTitleTextStyle}"
+                       Text="Destination" />
+
+            <TextBlock x:Name="PageSummary"
+                       Style="{ThemeResource WzBodyTextStyle}"
+                       Foreground="{ThemeResource WzTextSecondaryBrush}"
+                       MaxWidth="{ThemeResource WzProseMaxWidth}"
+                       TextWrapping="Wrap"
+                       Text="" />
+
+            <TextBlock Style="{ThemeResource WzCaptionTextStyle}"
+                       Foreground="{ThemeResource WzTextTertiaryBrush}"
+                       MaxWidth="{ThemeResource WzProseMaxWidth}"
+                       TextWrapping="Wrap"
+                       Text="This page is not built yet. The shell, its navigation and its title bar are; the content arrives with the page's own step in the implementation sequence." />
+        </StackPanel>
+    </ScrollViewer>
+</Page>

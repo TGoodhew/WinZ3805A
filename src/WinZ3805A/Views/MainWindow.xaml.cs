@@ -16,12 +16,16 @@ namespace WinZ3805A.Views;
 /// </summary>
 public sealed partial class MainWindow : Window
 {
+    /// <summary>Names this window's placement file. Unchanged from before it was keyed.</summary>
+    public const string PlacementKey = "window";
+
     /// <summary>The §10.3 floor: 380 x 240 standard, 380 x 120 in the compact layout.</summary>
     private const int MinimumWidth = 380;
     private const int MinimumStandardHeight = 240;
     private const int MinimumCompactHeight = 120;
 
     private readonly IWindowPlacementStore _placements;
+    private readonly IServiceProvider _services;
 
     /// <summary>
     /// Coalesces the burst of <c>AppWindow.Changed</c> events a single drag produces into one write.
@@ -29,6 +33,16 @@ public sealed partial class MainWindow : Window
     private readonly DispatcherTimer _saveAfterIdle = new() { Interval = TimeSpan.FromSeconds(1) };
 
     private readonly MainPage? _page;
+
+    /// <summary>
+    /// The §10.4 Details window while it is open.
+    /// </summary>
+    /// <remarks>
+    /// One at a time: a second would show the same receiver twice and give the user two places to
+    /// press Refresh. Windows manage windows, so this lives here rather than on the page - the page
+    /// is not told when its own window closes, and something has to close this one.
+    /// </remarks>
+    private DetailsWindow? _details;
 
     /// <summary>
     /// The last bounds seen while the window was neither maximised nor minimised.
@@ -49,7 +63,8 @@ public sealed partial class MainWindow : Window
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        _placements = services.GetRequiredService<IWindowPlacementStore>();
+        _services = services;
+        _placements = services.GetRequiredKeyedService<IWindowPlacementStore>(PlacementKey);
 
         InitializeComponent();
 
@@ -70,6 +85,7 @@ public sealed partial class MainWindow : Window
         // OnNavigatedTo - is exactly the shape that has twice killed this application at start-up.
         MainPage page = new(services);
         page.CompactChanged += OnCompactChanged;
+        page.DetailsRequested += (_, _) => ShowDetails();
         _page = page;
         RootFrame.Content = page;
 
@@ -84,12 +100,67 @@ public sealed partial class MainWindow : Window
 
         Closed += (_, _) =>
         {
+            // Before App disposes the container. Details binds to the same session, and leaving it
+            // open over a disposed one would be a window showing a receiver that no longer exists.
+            _details?.Close();
             _saveAfterIdle.Stop();
             SavePlacement();
         };
+
+        AddDetailsAccelerator();
     }
 
     private OverlappedPresenter? Presenter => AppWindow.Presenter as OverlappedPresenter;
+
+    /// <summary>Opens the §10.4 Details window, or brings the open one forward.</summary>
+    public void ShowDetails()
+    {
+        if (_details is null)
+        {
+            DetailsWindow details = new(_services);
+            details.Closed += (_, _) => _details = null;
+
+            // §10.12's dialog belongs to this window. Details asks rather than building a second
+            // one, which would give one session two dialogs able to disconnect each other.
+            details.ConnectionRequested += async (_, _) =>
+            {
+                Activate();
+                if (_page is not null)
+                {
+                    await _page.ShowConnectionDialogAsync();
+                }
+            };
+
+            _details = details;
+        }
+
+        _details.Activate();
+    }
+
+    /// <remarks>
+    /// §9.7.5's <c>Ctrl+D</c>. On the content root rather than the window, because
+    /// <c>Window</c> has no accelerator collection of its own.
+    /// </remarks>
+    private void AddDetailsAccelerator()
+    {
+        if (Content is not FrameworkElement root)
+        {
+            return;
+        }
+
+        Microsoft.UI.Xaml.Input.KeyboardAccelerator accelerator = new()
+        {
+            Key = Windows.System.VirtualKey.D,
+            Modifiers = Windows.System.VirtualKeyModifiers.Control,
+        };
+        accelerator.Invoked += (_, args) =>
+        {
+            ShowDetails();
+            args.Handled = true;
+        };
+
+        root.KeyboardAccelerators.Add(accelerator);
+    }
 
     private int MinimumHeight => _page?.IsCompact == true ? MinimumCompactHeight : MinimumStandardHeight;
 
@@ -114,7 +185,7 @@ public sealed partial class MainWindow : Window
 
         WindowPlacement? placement = WindowPlacementPolicy.Restore(
             stored,
-            WorkAreas(),
+            DisplayWorkAreas.Current(),
             MinimumWidth,
             MinimumHeight);
 
@@ -135,30 +206,6 @@ public sealed partial class MainWindow : Window
         {
             Presenter?.Maximize();
         }
-    }
-
-    /// <summary>The desktop area of every attached display, taskbar excluded.</summary>
-    /// <remarks>
-    /// <b>Indexed, never enumerated.</b> The <c>IReadOnlyList</c> that <c>FindAll</c> returns is a
-    /// WinRT vector view that does not implement <c>IIterable</c>, so asking it for an enumerator —
-    /// <c>foreach</c>, LINQ, a spread into a collection expression — fails the interface query and
-    /// terminates the process: <c>0xc000027b</c> raised inside <c>Microsoft.UI.Xaml.dll</c> over
-    /// <c>E_NOINTERFACE</c> from <c>combase.dll</c>, with nothing managed to catch, exactly like
-    /// <c>ApplicationData.Current</c> before it. The app builds clean, every test passes, and it
-    /// exits before showing a window. Reading it by index is fine.
-    /// </remarks>
-    private static IReadOnlyList<WindowRect> WorkAreas()
-    {
-        IReadOnlyList<DisplayArea> displays = DisplayArea.FindAll();
-        List<WindowRect> areas = new(displays.Count);
-
-        for (int i = 0; i < displays.Count; i++)
-        {
-            RectInt32 work = displays[i].WorkArea;
-            areas.Add(new WindowRect(work.X, work.Y, work.Width, work.Height));
-        }
-
-        return areas;
     }
 
     /// <summary>Applies the §10.3 minimum size for the layout the page is currently showing.</summary>

@@ -61,8 +61,18 @@ public partial class App : Application
         services.AddDevice(DeviceKeys.Primary, (port, settings) => new SerialTransport(port, settings));
 
         services.AddSingleton<IConnectionPreferenceStore, LocalConnectionPreferenceStore>();
-        services.AddSingleton<IWindowPlacementStore, LocalWindowPlacementStore>();
+        services.AddSingleton<IDetailsViewPreferenceStore, LocalDetailsViewPreferenceStore>();
         services.AddSingleton<SerialPortEnumerator>();
+
+        // Keyed by window: each keeps its own file, because the two are different sizes on
+        // different parts of the desktop and are moved and closed independently. The main window's
+        // key is its existing file name, so an upgrade does not lose a remembered placement.
+        foreach (string window in new[] { MainWindow.PlacementKey, DetailsWindow.PlacementKey })
+        {
+            services.AddKeyedSingleton<IWindowPlacementStore>(
+                window,
+                (_, key) => new LocalWindowPlacementStore(LocalWindowPlacementStore.PathFor((string)key!)));
+        }
 
         return services.BuildServiceProvider();
     }

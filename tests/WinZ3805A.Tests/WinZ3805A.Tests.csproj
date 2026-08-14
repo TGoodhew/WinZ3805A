@@ -87,6 +87,15 @@
     <Compile Include="..\..\src\WinZ3805A\Services\DeviceRegistration.cs"
              Link="Services\DeviceRegistration.cs" />
 
+    <!-- §15 step 8's Details shell. The window is what talks to NavigationView; what is linked is
+         the pane's contents as data - how many destinations there are, in what order, and which
+         Ctrl+n reaches each - because §10.2's cap of eight plus Settings is a counting rule that a
+         XAML item list cannot state and a reviewer cannot check by eye. -->
+    <Compile Include="..\..\src\WinZ3805A\ViewModels\DetailsDestination.cs"
+             Link="ViewModels\DetailsDestination.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Services\DetailsViewPreferences.cs"
+             Link="Services\DetailsViewPreferences.cs" />
+
     <!-- P0-3's window-state persistence. The window is what talks to AppWindow and DisplayArea;
          what is linked is the decision it delegates - given a saved rectangle and the displays
          attached now, where does the window open? The display topologies that make that question
@@ -96,6 +105,8 @@
              Link="Services\WindowPlacement.cs" />
     <Compile Include="..\..\src\WinZ3805A\Services\WindowPlacementPolicy.cs"
              Link="Services\WindowPlacementPolicy.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Services\WindowSizing.cs"
+             Link="Services\WindowSizing.cs" />
     <Compile Include="..\..\src\WinZ3805A\Services\LocalWindowPlacementStore.cs"
              Link="Services\LocalWindowPlacementStore.cs" />
 
