@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 
@@ -20,7 +21,7 @@ public sealed partial class MainWindow : Window
     private const int MinimumStandardHeight = 240;
     private const int MinimumCompactHeight = 120;
 
-    private readonly IWindowPlacementStore _placements = new LocalWindowPlacementStore();
+    private readonly IWindowPlacementStore _placements;
 
     /// <summary>
     /// Coalesces the burst of <c>AppWindow.Changed</c> events a single drag produces into one write.
@@ -38,8 +39,18 @@ public sealed partial class MainWindow : Window
     /// </remarks>
     private WindowRect? _restoredBounds;
 
-    public MainWindow()
+    /// <summary>Creates the window over the application's services.</summary>
+    /// <param name="services">
+    /// The §12 composition root. Passed on to the page as the navigation parameter rather than
+    /// resolved into it here: <c>Frame.Navigate</c> constructs the page itself and cannot call a
+    /// constructor with arguments.
+    /// </param>
+    public MainWindow(IServiceProvider services)
     {
+        ArgumentNullException.ThrowIfNull(services);
+
+        _placements = services.GetRequiredService<IWindowPlacementStore>();
+
         InitializeComponent();
 
         // §6.3: the display name is read from the manifest, never hard-coded.
@@ -54,12 +65,13 @@ public sealed partial class MainWindow : Window
 
         AppWindow.SetIcon("Assets/AppIcon.ico");
 
-        RootFrame.Navigate(typeof(MainPage));
-        if (RootFrame.Content is MainPage page)
-        {
-            _page = page;
-            page.CompactChanged += OnCompactChanged;
-        }
+        // Assigned rather than navigated to. Frame.Navigate constructs the page itself, so it
+        // cannot pass the services in, and a page that arrives half-built - fields null until
+        // OnNavigatedTo - is exactly the shape that has twice killed this application at start-up.
+        MainPage page = new(services);
+        page.CompactChanged += OnCompactChanged;
+        _page = page;
+        RootFrame.Content = page;
 
         RestorePlacement();
 

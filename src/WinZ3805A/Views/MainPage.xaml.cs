@@ -1,10 +1,10 @@
 using System.Globalization;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using WinZ3805A.Controls;
-using WinZ3805A.Device.Transport;
 using WinZ3805A.Services;
 using WinZ3805A.ViewModels;
 
@@ -29,12 +29,10 @@ namespace WinZ3805A.Views;
 /// </remarks>
 public sealed partial class MainPage : Page
 {
-    private readonly DeviceSessionService _session;
-    private readonly ReceiverStateStore _store;
-    private readonly PollingService _poller;
+    private readonly DeviceContext _device;
     private readonly MainViewModel _model;
-    private readonly SerialPortEnumerator _ports = new();
-    private readonly IConnectionPreferenceStore _preferences = new LocalConnectionPreferenceStore();
+    private readonly SerialPortEnumerator _ports;
+    private readonly IConnectionPreferenceStore _preferences;
     private readonly DispatcherTimer _stalenessTicker = new() { Interval = TimeSpan.FromSeconds(1) };
 
     private bool _compact;
@@ -51,27 +49,30 @@ public sealed partial class MainPage : Page
     /// </remarks>
     private readonly bool _ready;
 
-    /// <summary>Creates the page and its session.</summary>
-    public MainPage()
+    /// <summary>Creates the page over the application's services.</summary>
+    /// <param name="services">The §12 composition root, which owns the receiver.</param>
+    public MainPage(IServiceProvider services)
     {
+        ArgumentNullException.ThrowIfNull(services);
+
         InitializeComponent();
 
-        _session = new DeviceSessionService(
-            (port, settings) => new SerialTransport(port, settings),
-            TimeProvider.System);
+        // §12: resolved by device key, never constructed here. The Details window binds to the
+        // same context, and a page that built its own session would give it a second port.
+        _device = services.GetRequiredKeyedService<DeviceContext>(DeviceKeys.Primary);
+        _ports = services.GetRequiredService<SerialPortEnumerator>();
+        _preferences = services.GetRequiredService<IConnectionPreferenceStore>();
 
-        _store = new ReceiverStateStore(TimeProvider.System);
-        _poller = new PollingService(_session, _store, TimeProvider.System);
-        _model = new MainViewModel(_store, TimeProvider.System);
+        _model = new MainViewModel(_device.Store, services.GetRequiredService<TimeProvider>());
 
         _model.PropertyChanged += (_, _) => DispatcherQueue.TryEnqueue(Render);
-        _session.StatusChanged += (_, e) => DispatcherQueue.TryEnqueue(() =>
+        _device.Session.StatusChanged += (_, e) => DispatcherQueue.TryEnqueue(() =>
         {
             _model.Connection = e.Status;
             if (e.Status == ConnectionStatus.Connected)
             {
-                _model.PortDescription = $"{_session.PortName} · {_session.Settings}";
-                _poller.Start();
+                _model.PortDescription = $"{_device.Session.PortName} · {_device.Session.Settings}";
+                _device.Poller.Start();
             }
         });
 
@@ -87,12 +88,11 @@ public sealed partial class MainPage : Page
             Render();
             await ConnectOnLaunchAsync();
         };
-        Unloaded += async (_, _) =>
-        {
-            _stalenessTicker.Stop();
-            await _poller.DisposeAsync();
-            await _session.DisposeAsync();
-        };
+        // The session and poller belong to the container now, and are let go when the window that
+        // opened the receiver closes. Disposing them here would take the port away from the §10.4
+        // Details window, which shares this context - and Unloaded is not raised on window close
+        // anyway, so this was never the teardown it looked like.
+        Unloaded += (_, _) => _stalenessTicker.Stop();
     }
 
     /// <summary>
@@ -181,8 +181,8 @@ public sealed partial class MainPage : Page
     {
         if (!_model.CanConnect)
         {
-            await _poller.StopAsync();
-            await _session.DisconnectAsync();
+            await _device.Poller.StopAsync();
+            await _device.Session.DisconnectAsync();
             return;
         }
 
@@ -221,11 +221,11 @@ public sealed partial class MainPage : Page
             // §9.11 keeps "Disconnected" and "Connection lost" apart, and the session reports a
             // failed attempt as a fault. A remembered port that did not answer at start-up has lost
             // nothing — the window must not open claiming it has.
-            await _session.DisconnectAsync();
+            await _device.Session.DisconnectAsync();
         }
     }
 
-    private ConnectionViewModel NewConnectionViewModel() => new(_session, _ports, _preferences);
+    private ConnectionViewModel NewConnectionViewModel() => new(_device.Session, _ports, _preferences);
 
     /// <summary>Pushes the view model onto the surface.</summary>
     private void Render()

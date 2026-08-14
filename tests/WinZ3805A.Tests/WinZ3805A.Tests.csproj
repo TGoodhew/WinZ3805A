@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.11" />
     <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.9.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
@@ -76,6 +77,15 @@
              Link="Services\ConnectionPreferences.cs" />
     <Compile Include="..\..\src\WinZ3805A\ViewModels\ConnectionViewModel.cs"
              Link="ViewModels\ConnectionViewModel.cs" />
+
+    <!-- §12's composition root, or the half of it that can leave the app project. What is linked is
+         the registration shape - one context per device key, never shared across keys, no static
+         state - which is the part §12 actually constrains. The rest of Compose() reaches the
+         registry and the user's profile and stays in App. -->
+    <Compile Include="..\..\src\WinZ3805A\Services\DeviceContext.cs"
+             Link="Services\DeviceContext.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Services\DeviceRegistration.cs"
+             Link="Services\DeviceRegistration.cs" />
 
     <!-- P0-3's window-state persistence. The window is what talks to AppWindow and DisplayArea;
          what is linked is the decision it delegates - given a saved rectangle and the displays
