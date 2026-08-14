@@ -1,0 +1,215 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="WinZ3805A.Views.OverviewPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:WinZ3805A.Controls"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <!--
+        §10.4. Four cards down one column: Synchronization, Holdover Uncertainty, Health Monitor,
+        and Oscillator Control. Cards are L2 (§9.3) - 8 px radius, 16 px padding, hairline stroke,
+        no shadow. Commands are card-scoped (§9.7.4); there is no page-level CommandBar.
+
+        No ConnectedAnimation from the main window's medallion. §9.8.2 asks for one, but §10.2
+        makes Main and Details separate top-level Windows and ConnectedAnimationService is
+        per-view - the spec's own reduced-motion fallback is what is achievable.
+    -->
+    <ScrollViewer HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Padding="{ThemeResource WzPageMarginThickness}"
+                    MaxWidth="{ThemeResource WzContentMaxWidth}"
+                    HorizontalAlignment="Left"
+                    Spacing="{ThemeResource WzSpaceXl}">
+
+            <TextBlock Style="{ThemeResource WzTitleTextStyle}" Text="Overview" />
+
+            <!-- ============================ Synchronization ============================ -->
+            <Border Style="{ThemeResource WzCardStyle}">
+                <StackPanel Spacing="{ThemeResource WzSpaceMd}">
+                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Synchronization" />
+
+                    <StackPanel Orientation="Horizontal" Spacing="{ThemeResource WzSpaceMd}">
+                        <controls:StatusMedallion x:Name="Medallion"
+                                                  Size="Standard"
+                                                  VerticalAlignment="Top" />
+
+                        <StackPanel Spacing="{ThemeResource WzSpaceXxs}" VerticalAlignment="Center">
+                            <TextBlock x:Name="ModeText" Style="{ThemeResource WzSubtitleTextStyle}" />
+                            <TextBlock x:Name="ModeDetailText"
+                                       Style="{ThemeResource WzBodyTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}" />
+                            <controls:SeverityPill x:Name="CoastingPill"
+                                                   Severity="Caution"
+                                                   Text="coasting"
+                                                   Visibility="Collapsed" />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <controls:SeverityPill x:Name="OutputsPill" />
+
+                    <!--
+                        The three headline figures. Each carries the number, its label, and what the
+                        number means - the sub-caption is the whole point of showing TFOM at all.
+                    -->
+                    <Grid ColumnSpacing="{ThemeResource WzSpaceMd}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" Spacing="{ThemeResource WzSpaceXxs}">
+                            <controls:SeverityPill x:Name="TfomPill" />
+                            <TextBlock x:Name="TfomDetailText"
+                                       Style="{ThemeResource WzCaptionTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}" />
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1" Spacing="{ThemeResource WzSpaceXxs}">
+                            <controls:SeverityPill x:Name="FfomPill" />
+                            <TextBlock x:Name="FfomDetailText"
+                                       Style="{ThemeResource WzCaptionTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}" />
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="2" Spacing="{ThemeResource WzSpaceXxs}">
+                            <controls:ReadoutTile x:Name="TimeInterval"
+                                                  Label="1 PPS TI"
+                                                  Unit="ns"
+                                                  DecimalPlaces="1"
+                                                  MaxIntegerDigits="5"
+                                                  AllowNegative="True"
+                                                  Size="Medium" />
+                            <TextBlock Style="{ThemeResource WzCaptionTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                       Text="relative to GPS" />
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- ========================= Holdover uncertainty ========================== -->
+            <Border Style="{ThemeResource WzCardStyle}">
+                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Holdover uncertainty" />
+
+                    <Grid RowSpacing="{ThemeResource WzSpaceXs}" ColumnSpacing="{ThemeResource WzSpaceXl}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" MinWidth="160" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Grid.Row="0" Grid.Column="0"
+                                   Style="{ThemeResource WzBodyTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   Text="Predicted (24 h)" />
+                        <TextBlock x:Name="HoldoverPredictedText"
+                                   Grid.Row="0" Grid.Column="1"
+                                   Style="{ThemeResource WzMonoTextStyle}" />
+
+                        <TextBlock Grid.Row="1" Grid.Column="0"
+                                   Style="{ThemeResource WzBodyTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   Text="Threshold" />
+                        <TextBlock x:Name="HoldoverThresholdText"
+                                   Grid.Row="1" Grid.Column="1"
+                                   Style="{ThemeResource WzMonoTextStyle}" />
+
+                        <TextBlock Grid.Row="2" Grid.Column="0"
+                                   Style="{ThemeResource WzBodyTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   Text="Duration" />
+                        <TextBlock x:Name="HoldoverDurationText"
+                                   Grid.Row="2" Grid.Column="1"
+                                   Style="{ThemeResource WzBodyTextStyle}" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- ============================ Health monitor ============================= -->
+            <Border Style="{ThemeResource WzCardStyle}">
+                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Column="0"
+                                   Style="{ThemeResource WzBodyStrongTextStyle}"
+                                   VerticalAlignment="Center"
+                                   Text="Health monitor" />
+
+                        <!--
+                            §9.7.4 scopes commands to the card they affect. Disabled until §15
+                            step 10: *TST? needs confirmation, and the dialog infrastructure is
+                            step 10's whole subject. Wiring it early would be the one thing §8
+                            is most careful about.
+                        -->
+                        <Button x:Name="RunTestButton"
+                                Grid.Column="1"
+                                Content="Run test"
+                                IsEnabled="False"
+                                ToolTipService.ToolTip="The self-test needs a confirmation dialog, which arrives with §15 step 10." />
+                    </Grid>
+
+                    <TextBlock x:Name="HealthSummaryText"
+                               Style="{ThemeResource WzBodyTextStyle}"
+                               Foreground="{ThemeResource WzTextSecondaryBrush}" />
+
+                    <!--
+                        Wraps rather than a fixed grid: the receiver decides how many items it
+                        prints, and a layout that assumed the wireframe's six would clip a seventh
+                        from a firmware nobody has seen yet. ItemsRepeater because WinUI has no
+                        WrapPanel and this project does not take the Toolkit dependency for one.
+                    -->
+                    <ItemsRepeater x:Name="HealthItems">
+                        <ItemsRepeater.Layout>
+                            <UniformGridLayout MinItemWidth="200"
+                                               MinColumnSpacing="{ThemeResource WzSpaceMd}"
+                                               MinRowSpacing="{ThemeResource WzSpaceXs}"
+                                               ItemsStretch="None" />
+                        </ItemsRepeater.Layout>
+                    </ItemsRepeater>
+                </StackPanel>
+            </Border>
+
+            <!-- ========================== Oscillator control =========================== -->
+            <Border Style="{ThemeResource WzCardStyle}">
+                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Oscillator control (EFC)" />
+
+                    <controls:ReadoutTile x:Name="OscillatorControl"
+                                          Label="Current"
+                                          Unit="%"
+                                          DecimalPlaces="2"
+                                          MaxIntegerDigits="3"
+                                          AllowNegative="True"
+                                          Size="Medium" />
+
+                    <!--
+                        §10.4 draws a 6-hour trend here. Charting is P1-1 and is blocked on OQ-5
+                        (#38), so the number is shown without a frame around empty space: an empty
+                        chart implies data is on its way, and none is being kept yet.
+                    -->
+                    <TextBlock Style="{ThemeResource WzCaptionTextStyle}"
+                               Foreground="{ThemeResource WzTextTertiaryBrush}"
+                               TextWrapping="Wrap"
+                               MaxWidth="{ThemeResource WzProseMaxWidth}"
+                               Text="The trend plot arrives with the P1 charting work." />
+                </StackPanel>
+            </Border>
+
+            <TextBlock x:Name="FooterText"
+                       Style="{ThemeResource WzCaptionTextStyle}"
+                       Foreground="{ThemeResource WzTextTertiaryBrush}" />
+        </StackPanel>
+    </ScrollViewer>
+</Page>

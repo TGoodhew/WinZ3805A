@@ -41,6 +41,56 @@ public static class ReadoutFormatter
     public const string NoValue = "—";
 
     /// <summary>
+    /// A duration in seconds, rendered in the engineering unit that suits its magnitude.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The receiver reports every interval in seconds — <c>2.7E-006</c> for a holdover uncertainty,
+    /// <c>1.0E-006</c> for its threshold — and nobody reads those side by side and sees that one is
+    /// nearly three times the other. §9.5.3 rule 3 puts a hair space before the unit; the unit
+    /// itself is chosen here rather than fixed per field, because the same quantity spans
+    /// nanoseconds to seconds over a long holdover.
+    /// </para>
+    /// <para>
+    /// <b>Steps in thousands, never in between.</b> Only ns, µs, ms and s are produced, so a value
+    /// that grows never passes through a unit a reader has to think about, and two figures shown
+    /// together are comparable as often as the decade allows.
+    /// </para>
+    /// </remarks>
+    /// <param name="seconds">The interval, or <see langword="null"/>.</param>
+    /// <param name="decimalPlaces">Decimals to show, fixed per field as §9.5.3 rule 6 requires.</param>
+    /// <param name="culture">Supplies the decimal separator; defaults to the current culture.</param>
+    /// <returns>The value and its unit, or <see cref="NoValue"/> with no unit.</returns>
+    public static (string Value, string Unit) Seconds(
+        double? seconds,
+        int decimalPlaces = 1,
+        CultureInfo? culture = null)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(decimalPlaces);
+
+        if (seconds is not double value || double.IsNaN(value) || double.IsInfinity(value))
+        {
+            return (NoValue, string.Empty);
+        }
+
+        double magnitude = Math.Abs(value);
+
+        // Exact zero has no magnitude to choose from. Nanoseconds is the receiver's own resolution
+        // and the unit every other timing readout in the app uses, so a zero reads consistently
+        // beside them rather than as "0.0 s".
+        (double scale, string unit) = magnitude switch
+        {
+            0 => (1e9, "ns"),
+            < 1e-6 => (1e9, "ns"),
+            < 1e-3 => (1e6, "µs"),
+            < 1 => (1e3, "ms"),
+            _ => (1, "s"),
+        };
+
+        return (Format(value * scale, decimalPlaces, culture), unit);
+    }
+
+    /// <summary>
     /// Formats a value to a fixed number of decimal places, with U+2212 for negatives.
     /// </summary>
     /// <param name="value">The value, or <see langword="null"/> when the device did not report one.</param>
