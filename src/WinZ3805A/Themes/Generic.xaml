@@ -484,4 +484,87 @@
         </Setter>
     </Style>
 
+    <!-- =========================================================================== -->
+    <!-- SkyPlotControl (§10.5, §9.10.2, P0-9)                                        -->
+    <!--                                                                              -->
+    <!-- The plot itself is drawn into PART_Canvas in code: circles, a cross, some     -->
+    <!-- text and one Button per satellite. What is here is the frame around it and    -->
+    <!-- the marker's own shape, which is a Style rather than a per-marker template    -->
+    <!-- so every marker is the same shape by construction.                            -->
+    <!-- =========================================================================== -->
+
+    <Style TargetType="controls:SkyPlotControl">
+        <Setter Property="HorizontalAlignment" Value="Left" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="controls:SkyPlotControl">
+                    <StackPanel Spacing="{ThemeResource WzSpaceXs}">
+                        <!--
+                            Square, and sized by the control from its own width capped at
+                            MaxPlotSize. A polar plot on a non-square surface is an ellipse, and
+                            an ellipse read as a circle is a plot that lies about azimuth.
+                        -->
+                        <Grid x:Name="PART_Surface">
+                            <Canvas x:Name="PART_Canvas" />
+                        </Grid>
+
+                        <!--
+                            §10.5's legend, minus its third entry. The wireframe offers
+                            "✱ trying", but the receiver's Not Tracking table carries no status
+                            column, so acquiring and trying are not on the wire - see
+                            SkyPlotMarkerKind. Below the mask is derivable and takes its place.
+                        -->
+                        <StackPanel Orientation="Horizontal"
+                                    Spacing="{ThemeResource WzSpaceMd}"
+                                    AutomationProperties.AccessibilityView="Raw">
+                            <StackPanel Orientation="Horizontal" Spacing="{ThemeResource WzSpaceXxs}">
+                                <Ellipse Width="10" Height="10"
+                                         VerticalAlignment="Center"
+                                         Fill="{ThemeResource WzSequential5Brush}"
+                                         Stroke="{ThemeResource WzStrokeDefaultBrush}"
+                                         StrokeThickness="1" />
+                                <TextBlock Text="tracked"
+                                           Style="{ThemeResource WzCaptionTextStyle}"
+                                           Foreground="{ThemeResource WzTextSecondaryBrush}" />
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Spacing="{ThemeResource WzSpaceXxs}">
+                                <Ellipse Width="10" Height="10"
+                                         VerticalAlignment="Center"
+                                         Fill="{ThemeResource WzCardFillBrush}"
+                                         Stroke="{ThemeResource WzTextSecondaryBrush}"
+                                         StrokeThickness="1.5" />
+                                <TextBlock Text="predicted"
+                                           Style="{ThemeResource WzCaptionTextStyle}"
+                                           Foreground="{ThemeResource WzTextSecondaryBrush}" />
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Spacing="{ThemeResource WzSpaceXxs}">
+                                <Ellipse Width="10" Height="10"
+                                         VerticalAlignment="Center"
+                                         Opacity="0.55"
+                                         Fill="{ThemeResource WzCardFillBrush}"
+                                         Stroke="{ThemeResource WzTextTertiaryBrush}"
+                                         StrokeThickness="1.5" />
+                                <TextBlock Text="below mask"
+                                           Style="{ThemeResource WzCaptionTextStyle}"
+                                           Foreground="{ThemeResource WzTextSecondaryBrush}" />
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Spacing="{ThemeResource WzSpaceXxs}">
+                                <Rectangle Width="14" Height="2"
+                                           VerticalAlignment="Center"
+                                           Fill="{ThemeResource WzCautionBrush}" />
+                                <TextBlock x:Name="PART_MaskLabel"
+                                           Text="elevation mask"
+                                           Style="{ThemeResource WzCaptionTextStyle}"
+                                           Foreground="{ThemeResource WzTextSecondaryBrush}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </StackPanel>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
 </ResourceDictionary>

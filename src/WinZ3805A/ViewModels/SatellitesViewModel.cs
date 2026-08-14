@@ -21,6 +21,13 @@ public sealed class SatellitesViewModel : INotifyPropertyChanged
 
     private ConnectionStatus _connection = ConnectionStatus.Disconnected;
 
+    // The rows the tables hold, kept alive between reads - see EnsureRows.
+    private ReceiverStatus? _rowsBuiltFrom;
+    private int? _rowsBuiltForMask;
+    private IReadOnlyList<TrackedSatelliteRow> _tracked = [];
+    private IReadOnlyList<PredictedSatelliteRow> _notTracked = [];
+    private IReadOnlyList<SkyPlotSatellite> _skyPlot = [];
+
     /// <summary>Creates a view model over the shared store.</summary>
     public SatellitesViewModel(ReceiverStateStore store)
     {
@@ -75,14 +82,158 @@ public sealed class SatellitesViewModel : INotifyPropertyChanged
         : "Not connected";
 
     /// <summary>The tracked table, in the receiver's own order.</summary>
-    public IReadOnlyList<TrackedSatelliteRow> Tracked => Status is null
-        ? []
-        : [.. Status.Tracked.Select(satellite => new TrackedSatelliteRow(satellite, SignalStrengthKind))];
+    public IReadOnlyList<TrackedSatelliteRow> Tracked
+    {
+        get
+        {
+            EnsureRows();
+            return _tracked;
+        }
+    }
 
     /// <summary>The not-tracked table.</summary>
-    public IReadOnlyList<PredictedSatelliteRow> NotTracked => Status is null
-        ? []
-        : [.. Status.NotTracked.Select(satellite => new PredictedSatelliteRow(satellite, ElevationMaskDegrees))];
+    public IReadOnlyList<PredictedSatelliteRow> NotTracked
+    {
+        get
+        {
+            EnsureRows();
+            return _notTracked;
+        }
+    }
+
+    /// <summary>
+    /// Rebuilds the row objects, but only when the screen they came from has actually changed.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The identity of these objects is load-bearing.</b> They are what the two <c>ListView</c>s
+    /// hold and what <c>SelectedItem</c> is compared against, so a property that built a fresh list
+    /// on every read gave the page nothing it could select: the row handed to <c>SelectedItem</c>
+    /// was equal to one in the list and was not the same object, and setting it silently did
+    /// nothing.
+    /// </para>
+    /// <para>
+    /// It is also what stops the tables being rebuilt once a second. The staleness footer ticks on
+    /// a <c>DispatcherTimer</c> and raises every property with it, so an uncached list meant twelve
+    /// rows and twelve strength bars thrown away and remade every second — and any selection the
+    /// user had made thrown away with them, which is the same bug wearing different clothes.
+    /// </para>
+    /// </remarks>
+    private void EnsureRows()
+    {
+        if (ReferenceEquals(_rowsBuiltFrom, Status) && _rowsBuiltForMask == ElevationMaskDegrees)
+        {
+            return;
+        }
+
+        _rowsBuiltFrom = Status;
+        _rowsBuiltForMask = ElevationMaskDegrees;
+
+        _tracked = Status is null
+            ? []
+            : [.. Status.Tracked.Select(satellite => new TrackedSatelliteRow(satellite, SignalStrengthKind))];
+
+        _notTracked = Status is null
+            ? []
+            : [.. Status.NotTracked.Select(satellite => new PredictedSatelliteRow(satellite, ElevationMaskDegrees))];
+
+        _skyPlot = BuildSkyPlot();
+    }
+
+    /// <summary>
+    /// Everything the §10.5 sky plot draws, tracked and predicted together.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Built here rather than in the control, so the plot and the tables agree by construction: the
+    /// sentence a marker carries for assistive technology is the same
+    /// <c>Description</c> the table row uses, and a satellite is judged below the mask by the same
+    /// rule in both places.
+    /// </para>
+    /// <para>
+    /// Both lists feed one plot. A satellite the receiver has predicted but is not tracking is
+    /// exactly what the plot is for — it is how a user sees that the sky is full and the receiver
+    /// is still only holding four, which no table row states in so many words.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<SkyPlotSatellite> SkyPlotSatellites
+    {
+        get
+        {
+            EnsureRows();
+            return _skyPlot;
+        }
+    }
+
+    /// <summary>
+    /// Builds the plot's markers from the rows just built.
+    /// </summary>
+    /// <remarks>
+    /// Reads the fields rather than the <c>Tracked</c> and <c>NotTracked</c> properties, which
+    /// would call back into <c>EnsureRows</c>. The guard there makes that harmless today, purely
+    /// because the fields are assigned before this is called — which is a fact about statement
+    /// order, and not one worth depending on.
+    /// </remarks>
+    private IReadOnlyList<SkyPlotSatellite> BuildSkyPlot()
+    {
+        {
+            List<SkyPlotSatellite> markers = new(_tracked.Count + _notTracked.Count);
+
+            foreach (TrackedSatelliteRow row in _tracked)
+            {
+                markers.Add(new SkyPlotSatellite(
+                    row.Prn,
+                    row.ElevationDegrees,
+                    row.AzimuthDegrees,
+                    row.SignalStrength,
+                    row.Kind,
+                    SkyPlotMarkerKind.Tracked,
+                    $"{row.Description}, tracked"));
+            }
+
+            foreach (PredictedSatelliteRow row in _notTracked)
+            {
+                markers.Add(new SkyPlotSatellite(
+                    row.Prn,
+                    row.ElevationDegrees,
+                    row.AzimuthDegrees,
+                    null,
+                    SignalStrengthKind.Unknown,
+                    row.IsBelowMask ? SkyPlotMarkerKind.BelowMask : SkyPlotMarkerKind.Predicted,
+                    $"{row.Description}, not tracked"));
+            }
+
+            return markers;
+        }
+    }
+
+    /// <summary>
+    /// What the plot says when it has nothing to draw, or null when it has something.
+    /// </summary>
+    /// <remarks>
+    /// A plot of rings and no markers looks like a plot that failed rather than a receiver that can
+    /// see nothing, so §9.11's empty state applies to it as much as to a table — and it describes
+    /// what will appear there rather than what is absent.
+    /// </remarks>
+    public string? SkyPlotEmptyMessage
+    {
+        get
+        {
+            if (Connection != ConnectionStatus.Connected)
+            {
+                return EmptyMessage;
+            }
+
+            if (SkyPlotSatellites.Count == 0)
+            {
+                return "No satellites yet. Tracked and predicted satellites appear here as the receiver finds them.";
+            }
+
+            return SkyPlotSatellites.Any(satellite => satellite.CanPlot)
+                ? null
+                : "The receiver has not reported elevation and azimuth for any satellite yet, so none can be placed.";
+        }
+    }
 
     /// <summary>Whether there is anything at all to show.</summary>
     public bool HasSatellites => TrackedCount > 0 || NotTrackedCount > 0;
@@ -154,10 +305,18 @@ public sealed class TrackedSatelliteRow
     /// <summary>Azimuth as it is shown.</summary>
     public string AzimuthText => Degrees(AzimuthDegrees);
 
-    /// <summary>One sentence naming every column, for the row's automation name.</summary>
+    /// <summary>
+    /// One sentence naming every column, for the row's automation name and the sky plot's marker.
+    /// </summary>
+    /// <remarks>
+    /// The scale's label keeps its case. It used to be lower-cased for sentence flow, which reads
+    /// as "c/n 35 of 55" — and C/N is an abbreviation for carrier-to-noise, not a word. That was
+    /// invisible while this sentence was only spoken aloud by a screen reader; the sky plot puts it
+    /// on screen under the plot, where it is simply wrong.
+    /// </remarks>
     public string Description =>
         $"PRN {Prn}, elevation {Describe(ElevationDegrees)}, azimuth {Describe(AzimuthDegrees)}, "
-        + SignalStrengthScale.For(Kind).Describe(SignalStrength).ToLowerInvariant();
+        + SignalStrengthScale.For(Kind).Describe(SignalStrength);
 
     internal static string Degrees(int? value) => value is int degrees
         ? $"{degrees.ToString(System.Globalization.CultureInfo.CurrentCulture)}°"

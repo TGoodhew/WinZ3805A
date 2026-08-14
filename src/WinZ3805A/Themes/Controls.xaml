@@ -84,4 +84,75 @@
         </Setter>
     </Style>
 
+    <!--
+        Keyed styles live here rather than in Generic.xaml. Generic.xaml is loaded for a control's
+        implicit default style and is not merged into Application.Resources, so a keyed entry in it
+        resolves for nothing - not from a page, and not from Application.Current.Resources either.
+        A page referencing one silently fails to load, which is exactly as informative as it sounds.
+    -->
+
+    <!-- =========================================================================== -->
+    <!-- Dense list rows (§9.6.3)                                                     -->
+    <!--                                                                              -->
+    <!-- §10.5's tables need a real selection model - the sky plot selects into them   -->
+    <!-- and A11Y-11 wants them navigable on their own - but a stock ListViewItem is   -->
+    <!-- 40 px tall with 12 px of side padding, which turns a six-row satellite table  -->
+    <!-- into a scrolling one. §9.6.3 commits to a single density, so the container is -->
+    <!-- trimmed to the row's own padding rather than the density being changed.       -->
+    <!-- =========================================================================== -->
+
+    <Style x:Key="WzDenseListItemStyle" TargetType="ListViewItem" BasedOn="{StaticResource DefaultListViewItemStyle}">
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="Padding" Value="{ThemeResource WzSpaceXxsThickness}" />
+        <Setter Property="Margin" Value="0" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    </Style>
+
+    <Style x:Key="WzSkyPlotMarkerStyle" TargetType="Button">
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="MinWidth" Value="0" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+        <Setter Property="VerticalAlignment" Value="Top" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <!--
+                        A circle, because that is what a satellite marker is. The fill and the
+                        stroke come from the control, which is where the ramp step and the
+                        tracked/predicted distinction are decided.
+
+                        The transparent Grid is the hit area and is deliberately larger than the
+                        disc: a 9 px marker is an unreasonable pointer target (A11Y-5), and the
+                        control insets the visible circle inside a bigger button through Padding.
+                    -->
+                    <Grid Background="Transparent">
+                        <Ellipse x:Name="Marker"
+                                 Margin="{TemplateBinding Padding}"
+                                 Fill="{TemplateBinding Background}"
+                                 Stroke="{TemplateBinding BorderBrush}"
+                                 StrokeThickness="{TemplateBinding BorderThickness}">
+                            <VisualStateManager.VisualStateGroups>
+                                <VisualStateGroup x:Name="CommonStates">
+                                    <VisualState x:Name="Normal" />
+                                    <VisualState x:Name="PointerOver">
+                                        <VisualState.Setters>
+                                            <Setter Target="Marker.Stroke" Value="{ThemeResource WzAccentFillBrush}" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Pressed">
+                                        <VisualState.Setters>
+                                            <Setter Target="Marker.Stroke" Value="{ThemeResource WzAccentFillBrush}" />
+                                            <Setter Target="Marker.Opacity" Value="0.7" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Disabled" />
+                                </VisualStateGroup>
+                            </VisualStateManager.VisualStateGroups>
+                        </Ellipse>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
 </ResourceDictionary>
