@@ -75,6 +75,8 @@
              Link="ViewModels\OverviewViewModel.cs" />
     <Compile Include="..\..\src\WinZ3805A\ViewModels\SatellitesViewModel.cs"
              Link="ViewModels\SatellitesViewModel.cs" />
+    <Compile Include="..\..\src\WinZ3805A\ViewModels\PositionViewModel.cs"
+             Link="ViewModels\PositionViewModel.cs" />
 
     <!-- P0-1's §10.12 dialog. The registry walk and the LocalSettings container behind these are
          Windows-only and stay in the app; what is linked is the part with the decisions in it -
