@@ -20,6 +20,12 @@
     a nav icon or a typographic mark in XAML and there is no hex-colour spelling that
     begins '&#', so the lookbehind excludes them without weakening the rule.
 
+    Comments are stripped before the scan, because '#114' in a prose reference to an issue
+    is three hex digits and this gate cannot tell it from a colour. That distinction only
+    started to matter once issue numbers reached three figures, and rewording every comment
+    that cites one is the wrong way round: a hex colour inside a comment paints nothing, so
+    excluding comments costs the rule nothing it was protecting.
+
 .PARAMETER Root
     Repository root. Defaults to the parent of this script's directory.
 
@@ -50,11 +56,35 @@ $targets += Get-ChildItem -Path $src -Recurse -Filter '*.xaml' -File |
 $targets += Get-ChildItem -Path $src -Recurse -Filter '*.cs' -File |
     Where-Object { $_.FullName -notmatch '\\(bin|obj)\\' -and $_.FullName -match '\\(Views|Controls)\\' }
 
+# Comment spans, stripped before the scan. XAML has one form and C# has three; a line
+# comment is only recognised outside a string, so a '//' inside a URL or a literal does not
+# blank the rest of the line.
+$blockComment = '(?s)<!--.*?-->|/\*.*?\*/'
+
+# Everything before a '//' on the line is kept, so a '//' inside a string or a URL does not
+# blank the rest of it. .NET has no \K, hence the capture group.
+$lineComment = '(?m)^((?:[^"''\r\n]|"[^"\r\n]*"|''[^''\r\n]*'')*?)//[^\r\n]*$'
+
+function Remove-Comments {
+    param([string] $Text)
+
+    # Block comments collapse to their own newlines, so every later line keeps its number.
+    $withoutBlocks = [regex]::Replace(
+        $Text,
+        $blockComment,
+        { param($m) [string]::new("`n", $m.Value.Split("`n").Length - 1) })
+
+    return [regex]::Replace($withoutBlocks, $lineComment, '$1')
+}
+
 $hits = @()
 foreach ($f in $targets) {
     if ([System.IO.Path]::GetFullPath($f.FullName) -eq $allowed) { continue }
+    $text = Get-Content -LiteralPath $f.FullName -Raw
+    if ($null -eq $text) { continue }
+
     $n = 0
-    foreach ($line in (Get-Content -LiteralPath $f.FullName)) {
+    foreach ($line in (Remove-Comments $text) -split "`r?`n") {
         $n++
         foreach ($m in [regex]::Matches($line, $pattern)) {
             $hits += [pscustomobject]@{

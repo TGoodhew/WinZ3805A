@@ -20,6 +20,7 @@ public sealed class PositionViewModel : INotifyPropertyChanged
     private readonly ReceiverStateStore _store;
 
     private ConnectionStatus _connection = ConnectionStatus.Disconnected;
+    private bool? _surveyAtPowerUp;
 
     /// <summary>Creates a view model over the shared store.</summary>
     public PositionViewModel(ReceiverStateStore store)
@@ -168,6 +169,70 @@ public sealed class PositionViewModel : INotifyPropertyChanged
 
     /// <summary>The severity of the survey state, for the pill it renders through.</summary>
     public Severity SurveySeverity => IsSurveySuspended ? Severity.Caution : Severity.Neutral;
+
+    // ---- §10.6's survey commands -----------------------------------------------------------
+
+    /// <summary>
+    /// Whether a survey can be started. Not while one is already running — §8.3 offers no
+    /// "restart", and <c>STATe ONCE</c> sent mid-survey is a command with no stated meaning.
+    /// </summary>
+    public bool CanStartSurvey => Connection == ConnectionStatus.Connected && !IsSurveying;
+
+    /// <summary>
+    /// Whether the survey's own answer can be adopted, and whether it can be abandoned. Both are
+    /// only meaningful while one is running, and §8.3 words them for exactly that case — "stop
+    /// surveying and adopt", "cancel survey and restore".
+    /// </summary>
+    public bool CanEndSurvey => Connection == ConnectionStatus.Connected && IsSurveying;
+
+    /// <summary>
+    /// Whether the receiver surveys automatically at power-up, or null while unread.
+    /// </summary>
+    /// <remarks>
+    /// Read on demand rather than polled: it is a setting rather than a reading, it changes only
+    /// when someone changes it, and §7.3's two cadences have no business carrying it.
+    /// </remarks>
+    public bool? SurveyAtPowerUp
+    {
+        get => _surveyAtPowerUp;
+        set
+        {
+            if (_surveyAtPowerUp != value)
+            {
+                _surveyAtPowerUp = value;
+                RaiseAll();
+            }
+        }
+    }
+
+    /// <summary>
+    /// The position the receiver is holding, for the entry card to copy from.
+    /// </summary>
+    /// <remarks>
+    /// Exposed rather than the whole status: the entry card needs three numbers, and handing a page
+    /// the parsed screen invites it to reach past the view model for the rest.
+    /// </remarks>
+    public GeoPosition? ReceiverPosition => Status?.Position;
+
+    /// <summary>Whether a position may be set by hand at all.</summary>
+    public bool CanSetPosition => Connection == ConnectionStatus.Connected;
+
+    /// <summary>
+    /// The note beside the height entry field, naming the datum the receiver reported.
+    /// </summary>
+    /// <remarks>
+    /// §10.6 annotates this field "WGS-84, GPS ellipsoid", while the 58503B manual documents
+    /// the same command as taking "height above mean sea level" in its syntax line and WGS-84 in
+    /// its prose, two paragraphs apart. Those differ by the geoid separation, which is tens of
+    /// metres in most of the world. Filed as #114; until it is settled the page states which datum
+    /// the receiver said it was reporting rather than asserting one for the value being typed.
+    /// </remarks>
+    public string HeightEntryNote => Status?.HeightDatum switch
+    {
+        HeightDatum.Msl => "The receiver is reporting height above mean sea level. Enter it on the same datum.",
+        HeightDatum.GpsEllipsoid => "The receiver is reporting height above the WGS-84 ellipsoid. Enter it on the same datum.",
+        _ => "The receiver has not said which height datum it is using. Match whatever it reports above.",
+    };
 
     /// <summary>How old the position is — it arrives only on a full sweep.</summary>
     public TimeSpan? Age => _store.AgeOf(_store.LastFullPoll);

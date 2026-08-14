@@ -83,6 +83,8 @@ public sealed class NumberFieldValidator
 
         field.ValidationMode = NumberBoxValidationMode.Disabled;
 
+        _announced = IsValid;
+
         field.LostFocus += OnLostFocus;
         field.ValueChanged += OnValueChanged;
 
@@ -96,7 +98,18 @@ public sealed class NumberFieldValidator
     public event EventHandler? ValidityChanged;
 
     /// <summary>Whether the field currently holds a value that may be sent.</summary>
-    public bool IsValid { get; private set; } = true;
+    /// <remarks>
+    /// <b>Computed, never cached.</b> A cached flag initialised to true means an untouched card
+    /// answers "valid" for fields nobody has entered anything into — which is exactly the state a
+    /// freshly navigated page is in, and it left <em>Apply</em> enabled over seven empty boxes.
+    /// Whether a value may be sent and whether the user should be told off about it are two
+    /// different questions: this answers the first at any moment, and <see cref="Revalidate"/>
+    /// answers the second only when §9.11 says to ask.
+    /// </remarks>
+    public bool IsValid => RangeValidation.Describe(_field.Value, _minimum, _maximum, _unit) is null;
+
+    /// <summary>The validity last reported, so a change can be announced exactly once.</summary>
+    private bool _announced = true;
 
     /// <summary>The value, or null when the field does not hold a usable number.</summary>
     public double? Value =>
@@ -112,16 +125,8 @@ public sealed class NumberFieldValidator
         bool valid = message is null;
 
         _error.Message = message;
-
         ApplyBorder(valid);
-
-        if (valid == IsValid)
-        {
-            return;
-        }
-
-        IsValid = valid;
-        ValidityChanged?.Invoke(this, EventArgs.Empty);
+        Announce(valid);
     }
 
     /// <summary>Clears the error without judging the field, for a card being reset.</summary>
@@ -129,12 +134,19 @@ public sealed class NumberFieldValidator
     {
         _error.Message = null;
         ApplyBorder(valid: true);
+        Announce(IsValid);
+    }
 
-        if (!IsValid)
+    /// <summary>Raises <see cref="ValidityChanged"/> when the answer has actually moved.</summary>
+    private void Announce(bool valid)
+    {
+        if (valid == _announced)
         {
-            IsValid = true;
-            ValidityChanged?.Invoke(this, EventArgs.Empty);
+            return;
         }
+
+        _announced = valid;
+        ValidityChanged?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>
