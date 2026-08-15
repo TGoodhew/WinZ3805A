@@ -1,0 +1,20 @@
+# GitHub Pages configuration.
+#
+# This site exists for one reason: Microsoft Store policy requires a reachable
+# privacy policy URL for the listing (§6.3, OQ-6/#39). Publishing from /docs is
+# the cheapest way to have one that lives in the repository and is reviewed in
+# the same pull request as the code it describes.
+#
+# requirements.md is excluded deliberately. It is the project specification, it
+# is already readable on github.com for anyone who wants it, and rendering it as
+# an indexable web page alongside the privacy policy would make the site about
+# something other than what it is for. Excluding it here is presentation, not
+# secrecy - §8.4's command exclusions are a rule about what the *application*
+# exposes, and the specification is where they are written down.
+
+title: WinZ3805A
+description: Monitor and control application for HP and Symmetricom SCPI GPS-disciplined oscillators.
+theme: jekyll-theme-minimal
+
+exclude:
+  - requirements.md
