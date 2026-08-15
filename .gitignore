@@ -499,3 +499,6 @@ BundleArtifacts/
 # Publish profiles ARE part of the build (WinZ3805A.csproj resolves
 # $(PublishProfile) from them), so they must survive the *.pubxml rule above.
 !src/**/Properties/PublishProfiles/*.pubxml
+
+# WACK reports, written by build/Invoke-Wack.ps1 at the repository root.
+wack-*.xml

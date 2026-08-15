@@ -8,11 +8,27 @@
   IgnorableNamespaces="uap rescap">
 
   <!--
-    TODO (blocked by OQ-6): replace Name and Publisher with the values Partner
-    Center issues. Identity/@Name is effectively permanent - changing it later
-    creates a new app with a new listing and no upgrade path for existing users.
-    Properties/DisplayName below is deliberately decoupled from it (§6.3) and can
-    be changed at any time without consequence.
+    TODO (blocked by OQ-6, issue #39): three values here and one below come from
+    Partner Center and are the only thing standing between this manifest and a
+    submittable package. Reserve the app name in Partner Center, then copy from
+    Product identity:
+
+      Name       <- "Package/Identity/Name"       e.g. 12345TonyGoodhew.WinZ3805A
+      Publisher  <- "Package/Identity/Publisher"  e.g. CN=A1B2C3D4-...-E5F6
+      (below)    <- "Package/Properties/PublisherDisplayName"
+
+    Copy them verbatim. The publisher is a distinguished name that must match the
+    certificate the Store signs with exactly - retyping it from memory is the
+    usual way a first submission fails.
+
+    Identity/@Name is effectively permanent: changing it later creates a new app
+    with a new listing and no upgrade path for existing users. Properties
+    /DisplayName below is deliberately decoupled from it (§6.3) and can be
+    changed at any time without consequence.
+
+    Until then these are placeholders. They are what a local build signs with,
+    and they are why the package installs for development but would be rejected
+    at submission.
   -->
   <Identity
     Name="WinZ3805A"
@@ -26,7 +42,11 @@
          becomes descriptive (e.g. "GPSDO Monitor for Z3805A"). Read at runtime
          via Package.Current.DisplayName; never hard-coded in XAML or tests. -->
     <DisplayName>WinZ3805A</DisplayName>
-    <!-- TODO (blocked by OQ-6): Partner Center publisher display name. -->
+    <!--
+      TODO (blocked by OQ-6, issue #39): Partner Center publisher display name -
+      the third of the three values above. This one is shown to users on the
+      listing, unlike the Publisher distinguished name.
+    -->
     <PublisherDisplayName>AppPublisher</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
   </Properties>
@@ -40,17 +60,38 @@
     <Resource Language="x-generate"/>
   </Resources>
 
+  <!--
+    The privacy policy URL Store policy requires is NOT declared here - the
+    manifest has no element for it. It is entered in Partner Center against the
+    listing. The policy itself is docs/privacy.md, published by GitHub Pages;
+    see docs/store-listing.md for the URL and the rest of the submission copy.
+  -->
+
   <Applications>
     <Application Id="App"
       Executable="$targetnametoken$.exe"
       EntryPoint="$targetentrypoint$">
+      <!--
+        Every logo here names the unqualified file. MSIX resolves the
+        .scale-100 through .scale-400 and .targetsize-* variants beside it from
+        the resource index, so listing one is listing all of them; naming a
+        qualified file instead pins the app to a single display scaling.
+
+        The four tile sizes are all supplied. Windows falls back to scaling the
+        150x150 down when the small tile is absent, and a segmented ring
+        resampled to 71 px loses its gaps - see build/New-AppAssets.ps1, which
+        redraws the mark at each size rather than resampling one.
+      -->
       <uap:VisualElements
         DisplayName="WinZ3805A"
         Description="Monitor and control application for SCPI GPS-disciplined oscillators."
         BackgroundColor="transparent"
         Square150x150Logo="Assets\Square150x150Logo.png"
         Square44x44Logo="Assets\Square44x44Logo.png">
-        <uap:DefaultTile Wide310x150Logo="Assets\Wide310x150Logo.png" />
+        <uap:DefaultTile
+          Square71x71Logo="Assets\Square71x71Logo.png"
+          Square310x310Logo="Assets\Square310x310Logo.png"
+          Wide310x150Logo="Assets\Wide310x150Logo.png" />
         <uap:SplashScreen Image="Assets\SplashScreen.png" />
       </uap:VisualElements>
     </Application>
