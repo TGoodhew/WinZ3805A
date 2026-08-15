@@ -62,9 +62,10 @@ jobs:
         run: ./build/Test-NoBlockedCommands.ps1
 
   # ---------------------------------------------------------------------------
-  # §6.1 requires x64 and ARM64, and forbids AnyCPU. Both architectures build on
-  # an x64 runner because the app is framework-dependent and the RID follows
-  # $(Platform) rather than the building process' architecture.
+  # §6.1 as amended 15 Aug 2026 requires x64 only, and forbids AnyCPU. ARM64 was
+  # dropped because WACK cannot cross-test and there is no ARM64 hardware to
+  # certify a submission on; Windows 11 on ARM runs the x64 package under
+  # emulation. The matrix keeps its shape so restoring the row is one word.
   # ---------------------------------------------------------------------------
   build:
     name: Build ${{ matrix.configuration }} | ${{ matrix.platform }}
@@ -73,7 +74,7 @@ jobs:
       fail-fast: false
       matrix:
         configuration: [Debug, Release]
-        platform: [x64, ARM64]
+        platform: [x64]
     steps:
       - uses: actions/checkout@v4
 

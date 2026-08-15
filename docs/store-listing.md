@@ -95,7 +95,8 @@ otherwise — and it deliberately contains no company mark.
 > back the receiver's own error response if it is refused.
 >
 > Requires a serial port and a cable to the receiver. USB-to-serial adapters
-> work; on ARM64 machines check that your adapter's manufacturer ships an ARM64
+> work. The application is built for x64 and runs on Windows on ARM under
+> emulation; there, check that your adapter's manufacturer ships an ARM64
 > driver, as several common chipsets do not.
 >
 > Not affiliated with, endorsed by, or sponsored by HP, Hewlett-Packard,
@@ -151,9 +152,7 @@ screenshot of a disconnected application shows nothing worth seeing.
 - [ ] Partner Center registration complete, app name reserved
 - [ ] The three identity values copied into `Package.appxmanifest` (#39)
 - [ ] GitHub Pages enabled, privacy URL resolves
-- [ ] `pwsh build/Invoke-Wack.ps1` clean on **x64**, from an elevated shell
-- [ ] `pwsh build/Invoke-Wack.ps1 -Platform ARM64` clean on an **ARM64 machine** —
-      WACK installs and runs what it certifies and cannot cross-test, so this
-      needs real ARM64 hardware or a VM
+- [ ] `pwsh build/Invoke-Wack.ps1` clean on **x64**, from an elevated shell —
+      the only architecture, per §6.1 as amended
 - [ ] Screenshots captured
 - [ ] `Version` in the manifest set to the release version

@@ -142,8 +142,10 @@ $msb = 'C:\Program Files\Microsoft Visual Studio\18\Enterprise\MSBuild\Current\B
 & $msb WinZ3805A.sln -t:Build   -p:Configuration=Debug -p:Platform=x64
 ```
 
-Restore is per-platform because the RID differs. Valid platforms are **x64** and
-**ARM64** only — no AnyCPU, no x86 (§6.1).
+Restore is per-platform because the RID differs. The only valid platform is
+**x64** — no AnyCPU, no x86, and no ARM64 (§6.1, amended 15 Aug 2026: WACK
+cannot cross-test and there is no ARM64 hardware to certify on; Windows on ARM
+runs the x64 package under emulation).
 
 ```powershell
 # Tests (UI-independent, so the plain SDK is fine here)

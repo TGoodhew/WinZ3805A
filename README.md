@@ -48,11 +48,13 @@ that walks the most likely combinations sending `*IDN?` until a valid identity
 returns. Handshaking is always off; DTR and RTS are asserted on open. §7.1 of the
 specification gives the full parameter ranges.
 
-> **On ARM64 machines:** `System.IO.Ports` itself runs fine on ARM64, but
-> third-party USB-serial drivers frequently lack ARM64 builds — Prolific PL2303
-> and CH340 clones especially, while FTDI is generally fine. If no ports
-> enumerate on an ARM64 machine, the adapter's driver is the likely cause rather
-> than the application.
+> **On ARM64 machines:** the application is built for x64 only and runs on
+> Windows on ARM under emulation. The thing that actually bites there is the
+> driver, not the emulation: third-party USB-serial drivers frequently lack
+> ARM64 builds — Prolific PL2303 and CH340 clones especially, while FTDI is
+> generally fine. A serial-port driver is kernel-mode, so emulating the
+> application does not help. If no ports enumerate on an ARM64 machine, the
+> adapter's driver is the likely cause rather than the application.
 
 ## Installing
 
@@ -96,8 +98,10 @@ the file; reproduce it locally with MSBuild.)
 
 Restore is per-platform, because the runtime identifier — and so the assets file
 — differs between them. The valid combinations are `Debug` and `Release`
-configurations against `x64` and `ARM64` platforms. There is no `AnyCPU` (the
-Windows App SDK is native) and no `x86` (not shipped).
+configurations against the `x64` platform. There is no `AnyCPU` (the Windows App
+SDK is native), no `x86`, and — since 15 August 2026 — no `ARM64`: the
+certification kit installs and runs what it certifies and so cannot cross-test,
+and there is no ARM64 hardware to certify a submission on. See §6.1.
 
 `TreatWarningsAsErrors` and `EnforceCodeStyleInBuild` are both on, so a clean
 build produces zero warnings and a code-style violation is a build error rather
