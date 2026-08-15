@@ -3,8 +3,8 @@
     Builds the Release MSIX and runs the Windows App Certification Kit over it.
 
 .DESCRIPTION
-    P0-15 (#15) is verified by a clean WACK run on x64 and ARM64. This wraps
-    both halves so the run is repeatable rather than a sequence someone
+    P0-15 (#15) is verified by a clean WACK run on x64. This wraps the build and
+    the certification run so it is repeatable rather than a sequence someone
     reconstructs from memory once a release.
 
     Must be run **elevated**: appcert.exe refuses to start otherwise, and it
@@ -16,13 +16,16 @@
         pwsh build/Invoke-Wack.ps1
 
 .PARAMETER Platform
-    x64 or ARM64. Defaults to this machine's architecture.
+    x64, which is the only architecture §6.1 requires as of 15 Aug 2026 and the
+    only value this accepts. The parameter is kept rather than removed so that
+    restoring ARM64 later means widening a ValidateSet rather than rediscovering
+    that this script ever had a notion of architecture.
 
-    **WACK cannot cross-test.** It installs and runs the package, so an ARM64
-    package has to be certified on an ARM64 machine; there is no x64 host flag
-    that changes this. The x64 half of P0-15's criterion is reachable on a
-    typical development box and the ARM64 half is not, which is worth knowing
-    before the submission is planned around it. An ARM64 VM or a Dev Box will do.
+    ARM64 was dropped because **WACK cannot cross-test**: it installs and runs
+    the package it certifies, so an ARM64 package has to be certified on an ARM64
+    machine and there is no host flag that changes that. Windows 11 on ARM runs
+    the x64 package under emulation, so ARM64 users are not left without an
+    application - they are left without a native one.
 
 .PARAMETER SkipBuild
     Certify the package already in AppPackages rather than rebuilding.
@@ -35,8 +38,8 @@
 
 [CmdletBinding()]
 param(
-    [ValidateSet('x64', 'ARM64')]
-    [string]$Platform,
+    [ValidateSet('x64')]
+    [string]$Platform = 'x64',
 
     [switch]$SkipBuild,
 
@@ -47,10 +50,6 @@ $ErrorActionPreference = 'Stop'
 
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $project = Join-Path $repo 'src\WinZ3805A\WinZ3805A.csproj'
-
-if (-not $Platform) {
-    $Platform = if ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture -eq 'Arm64') { 'ARM64' } else { 'x64' }
-}
 
 if (-not $ReportPath) {
     $ReportPath = Join-Path $repo "wack-$($Platform.ToLowerInvariant()).xml"
@@ -67,9 +66,13 @@ if (-not (Test-Path $appcert)) {
     throw "The Windows App Certification Kit is not installed at $appcert. It ships with the Windows SDK."
 }
 
+# WACK installs and runs what it certifies, so certifying an x64 package from a
+# Windows-on-ARM host measures the emulator rather than the machine a reviewer
+# will use. Worth a warning rather than a refusal: the run still completes and
+# most of its checks are still meaningful.
 $hostArch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
-if (($Platform -eq 'ARM64' -and $hostArch -ne 'Arm64') -or ($Platform -eq 'x64' -and $hostArch -eq 'Arm64')) {
-    Write-Warning "Certifying a $Platform package on a $hostArch host. WACK installs and runs the package, so this will not produce a valid result - see the .PARAMETER Platform notes."
+if ($hostArch -ne 'X64') {
+    Write-Warning "Certifying an x64 package on a $hostArch host. WACK installs and runs the package, so the result reflects emulation - see the .PARAMETER Platform notes."
 }
 
 if (-not $SkipBuild) {

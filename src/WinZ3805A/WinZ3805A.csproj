@@ -5,19 +5,32 @@
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
     <RootNamespace>WinZ3805A</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <!-- §6.1: x64 and ARM64 only. No AnyCPU (Windows App SDK is native) and
-         no x86 (not shipped in the Store bundle). -->
-    <Platforms>x64;ARM64</Platforms>
     <!--
-      The template derived the RID from the *building process*' architecture,
-      which pins every build on an x64 host to win-x64 and makes the ARM64
-      solution platform unbuildable. §6.1 requires both architectures to ship,
-      so the RID follows $(Platform) instead. RuntimeIdentifiers lists both so
-      a single restore covers them.
+      §6.1 as amended 15 Aug 2026: x64 only. No AnyCPU (Windows App SDK is
+      native) and no x86.
+
+      This used to be x64;ARM64. ARM64 was dropped because WACK installs and
+      runs the package it certifies and therefore cannot cross-test, so an ARM64
+      submission needs ARM64 hardware to certify on, and this project has none -
+      shipping it would mean shipping a binary nobody had run the certification
+      kit against. Windows 11 on ARM runs x64 applications under emulation, so
+      ARM64 machines still get a working application from this package.
+
+      Restoring it is deliberately small: add ARM64 here, add win-arm64 to
+      RuntimeIdentifiers with its Condition line back, restore
+      Properties/PublishProfiles/win-arm64.pubxml, and add the matrix row in
+      .github/workflows/ci.yml. Do that when there is hardware to certify on.
     -->
-    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <Platforms>x64</Platforms>
+    <!--
+      The template derived the RID from the *building process*' architecture.
+      That is right on an x64-only project today and was wrong when ARM64 was a
+      solution platform, so the RID still follows $(Platform) rather than the
+      process - which is what makes the restoration above a one-line change
+      rather than a rewrite.
+    -->
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
     <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(Platform)' == 'x64'">win-x64</RuntimeIdentifier>
-    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(Platform)' == 'ARM64'">win-arm64</RuntimeIdentifier>
     <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-$([System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString().ToLowerInvariant())</RuntimeIdentifier>
     <PublishProfile Condition="Exists('Properties\PublishProfiles\win-$(Platform).pubxml')">win-$(Platform).pubxml</PublishProfile>
     <UseWinUI>true</UseWinUI>

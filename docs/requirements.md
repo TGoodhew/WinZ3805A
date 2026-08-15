@@ -26,7 +26,7 @@ Users currently either screen-scrape `:SYST:STAT?` in a terminal emulator or run
 | G6 | The app has a visual identity of its own while remaining native to Windows | The §9 token set is implemented in full; §9.13 anti-patterns audit passes; no `SystemAccentColor` used as brand |
 | G3 | Complete coverage of the safe, documented SCPI surface through task-oriented dialogs | Every command in §8 tier S/C reachable from the UI |
 | G4 | Destructive commands are unreachable — not merely warned about | Blocked commands (§8.3) absent from the shipped command catalog; no free-text command path can emit them |
-| G5 | Ships to the Microsoft Store as an MSIX package | Passes Windows App Certification Kit; installs from Store on clean x64 and ARM64 machines |
+| G5 | Ships to the Microsoft Store as an MSIX package | Passes Windows App Certification Kit; installs from Store on a clean x64 machine |
 
 ---
 
@@ -88,7 +88,7 @@ Users currently either screen-scrape `:SYST:STAT?` in a terminal emulator or run
 | Runtime | **.NET 10 (LTS)** — modern .NET, *not* .NET Framework 4.x | WinUI 3 cannot run on .NET Framework, so this is forced. Use the **LTS** release, not the newest STS or preview: Store apps have long tails and LTS gives 3 years of servicing. Do not adopt .NET 11 (Nov 2026, STS) on release. |
 | TFM | `net10.0-windows10.0.26100.0` | Confirm against the VS template default at project creation and prefer the template's value if it differs. |
 | Min platform | `10.0.17763.0` (Windows 10 1809) | WinUI 3's floor. Verify WinAppSDK 2.3.1 does not raise it; if it does, follow the SDK. |
-| Architectures | **x64 and ARM64** | No AnyCPU — Windows App SDK is native. Ship both in the Store bundle. Omit x86.<br>⚠ `System.IO.Ports` runs fine on ARM64, but third-party **USB-serial drivers frequently lack ARM64 builds** (Prolific PL2303 and CH340 clones especially; FTDI is generally fine). This is a driver problem, not an app problem — but the connection dialog must fail gracefully with a message naming the likely cause when zero ports enumerate on ARM64. |
+| Architectures | **x64 only** | No AnyCPU — Windows App SDK is native. Omit x86.<br>**Amended 15 Aug 2026.** This row required x64 *and* ARM64 and said to ship both in the bundle. It now requires x64 alone, for three reasons that compound. First, **WACK cannot cross-test**: it installs and runs the package it certifies, so an ARM64 submission has to be certified on ARM64 hardware, and there is none on this project. Shipping an architecture nobody can run the certification kit against is shipping an unverified binary. Second, **Windows 11 on ARM runs x64 applications under emulation**, so ARM64 machines still get a working application from the x64 package — the cost of dropping the native build is performance on a device this application spends its life idle on, waiting a second at a time for a serial reply. Third, the caveat this row already carried argued against the native build on its own: `System.IO.Ports` runs fine on ARM64, but third-party **USB-serial drivers frequently lack ARM64 builds** (Prolific PL2303 and CH340 clones especially; FTDI is generally fine), so a native ARM64 build is of limited use precisely where it would be used.<br>The driver caveat still applies under emulation, because it is a kernel-mode problem and the emulated application is not what is missing. The connection dialog must fail gracefully with a message naming the likely cause when zero ports enumerate on an ARM64 machine.<br>Restoring ARM64 is a small change — one entry in `Platforms`, one publish profile, one CI matrix row — and should be made when hardware to certify on exists, not before. |
 | IDE | Visual Studio 2026, *.NET desktop development* workload + Windows App SDK extension | |
 | MVVM | `CommunityToolkit.Mvvm` | Source-generated `ObservableProperty` / `RelayCommand`. |
 | DI | `Microsoft.Extensions.DependencyInjection` + `Microsoft.Extensions.Hosting` | |
@@ -1505,7 +1505,7 @@ something might later branch on.
 | P0-12 | Position survey start/monitor/adopt | Survey progress updates on each full poll; adopt is tier C |
 | P0-13 | Diagnostic log read, filter, export, clear | Clear is tier C; export writes UTF-8 CSV |
 | P0-14 | Graceful disconnect and auto-reconnect | Given the USB adapter is unplugged, then the app shows Disconnected within 10 s and reconnects within 30 s of replug |
-| P0-15 | MSIX package passing WACK | `makeappx` + WACK clean run on x64 and ARM64 |
+| P0-15 | MSIX package passing WACK | `makeappx` + WACK clean run on x64 |
 | P0-16 | Accessibility criteria A11Y-1 through A11Y-13 (§9.12) | Each by its stated verification method; A11Y-3 and A11Y-4 gate CI |
 | P0-17 | The §9 token set is implemented in `Themes/` with Light, Dark, and HighContrast dictionaries for every token | CI greps `Views/` and `Controls/` for hex colour literals and fails on any hit (§9.13 item 2) |
 | P0-18 | `StatusMedallion` renders the 60-second radial TI sparkline, updating with no animation | Given a fast poll delivers a new TI value, then the ring redraws within one frame and no `Storyboard` targets the geometry (§9.8.2) |
