@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Animation;
 
 using Windows.ApplicationModel;
 using Windows.Graphics;
@@ -50,11 +51,22 @@ public sealed partial class DetailsWindow : Window
     private readonly DeviceContext _device;
     private readonly IWindowPlacementStore _placements;
     private readonly IDetailsViewPreferenceStore _preferences;
+    private readonly IMotionService _motion;
     private readonly DispatcherTimer _saveAfterIdle = new() { Interval = TimeSpan.FromSeconds(1) };
 
     private WindowRect? _restoredBounds;
     private readonly bool _ready;
     private SizeInt32 _minimum;
+
+    /// <summary>
+    /// The §9.7.1 pane index of the page currently showing, or -1 before the first navigation.
+    /// </summary>
+    /// <remarks>
+    /// §9.8.2 takes the direction of the page transition from movement through the pane, and
+    /// <c>NavigationView</c> reports only where the user is going. The -1 start is what gives the
+    /// window's first page a fade rather than a slide out of nowhere.
+    /// </remarks>
+    private int _shownIndex = -1;
 
     /// <summary>Creates the window over the application's services.</summary>
     /// <param name="services">The §12 composition root.</param>
@@ -65,6 +77,7 @@ public sealed partial class DetailsWindow : Window
         _device = services.GetRequiredKeyedService<DeviceContext>(DeviceKeys.Primary);
         _placements = services.GetRequiredKeyedService<IWindowPlacementStore>(PlacementKey);
         _preferences = services.GetRequiredService<IDetailsViewPreferenceStore>();
+        _motion = services.GetRequiredService<IMotionService>();
 
         InitializeComponent();
 
@@ -234,15 +247,65 @@ public sealed partial class DetailsWindow : Window
         // A page that has been built takes the shared DeviceContext; one that has not shows what it
         // will hold. The mapping lives here rather than on the destination record because that
         // record is compiled into a headless test run, where no View type exists.
+        int index = DetailsDestinations.IndexOf(destination.Tag);
+        NavigationTransitionInfo transition = TransitionTo(index);
+        _shownIndex = index;
+
         if (Pages.TryGetValue(destination.Tag, out Type? page))
         {
-            ContentFrame.Navigate(page, _device);
+            ContentFrame.Navigate(page, _device, transition);
         }
         else
         {
-            ContentFrame.Navigate(typeof(DetailsPlaceholderPage), destination);
+            ContentFrame.Navigate(typeof(DetailsPlaceholderPage), destination, transition);
         }
     }
+
+    /// <summary>
+    /// §9.8.2's "Nav page change" row, in as much of it as Windows App SDK 2.3 can draw.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Passed to <c>Navigate</c> per call rather than set once as
+    /// <c>ContentFrame.ContentTransitions</c>, for two reasons: the direction is not a property of
+    /// the frame, and A11Y-13's requirement to <i>subscribe</i> to the setting is met for free by
+    /// asking again each time. There is no transition already in flight to switch when the user
+    /// changes the setting mid-session, so nothing has to be torn down — the next page change
+    /// simply chooses differently.
+    /// </para>
+    /// <para>
+    /// <b>Both halves of §9.8.2's row name an API that does not exist, so this is the defensible
+    /// reading rather than the literal one. Filed as #120.</b>
+    /// </para>
+    /// <para>
+    /// <b>Upward travel.</b> <c>SlideNavigationTransitionEffect</c> offers <c>FromBottom</c>,
+    /// <c>FromLeft</c> and <c>FromRight</c> — there is no <c>FromTop</c>, in WinUI or in the UWP
+    /// enumeration it was carried over from, so §9.8.2's <c>FromBottom</c>/<c>FromTop</c> pair is
+    /// half-unbuildable. The two effects that do remain are horizontal, and the same section's
+    /// "Directional consistency" paragraph forbids anything sliding horizontally in this
+    /// application. Rather than break that rule or invent a hand-rolled storyboard for one
+    /// direction, both directions rise: the transition keeps saying "the page changed, vertically"
+    /// and stops saying which way. One line changes here if the effect is ever added.
+    /// </para>
+    /// <para>
+    /// <b>Reduced motion.</b> §9.8.2's fallback column asks for <c>EntranceNavigationTransitionInfo</c>
+    /// "with opacity only", which was expressible in UWP, where that type carried
+    /// <c>FromHorizontalOffset</c> and <c>FromVerticalOffset</c>. WinUI 3 dropped both, leaving a
+    /// fade with a short rise baked into it and no way to take the rise out — motion, for the user
+    /// who turned motion off. <c>SuppressNavigationTransitionInfo</c> is used instead. It is
+    /// stricter than the fallback column and it is exactly what A11Y-13 asks for in words: no
+    /// animation runs, and the layout it lands on is the one the animated path lands on.
+    /// </para>
+    /// </remarks>
+    private NavigationTransitionInfo TransitionTo(int index) =>
+        MotionPolicy.ForNavigation(_motion.AnimationsEnabled, _shownIndex, index) switch
+        {
+            NavigationMotion.FromBottom or NavigationMotion.FromTop => new SlideNavigationTransitionInfo
+            {
+                Effect = SlideNavigationTransitionEffect.FromBottom,
+            },
+            _ => new SuppressNavigationTransitionInfo(),
+        };
 
     private void OnPaneStateChanged(NavigationView sender, object args)
     {

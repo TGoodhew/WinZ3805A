@@ -130,6 +130,28 @@ public static class DetailsDestinations
         All.FirstOrDefault(destination => destination.Tag == tag);
 
     /// <summary>
+    /// Where a destination sits in the pane, counting from the top, or -1 if it is not one.
+    /// </summary>
+    /// <remarks>
+    /// §9.8.2 takes the direction of the page transition from travel through this list, so the
+    /// position of an entry is not merely presentational and the ordering above is not free to
+    /// change without the transitions changing with it. Settings is included because it is a
+    /// destination the user navigates to, footer or not — it is simply the last one.
+    /// </remarks>
+    public static int IndexOf(string? tag)
+    {
+        for (int index = 0; index < All.Count; index++)
+        {
+            if (All[index].Tag == tag)
+            {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+
+    /// <summary>
     /// The destination <c>Ctrl+</c><paramref name="number"/> reaches, or <see langword="null"/>.
     /// </summary>
     /// <param name="number">One-based, as the accelerator is written.</param>

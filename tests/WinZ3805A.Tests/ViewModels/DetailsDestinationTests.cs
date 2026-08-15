@@ -86,4 +86,29 @@ public sealed class DetailsDestinationTests
         Assert.Null(DetailsDestinations.ByTag("console"));
         Assert.Null(DetailsDestinations.ByTag(null));
     }
+
+    /// <remarks>
+    /// §9.8.2's page transition reads the direction off these positions, so the index has to agree
+    /// with the pane the user is looking at - including Settings, which is drawn in the footer but
+    /// is still the last thing in the list and still navigated to.
+    /// </remarks>
+    [Fact]
+    public void DestinationsKnowWhereTheySitInThePane()
+    {
+        Assert.Equal(0, DetailsDestinations.IndexOf("overview"));
+        Assert.Equal(DetailsDestinations.All.Count - 1, DetailsDestinations.IndexOf("settings"));
+
+        for (int index = 0; index < DetailsDestinations.All.Count; index++)
+        {
+            Assert.Equal(index, DetailsDestinations.IndexOf(DetailsDestinations.All[index].Tag));
+        }
+    }
+
+    /// <summary>The sentinel the transition policy reads as "no page".</summary>
+    [Theory]
+    [InlineData("console")]
+    [InlineData("")]
+    [InlineData(null)]
+    public void SomethingThatIsNotADestinationHasNoIndex(string? tag) =>
+        Assert.Equal(-1, DetailsDestinations.IndexOf(tag));
 }

@@ -60,6 +60,12 @@ public partial class App : Application
         services.AddSingleton(TimeProvider.System);
         services.AddDevice(DeviceKeys.Primary, (port, settings) => new SerialTransport(port, settings));
 
+        // §9.8's reduced-motion rule. A singleton because the setting is the user's, not a
+        // window's, and because the UISettings instance behind it has to outlive the call that
+        // subscribed or it stops reporting changes. Resolved on demand, so the WinRT object is
+        // built when the first window that can animate opens rather than on the launch path.
+        services.AddSingleton<IMotionService, WzMotionService>();
+
         services.AddSingleton<IConnectionPreferenceStore, LocalConnectionPreferenceStore>();
         services.AddSingleton<IDetailsViewPreferenceStore, LocalDetailsViewPreferenceStore>();
         services.AddSingleton<SerialPortEnumerator>();
