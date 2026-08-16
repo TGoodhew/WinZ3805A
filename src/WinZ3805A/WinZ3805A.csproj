@@ -74,11 +74,43 @@
     <ProjectCapability Include="Msix" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <!--
+      §6.1's stack table, as amended 15 Aug 2026, minus four entries that were
+      referenced and never used. Each removal is one line to undo, and each is
+      recorded in §6.1 rather than only here:
+
+        CommunityToolkit.Mvvm                  zero usages. The eleven view
+                                               models hand-write INotifyProperty-
+                                               Changed and should keep doing so;
+                                               see §6.1's MVVM row for why.
+        Microsoft.Data.Sqlite                  zero usages, and 1.89 MB of native
+                                               e_sqlite3.dll in every package for
+                                               a feature (#50, P1) no code path
+                                               could reach. #50 restores it.
+        Microsoft.Extensions.Hosting           zero usages. App.Compose() builds a
+                                               ServiceProvider directly and never
+                                               a host.
+
+      CommunityToolkit.WinUI.Controls.SettingsControls also has zero usages and
+      is KEPT. §9.10's component inventory specifies SettingsCard and
+      SettingsExpander by name for the Settings page, which is a required §10.2
+      destination and still a placeholder, and the whole package measures 0.31 MB
+      of the bundle (15.70 against 15.39). Removing it to re-add it with the page
+      would trade that for churn. Sqlite went because 1.89 MB of *native* code is
+      a different order of cost, not because the two cases differ in principle.
+
+      Note §9.10 also lists those controls for the Timing and Holdover pages,
+      which are built and do not use them. That divergence is real and is a
+      design-system question rather than a packaging one; it is not settled here.
+
+      Microsoft.Extensions.Logging stays: ILogger is injected into the transport,
+      the session and the poller, and Device/Transport/TransportLog.cs holds real
+      LoggerMessage source-generated instrumentation. Nothing configures a
+      provider yet, so it all resolves to NullLogger - that is a missing feature
+      rather than a dead reference, and it is tracked as #127.
+    -->
     <PackageReference Include="CommunityToolkit.WinUI.Controls.SettingsControls" Version="8.2.251219" />
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.11" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.11" />
-    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.11" />
     <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.11" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2526" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools.WinApp" Version="0.5.0" />
