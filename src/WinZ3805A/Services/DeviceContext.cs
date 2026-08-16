@@ -41,6 +41,7 @@ public sealed class DeviceContext : IAsyncDisposable
         Session = session;
         Store = store;
         Poller = poller;
+        TimeProvider = timeProvider;
         PowerUp = new PowerUpGuard(timeProvider);
 
         // The guard is fed here rather than by the page that reads it, because §10.8's figure is
@@ -52,6 +53,15 @@ public sealed class DeviceContext : IAsyncDisposable
 
     /// <summary>Which device this is. v1 uses <see cref="DeviceKeys.Primary"/> and only that.</summary>
     public string Key { get; }
+
+    /// <summary>The clock everything under this device reads.</summary>
+    /// <remarks>
+    /// Already a constructor parameter and previously consumed only by <see cref="PowerUp"/>.
+    /// Exposed so a page that needs the time — the CSV export stamps its suggested file name with
+    /// it — takes the same injected clock as everything else rather than reaching for
+    /// <c>DateTime.Now</c>, which §12 forbids and which a test could not pin.
+    /// </remarks>
+    public TimeProvider TimeProvider { get; }
 
     /// <summary>The transport and command channel.</summary>
     public DeviceSessionService Session { get; }

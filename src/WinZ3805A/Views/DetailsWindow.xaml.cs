@@ -8,7 +8,13 @@ using Microsoft.UI.Xaml.Media.Animation;
 
 using Windows.ApplicationModel;
 using Windows.Graphics;
+using Windows.Storage;
+using Windows.Storage.Pickers;
 using Windows.System;
+
+using WinRT.Interop;
+
+using Microsoft.UI;
 
 using WinZ3805A.Controls;
 using WinZ3805A.Services;
@@ -68,6 +74,9 @@ public sealed partial class DetailsWindow : Window
     /// </remarks>
     private int _shownIndex = -1;
 
+    /// <summary>The page currently showing, if it can export. Held so it can be unsubscribed.</summary>
+    private ICsvExportSource? _exportSource;
+
     /// <summary>Creates the window over the application's services.</summary>
     /// <param name="services">The §12 composition root.</param>
     public DetailsWindow(IServiceProvider services)
@@ -90,6 +99,13 @@ public sealed partial class DetailsWindow : Window
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
         AppWindow.SetIcon("Assets/AppIcon.ico");
+
+        // Navigated rather than straight after Navigate, and the page comes from the event args
+        // rather than from ContentFrame.Content. Neither detail is optional: Navigate returns
+        // before Content is the new page, and Content is still not reliably updated when Navigated
+        // fires - both readings leave the command greyed out over a page that can export, which is
+        // exactly what this replaced.
+        ContentFrame.Navigated += (_, e) => RenderExportAvailability(e.Content);
 
         BuildNavigation();
         AddAccelerators();
@@ -262,6 +278,45 @@ public sealed partial class DetailsWindow : Window
     }
 
     /// <summary>
+    /// Greys out Export on a page that has nothing to export.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Until P0-13 this command was visible, enabled, and an empty method - it looked like it
+    /// worked and did nothing, which is worse than absent, because a user cannot tell it from a
+    /// silent failure. Most pages still have no table, so the honest state for them is disabled.
+    /// </para>
+    /// <para>
+    /// The page is subscribed to rather than sampled once, because its data arrives after
+    /// navigation completes - the log is read asynchronously and then narrowed by a filter box as
+    /// the user types. Sampling on navigation alone would leave the command greyed out over a page
+    /// that had since filled with entries.
+    /// </para>
+    /// </remarks>
+    private void RenderExportAvailability(object? content)
+    {
+        if (!ReferenceEquals(_exportSource, content))
+        {
+            if (_exportSource is ICsvExportSource previous)
+            {
+                previous.ExportAvailabilityChanged -= OnExportAvailabilityChanged;
+            }
+
+            _exportSource = content as ICsvExportSource;
+
+            if (_exportSource is ICsvExportSource current)
+            {
+                current.ExportAvailabilityChanged += OnExportAvailabilityChanged;
+            }
+        }
+
+        ExportButton.IsEnabled = _exportSource is { CanExport: true };
+    }
+
+    private void OnExportAvailabilityChanged(object? sender, EventArgs e) =>
+        ExportButton.IsEnabled = _exportSource is { CanExport: true };
+
+    /// <summary>
     /// §9.8.2's "Nav page change" row, in as much of it as Windows App SDK 2.3 can draw.
     /// </summary>
     /// <remarks>
@@ -376,10 +431,96 @@ public sealed partial class DetailsWindow : Window
     /// </remarks>
     private void RefreshFullStatus() => _device.Poller.RequestFullSweep();
 
-    private static void ExportCurrentView()
+    /// <summary>§9.7.5's <c>Ctrl+E</c>: writes the current page's table to a CSV file.</summary>
+    private void ExportCurrentView() => ExportFrom(_exportSource, Content?.XamlRoot);
+
+    /// <summary>
+    /// Runs the save picker for a page and writes its CSV, reporting a failure to the user.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Static and taking its source explicitly, so the Diagnostics card's own Export button reaches
+    /// the same code as the title bar rather than growing a second implementation. §9.7.4 shows
+    /// both affordances and they must not diverge - one of them writing a different file to the
+    /// other is the kind of thing nobody finds until a user reports it.
+    /// </para>
+    /// <para>
+    /// <c>InitializeWithWindow</c> is not optional. <c>FileSavePicker</c> is a WinRT type that
+    /// expects a CoreWindow, and in a WinUI 3 desktop app there is not one - without an owner HWND
+    /// the call throws <c>COMException</c> at <c>PickSaveFileAsync</c> rather than at construction,
+    /// so it looks like the picker failing rather than the setup being wrong.
+    /// </para>
+    /// <para>
+    /// The file is written through the <c>StorageFile</c> stream rather than
+    /// <c>File.WriteAllText</c> on its path. The picker hands back a broker-granted file that may
+    /// live somewhere this process cannot reach by path - OneDrive, a removable volume, a folder
+    /// the package has no capability for - and writing by path works in testing and fails for the
+    /// user.
+    /// </para>
+    /// </remarks>
+    internal static async void ExportFrom(ICsvExportSource? source, XamlRoot? xamlRoot)
     {
-        // §9.7.4 puts Export in the title bar, but what it exports is the current page's data and
-        // there is no page yet. It is wired when the first page with a table lands (§10.5).
+        if (xamlRoot is null ||
+            source is not { CanExport: true } ||
+            source.BuildCsv() is not CsvDocument document)
+        {
+            return;
+        }
+
+        FileSavePicker picker = new()
+        {
+            SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
+            SuggestedFileName = source.SuggestedFileName,
+        };
+
+        picker.FileTypeChoices.Add("Comma-separated values", [".csv"]);
+
+        // The owner comes from the XamlRoot rather than from a window reference, so the card's
+        // Export button and the title bar's Ctrl+E both parent the dialog to the window the user is
+        // actually looking at. A page cannot see its own Window in WinUI 3, and passing the main
+        // window would put the picker behind the Details window it was raised from.
+        InitializeWithWindow.Initialize(
+            picker,
+            Win32Interop.GetWindowFromWindowId(xamlRoot.ContentIslandEnvironment.AppWindowId));
+
+        StorageFile? file = await picker.PickSaveFileAsync();
+        if (file is null)
+        {
+            return;
+        }
+
+        try
+        {
+            // Deferring updates keeps a cloud-backed file from syncing the half-written version,
+            // and SetLength(0) is what makes overwriting an existing export replace it rather than
+            // leave the tail of a longer previous log behind it.
+            CachedFileManager.DeferUpdates(file);
+
+            using (Stream stream = await file.OpenStreamForWriteAsync())
+            {
+                stream.SetLength(0);
+
+                await using StreamWriter writer = new(stream, CsvDocument.Encoding);
+                await writer.WriteAsync(document.ToText());
+            }
+
+            await CachedFileManager.CompleteUpdatesAsync(file);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // §9.11 reserves ContentDialog for a decision the user cannot proceed without, and this
+            // is a stretch of that - but the window's chrome has no InfoBar, the failure is the
+            // direct result of something they just asked for, and saying nothing after a save
+            // dialog closes reads as success. It names the file so a read-only location or a full
+            // disk is identifiable.
+            await new ContentDialog
+            {
+                XamlRoot = xamlRoot,
+                Title = "Couldn't save the export",
+                Content = $"{file.Name} could not be written. {exception.Message}",
+                CloseButtonText = "Close",
+            }.ShowAsync();
+        }
     }
 
     private void OpenSettings() => Select(DetailsDestinations.Settings);
