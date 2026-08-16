@@ -56,16 +56,79 @@ public class PollingServiceTests
     }
 
     /// <summary>Winds the clock until a condition holds, so a cadence is assertable without waiting.</summary>
-    private static async Task WaitFor(FakeTimeProvider clock, Func<bool> condition)
+    /// <summary>
+    /// Advances the fake clock a second at a time until <paramref name="condition"/> holds.
+    /// </summary>
+    /// <param name="clock">The pinned clock the poller is running on.</param>
+    /// <param name="condition">What the caller is waiting to become true.</param>
+    /// <param name="progress">
+    /// Total sweeps so far, when the caller has a poller to ask. Supplying it makes the wait
+    /// settle before each advance instead of racing the loop.
+    /// </param>
+    /// <remarks>
+    /// <para>
+    /// <b>Advancing the clock while a sweep is still running loses ticks.</b>
+    /// <see cref="PollingService"/> drives one <c>PeriodicTimer</c>, and that timer deliberately
+    /// does not queue a tick that fires while nobody is awaiting it — which is what makes the
+    /// no-overlap rule structural rather than a flag. So a wait that advances again before the
+    /// loop has parked on <c>WaitForNextTickAsync</c> silently drops the sweep it just asked for.
+    /// </para>
+    /// <para>
+    /// The loss is not even, which is what makes it worth fixing rather than tolerating: a full
+    /// screen occupies the loop far longer than a fast scalar sweep, so the fast tier loses
+    /// proportionally more of its ticks. That is exactly the shape of the failure this replaced —
+    /// 14 fast sweeps to 3 full on a loaded CI runner, against a required ratio of five, while
+    /// passing six runs out of six on an idle development machine.
+    /// </para>
+    /// </remarks>
+    private static async Task WaitFor(
+        FakeTimeProvider clock,
+        Func<bool> condition,
+        Func<int>? progress = null)
     {
         using CancellationTokenSource giveUp = new(TestTimeout);
         while (!condition() && !giveUp.IsCancellationRequested)
         {
             clock.Advance(TimeSpan.FromSeconds(1));
-            await Task.Delay(5, CancellationToken.None);
+            await SettleAsync(progress, giveUp.Token);
         }
 
         Assert.True(condition(), "The condition never held.");
+    }
+
+    /// <summary>
+    /// Gives the poll loop real time to finish whatever the last tick started.
+    /// </summary>
+    /// <remarks>
+    /// Quiescence rather than a fixed delay: the sweep count is sampled until two consecutive
+    /// samples agree, so a runner that needs 40 ms gets 40 ms and an idle one is not slowed to
+    /// the worst case. Without a <c>progress</c> probe there is nothing to sample and this falls
+    /// back to the fixed wait it replaced, which is adequate for the callers that only need one
+    /// sweep to have happened.
+    /// </remarks>
+    private static async Task SettleAsync(Func<int>? progress, CancellationToken cancellationToken)
+    {
+        if (progress is null)
+        {
+            await Task.Delay(5, cancellationToken);
+            return;
+        }
+
+        int previous = -1;
+
+        // Bounded so a genuinely stuck loop still fails on TestTimeout rather than here.
+        for (int attempt = 0; attempt < 100; attempt++)
+        {
+            await Task.Delay(2, cancellationToken);
+
+            int current = progress();
+            if (current == previous)
+            {
+                return;
+            }
+
+            previous = current;
+        }
     }
 
     // -------------------------------------------------------------------------------------
@@ -227,7 +290,7 @@ public class PollingServiceTests
         await using PollingService poller = new(session, store, clock);
 
         poller.Start();
-        await WaitFor(clock, () => poller.FullSweeps >= 3);
+        await WaitFor(clock, () => poller.FullSweeps >= 3, () => poller.FastSweeps + poller.FullSweeps);
         await poller.StopAsync();
 
         Assert.True(
