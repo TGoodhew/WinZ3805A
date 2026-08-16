@@ -161,7 +161,7 @@ namespaces are a build error (`IDE0161`), not a suggestion.
 
 ### CI gates — run them before you push
 
-Two of the §9.12 criteria are enforced by CI rather than by review. Both are
+Several §9.12 and §9.13 criteria are enforced by CI rather than by review. All are
 plain scripts, so run them locally and get the answer in a second:
 
 ```powershell
@@ -171,9 +171,10 @@ pwsh build/Test-ThemeDictionaryParity.ps1  # §9.4 / A11Y-8
 pwsh build/Test-NoBlockedCommands.ps1    # P0-7 / §8.4
 ```
 
-`.github/workflows/ci.yml` runs all four first, before any restore, so a token,
+`.github/workflows/ci.yml` runs all five first, before any restore, so a token,
 accessibility, or safety regression fails in seconds rather than after a full build. It then
-builds all four Configuration × Platform combinations and runs the tests.
+builds both Configuration × Platform combinations — Debug and Release against x64,
+since §6.1 dropped ARM64 on 15 Aug 2026 — and runs the tests.
 
 The hex gate implements the broader §9.13 wording rather than P0-17's minimum: it
 scans every `*.xaml` under `src/` except `Themes/Colors.xaml`, plus `*.cs` under
@@ -186,6 +187,15 @@ The theme-parity gate exists because Light and Dark are exercised every time any
 runs the app and HighContrast is not — testing it means switching the whole
 desktop over. A token defined in one theme and not another compiles, passes
 review, and then fails at run time for precisely the user who needs that theme.
+
+The spacing gate is the newest, added after the §15 step 11 anti-pattern audit found
+**nine** off-scale values that had each passed review — `Padding="0,3"`,
+`Margin="0,0,0,6"`, `Margin="28,0,0,0"`. None of them is visible one at a time, which
+is exactly how a spacing scale stops being one. It strips XML comments before
+scanning, because `Spacing.xaml`'s own header quotes §9.13's `Margin="13,7,13,9"`
+example. `BorderThickness` is deliberately **not** checked: a stroke width is §9.2's
+business rather than the spacing scale's, and `SkyPlotControl`'s 1 px and 1.5 px
+marker outlines are correct.
 
 The blocked-command gate reads its tokens out of
 `src/WinZ3805A.Device/Commands/BlockedCommands.cs` rather than restating them, so

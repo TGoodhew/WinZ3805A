@@ -170,7 +170,7 @@
                                    Style="{ThemeResource WzBodyTextStyle}"
                                    Foreground="{ThemeResource WzTextSecondaryBrush}"
                                    VerticalAlignment="Bottom"
-                                   Margin="0,0,0,6"
+                                   Margin="0,0,0,4"
                                    Text="Latitude" />
                         <ComboBox x:Name="LatitudeSign" Grid.Row="0" Grid.Column="1"
                                   MinWidth="72"
@@ -196,7 +196,7 @@
                                    Style="{ThemeResource WzBodyTextStyle}"
                                    Foreground="{ThemeResource WzTextSecondaryBrush}"
                                    VerticalAlignment="Bottom"
-                                   Margin="0,0,0,6"
+                                   Margin="0,0,0,4"
                                    Text="Longitude" />
                         <ComboBox x:Name="LongitudeSign" Grid.Row="2" Grid.Column="1"
                                   MinWidth="72"
@@ -233,7 +233,7 @@
                                    Style="{ThemeResource WzCaptionTextStyle}"
                                    Foreground="{ThemeResource WzTextTertiaryBrush}"
                                    VerticalAlignment="Bottom"
-                                   Margin="0,0,0,6"
+                                   Margin="0,0,0,4"
                                    TextWrapping="Wrap"
                                    MaxWidth="360" />
                     </StackPanel>

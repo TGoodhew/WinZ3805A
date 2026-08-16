@@ -94,7 +94,7 @@
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="models:DiagnosticLogEntry">
                                 <TextBlock Style="{ThemeResource WzMonoTextStyle}"
-                                           Padding="0,3"
+                                           Padding="0,4"
                                            TextWrapping="Wrap"
                                            IsTextSelectionEnabled="True"
                                            Text="{x:Bind RawText}" />
@@ -143,7 +143,7 @@
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="x:String">
                                 <TextBlock Style="{ThemeResource WzMonoTextStyle}"
-                                           Padding="0,3"
+                                           Padding="0,4"
                                            TextWrapping="Wrap"
                                            IsTextSelectionEnabled="True"
                                            Text="{x:Bind}" />
