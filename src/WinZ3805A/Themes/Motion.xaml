@@ -11,6 +11,23 @@
     changed" into "something is moving", and on an instrument that is a lie. Naming zero
     as a token rather than leaving those cases untokenised is what makes the decision
     visible to the next person.
+
+    None of the tokens in this file is referenced anywhere yet, and a reference count
+    run over Themes/ on 15 Aug 2026 (#125) will report all seven as unused. They are
+    not dead, and deleting them would be wrong twice over.
+
+    Most of §9.8.2's rows describe animations that do not exist: there is no card-enter
+    stagger, no ConnectedAnimation between the windows (OverviewPage.xaml records why),
+    and no reorder animation on the satellite table. The one animation the application
+    does have, the Details page transition, is a SlideNavigationTransitionInfo - and
+    that type exposes neither a duration nor an easing, so WzDurationNormal and
+    WzEaseStandard cannot reach the row §9.8.2 assigns them to. That is part of #120,
+    which is filed against §9.8.2 for naming two APIs that do not exist.
+
+    So these tokens are the specification's motion vocabulary held ready, in a file
+    whose whole argument is that naming a decision makes it reviewable. Removing them
+    would leave the next animation to invent its own numbers, which is the thing the
+    file exists to prevent.
 -->
 <ResourceDictionary
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
