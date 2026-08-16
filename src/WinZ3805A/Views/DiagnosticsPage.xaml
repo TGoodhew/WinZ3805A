@@ -71,14 +71,29 @@
                                    VerticalAlignment="Center"
                                    Style="{ThemeResource WzBodyStrongTextStyle}" />
 
-                        <!-- §9.7.4 scopes the command to the card it empties. -->
-                        <Button x:Name="ClearLogButton"
-                                Grid.Column="1"
-                                Content="Clear log"
-                                Style="{ThemeResource WzDestructiveButtonStyle}"
-                                IsEnabled="False"
-                                ToolTipService.ToolTip="Delete every entry in the receiver&apos;s diagnostic log"
-                                Click="OnClearLogClicked" />
+                        <!--
+                            §10.9's wireframe puts Export beside Clear on this card. It duplicates
+                            the title bar's Ctrl+E, which is deliberate: the title-bar command is
+                            "export current view" and belongs to whatever page is showing, while
+                            this one is visibly the log's, next to the count of what it will write.
+                        -->
+                        <StackPanel Grid.Column="1"
+                                    Orientation="Horizontal"
+                                    Spacing="{ThemeResource WzSpaceXs}">
+                            <Button x:Name="ExportLogButton"
+                                    Content="Export"
+                                    IsEnabled="False"
+                                    ToolTipService.ToolTip="Save the entries shown here as a CSV file"
+                                    Click="OnExportLogClicked" />
+
+                            <!-- §9.7.4 scopes the command to the card it empties. -->
+                            <Button x:Name="ClearLogButton"
+                                    Content="Clear log"
+                                    Style="{ThemeResource WzDestructiveButtonStyle}"
+                                    IsEnabled="False"
+                                    ToolTipService.ToolTip="Delete every entry in the receiver&apos;s diagnostic log"
+                                    Click="OnClearLogClicked" />
+                        </StackPanel>
                     </Grid>
 
                     <controls:CommandOutcomeBar x:Name="LogOutcome" />
@@ -113,7 +128,7 @@
                                Foreground="{ThemeResource WzTextTertiaryBrush}"
                                TextWrapping="Wrap"
                                MaxWidth="{ThemeResource WzProseMaxWidth}"
-                               Text="Timestamps are on the receiver's own time scale and are subject to the §7.4 week rollover. CSV export arrives with P0-13." />
+                               Text="Timestamps are on the receiver's own time scale and are subject to the §7.4 week rollover. Export writes the entries shown, so a filter applies to the file too." />
                 </StackPanel>
             </Border>
 

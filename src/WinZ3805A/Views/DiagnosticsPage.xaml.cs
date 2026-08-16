@@ -11,7 +11,7 @@ namespace WinZ3805A.Views;
 /// <summary>
 /// The §10.9 Diagnostics page.
 /// </summary>
-public sealed partial class DiagnosticsPage : Page
+public sealed partial class DiagnosticsPage : Page, ICsvExportSource
 {
     /// <summary>§8.3's log clear — the one tier C command on this page.</summary>
     private static readonly ScpiCommand ClearLog = CommandConfirmation.Require(":DIAG:LOG:CLEar");
@@ -127,9 +127,35 @@ public sealed partial class DiagnosticsPage : Page
         ReadErrorsButton.IsEnabled = model.CanRead;
         ClearLogButton.IsEnabled = model.CanRead;
 
+        // Not model.CanRead: exporting what is already on screen does not need the receiver, and a
+        // user whose link has just dropped is exactly the one who wants the log they were reading
+        // when it happened.
+        ExportLogButton.IsEnabled = CanExport;
+        ExportAvailabilityChanged?.Invoke(this, EventArgs.Empty);
+
         FaultBar.IsOpen = model.Fault is not null;
         FaultBar.Message = model.Fault ?? string.Empty;
     }
+
+    /// <inheritdoc />
+    public event EventHandler? ExportAvailabilityChanged;
+
+    /// <inheritdoc />
+    public bool CanExport => _model?.Filtered.Count > 0;
+
+    /// <inheritdoc />
+    public string SuggestedFileName =>
+        DiagnosticLogCsv.SuggestedFileName(_device?.TimeProvider ?? TimeProvider.System);
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The <i>filtered</i> list, not the whole log — see <see cref="DiagnosticLogCsv.From"/> for
+    /// why, and note the caption under the card tells the user so before they press it.
+    /// </remarks>
+    public CsvDocument? BuildCsv() => DiagnosticLogCsv.From(_model?.Filtered);
+
+    private void OnExportLogClicked(object sender, RoutedEventArgs e) =>
+        DetailsWindow.ExportFrom(this, XamlRoot);
 
     /// <summary>
     /// §8.3's log clear. Nothing is re-read afterwards on purpose: the log is now empty, and a
