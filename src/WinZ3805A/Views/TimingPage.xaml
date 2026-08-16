@@ -91,17 +91,30 @@
                                      GroupName="CableSource"
                                      Checked="OnCableSourceChanged" />
 
+                        <!--
+                            No Minimum, Maximum or ValidationMode here, and that is the same rule
+                            every other NumberBox in this application already follows.
+                            InvalidInputOverwritten - which is the control's default and was set
+                            explicitly here - silently replaces an out-of-range entry, so §9.11 has
+                            nothing left to put an error message under: a user who typed 1.5 got
+                            0.99 back with no explanation. Bounds live on the validator below and
+                            are enforced by refusing to send.
+
+                            Writing them in XAML was wrong a second way. The parser reads the
+                            literal as a float and widens it, so Maximum="0.99" reached the control
+                            as 0.9900000095 - and the clamp then wrote that into the field, in
+                            full, where the user could read it.
+                        -->
                         <NumberBox x:Name="VelocityFactorBox"
                                    MinWidth="240"
                                    Margin="32,0,0,0"
                                    Header="Velocity factor"
-                                   Minimum="0.01"
-                                   Maximum="0.99"
                                    SmallChange="0.01"
                                    IsEnabled="False"
                                    SpinButtonPlacementMode="Compact"
-                                   ValidationMode="InvalidInputOverwritten"
                                    ValueChanged="OnVelocityFactorChanged" />
+                        <controls:FieldErrorText x:Name="VelocityFactorError"
+                                                 Margin="32,0,0,0" />
                     </StackPanel>
 
                     <StackPanel Spacing="{ThemeResource WzSpaceXxs}">
