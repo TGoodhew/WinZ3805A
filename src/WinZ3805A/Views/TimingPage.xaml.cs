@@ -28,6 +28,7 @@ public sealed partial class TimingPage : Page
     private CommandInvoker? _invoker;
     private readonly NumberFieldValidator _directDelay;
     private readonly NumberFieldValidator _length;
+    private readonly NumberFieldValidator _velocityFactor;
     private bool _busy;
     private readonly DispatcherTimer _stalenessTicker = new() { Interval = TimeSpan.FromSeconds(1) };
 
@@ -60,8 +61,17 @@ public sealed partial class TimingPage : Page
         _directDelay = new NumberFieldValidator(DirectDelayBox, DirectDelayError, DelayRange);
         _length = new NumberFieldValidator(LengthBox, LengthError, 0, 10000, "m");
 
+        // The velocity factor never reaches the receiver - it feeds the local calculation - but it
+        // is still a number a user types and gets wrong, so it validates like the other two. It
+        // used to rely on the NumberBox clamping to Minimum and Maximum instead, which replaced an
+        // out-of-range entry without saying so. A physically impossible factor is worth a sentence,
+        // not a silent correction: above 1 means faster than light, and the user has almost
+        // certainly read a percentage off a datasheet and not divided it by a hundred.
+        _velocityFactor = new NumberFieldValidator(VelocityFactorBox, VelocityFactorError, 0.01, 0.99);
+
         _directDelay.ValidityChanged += (_, _) => Render();
         _length.ValidityChanged += (_, _) => Render();
+        _velocityFactor.ValidityChanged += (_, _) => Render();
 
         _stalenessTicker.Tick += (_, _) => _model?.RaiseAll();
         Unloaded += (_, _) =>
@@ -234,10 +244,15 @@ public sealed partial class TimingPage : Page
                 ? "This cable run is longer than the receiver can compensate for. It accepts 0 to 999,999 ns."
                 : null;
 
+        // The cable path needs its length *and*, when the custom factor is selected, the factor -
+        // §9.11 disables Apply while any field in the card is invalid, and the factor was not being
+        // counted because the control used to clamp it into range instead of reporting it.
         ApplyDelayButton.IsEnabled =
             !_busy
             && model.CanApplyDelay
-            && (model.UseDirectEntry ? _directDelay.IsValid : _length.IsValid);
+            && (model.UseDirectEntry
+                ? _directDelay.IsValid
+                : _length.IsValid && (!model.UseVelocityFactor || _velocityFactor.IsValid));
 
         TimeInterval.Value = model.TimeIntervalNanoseconds;
         Deviation.Value = model.TimeIntervalDeviation;
