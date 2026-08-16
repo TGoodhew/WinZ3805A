@@ -45,6 +45,14 @@ jobs:
         shell: pwsh
         run: ./build/Test-ThemeDictionaryParity.ps1
 
+      # §9.13 item 4. Added 15 Aug 2026 after the §15 step 11 anti-pattern audit
+      # found nine off-scale values across four pages, every one of which had
+      # passed review - an off-by-two margin is invisible one at a time, which is
+      # how a spacing scale quietly stops being one.
+      - name: Spacing values are on the §9.6 scale and radii are §9.3 ones
+        shell: pwsh
+        run: ./build/Test-SpacingScale.ps1
+
   # ---------------------------------------------------------------------------
   # P0-7 / §8.4. Separate from the design-system gates because it guards a
   # different thing: that no excluded command is named anywhere but the single

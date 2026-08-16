@@ -96,7 +96,7 @@
                     <ItemsControl x:Name="BitRows">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="vm:RegisterBitRow">
-                                <Grid ColumnSpacing="{ThemeResource WzSpaceSm}" Padding="0,3"
+                                <Grid ColumnSpacing="{ThemeResource WzSpaceSm}" Padding="0,4"
                                       AutomationProperties.Name="{x:Bind Description}">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="44" />

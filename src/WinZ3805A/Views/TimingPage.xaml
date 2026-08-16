@@ -51,7 +51,7 @@
                                  GroupName="DelaySource"
                                  Checked="OnDelaySourceChanged" />
 
-                    <StackPanel Margin="28,0,0,0" Spacing="{ThemeResource WzSpaceXxs}">
+                    <StackPanel Margin="32,0,0,0" Spacing="{ThemeResource WzSpaceXxs}">
                         <NumberBox x:Name="DirectDelayBox"
                                    MinWidth="240"
                                    HorizontalAlignment="Left"
@@ -69,7 +69,7 @@
                                  IsChecked="True"
                                  Checked="OnDelaySourceChanged" />
 
-                    <StackPanel Margin="28,0,0,0"
+                    <StackPanel Margin="32,0,0,0"
                                 Spacing="{ThemeResource WzSpaceMd}">
 
                     <StackPanel Spacing="{ThemeResource WzSpaceXs}">
@@ -81,7 +81,7 @@
 
                         <ComboBox x:Name="CablePicker"
                                   MinWidth="240"
-                                  Margin="28,0,0,0"
+                                  Margin="32,0,0,0"
                                   Header="Cable type"
                                   DisplayMemberPath="Name"
                                   SelectionChanged="OnCableChanged" />
@@ -93,7 +93,7 @@
 
                         <NumberBox x:Name="VelocityFactorBox"
                                    MinWidth="240"
-                                   Margin="28,0,0,0"
+                                   Margin="32,0,0,0"
                                    Header="Velocity factor"
                                    Minimum="0.01"
                                    Maximum="0.99"
