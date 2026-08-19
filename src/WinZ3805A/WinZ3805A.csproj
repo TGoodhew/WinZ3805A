@@ -110,6 +110,13 @@
       rather than a dead reference, and it is tracked as #127.
     -->
     <PackageReference Include="CommunityToolkit.WinUI.Controls.SettingsControls" Version="8.2.251219" />
+    <!--
+      Restored by P1-2 (#50), exactly as #128 said it would be. It was removed on
+      15 Aug 2026 because it had zero usages and was carrying 1.89 MB of native
+      e_sqlite3.dll into every package for a feature no code path could reach;
+      TrendStore is that code path.
+    -->
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.11" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.11" />
     <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.11" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2526" />

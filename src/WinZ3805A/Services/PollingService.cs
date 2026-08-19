@@ -63,7 +63,8 @@ public sealed class PollingService : IAsyncDisposable
         DeviceSessionService session,
         ReceiverStateStore store,
         TimeProvider timeProvider,
-        ILogger<PollingService>? logger = null)
+        ILogger<PollingService>? logger = null,
+        TrendStore? trends = null)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(store);
@@ -72,6 +73,7 @@ public sealed class PollingService : IAsyncDisposable
         _session = session;
         _store = store;
         _timeProvider = timeProvider;
+        _trends = trends;
         _parser = new StatusScreenParser(timeProvider);
         _logger = logger ?? NullLogger<PollingService>.Instance;
     }
@@ -98,6 +100,12 @@ public sealed class PollingService : IAsyncDisposable
     /// </para>
     /// </remarks>
     public void RequestFullSweep() => Volatile.Write(ref _fullRequested, 1);
+
+    /// <summary>The durable trend history, or null when persistence is not wired up.</summary>
+    private readonly TrendStore? _trends;
+
+    /// <summary>When compaction last ran, so it does not run every sweep.</summary>
+    private DateTimeOffset? _lastCompaction;
 
     /// <summary>The last state written to the log, so only changes are recorded.</summary>
     private string? _lastSyncState;
@@ -244,12 +252,22 @@ public sealed class PollingService : IAsyncDisposable
 
         LogStateChange(syncState, tfom, tracked);
 
+        double? timeInterval = ScalarParsers.ParseSecondsAsNanoseconds(answers[3]);
+        double? efc = ScalarParsers.ParseDecimal(answers[4]);
+
+        // P1-2: every fast sweep is a row. Append never throws (see TrendStore), so a locked file
+        // or a full disk costs a gap in the trend rather than the polling cadence itself.
+        _trends?.Append(new TrendRecord(
+            _timeProvider.GetUtcNow().UtcTicks, efc, timeInterval, syncState, tracked));
+
+        MaybeCompact();
+
         _store.UpdateFast(
             syncState,
             tfom,
             ScalarParsers.ParseInteger(answers[2]),
-            ScalarParsers.ParseSecondsAsNanoseconds(answers[3]),
-            ScalarParsers.ParseDecimal(answers[4]),
+            timeInterval,
+            efc,
             tracked);
 
         FastSweeps++;
@@ -290,6 +308,32 @@ public sealed class PollingService : IAsyncDisposable
         _lastSyncState = syncState;
         _lastTfom = tfom;
         _lastTracked = tracked;
+    }
+
+    /// <summary>
+    /// Thins and prunes the trend store, occasionally.
+    /// </summary>
+    /// <remarks>
+    /// Hourly rather than per sweep. §12's compaction rewrites rows a day old and older, so running
+    /// it every second would be a full table scan a second to reclaim ten seconds of rows — and the
+    /// file is bounded by retention either way. Once on the first sweep as well, so an application
+    /// that is only ever open briefly still tidies what the last session left.
+    /// </remarks>
+    private void MaybeCompact()
+    {
+        if (_trends is null)
+        {
+            return;
+        }
+
+        DateTimeOffset now = _timeProvider.GetUtcNow();
+        if (_lastCompaction is DateTimeOffset last && now - last < TimeSpan.FromHours(1))
+        {
+            return;
+        }
+
+        _lastCompaction = now;
+        _trends.Compact(now.UtcTicks);
     }
 
     private async Task PollFullAsync(CancellationToken cancellationToken)
