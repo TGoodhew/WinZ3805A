@@ -49,11 +49,14 @@ public static class DeviceRegistration
 
             ReceiverStateStore store = new(time);
 
+            // P1-2's trend store, resolved rather than constructed: it is application-scoped, not
+            // device-scoped, and optional so a headless registration test does not need a file.
             PollingService poller = new(
                 session,
                 store,
                 time,
-                loggers?.CreateLogger<PollingService>());
+                loggers?.CreateLogger<PollingService>(),
+                provider.GetService<TrendStore>());
 
             return new DeviceContext((string)resolvedKey!, session, store, poller, time);
         });

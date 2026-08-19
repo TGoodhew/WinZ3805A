@@ -106,6 +106,11 @@ public partial class App : Application
         // built when the first window that can animate opens rather than on the launch path.
         services.AddSingleton<IMotionService, WzMotionService>();
 
+        // P1-2 (#50). Application-scoped rather than per device: v1 has one receiver, and a second
+        // would want its own file rather than a shared table with a device column - which is a
+        // decision for #61, not something to prejudge with a schema now.
+        services.AddSingleton(_ => new TrendStore(TrendStore.DefaultPath()));
+
         services.AddSingleton<IConnectionPreferenceStore, LocalConnectionPreferenceStore>();
         services.AddSingleton<IDetailsViewPreferenceStore, LocalDetailsViewPreferenceStore>();
         services.AddSingleton<SerialPortEnumerator>();
