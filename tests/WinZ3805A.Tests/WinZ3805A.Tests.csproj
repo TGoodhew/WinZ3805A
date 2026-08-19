@@ -54,6 +54,13 @@
              Link="Controls\SignalStrengthScale.cs" />
     <Compile Include="..\..\src\WinZ3805A\Controls\SkyPlotGeometry.cs"
              Link="Controls\SkyPlotGeometry.cs" />
+
+    <!-- §9.10.2's TrendChart, following the same split as the sky plot: the geometry is arithmetic
+         and is tested here, the control only draws. This half is why #38 rejected LiveCharts - the
+         min/max-per-column rule is what stops a one-second excursion vanishing at the 7-day range,
+         and it is the kind of thing that looks correct in a screenshot of a smooth trace. -->
+    <Compile Include="..\..\src\WinZ3805A\Controls\TrendDecimation.cs"
+             Link="Controls\TrendDecimation.cs" />
     <Compile Include="..\..\src\WinZ3805A\Controls\SkyPlotSatellite.cs"
              Link="Controls\SkyPlotSatellite.cs" />
 
