@@ -6,6 +6,7 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:vm="using:WinZ3805A.ViewModels"
+    xmlns:controls="using:WinZ3805A.Controls"
     mc:Ignorable="d">
 
     <!--
@@ -114,12 +115,35 @@
                                                Text="{x:Bind ConditionText}" />
                                     <TextBlock Grid.Column="2" Style="{ThemeResource WzMonoTextStyle}"
                                                Text="{x:Bind EventText}" />
-                                    <TextBlock Grid.Column="3" Style="{ThemeResource WzMonoTextStyle}"
-                                               Text="{x:Bind EnableText}" />
-                                    <TextBlock Grid.Column="4" Style="{ThemeResource WzMonoTextStyle}"
-                                               Text="{x:Bind PositiveTransitionText}" />
-                                    <TextBlock Grid.Column="5" Style="{ThemeResource WzMonoTextStyle}"
-                                               Text="{x:Bind NegativeTransitionText}" />
+                                    <!--
+                                        The three masks are settings, not readings, so §10.10 draws
+                                        them as boxes and P1-4 makes them editable. TwoWay, and the
+                                        rows are cached in the view model - handing out fresh row
+                                        objects on each render would discard a half-finished edit
+                                        every time the staleness ticker fires.
+
+                                        Each carries its own automation name because a bare checkbox
+                                        in a grid announces only "checkbox"; the row's own name says
+                                        which bit, but not which of three columns has focus.
+                                    -->
+                                    <CheckBox Grid.Column="3"
+                                              MinWidth="0"
+                                              IsChecked="{x:Bind EnableBit, Mode=TwoWay}"
+                                              IsEnabled="{x:Bind CanEditEnable}"
+                                              AutomationProperties.Name="{x:Bind EnableName}"
+                                              ToolTipService.ToolTip="Enable mask" />
+                                    <CheckBox Grid.Column="4"
+                                              MinWidth="0"
+                                              IsChecked="{x:Bind PositiveBit, Mode=TwoWay}"
+                                              IsEnabled="{x:Bind CanEditPositive}"
+                                              AutomationProperties.Name="{x:Bind PositiveName}"
+                                              ToolTipService.ToolTip="Positive-transition mask" />
+                                    <CheckBox Grid.Column="5"
+                                              MinWidth="0"
+                                              IsChecked="{x:Bind NegativeBit, Mode=TwoWay}"
+                                              IsEnabled="{x:Bind CanEditNegative}"
+                                              AutomationProperties.Name="{x:Bind NegativeName}"
+                                              ToolTipService.ToolTip="Negative-transition mask" />
                                     <TextBlock Grid.Column="6" Style="{ThemeResource WzBodyTextStyle}"
                                                TextWrapping="Wrap"
                                                Text="{x:Bind MeaningText}" />
@@ -132,6 +156,33 @@
                                Style="{ThemeResource WzMonoTextStyle}"
                                Foreground="{ThemeResource WzTextSecondaryBrush}"
                                TextWrapping="Wrap" />
+
+                    <controls:CommandOutcomeBar x:Name="MaskOutcome" />
+
+                    <!-- §10.10's single "Apply mask changes", with Discard beside it: an edit that
+                         cannot be undone without re-reading the register would make the checkboxes
+                         feel like switches on the instrument rather than a pending change. -->
+                    <StackPanel Orientation="Horizontal"
+                                Spacing="{ThemeResource WzSpaceXs}"
+                                HorizontalAlignment="Right">
+                        <Button x:Name="DiscardMasksButton"
+                                Content="Discard changes"
+                                IsEnabled="False"
+                                ToolTipService.ToolTip="Put the mask checkboxes back to what the receiver reported"
+                                Click="OnDiscardMasksClicked" />
+                        <Button x:Name="ApplyMasksButton"
+                                Content="Apply mask changes"
+                                Style="{ThemeResource WzDestructiveButtonStyle}"
+                                IsEnabled="False"
+                                ToolTipService.ToolTip="Write the changed masks to the receiver"
+                                Click="OnApplyMasksClicked" />
+                    </StackPanel>
+
+                    <TextBlock x:Name="PendingText"
+                               Style="{ThemeResource WzCaptionTextStyle}"
+                               Foreground="{ThemeResource WzTextTertiaryBrush}"
+                               TextWrapping="Wrap"
+                               MaxWidth="{ThemeResource WzProseMaxWidth}" />
                 </StackPanel>
             </Border>
 
@@ -139,7 +190,7 @@
                      IsClosable="False"
                      Severity="Informational"
                      Title="Read on demand"
-                     Message="Reading the event field clears its latches, so this page reads only when you ask it to. Changing the enable and transition masks is a write, and arrives with the confirmation dialogs in §15 step 10." />
+                     Message="Reading the event field clears its latches, so this page reads only when you ask it to. Each mask you change is written as a separate command and asks for its own confirmation." />
         </StackPanel>
     </ScrollViewer>
 </Page>
