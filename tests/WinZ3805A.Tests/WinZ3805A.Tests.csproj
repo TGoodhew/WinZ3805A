@@ -144,6 +144,13 @@
     <Compile Include="..\..\src\WinZ3805A\Services\MotionPolicy.cs"
              Link="Services\MotionPolicy.cs" />
 
+    <!-- #127's log file. The ILogger plumbing stays in the app; what is linked is when a file
+         rolls, what survives the roll, and what happens when the disk says no - the last of which
+         has to be "nothing visible", because a logger that propagates a full disk into the serial
+         loop takes the process down exactly when its output was worth having. -->
+    <Compile Include="..\..\src\WinZ3805A\Services\FileLogWriter.cs"
+             Link="Services\FileLogWriter.cs" />
+
     <!-- P0-13's CSV export. The picker, the file and the button stay in the app; what is linked is
          the part with rules - RFC 4180 escaping, invariant formatting, and the encoding, which the
          acceptance criterion names explicitly. Escaping is exactly the kind of thing that looks

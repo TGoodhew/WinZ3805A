@@ -132,6 +132,46 @@
                 </StackPanel>
             </Border>
 
+            <!-- ============================ Application log ============================= -->
+            <Border Style="{ThemeResource WzCardStyle}">
+                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Column="0"
+                                   VerticalAlignment="Center"
+                                   Style="{ThemeResource WzBodyStrongTextStyle}"
+                                   Text="Application log" />
+
+                        <Button x:Name="ShowLogFolderButton"
+                                Grid.Column="1"
+                                Content="Show log folder"
+                                ToolTipService.ToolTip="Open the folder holding this application&apos;s own log files"
+                                Click="OnShowLogFolderClicked" />
+                    </Grid>
+
+                    <!--
+                        Deliberately a separate card from the diagnostic log above, and named
+                        differently. "The log" meaning two different things on one page - the
+                        receiver's account of itself, and the application's account of the
+                        conversation - is worse than one extra card.
+                    -->
+                    <TextBlock Style="{ThemeResource WzBodyTextStyle}"
+                               TextWrapping="Wrap"
+                               MaxWidth="{ThemeResource WzProseMaxWidth}"
+                               Text="What this application saw: the port opening, the settings auto-detect settled on, every connection change, and the receiver's mode and satellite count whenever they move. Useful for a fault that comes and goes while nobody is watching the window." />
+
+                    <TextBlock x:Name="LogPathText"
+                               Style="{ThemeResource WzMonoTextStyle}"
+                               Foreground="{ThemeResource WzTextSecondaryBrush}"
+                               TextWrapping="Wrap"
+                               IsTextSelectionEnabled="True" />
+                </StackPanel>
+            </Border>
+
             <!-- ============================== Error queue =============================== -->
             <Border Style="{ThemeResource WzCardStyle}">
                 <StackPanel Spacing="{ThemeResource WzSpaceSm}">

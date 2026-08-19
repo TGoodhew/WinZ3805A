@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 
 using WinZ3805A.Device.Transport;
@@ -14,6 +15,25 @@ public partial class App : Application
 {
     private ServiceProvider? _services;
     private Window? _window;
+
+    /// <summary>
+    /// The §12 composition root, for the few things a page cannot be handed.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Pages are constructed by <c>Frame.Navigate</c> and cannot take constructor arguments, which
+    /// is why <see cref="DeviceContext"/> already arrives as a navigation parameter. That works
+    /// because the context is device-scoped and every page wants it; the log provider is
+    /// application-scoped and one page wants it, so widening the navigation parameter for it would
+    /// touch eight pages to serve one.
+    /// </para>
+    /// <para>
+    /// <b>Not a way around §12's keyed registration.</b> Anything device-scoped still comes through
+    /// <see cref="DeviceContext"/> — resolving a session or a store from here would reintroduce
+    /// exactly the shared state that §12 forbids, and multi-device readiness is the reason it does.
+    /// </para>
+    /// </remarks>
+    public static IServiceProvider? Services => (Current as App)?._services;
 
     /// <summary>
     /// Initializes the singleton application object. This is the first line of authored
@@ -58,6 +78,26 @@ public partial class App : Application
         ServiceCollection services = new();
 
         services.AddSingleton(TimeProvider.System);
+
+        // #127. ILogger has been injected into the transport, the session and the poller since
+        // §15 step 1, and nothing has ever registered a provider - so ILoggerFactory resolved to
+        // null and every line went to NullLogger. The instrumentation was real and the log was
+        // thrown away.
+        //
+        // Information by default. Debug logs a line per command, and §7.3 polls once a second on a
+        // receiver §1 expects to be left running for weeks; that is a gigabyte of "-> :PTIM:TINT?"
+        // and nothing anyone would read. What Information gives is the shape of a session - the
+        // port opening, auto-detect settling, every connection change, and the receiver's mode and
+        // satellite count as they move - which is what an intermittent antenna fault looks like
+        // written down.
+        services.AddSingleton(_ => new FileLogWriter(FileLoggerProvider.DefaultPath()));
+        services.AddSingleton<FileLoggerProvider>();
+        services.AddLogging(builder =>
+        {
+            builder.SetMinimumLevel(LogLevel.Information);
+            builder.Services.AddSingleton<ILoggerProvider>(
+                provider => provider.GetRequiredService<FileLoggerProvider>());
+        });
         services.AddDevice(DeviceKeys.Primary, (port, settings) => new SerialTransport(port, settings));
 
         // §9.8's reduced-motion rule. A singleton because the setting is the user's, not a

@@ -1,3 +1,5 @@
+using System.Globalization;
+
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using WinZ3805A.Device.Commands;
@@ -96,6 +98,11 @@ public sealed class PollingService : IAsyncDisposable
     /// </para>
     /// </remarks>
     public void RequestFullSweep() => Volatile.Write(ref _fullRequested, 1);
+
+    /// <summary>The last state written to the log, so only changes are recorded.</summary>
+    private string? _lastSyncState;
+    private int? _lastTfom;
+    private int? _lastTracked;
 
     /// <summary>True while the loop is running.</summary>
     public bool IsRunning => _loop is { IsCompleted: false };
@@ -231,15 +238,58 @@ public sealed class PollingService : IAsyncDisposable
             answers[i] = await AskAsync(FastTier[i], cancellationToken).ConfigureAwait(false);
         }
 
+        string? syncState = ScalarParsers.ParseKeyword(answers[0]);
+        int? tfom = ScalarParsers.ParseInteger(answers[1]);
+        int? tracked = ScalarParsers.ParseInteger(answers[5]);
+
+        LogStateChange(syncState, tfom, tracked);
+
         _store.UpdateFast(
-            ScalarParsers.ParseKeyword(answers[0]),
-            ScalarParsers.ParseInteger(answers[1]),
+            syncState,
+            tfom,
             ScalarParsers.ParseInteger(answers[2]),
             ScalarParsers.ParseSecondsAsNanoseconds(answers[3]),
             ScalarParsers.ParseDecimal(answers[4]),
-            ScalarParsers.ParseInteger(answers[5]));
+            tracked);
 
         FastSweeps++;
+    }
+
+    /// <summary>
+    /// Records mode, figure of merit and satellite count when any of them moves.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>On change, never per sweep.</b> §7.3 polls once a second on a receiver §1 expects to be
+    /// left running for weeks; a line a second is 2.5 million lines a month and nothing anyone
+    /// would read. A line when something moves is a few dozen a day and is the whole history of the
+    /// session.
+    /// </para>
+    /// <para>
+    /// This exists because the interesting faults on this hardware are intermittent. A satellite
+    /// count wandering between four and zero over hours is invisible to someone glancing at the
+    /// window and obvious in a file — and it is the one diagnosis available when the receiver
+    /// cannot be reached physically. Information level, so it survives the default configuration.
+    /// </para>
+    /// </remarks>
+    private void LogStateChange(string? syncState, int? tfom, int? tracked)
+    {
+        if (syncState == _lastSyncState && tfom == _lastTfom && tracked == _lastTracked)
+        {
+            return;
+        }
+
+        // The first sweep of a session is a change from nothing, and is worth a line: it is the
+        // baseline every later entry is read against.
+        _logger.LogInformation(
+            "State: {SyncState}, TFOM {Tfom}, {Tracked} satellite(s) tracked.",
+            syncState ?? "unknown",
+            tfom?.ToString(CultureInfo.InvariantCulture) ?? "—",
+            tracked?.ToString(CultureInfo.InvariantCulture) ?? "—");
+
+        _lastSyncState = syncState;
+        _lastTfom = tfom;
+        _lastTracked = tracked;
     }
 
     private async Task PollFullAsync(CancellationToken cancellationToken)
