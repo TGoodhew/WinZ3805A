@@ -84,6 +84,8 @@
              Link="ViewModels\CommandConfirmationViewModel.cs" />
     <Compile Include="..\..\src\WinZ3805A\ViewModels\RangeValidation.cs"
              Link="ViewModels\RangeValidation.cs" />
+    <Compile Include="..\..\src\WinZ3805A\ViewModels\RegisterMaskEdit.cs"
+             Link="ViewModels\RegisterMaskEdit.cs" />
     <Compile Include="..\..\src\WinZ3805A\ViewModels\Staleness.cs"
              Link="ViewModels\Staleness.cs" />
     <Compile Include="..\..\src\WinZ3805A\ViewModels\DisplayTime.cs"
