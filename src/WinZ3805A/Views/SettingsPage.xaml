@@ -8,16 +8,18 @@
     mc:Ignorable="d">
 
     <!--
-        Settings, built as far as #55 needs it and no further.
+        Settings, per §10.13.
 
-        §10 has no section describing this page. §9.7.5 gives it Ctrl+comma, §10.11 says the
-        console is "enabled in Settings - Advanced", and DetailsDestinations cites "§10.13" for its
-        summary - a section that does not exist; §10 ends at 10.12. Filed rather than invented.
+        The section did not exist when this page was built: §9.7.5 gave it Ctrl+comma, §10.11 said
+        the console is "enabled in Settings - Advanced", and DetailsDestinations cited a "§10.13"
+        that had never been written. It was filed rather than invented, and §10.13 was written the
+        same day (#146).
 
-        So this page carries the one section #55 requires and says plainly that the rest is not
-        here. Building poll cadences, the display time zone and units off the back of a console
-        issue would be scope nobody asked for, and inventing a specification for them would be
-        worse.
+        §10.13.1 is why this page carries one section. Poll cadences are deliberately not offered -
+        §7.3 fixes them and §12 gives the poller sole ownership, so making them user-visible is an
+        amendment to two sections rather than a feature. The display time zone lives on the main
+        window and §10.14; units are unspecified. The page says so on screen rather than showing
+        controls that do nothing.
     -->
     <ScrollViewer HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
         <StackPanel Padding="{ThemeResource WzPageMarginThickness}"

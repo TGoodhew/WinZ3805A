@@ -1022,6 +1022,11 @@ Two behavioural principles remain here because they are functional rather than v
 > **The accelerators do not stretch with it, and cannot.** There is no `Ctrl+10`. Numbered accelerators therefore cover destinations **1 to 9** and stop; destinations 10 to 12 are reachable by pointer, by `Tab`, and by the pane's own arrow-key navigation, but have no single-keystroke jump. That is the price of the loosening and it is asymmetric — a destination past the ninth is a second-class one for a keyboard user, so **order the pane so that the most-used destinations sit in the first nine**. A11Y-1 requires every destination to be keyboard *reachable*, which pane navigation satisfies; it does not require every destination to have an accelerator.
 >
 > Advanced Console still appears below Settings and outside the numbered set.
+>
+> **The three missing sections were written on 20 Aug 2026** — §10.13 Settings, §10.14 Time & Leap
+> Seconds, and §10.7's oscillator cards. Every page in the inventory above now has a section
+> describing it, which had not been true since the inventory was written. See the note at the head
+> of §10.13 for why they are numbered after §10.12 rather than inserted in pane order.
 
 ### 10.3 Main window
 
@@ -1222,11 +1227,24 @@ Validation before send: lat degrees 0–90, lon degrees 0–180, minutes 0–59,
 │  └────────────────────────────────────────────────────────────────────┘  │
 │                                                                          │
 │  ┌─ 1 PPS time interval ──────────────────────────────────────────────┐  │
+│  │  Current −33.1 ns · σ 12.4 ns         [1 h][6 h][24 h][7 d]        │  │
 │  │   +50 ns │        ╱╲                                               │  │
 │  │        0 │───╲───╱──╲──────╱╲────                                  │  │
 │  │   −50 ns │    ╲_╱    ╲____╱                                        │  │
 │  │          └──────────────────────────────                           │  │
-│  │  Current −33.1 ns · σ (1 h) 12.4 ns   [1 h][6 h][24 h][7 d]        │  │
+│  │                                                                    │  │
+│  │  Oscillator control (EFC)                                          │  │
+│  │   +25 % │                                                          │  │
+│  │      0 %│──────────────────────────────                            │  │
+│  │   −25 % │        ─────────────────────                             │  │
+│  │         └───────────────────────────────                           │  │
+│  │                                                                    │  │
+│  │  Oscillator drift                                                  │  │
+│  │   ⬤ Nothing remarkable                                             │  │
+│  │   Nothing in this window suggests a fault.                         │  │
+│  │   Drift −0.001 %/day — no projection: under a day of data here.    │  │
+│  │   From 792 settled readings spanning 19.6 hours. Scatter 0.00 %.   │  │
+│  │   Hardware bits 6 and 7 are both clear.                            │  │
 │  │                                              [ Export CSV… ]       │  │
 │  └────────────────────────────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────────────────────┘
@@ -1239,6 +1257,46 @@ Cable presets, delay per metre (from the vendor cable tables in the 58503B manua
 | RG-213 / Belden 8267 | 5.05 |
 | LMR-400 | 3.93 |
 | Custom (enter velocity factor) | `3.3356 / VF` ns/m |
+
+#### 10.7.1 The trends and the drift advisory
+
+> **⚠ Added 20 Aug 2026** (#142). The two charts and the advisory below them were built by P1-1, P1-2
+> and #137 and had no section describing them. This is the third §10.x gap of the same kind, after
+> #111 and this one's own sibling #146; §10's section list was written before the feature set
+> settled. The surface stays on this page rather than becoming a destination of its own: it annotates
+> the 1 PPS trend it sits under, and §10.2's cap is a rule about the numbered set that a new
+> destination would have had to be argued past rather than slipped through.
+
+Both charts share one range selector — 1 h, 6 h, 24 h, 7 d — and both draw from the persisted series,
+decimated per §9.10.2 (minimum and maximum per pixel column, never a sample).
+
+- **1 PPS time interval** is zero-anchored with a diverging fill whose neutral midpoint is exactly
+  0 ns (§9.4.4). Stretches where the receiver was **not** locked are shaded.
+- **Oscillator control (EFC)** is a **second chart, not a second axis.** 0 ns and 0 % are not the same
+  zero, and one axis carrying both would put the colour break of one series at an arbitrary value of
+  the other.
+
+**The drift advisory reports what the fit can support and refuses what it cannot.** It states the
+secular slope in %/day, the sample count, the span actually fitted, the residual, and a projection to
+±100 % as both a count of days and a date — and it withholds the projection where the window cannot
+support one. A slope without a sense of scatter is a number pretending to be a measurement.
+
+- **Diurnal swing is reported separately from secular drift**, and only where the window is long
+  enough to tell them apart. Below a day of data the fit drops to a plain line and says so, rather
+  than reporting a daily amplitude of zero — which would be a measurement.
+- **There is no internal temperature query on this receiver.** The daily component is inferred from
+  EFC's own periodicity, and the interface must say so: a user who reads "diurnal" will otherwise
+  assume something measured it.
+- **Samples inside the first 24 h after a power-up are excluded** and the count of them is shown. The
+  loop is settling and those readings bend the fit; §10.8's power-up guard uses the same figure.
+- The advisory names its evidence and **hedges its wording**. It is consistent-with, never is.
+  Severity renders through `SeverityPill` — colour **and** shape **and** text (§9.4.3, A11Y-12).
+- **Hardware register bits 6 and 7** — "EFC voltage near full scale" and "at full scale" — are
+  surfaced here, read from the receiver rather than recomputed. They are the alarm; the slope is the
+  gauge.
+
+**Read-only.** Nothing on this card writes to the receiver. Adjusting the oscillator is not something
+this application does, and nothing here may imply it could.
 
 ### 10.8 Holdover page
 
@@ -1387,6 +1445,159 @@ If a future version adds free-text entry, it must run every submission through `
 ```
 
 Auto-detect tries, in order: 9600-8-N-1, 19200-7-E-1, 9600-7-E-1, 19200-8-N-1, 2400-8-N-1, 1200-8-N-1, 9600-7-O-1, 19200-7-O-1. Each attempt sends `*IDN?` with a 2 s timeout. Show progress and allow cancel.
+
+### 10.13 Settings page
+
+> **⚠ Added 20 Aug 2026** (#146). §10.2's inventory has listed a Settings page since it was written,
+> §9.7.5 gives it `Ctrl+,`, and §10.11 says the Advanced Console is "Enabled in Settings → Advanced" —
+> but no section described it, and the code's own destination record cited a **§10.13 that did not
+> exist**. This is that section.
+>
+> **Why it is numbered after the Connection dialog rather than inserted in pane order.** §10.4 to
+> §10.12 are cited by number throughout the source, the issue tracker and this document; inserting a
+> section in the middle would renumber four of them and invalidate every one of those citations. The
+> numbering therefore records the order the sections were written, not the order the user meets the
+> pages — which was already true before this change, since §10.9 Diagnostics precedes §10.10 Status
+> Registers while the pane draws them the other way round.
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│  Settings                                                                │
+├──────────────────────────────────────────────────────────────────────────┤
+│  ┌─ Advanced ─────────────────────────────────────────────────────────┐  │
+│  │  For working out what the receiver is doing, rather than for       │  │
+│  │  using it.                                                         │  │
+│  │                                                                    │  │
+│  │  Advanced Console        [ ●━━ Shown ]                             │  │
+│  │  Adds a page below Settings offering every command in the          │  │
+│  │  catalog as a picker, with a transcript of everything sent         │  │
+│  │  and received.                                                     │  │
+│  └────────────────────────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+**Advanced Console (§10.11).** Off on a fresh install. The switch adds and removes the destination
+from the pane; it does not merely hide it, so a disabled console is not an item a keyboard user can
+still reach. If the console is showing when it is switched off, the pane falls back to the first
+destination rather than leaving the frame on a page it no longer lists.
+
+**Opting in changes what is reachable, never what is permitted.** The console is a picker over the
+same §8.1 allowlist every other page uses, so enabling it adds no command the application could not
+already send. The §8.4 exclusions are absent from the catalog and therefore absent from the console,
+opted in or not. **No setting on this page may ever change that**, and none may relax a §8.3
+confirmation.
+
+**Preferences fail safe and fail silent.** A preference file that is missing, truncated or unreadable
+reads as the default, and the default for anything advanced is *off* — a store that failed open would
+enable an advanced surface because a disk went wrong. A write that fails is not reported: a
+preference is by definition something the user can set again, and nothing load-bearing may live in
+one of these files.
+
+#### 10.13.1 Not on this page, and why
+
+| Setting | Where it is | Status |
+|---|---|---|
+| Display time zone | Main window clock, and §10.14 | Built (#95) |
+| Poll cadences | Nowhere — fixed by §7.3 | **See below** |
+| Units | Nowhere | Not specified |
+| Experimental §8.5 queries | Nowhere | P1-8 (#56) |
+
+**Poll cadences are deliberately not offered.** §7.3 fixes them at 1 s and 10 s and §12 gives the
+poller sole ownership of both. A settings page that offered to change them would contradict two
+sections rather than implement one, so making them user-visible is an amendment to §7.3 and §12 and
+must be argued there first.
+
+The other three rows are unbuilt rather than refused. The page states plainly on screen that they are
+not there yet; §9.11's rule against a control that looks like it works and does nothing applies to a
+settings page more than to most.
+
+### 10.14 Time & Leap Seconds page
+
+> **⚠ Added 20 Aug 2026** (#111). §10.2's inventory, §9.7.1's pane wireframe and §15 step 8's build
+> order all required this destination, and no section described it — so #110 built it from what the
+> document defines for the data rather than from a specification of the page. This section settles
+> the three questions #111 raised, and the answers are recorded below rather than left implicit.
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│  Time                                                                    │
+├──────────────────────────────────────────────────────────────────────────┤
+│  ┌─ Receiver clock ───────────────────────────────────────────────────┐  │
+│  │  12:29:09  Pacific Daylight Time · 20 Aug 2026                     │  │
+│  │  Show times in  [ This computer (Pacific Daylight Time)  ▾ ]       │  │
+│  │                                                                    │  │
+│  │  Time scale             UTC                                        │  │
+│  │  Reported by receiver   04 Jan 2007 19:29:09                       │  │
+│  └────────────────────────────────────────────────────────────────────┘  │
+│                                                                          │
+│  ┌─ Week rollover correction ─────────────────────────────────────────┐  │
+│  │  ⬤ Corrected by 1 epoch of 1024 weeks                              │  │
+│  │  GPS transmits the week number in ten bits, so it wraps            │  │
+│  │  about every 19.6 years and a receiver of this age reports         │  │
+│  │  a date that far in the past. The time of day and the 1 PPS        │  │
+│  │  output are unaffected.                                            │  │
+│  └────────────────────────────────────────────────────────────────────┘  │
+│                                                                          │
+│  ┌─ Leap second ──────────────────────────────────────────────────────┐  │
+│  │  ⬤ None announced                                                  │  │
+│  │  GPS − UTC   +18 s accumulated                                     │  │
+│  └────────────────────────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+**The receiver's clock, in the zone the user chose.** The corrected instant in the display zone, with
+the zone always named — never an unlabelled wall-clock time (§11.2, #95). The time scale the receiver
+is reporting on is stated, because UTC and GPS differ by the accumulated leap seconds and a reading
+that does not say which it is cannot be compared to anything.
+
+**The receiver's own date is shown beside the corrected one, never instead of it** (§7.4). The
+correction is reported and explained; it is never silently substituted, because a user who sees a
+date two decades out with no explanation reasonably concludes the hardware has failed. Severity
+renders through `SeverityPill`.
+
+**The leap-second card carries what the receiver will tell it, which is less than the catalog
+suggests.** The status screen announces a *pending* leap second and its direction. The `:PTIM:LEAP:`
+subsystem holds four tier S queries, and they do not all answer:
+
+| Query | On the bench receiver, 20 Aug 2026 |
+|---|---|
+| `:PTIM:LEAP:ACC?` | `+18` — the accumulated GPS−UTC offset |
+| `:PTIM:LEAP:STAT?` | `0` — none announced |
+| `:PTIM:LEAP:DATE?` | **`E-230`** |
+| `:PTIM:LEAP:DUR?` | **`E-230`** |
+
+**The date and the direction answer only while an announcement stands.** With `STAT? = 0` there is no
+announced leap second to have a date or a direction, and the receiver rejects the question rather than
+returning a null. So the card must read `STAT?` first and ask the other two only if it says yes — a
+page that asked all four on arrival would put two errors in the error queue every time it was opened.
+
+**The accumulated offset is the number worth showing unconditionally.** It is what anyone comparing
+GPS time to UTC needs, it is always available, and it is the one figure on this page that justifies
+the section title on a day when nothing is announced.
+
+> **Not yet built.** The page as shipped shows only the status screen's pending flag and direction;
+> none of the four queries is called. Filed as **#149**, with the measurements above as its evidence.
+> This section states what the page is for, which is the job of a specification; the gap between it
+> and the code is recorded rather than written out of the requirement.
+
+#### 10.14.1 The three questions #111 raised
+
+**1. Does "& Leap Seconds" imply a history table?** **No.** There is no command that returns a
+leap-second history — the receiver answers only about the accumulated offset and the one announcement
+it currently holds — and a table of historical leap seconds would be a table this application had to
+carry as data of its own, going stale on a schedule nobody controls. What the section title promises
+and the receiver can support is the *accumulated offset* and the *pending announcement*, and that is
+what the page holds.
+
+**2. Does the page set anything?** **No. It is read-only.** `:PTIM:TZONe` would set the offset the
+receiver itself reports in, which is a different thing from the zone this application displays in, and
+it is tier C. Changing it would move every reported time including the timecode output, for a
+cosmetic gain the display-zone picker already provides without touching the device.
+
+**3. Where does the display-zone picker live?** **Both here and on the main window, deliberately.**
+The main window is a glanceable surface a user leaves on a second monitor for weeks, and the zone is
+part of reading the clock on it; this page is where the reasoning about time lives. One preference,
+two places to set it — which is a duplicated control, not duplicated state.
 
 ---
 

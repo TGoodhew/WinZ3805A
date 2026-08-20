@@ -12,8 +12,8 @@ namespace WinZ3805A.Views;
 /// The Settings page, currently carrying only §10.11's Advanced opt-in.
 /// </summary>
 /// <remarks>
-/// See the XAML for why it holds one section: §10 has no section describing this page at all, and
-/// #55 needs exactly one switch on it.
+/// See the XAML for why it holds one section. §10.13.1 lists what is deliberately absent and what
+/// is merely unbuilt, which are different things and are shown differently.
 /// </remarks>
 public sealed partial class SettingsPage : Page
 {

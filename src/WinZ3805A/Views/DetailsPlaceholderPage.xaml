@@ -8,7 +8,7 @@
     mc:Ignorable="d">
 
     <!--
-        Stands in for a §10.4-§10.13 page until that page is built. It carries the §9.7 page
+        Stands in for a §10.4-§10.14 page until that page is built. It carries the §9.7 page
         header, which is what tells the user where they are in a two-level hierarchy with no
         breadcrumbs, and says plainly that the content is not here yet.
 
