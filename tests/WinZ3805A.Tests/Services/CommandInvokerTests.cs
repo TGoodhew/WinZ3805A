@@ -66,17 +66,24 @@ public class CommandInvokerTests
     /// §7.2: after every tier C command, issue <c>:SYST:ERR?</c>. Without it a rejected setter is
     /// silent — the receiver answers a setter with the prompt alone either way.
     /// </summary>
+    /// <remarks>
+    /// <b>And before it, too.</b> The read afterwards only identifies this command's error if the
+    /// queue was this command's to begin with, and the poll fills it with its own whenever the
+    /// receiver refuses a reading (#155). So the sequence is drain, command, read — three writes,
+    /// not two, and the middle one is still the command.
+    /// </remarks>
     [Fact]
-    public async Task ReadsTheErrorQueueAfterEveryTierCCommand()
+    public async Task ReadsTheErrorQueueBeforeAndAfterEveryTierCCommand()
     {
         Bench bench = new();
         await using DeviceSessionService session = await ConnectedAsync(bench, new FakeTimeProvider());
 
         await new CommandInvoker(session).ExecuteAsync(Command(":DIAG:LOG:CLEar")).WaitAsync(TestTimeout);
 
-        Assert.Equal(2, bench.Written.Count);
-        Assert.StartsWith(":DIAG:LOG:CLE", bench.Written[0], StringComparison.OrdinalIgnoreCase);
-        Assert.StartsWith(":SYST:ERR?", bench.Written[1], StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(3, bench.Written.Count);
+        Assert.StartsWith(":SYST:ERR?", bench.Written[0], StringComparison.OrdinalIgnoreCase);
+        Assert.StartsWith(":DIAG:LOG:CLE", bench.Written[1], StringComparison.OrdinalIgnoreCase);
+        Assert.StartsWith(":SYST:ERR?", bench.Written[2], StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>An empty queue after the command means it worked.</summary>

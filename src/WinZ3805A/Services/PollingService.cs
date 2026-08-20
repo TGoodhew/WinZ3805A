@@ -45,6 +45,14 @@ public sealed class PollingService : IAsyncDisposable
         ":GPS:SAT:TRAC:COUN?",
     ];
 
+    /// <summary>Where <c>:SYNC:TINT?</c> sits in <see cref="FastTier"/>.</summary>
+    /// <remarks>
+    /// Derived rather than written as a literal, because §7.3 fixes the sweep's order and an index
+    /// that drifted from it would suppress the wrong reading — silently, and only while the receiver
+    /// was unlocked, which is the hardest case to notice.
+    /// </remarks>
+    private static readonly int TimeIntervalIndex = Array.IndexOf(FastTier, ":SYNC:TINT?");
+
     private const string FullScreenCommand = ":SYST:STAT?";
 
     private readonly DeviceSessionService _session;
@@ -57,6 +65,19 @@ public sealed class PollingService : IAsyncDisposable
     private Task? _loop;
     private bool _disposed;
     private int _fullRequested;
+
+    /// <summary>
+    /// The sync state under which the receiver last refused the time-interval query, or null.
+    /// </summary>
+    /// <remarks>
+    /// See <see cref="PollFastAsync"/>. Holding the state rather than a bare flag is what makes the
+    /// suppression self-clearing: the question is asked again the moment the receiver's state
+    /// changes, so nothing has to know which states support the reading.
+    /// </remarks>
+    private string? _timeIntervalRefusedUnder;
+
+    /// <summary>How many sweeps have skipped the time-interval query, for the tests to see.</summary>
+    public long TimeIntervalSkips { get; private set; }
 
     /// <summary>Creates a poller for one session.</summary>
     public PollingService(
@@ -237,16 +258,61 @@ public sealed class PollingService : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Runs one §7.3 fast sweep, skipping a reading the receiver has said it cannot give.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The sweep is conditional on one command, and it has to be.</b> While the receiver is not
+    /// locked there is no 1 PPS to measure against, so <c>:SYNC:TINT?</c> answers nothing and puts
+    /// <c>E-230</c> in the prompt — once a second, indefinitely. On the bench receiver that
+    /// overflowed the error queue outright: it began answering <c>E-350</c>, and the Diagnostics
+    /// page could not drain it because the poll refilled it faster than the page emptied it (#155).
+    /// </para>
+    /// <para>
+    /// <b>The cost is not the churn.</b> §7.2 requires the error queue to be read after every tier C
+    /// command and anything non-zero surfaced, which assumes the queue holds <i>that command's</i>
+    /// error. Filled with poll noise it does not, so a user applying an antenna delay while the
+    /// receiver was unlocked was told about a time-interval poll instead — a fault reported that did
+    /// not happen, and one that did hidden behind it.
+    /// </para>
+    /// <para>
+    /// <b>Suppression is keyed on the sync state rather than on a list of states that support the
+    /// reading.</b> Nothing here has to know which those are: the receiver is asked once, and if it
+    /// refuses, it is not asked again until its own state changes. That is at most one error per
+    /// transition instead of one per second, it self-clears on recovery, and it makes no claim
+    /// about a sibling model whose firmware may answer where this one does not.
+    /// </para>
+    /// </remarks>
     private async Task PollFastAsync(CancellationToken cancellationToken)
     {
         string?[] answers = new string?[FastTier.Length];
 
-        for (int i = 0; i < FastTier.Length; i++)
+        // The sync state comes first in §7.3's order, which is what makes this possible at all.
+        answers[0] = await AskAsync(FastTier[0], cancellationToken).ConfigureAwait(false);
+        string? state = ScalarParsers.ParseKeyword(answers[0]);
+
+        for (int i = 1; i < FastTier.Length; i++)
         {
+            if (i == TimeIntervalIndex)
+            {
+                if (string.Equals(_timeIntervalRefusedUnder, state ?? string.Empty, StringComparison.Ordinal))
+                {
+                    TimeIntervalSkips++;
+                    continue;
+                }
+
+                (answers[i], bool refused) =
+                    await AskWithStatusAsync(FastTier[i], cancellationToken).ConfigureAwait(false);
+
+                _timeIntervalRefusedUnder = refused ? state ?? string.Empty : null;
+                continue;
+            }
+
             answers[i] = await AskAsync(FastTier[i], cancellationToken).ConfigureAwait(false);
         }
 
-        string? syncState = ScalarParsers.ParseKeyword(answers[0]);
+        string? syncState = state;
         int? tfom = ScalarParsers.ParseInteger(answers[1]);
         int? tracked = ScalarParsers.ParseInteger(answers[5]);
 
@@ -367,7 +433,21 @@ public sealed class PollingService : IAsyncDisposable
     /// the user would see an application that stops updating rather than one that says it has lost
     /// the link.
     /// </remarks>
-    private async Task<string?> AskAsync(string mnemonic, CancellationToken cancellationToken)
+    private async Task<string?> AskAsync(string mnemonic, CancellationToken cancellationToken) =>
+        (await AskWithStatusAsync(mnemonic, cancellationToken).ConfigureAwait(false)).Text;
+
+    /// <summary>
+    /// As <see cref="AskAsync"/>, and also reports whether the receiver <i>refused</i> the command.
+    /// </summary>
+    /// <returns>
+    /// <c>Refused</c> is true only when the receiver answered and rejected it — an error token in
+    /// the prompt. A timeout, a dropped link or an uncatalogued mnemonic are all false: those say
+    /// nothing about whether the receiver would have answered, and suppressing a reading because
+    /// the cable was unplugged would keep it suppressed after it was plugged back in.
+    /// </returns>
+    private async Task<(string? Text, bool Refused)> AskWithStatusAsync(
+        string mnemonic,
+        CancellationToken cancellationToken)
     {
         ScpiCommand? command = CommandCatalog.Find(mnemonic);
         if (command is null)
@@ -375,7 +455,7 @@ public sealed class PollingService : IAsyncDisposable
             // Only reachable if the catalog and this list disagree, which is a bug rather than a
             // device condition — hence a warning rather than silence.
             _logger.LogWarning("{Mnemonic} is not in the command catalog and was not polled.", mnemonic);
-            return null;
+            return (null, false);
         }
 
         try
@@ -383,7 +463,7 @@ public sealed class PollingService : IAsyncDisposable
             Transaction transaction = await _session.ExecuteAsync(command, origin: CommandOrigin.Poll, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
 
-            return transaction.Succeeded ? transaction.Text : null;
+            return (transaction.Succeeded ? transaction.Text : null, transaction.HasDeviceError);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -392,7 +472,7 @@ public sealed class PollingService : IAsyncDisposable
         catch (Exception exception) when (TransportFaults.IsTransportFault(exception))
         {
             _logger.LogDebug(exception, "Polling {Mnemonic} failed.", mnemonic);
-            return null;
+            return (null, false);
         }
     }
 }

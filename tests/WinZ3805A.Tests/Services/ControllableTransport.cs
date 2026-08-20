@@ -59,6 +59,18 @@ public sealed class ControllableTransport : ITransport
     public string Prompt { get; init; } = "scpi > ";
 
     /// <summary>
+    /// An alternative prompt for particular commands, or null to use <see cref="Prompt"/> always.
+    /// </summary>
+    /// <remarks>
+    /// The receiver replaces the prompt word with an error token when the last command failed —
+    /// <c>"E-230&gt; "</c> rather than <c>"scpi &gt; "</c> — so the prompt doubles as the rejection
+    /// signal. A test that needs a refusal has to be able to produce that, and it has to be per
+    /// command: the real unit answers one query normally and refuses the next in the same session,
+    /// which is exactly the behaviour #155 is about.
+    /// </remarks>
+    public Func<string, string?>? PromptFor { get; init; }
+
+    /// <summary>
     /// What the device announces, unprompted, when DTR is asserted — followed by a prompt.
     /// </summary>
     /// <remarks>
@@ -124,7 +136,8 @@ public sealed class ControllableTransport : ITransport
             }
 
             string? response = _responder(command);
-            string payload = response is null ? Prompt : $"{response}\r\n{Prompt}";
+            string prompt = PromptFor?.Invoke(command) ?? Prompt;
+            string payload = response is null ? prompt : $"{response}\r\n{prompt}";
             await _pipe.Writer.WriteAsync(Encoding.Latin1.GetBytes(payload), cancellationToken).ConfigureAwait(false);
             await _pipe.Writer.FlushAsync(cancellationToken).ConfigureAwait(false);
         }

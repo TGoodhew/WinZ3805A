@@ -251,6 +251,43 @@ Rationale: the satellite El/Az/(C-N) table has **no individual query** — it ex
 
 At 9600 baud the full screen consumes ~2 s of the 10 s window. The scheduler must never let the two tiers overlap — they share the same command channel, so the fast tier will naturally stall behind a full-screen fetch. That is acceptable; do not attempt to interleave.
 
+#### 7.3.1 A reading the receiver will not give
+
+> **⚠ Added 20 Aug 2026** (#155). The sweep above was a fixed list asked unconditionally. It is now
+> conditional in one place, for a reason that had to be found on hardware.
+
+**`:SYNC:TINT?` has no answer while the receiver is unlocked.** There is no GPS 1 PPS to measure
+against, so the receiver answers no data at all and puts `E-230` — *data corrupt or stale* — in the
+prompt. That is the correct answer to the question; the question is the mistake.
+
+Asked once a second it is a mistake with consequences. On the bench receiver, an unlocked spell
+filled the error queue until the receiver began answering **`E-350`, queue overflow**, and the
+Diagnostics page could not empty it because the sweep refilled it faster than the page drained it.
+Real errors were being discarded to make room for poll noise.
+
+**The rule.** When the receiver refuses a fast-tier reading, that reading is not asked for again
+until `:SYNC:STAT?` reports a different state.
+
+- **Keyed on the state, not on a list of states.** Nothing in the application decides which sync
+  states support which reading; the receiver is asked once and believed. This makes no claim about a
+  sibling model whose firmware may answer where this one does not, and it costs at most one error per
+  state transition instead of one per second.
+- **It self-clears.** A receiver that regains lock is asked again on the next sweep, because its
+  state changed.
+- **Only a refusal counts.** A timeout or a dropped link says nothing about whether the receiver
+  would have answered, and suppressing a reading because a cable was unplugged would keep it
+  suppressed after the cable was plugged back in.
+- **`:SYNC:STAT?` must stay first in the sweep.** The rule depends on knowing the state before the
+  rest of the tier is asked, which the order above already provides.
+
+**§7.2's error-queue check is why this matters beyond tidiness.** That rule reads the queue after
+every tier C command and surfaces anything non-zero, which assumes the queue holds *that command's*
+error. Filled with poll noise it does not: a user applying an antenna delay while the receiver was
+unlocked was told about a time-interval poll instead — a fault reported that did not happen, and one
+that did hidden behind it. **So the tier C path drains the queue before the command as well as
+reading it afterwards**, bounded, discarding what it finds without reporting it. Those entries
+pre-date the user's action and attributing them to it is the defect.
+
 ### 7.4 GPS week rollover detection
 
 Compute `delta = SystemUtcNow - DeviceReportedUtc`. If `delta` is within ±7 days of a multiple of 1024 weeks (7168 days), set `ReceiverStatus.WeekRolloverEpochs = round(delta / 7168 days)` and expose:
