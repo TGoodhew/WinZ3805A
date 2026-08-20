@@ -435,4 +435,140 @@ public class PollingServiceTests
         Assert.Equal(TimeSpan.FromSeconds(42), store.AgeOf(taken));
         Assert.Null(store.AgeOf(null));
     }
+
+    // -------------------------------------------------------------------------------------
+    // #155: a reading the receiver refuses is not asked for again until its state changes
+    // -------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// An unlocked receiver refuses the time-interval query, and the poller stops asking.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The bench receiver answers <c>:SYNC:TINT?</c> with nothing at all and <c>E-230</c> in the
+    /// prompt while it has no 1 PPS to measure against. Asked once a second it filled the error
+    /// queue until the receiver answered <c>E-350</c>, queue overflow, and the Diagnostics page
+    /// could not drain it faster than the poll refilled it.
+    /// </para>
+    /// <para>
+    /// This is the fix's whole claim: after the first refusal the sweep stops asking, so the count
+    /// of skips grows while the count of asks does not.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ARefusedReadingIsNotAskedForAgain()
+    {
+        int asked = 0;
+        ControllableTransport transport = new(command =>
+        {
+            if (command.StartsWith("*IDN", StringComparison.OrdinalIgnoreCase))
+            {
+                return Identity;
+            }
+
+            if (command == ":SYNC:TINT?")
+            {
+                asked++;
+                return null;
+            }
+
+            return command switch
+            {
+                ":SYNC:STAT?" => " WAIT",
+                ":SYST:STAT?" => StatusScreen(),
+                _ => " +0",
+            };
+        })
+        {
+            Banner = Identity,
+            PromptFor = command => command == ":SYNC:TINT?" ? "E-230> " : null,
+        };
+
+        FakeTimeProvider clock = new();
+        (DeviceSessionService session, ReceiverStateStore store) = await ConnectedAsync(transport, clock);
+        await using DeviceSessionService owned = session;
+
+        await using PollingService poller = new(owned, store, clock);
+        poller.Start();
+
+        await WaitFor(clock, () => poller.TimeIntervalSkips >= 3, () => (int)poller.FastSweeps);
+
+        // Asked once, refused once, and never asked again while the state stayed the same.
+        Assert.Equal(1, asked);
+    }
+
+    /// <summary>
+    /// And it is asked again the moment the receiver's state changes, without anything knowing
+    /// which states support the reading.
+    /// </summary>
+    [Fact]
+    public async Task ItIsAskedAgainWhenTheReceiversStateChanges()
+    {
+        int asked = 0;
+        string state = " WAIT";
+
+        ControllableTransport transport = new(command =>
+        {
+            if (command.StartsWith("*IDN", StringComparison.OrdinalIgnoreCase))
+            {
+                return Identity;
+            }
+
+            if (command == ":SYNC:TINT?")
+            {
+                asked++;
+                return state == " LOCK" ? " -5.4E-009" : null;
+            }
+
+            return command switch
+            {
+                ":SYNC:STAT?" => state,
+                ":SYST:STAT?" => StatusScreen(),
+                _ => " +0",
+            };
+        })
+        {
+            Banner = Identity,
+            PromptFor = command => command == ":SYNC:TINT?" && state != " LOCK" ? "E-230> " : null,
+        };
+
+        FakeTimeProvider clock = new();
+        (DeviceSessionService session, ReceiverStateStore store) = await ConnectedAsync(transport, clock);
+        await using DeviceSessionService owned = session;
+
+        await using PollingService poller = new(owned, store, clock);
+        poller.Start();
+
+        await WaitFor(clock, () => poller.TimeIntervalSkips >= 2, () => (int)poller.FastSweeps);
+        Assert.Equal(1, asked);
+
+        state = " LOCK";
+
+        await WaitFor(clock, () => asked >= 2, () => asked);
+
+        // Asked again on the new state, accepted this time, and not suppressed thereafter.
+        long skipsAfterRecovery = poller.TimeIntervalSkips;
+        await WaitFor(clock, () => asked >= 4, () => asked);
+
+        Assert.Equal(skipsAfterRecovery, poller.TimeIntervalSkips);
+    }
+
+    /// <summary>
+    /// A reading the receiver answers normally is never suppressed, however many sweeps run. The
+    /// suppression must be provoked by a refusal and by nothing else.
+    /// </summary>
+    [Fact]
+    public async Task AReadingThatAnswersIsNeverSkipped()
+    {
+        FakeTimeProvider clock = new();
+        (DeviceSessionService session, ReceiverStateStore store) = await ConnectedAsync(Receiver(), clock);
+        await using DeviceSessionService owned = session;
+
+        await using PollingService poller = new(owned, store, clock);
+        poller.Start();
+
+        await WaitFor(clock, () => poller.FastSweeps >= 3, () => (int)poller.FastSweeps);
+
+        Assert.Equal(0, poller.TimeIntervalSkips);
+    }
 }

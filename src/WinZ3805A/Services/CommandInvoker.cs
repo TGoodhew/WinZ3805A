@@ -74,6 +74,16 @@ public sealed class CommandInvoker
             return Failure(command, "The receiver is not connected.");
         }
 
+        // §7.2's check reads the error queue after the command and reports what it finds, which
+        // assumes the queue holds this command's error. It does not always: the receiver queues an
+        // error for anything it refuses, including a poll, so a queue left dirty by the sweep would
+        // be reported as this command's fault (#155). Draining first is what makes the answer
+        // afterwards attributable.
+        //
+        // Not a fix for the churn — that is the poller's business — but the correctness half stands
+        // on its own, and belongs here rather than there: this is the code that makes the claim.
+        await DrainErrorsAsync(cancellationToken).ConfigureAwait(true);
+
         Transaction transaction;
         try
         {
@@ -145,6 +155,36 @@ public sealed class CommandInvoker
     }
 
     // ===========================================================================================
+
+    /// <summary>
+    /// Empties the receiver's error queue so that what is read afterwards belongs to one command.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Bounded, because the queue can be refilled while it is being emptied — that is exactly what
+    /// #155 describes — and a loop that insisted on reaching empty would never return while the
+    /// receiver was unlocked. The bound is generous enough to clear an ordinary queue and small
+    /// enough that a flooded one costs a fraction of a second rather than the command.
+    /// </para>
+    /// <para>
+    /// What is discarded here is not reported. These are errors from before the user asked for
+    /// anything, they have already been shown on the Diagnostics page if anyone was looking, and
+    /// attributing them to the command about to run is the bug this exists to prevent.
+    /// </para>
+    /// </remarks>
+    private async Task DrainErrorsAsync(CancellationToken cancellationToken)
+    {
+        for (int read = 0; read < MaximumDrain; read++)
+        {
+            if (await ReadErrorAsync(cancellationToken).ConfigureAwait(true) is not { IsError: true })
+            {
+                return;
+            }
+        }
+    }
+
+    /// <summary>How many entries <see cref="DrainErrorsAsync"/> will discard before giving up.</summary>
+    private const int MaximumDrain = 16;
 
     private async Task<ScpiError?> ReadErrorAsync(CancellationToken cancellationToken)
     {
