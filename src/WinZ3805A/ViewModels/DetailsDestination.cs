@@ -139,7 +139,7 @@ public static class DetailsDestinations
         Tag = "settings",
         Label = "Settings",
         Glyph = "\uE713", // Settings
-        Summary = "Poll cadences, display time zone, units, and the opt-in advanced features (§10.13).",
+        Summary = "The opt-in advanced features, and what is deliberately not a setting (§10.13).",
     };
 
     /// <summary>

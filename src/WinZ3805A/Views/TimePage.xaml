@@ -9,10 +9,13 @@
     mc:Ignorable="d">
 
     <!--
-        §10.2 requires this destination and no §10.x section describes it - the numbered sections
-        run 10.9 Diagnostics, 10.10 Status Registers, 10.11 Advanced Console with nothing between.
-        Filed rather than invented around; the content here comes from what the specification does
-        define for this data: §7.4's week rollover, §11.2's time fields, and #95's display zone.
+        §10.14, written after this page rather than before it: §10.2 required the destination and
+        no §10.x section described it, so this was built from what the specification does define
+        for the data - §7.4's week rollover, §11.2's time fields, #95's display zone - and the gap
+        was filed as #111. §10.14 adopted that reading and settled the three questions #111 raised.
+
+        The leap-second card is not finished. §10.14 requires the accumulated GPS-UTC offset, which
+        this does not show; #149 carries it.
     -->
     <ScrollViewer HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
         <StackPanel Padding="{ThemeResource WzPageMarginThickness}"

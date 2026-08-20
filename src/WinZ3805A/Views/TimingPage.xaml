@@ -240,10 +240,14 @@
                                          AutomationProperties.Name="Oscillator control trend" />
 
                     <!--
-                        #137's drift analysis. A card on this page rather than a destination of its
-                        own: §10.2's cap is twelve now and a page was available, but the fit is
-                        about the series drawn immediately above it and separating them would put a
-                        number on one page and its evidence on another.
+                        #137's drift analysis, specified in §10.7.1. A card on this page rather than
+                        a destination of its own: §10.2's cap is twelve now and a page was
+                        available, but the fit is about the series drawn immediately above it and
+                        separating them would put a number on one page and its evidence on another.
+
+                        That placement was a code decision when it was made - §10.7 described this
+                        page as the cable delay and the 1 PPS trend and nothing else - which is why
+                        it was raised as #142 rather than settled here. §10.7.1 settles it.
                     -->
                     <StackPanel Spacing="{ThemeResource WzSpaceXs}">
                         <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}"

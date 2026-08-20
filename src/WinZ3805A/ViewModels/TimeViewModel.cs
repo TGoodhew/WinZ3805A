@@ -12,16 +12,20 @@ namespace WinZ3805A.ViewModels;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>§10.2 requires this destination and no §10.x section describes it.</b> The window inventory
-/// lists "Time &amp; Leap Seconds — Page in Details", §9.7.1 draws it in the pane, and §15 step 8
-/// puts it in the build order, but the numbered sections run §10.9 Diagnostics, §10.10 Status
-/// Registers, §10.11 Advanced Console with nothing in between. Filed rather than invented around.
+/// <b>Specified in §10.14</b>, which was written after this page rather than before it. §10.2
+/// required the destination, §9.7.1 drew it in the pane and §15 step 8 put it in the build order,
+/// but no §10.x section described it — so this was built from what the specification <i>does</i>
+/// define for the data, and the gap was filed as #111 rather than invented around.
 /// </para>
 /// <para>
-/// So the content comes from what the specification <i>does</i> define for this data: §7.4's week
-/// rollover, §11.2's time fields, and #95's display-zone requirement. It is the §10.3 clock line
-/// with its workings shown — which is what a page called Time is for, and what a user checking a
-/// suspect date needs.
+/// That reading turned out to be the one §10.14 adopted: §7.4's week rollover, §11.2's time fields,
+/// and #95's display zone. It is the §10.3 clock line with its workings shown — which is what a
+/// page called Time is for, and what a user checking a suspect date needs.
+/// </para>
+/// <para>
+/// <b>The leap-second card is not finished.</b> §10.14 requires the accumulated GPS−UTC offset from
+/// <c>:PTIM:LEAP:ACC?</c>, which this shows nothing of; it carries only the status screen's pending
+/// flag. Filed as #149, with the receiver's own answers to all four queries recorded in §10.14.
 /// </para>
 /// </remarks>
 public sealed class TimeViewModel : INotifyPropertyChanged

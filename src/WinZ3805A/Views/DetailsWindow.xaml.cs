@@ -23,7 +23,7 @@ using WinZ3805A.ViewModels;
 namespace WinZ3805A.Views;
 
 /// <summary>
-/// The §10.4-§10.13 Receiver Details window: the §9.7 <c>NavigationView</c> shell and its title bar.
+/// The §10.4-§10.14 Receiver Details window: the §9.7 <c>NavigationView</c> shell and its title bar.
 /// </summary>
 /// <remarks>
 /// <para>
