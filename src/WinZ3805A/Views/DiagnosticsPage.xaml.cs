@@ -157,9 +157,14 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
             else if (transaction.PromptStatus is string status)
             {
                 // The receiver rejected it, which for an undocumented node is a real answer about
-                // that node rather than a failure of this card.
+                // that node rather than a failure of this card. E-113 is named because it is the
+                // common case and because "undefined header" is not something a user should have to
+                // look up: five of §8.5's six answer it on this model, and the specification now
+                // records that as an expected result rather than an error.
                 row.IsError = true;
-                row.Result = $"The receiver answered {status}.";
+                row.Result = status.Contains("113", StringComparison.Ordinal)
+                    ? $"{status} — this receiver's firmware does not have that node."
+                    : $"The receiver answered {status}.";
             }
             else if (transaction.Lines.Count == 0)
             {
