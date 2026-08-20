@@ -52,6 +52,31 @@
                                MaxWidth="{ThemeResource WzProseMaxWidth}"
                                TextWrapping="Wrap"
                                Text="Adds a page below Settings offering every command in the catalog as a picker, with a transcript of everything sent and received. It changes what is reachable, never what is permitted: the commands this application will not send are absent from the catalog, so they are absent from the console." />
+
+                    <ToggleSwitch x:Name="ExperimentalSwitch"
+                                  Header="Undocumented read-only queries"
+                                  OnContent="Shown"
+                                  OffContent="Hidden"
+                                  AutomationProperties.Name="Enable undocumented read-only queries"
+                                  Toggled="OnExperimentalToggled" />
+
+                    <!--
+                        §8.5's own sentence, verbatim, which #56 requires the toggle to carry. It is
+                        quoted rather than paraphrased because every clause of it is a warning: the
+                        queries are undocumented, they may answer with nonsense, and - the part a
+                        user most needs - nothing is being set.
+                    -->
+                    <TextBlock Style="{ThemeResource WzCaptionTextStyle}"
+                               Foreground="{ThemeResource WzTextTertiaryBrush}"
+                               MaxWidth="{ThemeResource WzProseMaxWidth}"
+                               TextWrapping="Wrap"
+                               Text="Enable undocumented read-only queries. These are present in the receiver's command parser but absent from the published manual. They may return errors or nonsense. No setting is changed." />
+
+                    <TextBlock Style="{ThemeResource WzCaptionTextStyle}"
+                               Foreground="{ThemeResource WzTextTertiaryBrush}"
+                               MaxWidth="{ThemeResource WzProseMaxWidth}"
+                               TextWrapping="Wrap"
+                               Text="Six queries appear on the Diagnostics page, each run only when you click it. There is no way to type one, and the set forms of these nodes are excluded permanently and cannot be enabled here or anywhere else." />
                 </StackPanel>
             </Border>
 

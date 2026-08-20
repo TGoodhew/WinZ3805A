@@ -9,6 +9,7 @@ using Windows.Storage;
 using Windows.System;
 
 using WinZ3805A.Device.Commands;
+using WinZ3805A.Device.Transport;
 using WinZ3805A.Services;
 using WinZ3805A.ViewModels;
 
@@ -32,6 +33,9 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
     private CancellationTokenSource? _reading;
     private bool _ready;
 
+    /// <summary>§8.5's six, or empty before navigation.</summary>
+    private IReadOnlyList<ExperimentalQueryRow> _experimental = [];
+
     /// <summary>Creates the page.</summary>
     public DiagnosticsPage()
     {
@@ -42,6 +46,8 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
             _reading?.Cancel();
             _reading?.Dispose();
             _reading = null;
+
+            SettingsPage.AdvancedChanged -= OnAdvancedChanged;
 
             if (_device is DeviceContext device)
             {
@@ -72,6 +78,13 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
         _model.PropertyChanged += (_, _) => DispatcherQueue.TryEnqueue(Render);
         device.Session.StatusChanged += OnStatusChanged;
 
+        // §8.5's opt-in. Rows are created per page rather than shared: each holds its own last
+        // answer, and two pages over one set would show each other's.
+        _experimental = ExperimentalQueries.Create();
+        ExperimentalRows.ItemsSource = _experimental;
+        SettingsPage.AdvancedChanged += OnAdvancedChanged;
+        ApplyExperimentalVisibility();
+
         _ready = true;
         Render();
 
@@ -82,6 +95,91 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
 
     private void OnStatusChanged(object? sender, ConnectionStatusChanged e) =>
         DispatcherQueue.TryEnqueue(() => _model?.RaiseAll());
+
+    private void OnAdvancedChanged(object? sender, EventArgs e) =>
+        DispatcherQueue.TryEnqueue(ApplyExperimentalVisibility);
+
+    /// <summary>
+    /// Shows or hides §8.5's card to match Settings → Advanced.
+    /// </summary>
+    /// <remarks>
+    /// Collapsed rather than disabled. A card of buttons nobody opted into is not something to grey
+    /// out — it is something that should not be on the page, and collapsing it also keeps it out of
+    /// the tab order without <c>IsEnabled</c> being the only thing standing between a keyboard user
+    /// and six undocumented queries.
+    /// </remarks>
+    private void ApplyExperimentalVisibility()
+    {
+        bool enabled = App.Services?.GetService<IAdvancedPreferenceStore>()
+            ?.Load().AreExperimentalQueriesEnabled == true;
+
+        ExperimentalCard.Visibility = enabled ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>
+    /// Runs one §8.5 query, on this click and no other trigger.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The command comes from the row, which came from the catalog. There is no string here and no
+    /// way to reach a node the catalog does not hold — and §8.4 keeps the set forms of these nodes
+    /// out of the catalog permanently, so the opt-in cannot reach them either.
+    /// </para>
+    /// <para>
+    /// <b>Whatever comes back is shown, including an error.</b> §8.5 says results are raw text and
+    /// any SCPI error is displayed rather than swallowed. An undocumented node answering E-113 is
+    /// the most useful thing this card can tell anyone about that node.
+    /// </para>
+    /// </remarks>
+    private async void OnRunExperimentalClicked(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { DataContext: ExperimentalQueryRow row }
+            || _device is not DeviceContext device
+            || row.IsBusy)
+        {
+            return;
+        }
+
+        row.IsBusy = true;
+        row.IsError = false;
+
+        try
+        {
+            Transaction transaction = await device.Session
+                .ExecuteAsync(row.Command, origin: CommandOrigin.User)
+                .ConfigureAwait(true);
+
+            if (transaction.Outcome == TransactionOutcome.TimedOut)
+            {
+                row.IsError = true;
+                row.Result = "No answer within the timeout.";
+            }
+            else if (transaction.PromptStatus is string status)
+            {
+                // The receiver rejected it, which for an undocumented node is a real answer about
+                // that node rather than a failure of this card.
+                row.IsError = true;
+                row.Result = $"The receiver answered {status}.";
+            }
+            else if (transaction.Lines.Count == 0)
+            {
+                row.Result = "(no output)";
+            }
+            else
+            {
+                row.Result = string.Join(Environment.NewLine, transaction.Lines);
+            }
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or TransportException)
+        {
+            row.IsError = true;
+            row.Result = exception.Message;
+        }
+        finally
+        {
+            row.IsBusy = false;
+        }
+    }
 
     private async void OnRefreshClicked(object sender, RoutedEventArgs e) => await RefreshAsync();
 

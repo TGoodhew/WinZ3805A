@@ -7,6 +7,7 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:models="using:WinZ3805A.Device.Models"
+    xmlns:vm="using:WinZ3805A.ViewModels"
     mc:Ignorable="d">
 
     <!--
@@ -211,6 +212,79 @@
                                TextWrapping="Wrap"
                                MaxWidth="{ThemeResource WzProseMaxWidth}"
                                Text="Reading the queue empties it: each read removes the entry it returns. What is shown here is what was read, and it is not re-read on its own." />
+                </StackPanel>
+            </Border>
+
+            <!-- ========================= Undocumented queries (§8.5) ==================== -->
+            <!--
+                Hidden unless Settings - Advanced enables it, and collapsed rather than disabled:
+                a card of buttons nobody opted into is not something to grey out, it is something
+                that should not be there.
+
+                Six queries, from the catalog, each run only on its own click. §8.5 says never on a
+                poll timer, and there is no timer here to forget about - the only thing that sends
+                anything on this card is a Click handler.
+            -->
+            <Border x:Name="ExperimentalCard" Style="{ThemeResource WzCardStyle}" Visibility="Collapsed">
+                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}"
+                               Text="Undocumented queries" />
+
+                    <TextBlock Style="{ThemeResource WzBodyTextStyle}"
+                               Foreground="{ThemeResource WzTextSecondaryBrush}"
+                               TextWrapping="Wrap"
+                               MaxWidth="{ThemeResource WzProseMaxWidth}"
+                               Text="Present in the receiver's command parser but absent from the published manual. They may return errors or nonsense. No setting is changed." />
+
+                    <ItemsControl x:Name="ExperimentalRows">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:ExperimentalQueryRow">
+                                <Grid ColumnSpacing="{ThemeResource WzSpaceMd}"
+                                      Padding="{ThemeResource WzSpaceXsThickness}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+
+                                    <StackPanel Grid.Row="0" Grid.Column="0"
+                                                Spacing="{ThemeResource WzSpaceXxs}">
+                                        <TextBlock Style="{ThemeResource WzMonoTextStyle}"
+                                                   IsTextSelectionEnabled="True"
+                                                   Text="{x:Bind Mnemonic}" />
+                                        <TextBlock Style="{ThemeResource WzCaptionTextStyle}"
+                                                   Foreground="{ThemeResource WzTextTertiaryBrush}"
+                                                   TextWrapping="Wrap"
+                                                   MaxWidth="{ThemeResource WzProseMaxWidth}"
+                                                   Text="{x:Bind Description}" />
+                                    </StackPanel>
+
+                                    <Button Grid.Row="0" Grid.Column="1"
+                                            Content="Run"
+                                            VerticalAlignment="Top"
+                                            IsEnabled="{x:Bind CanRun, Mode=OneWay}"
+                                            AutomationProperties.Name="{x:Bind Mnemonic}"
+                                            Click="OnRunExperimentalClicked" />
+
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                                               Style="{ThemeResource WzMonoTextStyle}"
+                                               TextWrapping="Wrap"
+                                               IsTextSelectionEnabled="True"
+                                               Visibility="{x:Bind HasResult, Mode=OneWay}"
+                                               Text="{x:Bind Result, Mode=OneWay}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBlock Style="{ThemeResource WzCaptionTextStyle}"
+                               Foreground="{ThemeResource WzTextTertiaryBrush}"
+                               TextWrapping="Wrap"
+                               MaxWidth="{ThemeResource WzProseMaxWidth}"
+                               Text="This list is fixed. Nothing can be typed into it, and the set forms of these nodes are excluded from this application permanently." />
                 </StackPanel>
             </Border>
         </StackPanel>
