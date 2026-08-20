@@ -92,11 +92,51 @@
                 <StackPanel Spacing="{ThemeResource WzSpaceSm}">
                     <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Leap second" />
                     <controls:SeverityPill x:Name="LeapPill" />
+
+                    <!--
+                        §10.14's accumulated offset. Always shown, because it is the one figure on
+                        this card that is available on a day when nothing is announced - and it is
+                        the number anyone comparing GPS time to UTC actually needs.
+                    -->
+                    <Grid ColumnSpacing="{ThemeResource WzSpaceMd}" RowSpacing="{ThemeResource WzSpaceXxs}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="200" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Grid.Row="0" Grid.Column="0"
+                                   Style="{ThemeResource WzBodyTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   Text="GPS − UTC" />
+                        <TextBlock x:Name="AccumulatedText" Grid.Row="0" Grid.Column="1"
+                                   Style="{ThemeResource WzMonoTextStyle}" />
+
+                        <TextBlock x:Name="AnnouncedLabel" Grid.Row="1" Grid.Column="0"
+                                   Style="{ThemeResource WzBodyTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   Visibility="Collapsed"
+                                   Text="Announced for" />
+                        <TextBlock x:Name="AnnouncedDateText" Grid.Row="1" Grid.Column="1"
+                                   Style="{ThemeResource WzMonoTextStyle}"
+                                   Visibility="Collapsed" />
+                    </Grid>
+
+                    <TextBlock x:Name="LeapErrorText"
+                               Style="{ThemeResource WzCaptionTextStyle}"
+                               Foreground="{ThemeResource WzTextTertiaryBrush}"
+                               TextWrapping="Wrap"
+                               MaxWidth="{ThemeResource WzProseMaxWidth}"
+                               Visibility="Collapsed" />
+
                     <TextBlock Style="{ThemeResource WzCaptionTextStyle}"
                                Foreground="{ThemeResource WzTextTertiaryBrush}"
                                TextWrapping="Wrap"
                                MaxWidth="{ThemeResource WzProseMaxWidth}"
-                               Text="The receiver announces a pending leap second in its status screen. Anything downstream counting seconds needs to expect the step." />
+                               Text="The accumulated offset is how far GPS time has run ahead of UTC since 1980. An announced leap second is a step the 1 PPS will take, which anything downstream counting seconds needs to expect." />
                 </StackPanel>
             </Border>
 
