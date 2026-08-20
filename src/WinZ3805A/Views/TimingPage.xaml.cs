@@ -352,6 +352,11 @@ public sealed partial class TimingPage : Page, ICsvExportSource
             return null;
         }
 
+        // No CorrectedTimestamp column here, and #132 asked for that to be checked rather than
+        // assumed. These ticks come from PollingService's own TimeProvider at the moment of the
+        // sweep, not from anything the receiver printed, so §7.4's rollover cannot reach them. The
+        // diagnostic log is the opposite case: its dates are the receiver's own, and that export
+        // carries both columns.
         CsvDocument document = new("Timestamp", "TimeIntervalNs", "EfcPercent", "SyncState", "TrackedSatellites");
 
         foreach (TrendRecord record in _exportable)

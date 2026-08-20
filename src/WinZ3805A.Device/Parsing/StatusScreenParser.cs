@@ -42,12 +42,6 @@ namespace WinZ3805A.Device.Parsing;
 /// </param>
 public sealed partial class StatusScreenParser(TimeProvider timeProvider)
 {
-    /// <summary>One GPS epoch: 1024 weeks, the period after which an unpatched receiver's date wraps (§7.4).</summary>
-    private static readonly TimeSpan GpsEpoch = TimeSpan.FromDays(7168);
-
-    /// <summary>How far from an exact multiple of <see cref="GpsEpoch"/> still counts as a rollover (§7.4).</summary>
-    private static readonly TimeSpan RolloverTolerance = TimeSpan.FromDays(7);
-
     /// <summary>
     /// The header tokens that make up a satellite column group, besides <c>PRN</c> which opens one.
     /// </summary>
@@ -578,15 +572,15 @@ public sealed partial class StatusScreenParser(TimeProvider timeProvider)
         }
 
         TimeSpan delta = now - device;
-        double epochs = Math.Round(delta / GpsEpoch);
+        double epochs = Math.Round(delta / GpsWeekRollover.Epoch);
 
         if (epochs <= 0)
         {
             return (0, device);
         }
 
-        TimeSpan residual = delta - (GpsEpoch * epochs);
-        if (residual.Duration() > RolloverTolerance)
+        TimeSpan residual = delta - (GpsWeekRollover.Epoch * epochs);
+        if (residual.Duration() > GpsWeekRollover.Tolerance)
         {
             // A large gap that is not a multiple of the epoch is a receiver with the wrong date set,
             // not a rollover, and inventing a correction for it would be worse than showing what the
@@ -595,7 +589,7 @@ public sealed partial class StatusScreenParser(TimeProvider timeProvider)
         }
 
         int count = (int)epochs;
-        return (count, device + (GpsEpoch * count));
+        return (count, device + (GpsWeekRollover.Epoch * count));
     }
 
     /// <summary>

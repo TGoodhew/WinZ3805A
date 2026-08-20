@@ -171,7 +171,13 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
     /// The <i>filtered</i> list, not the whole log — see <see cref="DiagnosticLogCsv.From"/> for
     /// why, and note the caption under the card tells the user so before they press it.
     /// </remarks>
-    public CsvDocument? BuildCsv() => DiagnosticLogCsv.From(_model?.Filtered);
+    /// <remarks>
+    /// The rollover epoch count comes from the current status rather than from the entries: an
+    /// entry carries a date and nothing to check it against, while the status screen is where §7.4's
+    /// comparison against the host clock is made. See <see cref="DiagnosticLogCsv.From"/>.
+    /// </remarks>
+    public CsvDocument? BuildCsv() =>
+        DiagnosticLogCsv.From(_model?.Filtered, _device?.Store.Status?.WeekRolloverEpochs ?? 0);
 
     private void OnExportLogClicked(object sender, RoutedEventArgs e) =>
         DetailsWindow.ExportFrom(this, XamlRoot);

@@ -21,12 +21,26 @@ public static class DiagnosticLogCsv
     /// view. Exporting the whole log while the screen shows four lines would be a surprise, and the
     /// header row records the distinction anyway.
     /// </param>
+    /// <param name="rolloverEpochs">
+    /// How many 1024-week epochs the receiver's date is behind, from
+    /// <see cref="ReceiverStatus.WeekRolloverEpochs"/>. Zero on a receiver that has not rolled over,
+    /// which leaves the corrected column empty.
+    /// <para>
+    /// <b>One figure for the whole export, not one per entry.</b> The epoch count is derived on the
+    /// status screen by comparing the receiver's date against the host clock, and a log entry from
+    /// years ago has no such comparison available — it carries a date and nothing to check it
+    /// against. Correcting every entry by the count the receiver is behind <i>now</i> is right for
+    /// any log that does not itself span a rollover boundary, which is every log this receiver can
+    /// produce: the boundary is 1024 weeks apart and the log holds a few hundred entries. Per-entry
+    /// derivation would be more general and could not be verified against anything.
+    /// </para>
+    /// </param>
     /// <returns>
     /// A document, or <see langword="null"/> when there is nothing to write. Null rather than an
     /// empty document so the caller can leave the command disabled rather than offering a file
     /// picker that produces a header and no rows.
     /// </returns>
-    public static CsvDocument? From(IReadOnlyList<DiagnosticLogEntry>? entries)
+    public static CsvDocument? From(IReadOnlyList<DiagnosticLogEntry>? entries, int rolloverEpochs = 0)
     {
         if (entries is null || entries.Count == 0)
         {
@@ -38,13 +52,23 @@ public static class DiagnosticLogCsv
         // renders under (§11.1: unparseable becomes null, never a guess), and it is why RawText is
         // a column rather than a fallback stuffed into Message - a row where the structured columns
         // are empty is visibly unparsed rather than quietly wrong.
-        CsvDocument document = new("Entry", "Timestamp", "Message", "Raw");
+        //
+        // CorrectedTimestamp is a fifth column rather than a repair of the second. A CSV outlives
+        // the window it was exported from, and the caption on the log card that explains the 2006
+        // dates does not travel with the file — but neither may the file stop saying what the
+        // receiver said (§11.1). Both, side by side, is the only version that is true twice.
+        //
+        // It stays empty when no correction applies. Repeating the uncorrected value there would
+        // imply a correction had been computed and come to zero, which is a different claim from
+        // "this receiver has not rolled over".
+        CsvDocument document = new("Entry", "Timestamp", "CorrectedTimestamp", "Message", "Raw");
 
         foreach (DiagnosticLogEntry entry in entries)
         {
             document.AddRow(
                 entry.Number?.ToString(System.Globalization.CultureInfo.InvariantCulture),
                 CsvDocument.Timestamp(entry.Timestamp),
+                CsvDocument.Timestamp(GpsWeekRollover.Correct(entry.Timestamp, rolloverEpochs)),
                 entry.Message,
                 entry.RawText);
         }
