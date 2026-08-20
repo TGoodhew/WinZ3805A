@@ -62,4 +62,40 @@ public sealed record SkyPlotSatellite(
     /// marker at a guessed position is worse than an absent one on a plot read for geometry.
     /// </summary>
     public bool CanPlot => ElevationDegrees is not null && AzimuthDegrees is not null;
+
+    /// <summary>The PRN as it is shown.</summary>
+    public string PrnText => Prn.ToString(System.Globalization.CultureInfo.CurrentCulture);
+
+    /// <summary>Elevation as it is shown, with the degree sign.</summary>
+    public string ElevationText => ReadoutFormatter.Degrees(ElevationDegrees);
+
+    /// <summary>Azimuth as it is shown.</summary>
+    public string AzimuthText => ReadoutFormatter.Degrees(AzimuthDegrees);
+
+    /// <summary>
+    /// What the marker's shape says, in words (A11Y-11).
+    /// </summary>
+    /// <remarks>
+    /// The plot carries this distinction as shape and reinforces it with colour (§9.4.3). A list has
+    /// neither, so the alternate view has to say it — and a list that dropped it would be a summary
+    /// of the plot rather than the same data in another form, which is what #60 rules out.
+    /// </remarks>
+    public string StateText => Marker switch
+    {
+        SkyPlotMarkerKind.Tracked => "Tracked",
+        SkyPlotMarkerKind.Predicted => "Predicted",
+        SkyPlotMarkerKind.BelowMask => "Below mask",
+        _ => ReadoutFormatter.NoValue,
+    };
+
+    /// <summary>
+    /// What the plot cannot show about this satellite, or empty when there is nothing to add.
+    /// </summary>
+    /// <remarks>
+    /// A satellite the receiver reported without both angles is absent from the plot, because there
+    /// is nowhere honest to draw it. The list has no such constraint and shows it with em dashes for
+    /// the angles — but then the two views hold different numbers of rows, and a user comparing them
+    /// deserves to be told why rather than left to wonder which one is broken.
+    /// </remarks>
+    public string PlotNote => CanPlot ? string.Empty : "not on the plot: no position reported";
 }

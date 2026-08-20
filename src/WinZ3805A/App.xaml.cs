@@ -113,6 +113,7 @@ public partial class App : Application
 
         services.AddSingleton<IConnectionPreferenceStore, LocalConnectionPreferenceStore>();
         services.AddSingleton<IDetailsViewPreferenceStore, LocalDetailsViewPreferenceStore>();
+        services.AddSingleton<ISatellitesViewPreferenceStore, LocalSatellitesViewPreferenceStore>();
         services.AddSingleton<SerialPortEnumerator>();
 
         // Keyed by window: each keeps its own file, because the two are different sizes on

@@ -40,6 +40,16 @@ public static class ReadoutFormatter
     /// <summary>What a field with no value shows (§11.1).</summary>
     public const string NoValue = "—";
 
+    /// <summary>An angle in whole degrees, or <see cref="NoValue"/>.</summary>
+    /// <remarks>
+    /// Here rather than on a row type because the satellite tables, the sky plot and the plot's
+    /// A11Y-11 list alternate all render the same two angles, and §11.1's rule that a missing
+    /// reading shows as an em dash is only one rule if it is written once.
+    /// </remarks>
+    public static string Degrees(int? value) => value is int degrees
+        ? $"{degrees.ToString(System.Globalization.CultureInfo.CurrentCulture)}°"
+        : NoValue;
+
     /// <summary>
     /// A duration in seconds, rendered in the engineering unit that suits its magnitude.
     /// </summary>
