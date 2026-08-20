@@ -315,6 +315,23 @@ public sealed partial class TimingPage : Page
         }
     }
 
+    /// <summary>Pulls one field out of a window, dropping the samples that have none.</summary>
+    private static IReadOnlyList<TrendSample> Project(
+        IReadOnlyList<TrendRecord> window,
+        Func<TrendRecord, double?> selector)
+    {
+        List<TrendSample> samples = [];
+        foreach (TrendRecord record in window)
+        {
+            if (selector(record) is double value)
+            {
+                samples.Add(new TrendSample(record.Ticks, value));
+            }
+        }
+
+        return samples;
+    }
+
     private void OnRangeChanged(object sender, RoutedEventArgs e)
     {
         if (sender is RadioButton button && int.TryParse((string?)button.Tag, out int hours))
@@ -348,18 +365,35 @@ public sealed partial class TimingPage : Page
         long now = device.TimeProvider.GetUtcNow().UtcTicks;
         long from = now - TimeSpan.FromHours(_rangeHours).Ticks;
 
-        IReadOnlyList<TrendSample> series =
-            trends.ReadSeries(from, now, record => record.TimeIntervalNanoseconds);
+        IReadOnlyList<TrendRecord> window = trends.Read(from, now);
+
+        IReadOnlyList<TrendSample> series = Project(window, record => record.TimeIntervalNanoseconds);
+        IReadOnlyList<TrendSample> efc = Project(window, record => record.Efc);
+
+        // The mode as a number, for the background shading. Read once and shared by both charts,
+        // so the two cannot disagree about when the receiver was locked.
+        IReadOnlyList<TrendSample> states = Project(
+            window,
+            record => (double)ReceiverModes.FromSyncState(record.SyncState));
 
         TimeIntervalTrend.FromTicks = from;
         TimeIntervalTrend.ToTicks = now;
+        TimeIntervalTrend.States = states;
         TimeIntervalTrend.Samples = series;
 
+        EfcTrend.FromTicks = from;
+        EfcTrend.ToTicks = now;
+        EfcTrend.States = states;
+        EfcTrend.Samples = efc;
+
+        // Names the shading in words as well as colour (§9.4.3, A11Y-12), and reports the count,
+        // because a 7-day range drawn from four hours of history looks exactly like one drawn from
+        // seven days.
         TrendSummaryText.Text = series.Count switch
         {
             0 => "No readings stored for this range yet. The trend fills as the receiver is polled.",
-            1 => "1 reading stored for this range.",
-            _ => $"{series.Count:N0} readings stored for this range.",
+            1 => "1 reading stored for this range. Shaded stretches are where the receiver was not locked.",
+            _ => $"{series.Count:N0} readings stored for this range. Shaded stretches are where the receiver was not locked.",
         };
     }
 }
