@@ -16,7 +16,7 @@ namespace WinZ3805A.Views;
 /// <summary>
 /// The §10.7 Timing &amp; Antenna page.
 /// </summary>
-public sealed partial class TimingPage : Page
+public sealed partial class TimingPage : Page, ICsvExportSource
 {
     /// <summary>§8.3's antenna delay, the one tier C command on this page.</summary>
     private static readonly ScpiCommand SetDelay = CommandConfirmation.Require(":GPS:REF:ADELay");
@@ -30,6 +30,9 @@ public sealed partial class TimingPage : Page
 
     /// <summary>The selected range, in hours. §13's four settings are 1, 6, 24 and 168.</summary>
     private int _rangeHours = 1;
+
+    /// <summary>The window currently on screen, which is also what Export writes.</summary>
+    private IReadOnlyList<TrendRecord> _exportable = [];
     private CommandInvoker? _invoker;
     private readonly NumberFieldValidator _directDelay;
     private readonly NumberFieldValidator _length;
@@ -315,6 +318,52 @@ public sealed partial class TimingPage : Page
         }
     }
 
+    /// <inheritdoc />
+    public event EventHandler? ExportAvailabilityChanged;
+
+    /// <inheritdoc />
+    public bool CanExport => _exportable.Count > 0;
+
+    /// <inheritdoc />
+    public string SuggestedFileName =>
+        $"receiver-trend-{(_device?.TimeProvider ?? TimeProvider.System).GetLocalNow():yyyy-MM-dd-HHmm}";
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// The <i>selected range</i>, not the whole store, because §9.7.5 calls the command "export
+    /// current view" and the range selector is the view. A user looking at one hour who exports
+    /// eight weeks has been surprised.
+    /// </para>
+    /// <para>
+    /// <b>Undecimated.</b> The chart reduces 604 800 samples to a thousand columns because a screen
+    /// has a thousand columns; a file does not, and a spreadsheet fed min/max pairs would be
+    /// analysing an artefact of the plot width. What decimation exists to protect on screen —
+    /// the one-second excursion — is simply present here.
+    /// </para>
+    /// </remarks>
+    public CsvDocument? BuildCsv()
+    {
+        if (_exportable.Count == 0)
+        {
+            return null;
+        }
+
+        CsvDocument document = new("Timestamp", "TimeIntervalNs", "EfcPercent", "SyncState", "TrackedSatellites");
+
+        foreach (TrendRecord record in _exportable)
+        {
+            document.AddRow(
+                CsvDocument.PreciseTimestamp(new DateTime(record.Ticks, DateTimeKind.Utc)),
+                CsvDocument.Number(record.TimeIntervalNanoseconds, 1),
+                CsvDocument.Number(record.Efc, 2),
+                record.SyncState,
+                record.TrackedCount?.ToString(CultureInfo.InvariantCulture));
+        }
+
+        return document;
+    }
+
     /// <summary>Pulls one field out of a window, dropping the samples that have none.</summary>
     private static IReadOnlyList<TrendSample> Project(
         IReadOnlyList<TrendRecord> window,
@@ -366,6 +415,7 @@ public sealed partial class TimingPage : Page
         long from = now - TimeSpan.FromHours(_rangeHours).Ticks;
 
         IReadOnlyList<TrendRecord> window = trends.Read(from, now);
+        _exportable = window;
 
         IReadOnlyList<TrendSample> series = Project(window, record => record.TimeIntervalNanoseconds);
         IReadOnlyList<TrendSample> efc = Project(window, record => record.Efc);
@@ -389,6 +439,8 @@ public sealed partial class TimingPage : Page
         // Names the shading in words as well as colour (§9.4.3, A11Y-12), and reports the count,
         // because a 7-day range drawn from four hours of history looks exactly like one drawn from
         // seven days.
+        ExportAvailabilityChanged?.Invoke(this, EventArgs.Empty);
+
         TrendSummaryText.Text = series.Count switch
         {
             0 => "No readings stored for this range yet. The trend fills as the receiver is polled.",

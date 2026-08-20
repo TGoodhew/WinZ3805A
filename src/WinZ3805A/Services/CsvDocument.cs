@@ -85,6 +85,18 @@ public sealed class CsvDocument
     public static string Number(double? value, int decimals) =>
         value is null ? string.Empty : value.Value.ToString($"F{decimals}", CultureInfo.InvariantCulture);
 
+    /// <summary>Formats a timestamp for a cell to millisecond precision, or empty.</summary>
+    /// <remarks>
+    /// For a source whose samples are finer than a second. The trend is polled at roughly 1 Hz but
+    /// not exactly, so two samples can land in the same second — and at whole-second precision they
+    /// come out as identical rows, which reads as duplicated data rather than as two readings.
+    /// The receiver's own diagnostic log has second resolution and uses
+    /// <see cref="Timestamp(DateTime?)"/> instead: milliseconds there would be precision the device
+    /// never claimed.
+    /// </remarks>
+    public static string PreciseTimestamp(DateTime? value) =>
+        value is null ? string.Empty : value.Value.ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture);
+
     /// <summary>Formats a timestamp for a cell as ISO 8601, or empty.</summary>
     /// <remarks>
     /// Round-trippable and unambiguous, which a localised date is not. No offset is appended: the
