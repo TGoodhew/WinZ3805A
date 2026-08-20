@@ -175,8 +175,8 @@ public static class CommandCatalog
             Query(":PTIM:TIME:STR?", "Time as text", "Reads the time already formatted as a string.", ResponseFormat.Text),
             Query(":PTIM:TZON?", "Time zone", "Reads the configured time zone offset.", ResponseFormat.IntegerList),
             Query(":PTIM:LEAP:ACC?", "Leap second accumulated", "Reads the accumulated difference between GPS time and UTC.", ResponseFormat.Integer),
-            Query(":PTIM:LEAP:DATE?", "Leap second date", "Reads the date of the announced leap second.", ResponseFormat.IntegerList),
-            Query(":PTIM:LEAP:DUR?", "Leap second direction", "Reads whether the announced leap second is added or removed.", ResponseFormat.Integer),
+            Query(":PTIM:LEAP:DATE?", "Leap second date", "Reads the date of the announced leap second. Answers only while one is announced; rejected with E-230 otherwise.", ResponseFormat.IntegerList),
+            Query(":PTIM:LEAP:DUR?", "Leap second direction", "Reads whether the announced leap second is added or removed. Answers only while one is announced; rejected with E-230 otherwise.", ResponseFormat.Integer),
             Query(":PTIM:LEAP:STAT?", "Leap second pending", "Reads whether a leap second is currently announced.", ResponseFormat.Keyword),
 
             // ---- Front panel indicators -----------------------------------------------------

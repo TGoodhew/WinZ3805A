@@ -1,7 +1,14 @@
+using System.Globalization;
+
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
 
+using WinZ3805A.Controls;
+using WinZ3805A.Device.Commands;
+using WinZ3805A.Device.Models;
+using WinZ3805A.Device.Parsing;
+using WinZ3805A.Device.Transport;
 using WinZ3805A.Services;
 using WinZ3805A.ViewModels;
 
@@ -17,6 +24,12 @@ public sealed partial class TimePage : Page
     private readonly DispatcherTimer _ticker = new() { Interval = TimeSpan.FromSeconds(1) };
     private bool _ready;
 
+    /// <summary>§10.14's leap-second detail, read on arrival and on reconnect.</summary>
+    private LeapSecondReading _leap = LeapSecondReading.Unknown;
+
+    /// <summary>Cancels a read in flight when the page is left.</summary>
+    private CancellationTokenSource? _reading;
+
     /// <summary>Creates the page.</summary>
     public TimePage()
     {
@@ -26,6 +39,10 @@ public sealed partial class TimePage : Page
         Unloaded += (_, _) =>
         {
             _ticker.Stop();
+            _reading?.Cancel();
+            _reading?.Dispose();
+            _reading = null;
+
             if (_device is DeviceContext device)
             {
                 device.Session.StatusChanged -= OnStatusChanged;
@@ -53,6 +70,103 @@ public sealed partial class TimePage : Page
         _ready = true;
         _ticker.Start();
         Render();
+
+        // Read once on arrival rather than on a timer. The accumulated offset changes when a leap
+        // second is applied, which is at most twice a year, and §7.3 gives the poller sole ownership
+        // of anything that repeats. It is re-read on reconnect, because a different receiver may
+        // have been plugged in.
+        _ = ReadLeapAsync();
+    }
+
+    /// <summary>
+    /// Reads the §10.14 leap-second detail, asking only what the receiver will answer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The order is the point.</b> <c>ACC?</c> and <c>STAT?</c> are always safe to ask;
+    /// <c>DATE?</c> and <c>DUR?</c> answer only while an announcement stands and are rejected with
+    /// <c>E-230</c> otherwise. Asking all four on arrival would put two errors in the receiver's
+    /// error queue every time this page was opened, and they would then surface on the Diagnostics
+    /// page as if something had gone wrong. See <see cref="LeapSecondQueries"/>.
+    /// </para>
+    /// <para>
+    /// Nothing here is a setter and nothing here is tier C. The whole card is four queries.
+    /// </para>
+    /// </remarks>
+    private async Task ReadLeapAsync()
+    {
+        if (_device is not DeviceContext device)
+        {
+            return;
+        }
+
+        _reading?.Cancel();
+        _reading?.Dispose();
+        _reading = new CancellationTokenSource();
+        CancellationToken token = _reading.Token;
+
+        try
+        {
+            int? accumulated = await AskAsync(LeapSecondQueries.Accumulated, token).ConfigureAwait(true);
+            int? status = await AskAsync(LeapSecondQueries.Status, token).ConfigureAwait(true);
+
+            int? direction = null;
+            DateOnly? announced = null;
+
+            if (LeapSecondQueries.NeedsAnnouncementDetail(LeapSecondQueries.Decode(status, null)))
+            {
+                direction = await AskAsync(LeapSecondQueries.Direction, token).ConfigureAwait(true);
+                announced = LeapSecondQueries.ParseDate(
+                    await AskLinesAsync(LeapSecondQueries.Date, token).ConfigureAwait(true));
+            }
+
+            _leap = new LeapSecondReading(
+                accumulated,
+                LeapSecondQueries.Decode(status, direction),
+                announced,
+                accumulated is null && status is null
+                    ? "The receiver did not answer the leap-second queries."
+                    : null);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or TransportException)
+        {
+            _leap = LeapSecondReading.Unknown with { Error = exception.Message };
+        }
+
+        if (_ready)
+        {
+            Render();
+        }
+    }
+
+    /// <summary>Asks one catalogued query and reads a single integer from the answer.</summary>
+    private async Task<int?> AskAsync(string mnemonic, CancellationToken token) =>
+        ScalarParsers.ParseInteger(
+            (await AskLinesAsync(mnemonic, token).ConfigureAwait(true)) is [string first, ..] ? first : null);
+
+    /// <summary>
+    /// Asks one catalogued query and returns its lines, or null if it did not answer.
+    /// </summary>
+    /// <remarks>
+    /// Resolved through the catalog rather than sent as text: §8.1 makes the catalog an allowlist and
+    /// <c>ExecuteAsync</c> takes an <see cref="ScpiCommand"/> precisely so nothing routes around it.
+    /// </remarks>
+    private async Task<IReadOnlyList<string>?> AskLinesAsync(string mnemonic, CancellationToken token)
+    {
+        if (_device is not DeviceContext device || CommandCatalog.Find(mnemonic) is not ScpiCommand command)
+        {
+            return null;
+        }
+
+        Transaction transaction = await device.Session
+            .ExecuteAsync(command, cancellationToken: token)
+            .ConfigureAwait(true);
+
+        return transaction.Succeeded && transaction.Lines.Count > 0 ? transaction.Lines : null;
     }
 
     /// <remarks>
@@ -82,6 +196,15 @@ public sealed partial class TimePage : Page
             if (_model is TimeViewModel model)
             {
                 model.Connection = e.Status;
+            }
+
+            // Re-read on a fresh connection: the accumulated offset is a fact about the receiver,
+            // and a reconnect may be to a different one. Nothing is read while disconnected, which
+            // leaves the last-known values on screen with the footer saying how old they are —
+            // §9.11's rule that stale is dimmed and timestamped, never blanked.
+            if (e.Status == ConnectionStatus.Connected)
+            {
+                _ = ReadLeapAsync();
             }
         });
 
@@ -113,8 +236,33 @@ public sealed partial class TimePage : Page
         RolloverPill.Text = model.IsDateCorrected ? "Date corrected" : "No correction";
         RolloverText.Text = model.RolloverText;
 
-        LeapPill.Severity = model.LeapSeverity;
-        LeapPill.Text = model.LeapPendingText;
+        // The pill follows the direct query where there is one, and the status screen otherwise.
+        // They agree in every case seen so far; where they could not both be read, the screen is
+        // the one that arrives without asking.
+        LeapSecondPending pending = _leap.AccumulatedSeconds is null && _leap.Error is null
+            ? model.LeapPending
+            : _leap.Pending;
+
+        LeapPill.Severity = pending == LeapSecondPending.None ? Severity.Neutral : Severity.Caution;
+        LeapPill.Text = pending switch
+        {
+            LeapSecondPending.Plus => "A second will be inserted",
+            LeapSecondPending.Minus => "A second will be removed",
+            _ => "None announced",
+        };
+
+        AccumulatedText.Text = _leap.AccumulatedSeconds is int seconds
+            ? $"{seconds.ToString("+0;\u22120;0", CultureInfo.CurrentCulture)}{ReadoutFormatter.HairSpace}s"
+            : ReadoutFormatter.NoValue;
+
+        bool hasDate = _leap.AnnouncedDate is DateOnly;
+        AnnouncedLabel.Visibility = hasDate ? Visibility.Visible : Visibility.Collapsed;
+        AnnouncedDateText.Visibility = hasDate ? Visibility.Visible : Visibility.Collapsed;
+        AnnouncedDateText.Text = _leap.AnnouncedDate?.ToString("d MMM yyyy", CultureInfo.CurrentCulture)
+            ?? string.Empty;
+
+        LeapErrorText.Text = _leap.Error ?? string.Empty;
+        LeapErrorText.Visibility = _leap.Error is null ? Visibility.Collapsed : Visibility.Visible;
 
         FooterText.Text = model.AgeDescription;
     }

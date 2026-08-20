@@ -162,6 +162,8 @@
              Link="Services\AdvancedPreferences.cs" />
     <Compile Include="..\..\src\WinZ3805A\ViewModels\AdvancedConsole.cs"
              Link="ViewModels\AdvancedConsole.cs" />
+    <Compile Include="..\..\src\WinZ3805A\ViewModels\LeapSecondReading.cs"
+             Link="ViewModels\LeapSecondReading.cs" />
     <Compile Include="..\..\src\WinZ3805A\Services\JsonPreferenceFile.cs"
              Link="Services\JsonPreferenceFile.cs" />
     <Compile Include="..\..\src\WinZ3805A\Services\SatellitesViewPreferences.cs"
