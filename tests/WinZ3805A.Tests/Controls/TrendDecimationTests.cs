@@ -225,4 +225,68 @@ public sealed class TrendDecimationTests
         Assert.Equal(-50, minimum);
         Assert.Equal(50, maximum);
     }
+
+    // ------------------------------------------------------------------------ state columns
+
+    /// <summary>
+    /// A state is not a number. Two states in one column cannot be averaged, so the honest
+    /// reduction is the one that covered most of the column.
+    /// </summary>
+    [Fact]
+    public void AColumnTakesTheStateThatCoveredMostOfIt()
+    {
+        TrendSample[] states =
+        [
+            new(0, 1), new(1 * Second, 1), new(2 * Second, 1),
+            new(3 * Second, 2),
+        ];
+
+        (int column, int state) = Assert.Single(
+            TrendDecimation.ToStateColumns(states, 0, 4 * Second, 1));
+
+        Assert.Equal(0, column);
+        Assert.Equal(1, state);
+    }
+
+    [Fact]
+    public void EachColumnGetsItsOwnState()
+    {
+        TrendSample[] states = [new(0, 7), new(5 * Second, 9)];
+
+        IReadOnlyList<(int Column, int State)> columns =
+            TrendDecimation.ToStateColumns(states, 0, 10 * Second, 10);
+
+        Assert.Equal(2, columns.Count);
+        Assert.Equal((0, 7), columns[0]);
+        Assert.Equal((5, 9), columns[1]);
+    }
+
+    /// <summary>
+    /// Shading a gap would assert the receiver was locked while it was in fact unplugged, so an
+    /// unrecorded column is absent rather than inheriting whatever preceded it.
+    /// </summary>
+    [Fact]
+    public void AnUnrecordedColumnIsNotShadedWithTheStateBeforeIt()
+    {
+        TrendSample[] states = [new(0, 1), new(9 * Second, 1)];
+
+        IReadOnlyList<(int Column, int State)> columns =
+            TrendDecimation.ToStateColumns(states, 0, 10 * Second, 10);
+
+        Assert.Equal(2, columns.Count);
+        Assert.DoesNotContain(columns, entry => entry.Column is > 0 and < 9);
+    }
+
+    [Fact]
+    public void NoStatesProducesNoShading() =>
+        Assert.Empty(TrendDecimation.ToStateColumns([], 0, 10 * Second, 10));
+
+    [Fact]
+    public void StateColumnsNeverOutnumberThePlotWidth()
+    {
+        TrendSample[] states =
+            [.. Enumerable.Range(0, 100_000).Select(i => new TrendSample(i * Second, i % 3))];
+
+        Assert.True(TrendDecimation.ToStateColumns(states, 0, 100_000L * Second, 500).Count <= 500);
+    }
 }

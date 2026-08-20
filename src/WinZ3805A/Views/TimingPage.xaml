@@ -224,6 +224,21 @@
                                          Unit="ns"
                                          AutomationProperties.Name="1 PPS time interval trend" />
 
+                    <!--
+                        EFC on its own chart rather than a second axis on the first. §9.4.4's
+                        diverging ramp is anchored on zero and the two quantities do not share a
+                        zero: 0 ns is the receiver on time, and 0 % is the oscillator at the middle
+                        of its range. Overlaying them would make one of the two colour scales lie.
+                    -->
+                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}"
+                               Text="Oscillator control (EFC)" />
+
+                    <controls:TrendChart x:Name="EfcTrend"
+                                         Height="140"
+                                         Unit="%"
+                                         Floor="25"
+                                         AutomationProperties.Name="Oscillator control trend" />
+
                     <TextBlock x:Name="TrendSummaryText"
                                Style="{ThemeResource WzCaptionTextStyle}"
                                Foreground="{ThemeResource WzTextTertiaryBrush}"

@@ -44,6 +44,91 @@ public readonly record struct TrendColumn(int Column, double Minimum, double Max
 public static class TrendDecimation
 {
     /// <summary>
+    /// Reduces a run of states to the pixel columns over which each held.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// §49's lock-state shading. Separate from <see cref="ToColumns"/> because a state is not a
+    /// number: two states in one column cannot be averaged, and the honest reduction is "the state
+    /// that covered most of this column", not a mean of an enumeration.
+    /// </para>
+    /// <para>
+    /// A column with no samples is absent, exactly as with the value series, so an unrecorded
+    /// stretch is unshaded rather than shaded with whatever preceded it. Shading a gap would assert
+    /// the receiver was locked while it was in fact unplugged.
+    /// </para>
+    /// </remarks>
+    /// <param name="states">
+    /// Samples of the state, ascending. <c>Value</c> is an arbitrary integer key — the caller
+    /// decides what it means.
+    /// </param>
+    /// <param name="fromTicks">The left edge of the window.</param>
+    /// <param name="toTicks">The right edge.</param>
+    /// <param name="width">How many pixel columns the plot is wide.</param>
+    public static IReadOnlyList<(int Column, int State)> ToStateColumns(
+        IReadOnlyList<TrendSample> states,
+        long fromTicks,
+        long toTicks,
+        int width)
+    {
+        ArgumentNullException.ThrowIfNull(states);
+        ArgumentOutOfRangeException.ThrowIfLessThan(width, 1);
+
+        if (toTicks <= fromTicks || states.Count == 0)
+        {
+            return [];
+        }
+
+        long span = toTicks - fromTicks;
+
+        // One small tally per column. States are few, so a per-column dictionary would cost more
+        // in allocation than the counting saves.
+        Dictionary<int, int>[] tally = new Dictionary<int, int>[width];
+
+        foreach (TrendSample state in states)
+        {
+            if (state.Ticks < fromTicks || state.Ticks > toTicks)
+            {
+                continue;
+            }
+
+            int column = (int)((state.Ticks - fromTicks) * width / span);
+            if (column >= width)
+            {
+                column = width - 1;
+            }
+
+            Dictionary<int, int> counts = tally[column] ??= [];
+            int key = (int)state.Value;
+            counts[key] = counts.TryGetValue(key, out int seen) ? seen + 1 : 1;
+        }
+
+        List<(int Column, int State)> columns = [];
+        for (int c = 0; c < width; c++)
+        {
+            if (tally[c] is not Dictionary<int, int> counts || counts.Count == 0)
+            {
+                continue;
+            }
+
+            int best = 0;
+            int bestCount = -1;
+            foreach ((int state, int count) in counts)
+            {
+                if (count > bestCount)
+                {
+                    best = state;
+                    bestCount = count;
+                }
+            }
+
+            columns.Add((c, best));
+        }
+
+        return columns;
+    }
+
+    /// <summary>
     /// Buckets samples into pixel columns across a time window.
     /// </summary>
     /// <param name="samples">

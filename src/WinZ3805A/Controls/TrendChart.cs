@@ -78,6 +78,13 @@ public sealed class TrendChart : Control
         typeof(TrendChart),
         new PropertyMetadata(50.0, OnChartChanged));
 
+    /// <summary>Identifies the <see cref="States"/> dependency property.</summary>
+    public static readonly DependencyProperty StatesProperty = DependencyProperty.Register(
+        nameof(States),
+        typeof(IReadOnlyList<TrendSample>),
+        typeof(TrendChart),
+        new PropertyMetadata(null, OnChartChanged));
+
     private Canvas? _surface;
 
     /// <summary>Creates the control.</summary>
@@ -93,6 +100,21 @@ public sealed class TrendChart : Control
     {
         get => (IReadOnlyList<TrendSample>?)GetValue(SamplesProperty);
         set => SetValue(SamplesProperty, value);
+    }
+
+    /// <summary>
+    /// The receiver's state over the same window, for §49's background shading.
+    /// </summary>
+    /// <remarks>
+    /// <c>Value</c> carries a <see cref="ReceiverMode"/> cast to a double. Shading is drawn only
+    /// where the mode is <b>not</b> locked, so a healthy trace has a plain background and the eye
+    /// is drawn to the stretches that were not — which is the §9.1 argument that the interesting
+    /// state is the one that should stand out, not the ordinary one.
+    /// </remarks>
+    public IReadOnlyList<TrendSample>? States
+    {
+        get => (IReadOnlyList<TrendSample>?)GetValue(StatesProperty);
+        set => SetValue(StatesProperty, value);
     }
 
     /// <summary>The left edge of the window, in UTC ticks.</summary>
@@ -161,6 +183,7 @@ public sealed class TrendChart : Control
         double zeroY = height / 2;
         double scale = (height / 2) / maximum;
 
+        DrawStateShading(surface, height);
         DrawZeroLine(surface, width, zeroY);
 
         foreach (TrendColumn column in columns)
@@ -189,6 +212,56 @@ public sealed class TrendChart : Control
         }
 
         DrawAxisLabels(surface, width, height, maximum);
+    }
+
+    /// <summary>
+    /// Shades the columns where the receiver was not locked (#49).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Drawn first, so the trace sits on top of it rather than under it, and at low opacity so it
+    /// reads as ground rather than as data. A shaded stretch is context for the trace above it —
+    /// an excursion during holdover means something different from the same excursion while
+    /// locked, and without this the two are indistinguishable.
+    /// </para>
+    /// <para>
+    /// <b>Colour is not the only channel here either.</b> Shading marks a region rather than
+    /// encoding a value, and the caption under the chart names what it means in words, so a reader
+    /// who cannot see the tint is not being denied a reading (§9.4.3, A11Y-12).
+    /// </para>
+    /// </remarks>
+    private void DrawStateShading(Canvas surface, double height)
+    {
+        if (States is not { Count: > 0 } states)
+        {
+            return;
+        }
+
+        IReadOnlyList<(int Column, int State)> shaded = TrendDecimation.ToStateColumns(
+            states, FromTicks, ToTicks, (int)Math.Floor(surface.ActualWidth));
+
+        Brush? caution = Resource<Brush>("WzCautionBrush");
+        if (caution is null)
+        {
+            return;
+        }
+
+        foreach ((int column, int state) in shaded)
+        {
+            if ((ReceiverMode)state == ReceiverMode.Locked)
+            {
+                continue;
+            }
+
+            surface.Children.Add(new Rectangle
+            {
+                Width = 1,
+                Height = height,
+                Fill = caution,
+                Opacity = 0.18,
+                Margin = new Thickness(column, 0, 0, 0),
+            });
+        }
     }
 
     /// <summary>
