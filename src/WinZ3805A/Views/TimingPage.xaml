@@ -239,6 +239,41 @@
                                          Floor="25"
                                          AutomationProperties.Name="Oscillator control trend" />
 
+                    <!--
+                        #137's drift analysis. A card on this page rather than a destination of its
+                        own: §10.2's cap is twelve now and a page was available, but the fit is
+                        about the series drawn immediately above it and separating them would put a
+                        number on one page and its evidence on another.
+                    -->
+                    <StackPanel Spacing="{ThemeResource WzSpaceXs}">
+                        <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}"
+                                   Text="Oscillator drift" />
+
+                        <controls:SeverityPill x:Name="DriftPill" HorizontalAlignment="Left" />
+
+                        <TextBlock x:Name="DriftAdvisoryText"
+                                   Style="{ThemeResource WzBodyTextStyle}"
+                                   TextWrapping="Wrap"
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}" />
+
+                        <TextBlock x:Name="DriftNumbersText"
+                                   Style="{ThemeResource WzMonoTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   TextWrapping="Wrap" />
+
+                        <TextBlock x:Name="DriftEvidenceText"
+                                   Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextTertiaryBrush}"
+                                   TextWrapping="Wrap"
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}" />
+
+                        <TextBlock x:Name="DriftHardwareText"
+                                   Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextTertiaryBrush}"
+                                   TextWrapping="Wrap"
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}" />
+                    </StackPanel>
+
                     <TextBlock x:Name="TrendSummaryText"
                                Style="{ThemeResource WzCaptionTextStyle}"
                                Foreground="{ThemeResource WzTextTertiaryBrush}"
