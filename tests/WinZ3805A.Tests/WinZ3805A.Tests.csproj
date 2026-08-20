@@ -100,6 +100,13 @@
              Link="ViewModels\RangeValidation.cs" />
     <Compile Include="..\..\src\WinZ3805A\ViewModels\RegisterMaskEdit.cs"
              Link="ViewModels\RegisterMaskEdit.cs" />
+
+    <!-- #137's drift fit. Every judgement in it is one a screenshot cannot check: a slope looks
+         equally plausible whether or not the 24-hour term was removed from it first, and a
+         classification that names the wrong fault is still a sentence. Synthetic series with a
+         known slope, a known daily cycle and a known settling period are the only way to tell. -->
+    <Compile Include="..\..\src\WinZ3805A\ViewModels\EfcDrift.cs"
+             Link="ViewModels\EfcDrift.cs" />
     <Compile Include="..\..\src\WinZ3805A\ViewModels\Staleness.cs"
              Link="ViewModels\Staleness.cs" />
     <Compile Include="..\..\src\WinZ3805A\ViewModels\DisplayTime.cs"

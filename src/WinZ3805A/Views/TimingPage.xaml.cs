@@ -8,6 +8,8 @@ using Microsoft.UI.Xaml.Navigation;
 using WinZ3805A.Controls;
 using WinZ3805A.Device.Commands;
 using WinZ3805A.Device.Models;
+using WinZ3805A.Device.Parsing;
+using WinZ3805A.Device.Transport;
 using WinZ3805A.Services;
 using WinZ3805A.ViewModels;
 
@@ -113,6 +115,7 @@ public sealed partial class TimingPage : Page, ICsvExportSource
 
         _device = device;
         _trends = App.Services?.GetService<TrendStore>();
+        _ = ReadEfcHardwareBitsAsync();
         _invoker = new CommandInvoker(device.Session);
         _model = new TimingViewModel(device.Store) { Connection = device.Session.Status };
         _model.PropertyChanged += (_, _) => DispatcherQueue.TryEnqueue(Render);
@@ -364,6 +367,165 @@ public sealed partial class TimingPage : Page, ICsvExportSource
         return document;
     }
 
+    /// <summary>
+    /// Runs #137's fit over the window on screen and reports it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Over the same window the chart is showing, so the numbers describe the picture above them.
+    /// A fit over a different span from the plot would be two claims about one receiver.
+    /// </para>
+    /// <para>
+    /// Severity comes from the pattern rather than from the slope. A steep drift on a receiver
+    /// whose fix has been failing is not an oscillator warning, and §9.4.3 renders it through
+    /// <c>SeverityPill</c> — colour, shape and text together — because a coloured dot asserting a
+    /// hardware fault is exactly what A11Y-12 forbids.
+    /// </para>
+    /// </remarks>
+    private void RenderDrift(IReadOnlyList<TrendRecord> window)
+    {
+        List<EfcSample> samples = [];
+        foreach (TrendRecord record in window)
+        {
+            if (record.Efc is not double percent)
+            {
+                continue;
+            }
+
+            ReceiverMode mode = ReceiverModes.FromSyncState(record.SyncState);
+            samples.Add(new EfcSample(
+                record.Ticks,
+                percent,
+                IsPowerUp: mode == ReceiverMode.PowerUp,
+                IsLocked: mode == ReceiverMode.Locked));
+        }
+
+        EfcDriftResult drift = EfcDrift.Analyse(samples);
+
+        DriftPill.Severity = drift.Pattern switch
+        {
+            DriftPattern.OscillatorNearingRange => Severity.Critical,
+            DriftPattern.GpsOrAntennaPath => Severity.Caution,
+            DriftPattern.LoopOrReference => Severity.Caution,
+            DriftPattern.NothingRemarkable => Severity.Success,
+            _ => Severity.Neutral,
+        };
+
+        DriftPill.Text = drift.Pattern switch
+        {
+            DriftPattern.OscillatorNearingRange => "Oscillator near end of range",
+            DriftPattern.GpsOrAntennaPath => "Signal path",
+            DriftPattern.LoopOrReference => "Loop or reference",
+            DriftPattern.NothingRemarkable => "Nothing remarkable",
+            _ => "Not enough data",
+        };
+
+        DriftAdvisoryText.Text = EfcDrift.Describe(drift.Pattern);
+
+        if (!drift.IsUsable)
+        {
+            DriftNumbersText.Text = string.Empty;
+            DriftEvidenceText.Text =
+                $"{drift.SampleCount:N0} usable reading(s) in this range; the fit needs at least "
+                + $"{EfcDrift.MinimumSamples}.";
+            return;
+        }
+
+        string projection = drift.DaysToRail is double days
+            ? $"reaches ±100 % in about {days:N0} day(s), around "
+              + $"{(_device?.TimeProvider ?? TimeProvider.System).GetLocalNow().AddDays(days):d MMM yyyy}"
+            : drift.DiurnalSeparable
+                ? "no projection: the trend is flat or heading away from both rails"
+                  // "this range" would be wrong: the user may have the 7-day range selected and
+                  // simply not have 7 days of history yet. What is short is the data.
+                : "no projection: under a day of data here, too short to tell drift from the "
+                  + "room warming up";
+
+        DriftNumbersText.Text =
+            $"Drift {drift.SlopePercentPerDay:+0.000;−0.000;0.000} %/day — {projection}.";
+
+        // The residual and the sample count are shown because a slope without a sense of scatter
+        // is a number pretending to be a measurement (#137).
+        DriftEvidenceText.Text =
+            $"From {drift.SampleCount:N0} settled reading(s) spanning {DescribeSpan(drift.WindowSpan)}"
+            + (drift.ExcludedForSettling > 0
+                ? $", {drift.ExcludedForSettling:N0} excluded as post-power-up settling"
+                : string.Empty)
+            + $". Unexplained scatter {drift.ResidualPercent:F2} %. "
+            + (drift.DiurnalSeparable
+                ? $"Daily swing about ±{drift.DiurnalAmplitudePercent:F2} %, inferred from the "
+                  + "reading's own 24-hour periodicity — this receiver reports no temperature, so "
+                  + "nothing here is correlated against one."
+                : "A daily swing cannot be separated from the trend in under a day of data, so "
+                  + "none is reported — the fit here is a plain line.");
+    }
+
+    /// <summary>Says how long a fitted window is, in the largest unit that stays readable.</summary>
+    private static string DescribeSpan(TimeSpan span) => span switch
+    {
+        { TotalDays: >= 2 } => $"{span.TotalDays:N1} days",
+        { TotalHours: >= 2 } => $"{span.TotalHours:N1} hours",
+        { TotalMinutes: >= 2 } => $"{span.TotalMinutes:N0} minutes",
+        _ => $"{span.TotalSeconds:N0} seconds",
+    };
+
+    /// <summary>
+    /// Reads the receiver's own verdict on its EFC range (#137).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Surfaced, never recomputed.</b> Hardware register bits 6 and 7 are the receiver saying
+    /// "EFC voltage near full scale" and "at full scale" in its own words, documented in the 58503A
+    /// reference and decoded in <c>StatusRegisterMap</c> since #34. A fit that disagreed with them
+    /// would be the application arguing with the instrument.
+    /// </para>
+    /// <para>
+    /// The <b>condition</b> field only. Reading <c>:EVENt</c> clears its latches, and doing that
+    /// from a page the user came to for a chart would silently destroy history the Status Registers
+    /// page exists to show them.
+    /// </para>
+    /// </remarks>
+    private async Task ReadEfcHardwareBitsAsync()
+    {
+        if (_device is not DeviceContext device)
+        {
+            return;
+        }
+
+        ScpiCommand? command = CommandCatalog.Find(":STAT:OPER:HARD:COND?");
+        if (command is null)
+        {
+            return;
+        }
+
+        try
+        {
+            Transaction transaction = await device.Session.ExecuteAsync(command);
+            if (!transaction.Succeeded || ScalarParsers.ParseInteger(transaction.Text) is not int condition)
+            {
+                return;
+            }
+
+            bool near = (condition & (1 << 6)) != 0;
+            bool full = (condition & (1 << 7)) != 0;
+
+            DriftHardwareText.Text = (near, full) switch
+            {
+                (_, true) => "The receiver reports its EFC voltage at full scale (hardware bit 7). "
+                    + "That is the instrument's own end-of-range indication, not an inference.",
+                (true, _) => "The receiver reports its EFC voltage near full scale (hardware bit 6). "
+                    + "That is the instrument's own warning, not an inference.",
+                _ => "The receiver reports its EFC voltage within range: hardware bits 6 and 7 are "
+                    + "both clear.",
+            };
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or TimeoutException or IOException)
+        {
+            // A page that could not ask says nothing rather than guessing.
+            DriftHardwareText.Text = string.Empty;
+        }
+    }
+
     /// <summary>Pulls one field out of a window, dropping the samples that have none.</summary>
     private static IReadOnlyList<TrendSample> Project(
         IReadOnlyList<TrendRecord> window,
@@ -439,6 +601,7 @@ public sealed partial class TimingPage : Page, ICsvExportSource
         // Names the shading in words as well as colour (§9.4.3, A11Y-12), and reports the count,
         // because a 7-day range drawn from four hours of history looks exactly like one drawn from
         // seven days.
+        RenderDrift(window);
         ExportAvailabilityChanged?.Invoke(this, EventArgs.Empty);
 
         TrendSummaryText.Text = series.Count switch
