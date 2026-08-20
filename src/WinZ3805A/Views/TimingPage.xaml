@@ -201,6 +201,35 @@
                                               Size="Medium" />
                     </Grid>
 
+                    <!--
+                        P1-1's trend. The range selector is §9.10.2's, and the four settings are
+                        §13's 1 h / 6 h / 24 h / 7 d. RadioButtons rather than a ComboBox: four
+                        mutually exclusive settings that are all worth seeing at once, and the
+                        current one is then legible without opening anything.
+                    -->
+                    <StackPanel Orientation="Horizontal"
+                                Spacing="{ThemeResource WzSpaceXs}">
+                        <RadioButton x:Name="Range1h" Content="1 h" GroupName="TrendRange"
+                                     Checked="OnRangeChanged" Tag="1" />
+                        <RadioButton x:Name="Range6h" Content="6 h" GroupName="TrendRange"
+                                     Checked="OnRangeChanged" Tag="6" />
+                        <RadioButton x:Name="Range24h" Content="24 h" GroupName="TrendRange"
+                                     Checked="OnRangeChanged" Tag="24" />
+                        <RadioButton x:Name="Range7d" Content="7 d" GroupName="TrendRange"
+                                     Checked="OnRangeChanged" Tag="168" />
+                    </StackPanel>
+
+                    <controls:TrendChart x:Name="TimeIntervalTrend"
+                                         Height="140"
+                                         Unit="ns"
+                                         AutomationProperties.Name="1 PPS time interval trend" />
+
+                    <TextBlock x:Name="TrendSummaryText"
+                               Style="{ThemeResource WzCaptionTextStyle}"
+                               Foreground="{ThemeResource WzTextTertiaryBrush}"
+                               TextWrapping="Wrap"
+                               MaxWidth="{ThemeResource WzProseMaxWidth}" />
+
                     <TextBlock x:Name="DeviationWindowText"
                                Style="{ThemeResource WzCaptionTextStyle}"
                                Foreground="{ThemeResource WzTextTertiaryBrush}"

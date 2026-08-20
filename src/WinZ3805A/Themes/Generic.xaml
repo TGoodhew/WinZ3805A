@@ -485,6 +485,40 @@
     </Style>
 
     <!-- =========================================================================== -->
+    <!-- =========================================================================== -->
+    <!-- TrendChart (§9.10.2, §9.4.4, P1-1)                                            -->
+    <!--                                                                              -->
+    <!-- The plot is drawn into PART_Surface in code: one vertical stroke per pixel    -->
+    <!-- column, from that column's minimum to its maximum, plus a zero line and three -->
+    <!-- axis labels. What is here is the surface it draws on.                         -->
+    <!--                                                                              -->
+    <!-- Only an implicit style: a keyed one declared here would resolve for nothing,  -->
+    <!-- because Generic.xaml is loaded for a control's default style and is not       -->
+    <!-- merged into Application.Resources.                                            -->
+    <!-- =========================================================================== -->
+
+    <Style TargetType="controls:TrendChart">
+        <Setter Property="MinHeight" Value="120" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="controls:TrendChart">
+                    <Border Background="{ThemeResource WzLayerFillBrush}"
+                            CornerRadius="{ThemeResource WzCardCornerRadius}"
+                            Padding="{ThemeResource WzSpaceXsThickness}">
+                        <!--
+                            No ClipToBounds: that is a WPF property and a XAML compiler error here.
+                            The drawing clamps its own coordinates instead, which it has to do
+                            anyway - a column whose extreme is off the axis must stop at the edge
+                            rather than be hidden by a clip.
+                        -->
+                        <Canvas x:Name="PART_Surface" />
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- SkyPlotControl (§10.5, §9.10.2, P0-9)                                        -->
     <!--                                                                              -->
     <!-- The plot itself is drawn into PART_Canvas in code: circles, a cross, some     -->

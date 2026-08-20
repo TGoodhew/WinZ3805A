@@ -1,5 +1,6 @@
 using System.Globalization;
 
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
@@ -25,6 +26,10 @@ public sealed partial class TimingPage : Page
 
     private TimingViewModel? _model;
     private DeviceContext? _device;
+    private TrendStore? _trends;
+
+    /// <summary>The selected range, in hours. §13's four settings are 1, 6, 24 and 168.</summary>
+    private int _rangeHours = 1;
     private CommandInvoker? _invoker;
     private readonly NumberFieldValidator _directDelay;
     private readonly NumberFieldValidator _length;
@@ -73,7 +78,16 @@ public sealed partial class TimingPage : Page
         _length.ValidityChanged += (_, _) => Render();
         _velocityFactor.ValidityChanged += (_, _) => Render();
 
-        _stalenessTicker.Tick += (_, _) => _model?.RaiseAll();
+        Range1h.IsChecked = true;
+
+        // The trend redraws on the staleness tick rather than on every fast poll. One second of
+        // new data cannot move a plot whose narrowest range is an hour, and redrawing a thousand
+        // strokes at 1 Hz to show it would be work nobody can see.
+        _stalenessTicker.Tick += (_, _) =>
+        {
+            _model?.RaiseAll();
+            RenderTrend();
+        };
         Unloaded += (_, _) =>
         {
             _stalenessTicker.Stop();
@@ -95,6 +109,7 @@ public sealed partial class TimingPage : Page
         }
 
         _device = device;
+        _trends = App.Services?.GetService<TrendStore>();
         _invoker = new CommandInvoker(device.Session);
         _model = new TimingViewModel(device.Store) { Connection = device.Session.Status };
         _model.PropertyChanged += (_, _) => DispatcherQueue.TryEnqueue(Render);
@@ -298,5 +313,53 @@ public sealed partial class TimingPage : Page
             _busy = false;
             Render();
         }
+    }
+
+    private void OnRangeChanged(object sender, RoutedEventArgs e)
+    {
+        if (sender is RadioButton button && int.TryParse((string?)button.Tag, out int hours))
+        {
+            _rangeHours = hours;
+            RenderTrend();
+        }
+    }
+
+    /// <summary>
+    /// Reads the selected window out of the store and hands it to the chart.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The chart decimates, so the cost of this is the query rather than the drawing: a 7-day
+    /// window is about 138 000 rows after compaction and collapses to one stroke per pixel column.
+    /// </para>
+    /// <para>
+    /// The summary line says how many samples are behind the plot, because a 7-day range drawn
+    /// from four hours of history looks identical to one drawn from seven days — an empty stretch
+    /// and a disconnected stretch are the same picture, and only the count tells them apart.
+    /// </para>
+    /// </remarks>
+    private void RenderTrend()
+    {
+        if (_trends is not TrendStore trends || _device is not DeviceContext device)
+        {
+            return;
+        }
+
+        long now = device.TimeProvider.GetUtcNow().UtcTicks;
+        long from = now - TimeSpan.FromHours(_rangeHours).Ticks;
+
+        IReadOnlyList<TrendSample> series =
+            trends.ReadSeries(from, now, record => record.TimeIntervalNanoseconds);
+
+        TimeIntervalTrend.FromTicks = from;
+        TimeIntervalTrend.ToTicks = now;
+        TimeIntervalTrend.Samples = series;
+
+        TrendSummaryText.Text = series.Count switch
+        {
+            0 => "No readings stored for this range yet. The trend fills as the receiver is polled.",
+            1 => "1 reading stored for this range.",
+            _ => $"{series.Count:N0} readings stored for this range.",
+        };
     }
 }
