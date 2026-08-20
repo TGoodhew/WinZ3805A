@@ -89,6 +89,21 @@ public sealed class DeviceSessionService : IAsyncDisposable
     /// <summary>Raised whenever <see cref="Status"/> changes.</summary>
     public event EventHandler<ConnectionStatusChanged>? StatusChanged;
 
+    /// <summary>
+    /// Raised after every transaction this session completes, for §10.11's transcript.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Every</b> transaction: polls, user commands, the connect sequence, successes, timeouts
+    /// and faults alike. §10.11 says the transcript shows all traffic, and a transcript that
+    /// quietly omitted the failures would be worthless for the one job it has.
+    /// </para>
+    /// <para>
+    /// Raised on the pump thread, not the UI thread. A handler that touches XAML must marshal.
+    /// </para>
+    /// </remarks>
+    public event EventHandler<TranscriptEntry>? TransactionCompleted;
+
     /// <summary>Where the session stands.</summary>
     public ConnectionStatus Status { get; private set; } = ConnectionStatus.Disconnected;
 
@@ -235,15 +250,24 @@ public sealed class DeviceSessionService : IAsyncDisposable
     /// arbitrary text: the Advanced Console validates against the catalog and hands back an entry,
     /// it does not get a back door here.
     /// </remarks>
+    /// <param name="command">A catalogued command. There is no overload taking text.</param>
+    /// <param name="argument">Its parameter, already formatted and validated by the caller.</param>
+    /// <param name="origin">
+    /// Who asked, which only §10.11's transcript reads. It changes nothing about what is sent — the
+    /// wire cannot tell a poll from a click — and exists so the console's "hide poll traffic" toggle
+    /// filters on a fact rather than on a guess from the mnemonic.
+    /// </param>
+    /// <param name="cancellationToken">Cancels the wait, not the transaction already in flight.</param>
     public async Task<Transaction> ExecuteAsync(
         ScpiCommand command,
         string? argument = null,
+        CommandOrigin origin = CommandOrigin.User,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(command);
         ObjectDisposedException.ThrowIf(_disposed, this);
 
-        PendingCommand pending = new(command, argument, cancellationToken);
+        PendingCommand pending = new(command, argument, origin, cancellationToken);
         if (!_queue.Writer.TryWrite(pending))
         {
             throw new InvalidOperationException("The command queue is closed.");
@@ -300,6 +324,8 @@ public sealed class DeviceSessionService : IAsyncDisposable
             Transaction identity = await _protocol
                 .ExecuteAsync("*IDN?", TransactionTimeouts.AutoDetectProbe, cancellationToken)
                 .ConfigureAwait(false);
+
+            Record(CommandOrigin.Session, identity);
 
             if (!identity.Succeeded || !LooksLikeIdentity(identity.FirstLine))
             {
@@ -375,9 +401,7 @@ public sealed class DeviceSessionService : IAsyncDisposable
             return;
         }
 
-        string text = pending.Argument is null
-            ? pending.Command.Mnemonic
-            : $"{pending.Command.Mnemonic} {pending.Argument}";
+        string text = TextFor(pending.Command, pending.Argument);
 
         try
         {
@@ -389,6 +413,7 @@ public sealed class DeviceSessionService : IAsyncDisposable
                 .ConfigureAwait(false);
 
             pending.Completion.TrySetResult(transaction);
+            Record(pending.Origin, transaction);
             await NoteOutcomeAsync(transaction).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (pending.CancellationToken.IsCancellationRequested)
@@ -398,6 +423,12 @@ public sealed class DeviceSessionService : IAsyncDisposable
         catch (Exception exception) when (TransportFaults.IsTransportFault(exception))
         {
             pending.Completion.TrySetException(exception);
+
+            // Recorded before the reconnect, because the transcript's whole value here is showing
+            // what was on the wire when the link went. A fault leaves no Transaction, so the entry
+            // is built from what is known: what was sent, and that it did not come back.
+            RecordFault(pending.Origin, text, exception);
+
             BeginReconnect($"The link to {PortName} failed: {exception.Message}");
         }
     }
@@ -568,11 +599,54 @@ public sealed class DeviceSessionService : IAsyncDisposable
     }
 
     /// <summary>One queued command and the caller waiting on it.</summary>
-    private sealed class PendingCommand(ScpiCommand command, string? argument, CancellationToken cancellationToken)
+    /// <summary>
+    /// Exactly what goes on the wire for a command and its argument.
+    /// </summary>
+    /// <remarks>
+    /// Public and static so §10.11's "Will send:" line is produced by the same code that produces
+    /// the bytes, rather than by a second expression that agrees with it today. A preview that can
+    /// disagree with what is sent is worse than no preview: it is a confirmation step that lies.
+    /// </remarks>
+    public static string TextFor(ScpiCommand command, string? argument)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        return string.IsNullOrEmpty(argument) ? command.Mnemonic : $"{command.Mnemonic} {argument}";
+    }
+
+    /// <summary>Publishes a completed transaction to §10.11's transcript.</summary>
+    private void Record(CommandOrigin origin, Transaction transaction) =>
+        TransactionCompleted?.Invoke(this, new TranscriptEntry(
+            _timeProvider.GetUtcNow().UtcTicks,
+            origin,
+            transaction.Command,
+            transaction.Lines,
+            transaction.Outcome,
+            transaction.Elapsed,
+            transaction.PromptStatus));
+
+    /// <summary>Publishes a transaction that never completed, so the transcript shows the gap.</summary>
+    private void RecordFault(CommandOrigin origin, string sent, Exception exception) =>
+        TransactionCompleted?.Invoke(this, new TranscriptEntry(
+            _timeProvider.GetUtcNow().UtcTicks,
+            origin,
+            sent,
+            [exception.Message],
+            TransactionOutcome.Faulted,
+            TimeSpan.Zero,
+            PromptStatus: null));
+
+    private sealed class PendingCommand(
+        ScpiCommand command,
+        string? argument,
+        CommandOrigin origin,
+        CancellationToken cancellationToken)
     {
         public ScpiCommand Command { get; } = command;
 
         public string? Argument { get; } = argument;
+
+        public CommandOrigin Origin { get; } = origin;
 
         public CancellationToken CancellationToken { get; } = cancellationToken;
 

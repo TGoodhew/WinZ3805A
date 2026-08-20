@@ -13,15 +13,38 @@ namespace WinZ3805A.Tests.ViewModels;
 public sealed class DetailsDestinationTests
 {
     /// <remarks>
-    /// §10.2 caps the numbered set at twelve as of 19 Aug 2026, raised from eight. The Advanced
-    /// Console still sits below Settings and is not a destination here.
+    /// §10.2 caps the numbered set at twelve as of 19 Aug 2026, raised from eight. Settings and the
+    /// Advanced Console both sit outside it, in the footer.
     /// </remarks>
     [Fact]
     public void TheNumberedSetStaysWithinTheCap()
     {
         Assert.InRange(DetailsDestinations.Numbered.Count, 1, DetailsDestinations.MaxNumbered);
-        Assert.Equal(DetailsDestinations.Numbered.Count + 1, DetailsDestinations.All.Count);
+        Assert.Equal(DetailsDestinations.Numbered.Count + 2, DetailsDestinations.All.Count);
     }
+
+    /// <summary>
+    /// #55's console is a destination only some users have, so it must never be numbered.
+    /// </summary>
+    /// <remarks>
+    /// A numbered accelerator whose target depended on a preference would be worse than no
+    /// accelerator: <c>Ctrl+3</c> would reach a different page for two users of the same build.
+    /// </remarks>
+    [Fact]
+    public void TheAdvancedConsoleIsNotNumbered()
+    {
+        Assert.DoesNotContain(DetailsDestinations.AdvancedConsole, DetailsDestinations.Numbered);
+        Assert.Same(DetailsDestinations.AdvancedConsole, DetailsDestinations.All[^1]);
+    }
+
+    /// <summary>And no number reaches it, however many are tried.</summary>
+    [Fact]
+    public void NoAcceleratorReachesTheAdvancedConsole() =>
+        Assert.All(
+            Enumerable.Range(1, 12),
+            number => Assert.NotSame(
+                DetailsDestinations.AdvancedConsole,
+                DetailsDestinations.ByNumber(number)));
 
     /// <remarks>
     /// Settings has its own accelerator, <c>Ctrl+,</c>. If it ever joined the numbered list it
@@ -31,7 +54,9 @@ public sealed class DetailsDestinationTests
     public void SettingsIsNotNumbered()
     {
         Assert.DoesNotContain(DetailsDestinations.Settings, DetailsDestinations.Numbered);
-        Assert.Same(DetailsDestinations.Settings, DetailsDestinations.All[^1]);
+
+        // Last but one now: the opt-in console sits below it. Settings keeps Ctrl+comma either way.
+        Assert.Same(DetailsDestinations.Settings, DetailsDestinations.All[^2]);
     }
 
     /// <remarks>The §9.7.1 wireframe's order, which is the one the user sees.</remarks>
@@ -115,7 +140,12 @@ public sealed class DetailsDestinationTests
     {
         Assert.Equal("Status Registers", DetailsDestinations.ByTag("registers")?.Label);
         Assert.Same(DetailsDestinations.Settings, DetailsDestinations.ByTag("settings"));
-        Assert.Null(DetailsDestinations.ByTag("console"));
+
+        // The console is findable by tag even when it is switched off. It has to be: the window
+        // navigates to it by tag, and whether it is listed in the pane is a separate question.
+        Assert.Same(DetailsDestinations.AdvancedConsole, DetailsDestinations.ByTag("console"));
+
+        Assert.Null(DetailsDestinations.ByTag("nothing-of-the-sort"));
         Assert.Null(DetailsDestinations.ByTag(null));
     }
 
@@ -128,7 +158,8 @@ public sealed class DetailsDestinationTests
     public void DestinationsKnowWhereTheySitInThePane()
     {
         Assert.Equal(0, DetailsDestinations.IndexOf("overview"));
-        Assert.Equal(DetailsDestinations.All.Count - 1, DetailsDestinations.IndexOf("settings"));
+        Assert.Equal(DetailsDestinations.All.Count - 2, DetailsDestinations.IndexOf("settings"));
+        Assert.Equal(DetailsDestinations.All.Count - 1, DetailsDestinations.IndexOf("console"));
 
         for (int index = 0; index < DetailsDestinations.All.Count; index++)
         {
@@ -137,8 +168,12 @@ public sealed class DetailsDestinationTests
     }
 
     /// <summary>The sentinel the transition policy reads as "no page".</summary>
+    /// <remarks>
+    /// "console" used to be here as a tag that named nothing. It names #55's page now, so the case
+    /// it stood for is covered by a string that is still not a destination.
+    /// </remarks>
     [Theory]
-    [InlineData("console")]
+    [InlineData("nothing-of-the-sort")]
     [InlineData("")]
     [InlineData(null)]
     public void SomethingThatIsNotADestinationHasNoIndex(string? tag) =>

@@ -28,10 +28,12 @@ public sealed record DetailsDestination
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>Eight, plus Settings, and no more.</b> §10.2 caps it there so <c>Ctrl+1</c>…<c>Ctrl+8</c>
-/// stays complete, which is also why the Advanced Console sits below Settings and outside the
-/// numbered set. A ninth destination silently makes one page unreachable by keyboard, so the count
-/// is asserted rather than trusted.
+/// <b>Numbered, plus Settings, plus the opt-in console.</b> §10.2 capped the numbered set at eight
+/// so <c>Ctrl+1</c>…<c>Ctrl+8</c> stayed complete; <see cref="DetailsDestinations.MaxNumbered"/> has
+/// since been raised and <see cref="DetailsDestinations.MaxAccelerated"/> now carries the keyboard
+/// rule alone. What has not changed is why the Advanced Console sits below Settings and outside the
+/// numbered set: a destination that exists only for some users must never shift which page a
+/// numbered accelerator reaches. The counts are asserted rather than trusted.
 /// </para>
 /// <para>
 /// The order here is §9.7.1's, which is what the user sees. §15 step 8 gives a different order —
@@ -140,8 +142,31 @@ public static class DetailsDestinations
         Summary = "Poll cadences, display time zone, units, and the opt-in advanced features (§10.13).",
     };
 
+    /// <summary>
+    /// The §10.11 Advanced Console, shown only when Settings → Advanced enables it.
+    /// </summary>
+    /// <remarks>
+    /// <b>Below Settings, in the footer, and never numbered.</b> §10.2's accelerator cap is a rule
+    /// about the numbered set, and a destination that only exists for some users must not be able
+    /// to shift which page <c>Ctrl+3</c> reaches — a shortcut whose meaning depends on a preference
+    /// is worse than no shortcut. Keeping it out of <see cref="Numbered"/> makes that structural.
+    /// </remarks>
+    public static DetailsDestination AdvancedConsole { get; } = new()
+    {
+        Tag = "console",
+        Label = "Advanced Console",
+        Glyph = "\uE756", // CommandPrompt
+        Summary = "A picker over the command catalog, with a transcript of everything on the wire (§10.11).",
+    };
+
     /// <summary>Every destination, numbered ones first.</summary>
-    public static IReadOnlyList<DetailsDestination> All { get; } = [.. Numbered, Settings];
+    /// <remarks>
+    /// The console is included even when it is switched off. This list is what §9.8.2's transition
+    /// direction and the persisted pane state are read from, and a list whose length depended on a
+    /// preference would make a remembered selection mean a different page after the switch moved.
+    /// Whether it is <i>shown</i> is the Details window's business.
+    /// </remarks>
+    public static IReadOnlyList<DetailsDestination> All { get; } = [.. Numbered, Settings, AdvancedConsole];
 
     /// <summary>Finds a destination by its tag, or <see langword="null"/>.</summary>
     public static DetailsDestination? ByTag(string? tag) =>

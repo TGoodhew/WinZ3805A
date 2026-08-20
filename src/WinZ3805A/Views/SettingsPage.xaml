@@ -1,0 +1,70 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="WinZ3805A.Views.SettingsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <!--
+        Settings, built as far as #55 needs it and no further.
+
+        §10 has no section describing this page. §9.7.5 gives it Ctrl+comma, §10.11 says the
+        console is "enabled in Settings - Advanced", and DetailsDestinations cites "§10.13" for its
+        summary - a section that does not exist; §10 ends at 10.12. Filed rather than invented.
+
+        So this page carries the one section #55 requires and says plainly that the rest is not
+        here. Building poll cadences, the display time zone and units off the back of a console
+        issue would be scope nobody asked for, and inventing a specification for them would be
+        worse.
+    -->
+    <ScrollViewer HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Padding="{ThemeResource WzPageMarginThickness}"
+                    MaxWidth="{ThemeResource WzContentMaxWidth}"
+                    HorizontalAlignment="Left"
+                    Spacing="{ThemeResource WzSpaceXl}">
+
+            <TextBlock Style="{ThemeResource WzTitleTextStyle}" Text="Settings" />
+
+            <!-- ================================ Advanced =============================== -->
+            <Border Style="{ThemeResource WzCardStyle}">
+                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Advanced" />
+
+                    <TextBlock Style="{ThemeResource WzBodyTextStyle}"
+                               Foreground="{ThemeResource WzTextSecondaryBrush}"
+                               MaxWidth="{ThemeResource WzProseMaxWidth}"
+                               TextWrapping="Wrap"
+                               Text="For working out what the receiver is doing, rather than for using it." />
+
+                    <ToggleSwitch x:Name="ConsoleSwitch"
+                                  Header="Advanced Console"
+                                  OnContent="Shown"
+                                  OffContent="Hidden"
+                                  AutomationProperties.Name="Show the Advanced Console"
+                                  Toggled="OnConsoleToggled" />
+
+                    <TextBlock Style="{ThemeResource WzCaptionTextStyle}"
+                               Foreground="{ThemeResource WzTextTertiaryBrush}"
+                               MaxWidth="{ThemeResource WzProseMaxWidth}"
+                               TextWrapping="Wrap"
+                               Text="Adds a page below Settings offering every command in the catalog as a picker, with a transcript of everything sent and received. It changes what is reachable, never what is permitted: the commands this application will not send are absent from the catalog, so they are absent from the console." />
+                </StackPanel>
+            </Border>
+
+            <!-- ============================== Not built yet ============================ -->
+            <Border Style="{ThemeResource WzCardStyle}">
+                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Elsewhere for now" />
+
+                    <TextBlock Style="{ThemeResource WzBodyTextStyle}"
+                               Foreground="{ThemeResource WzTextSecondaryBrush}"
+                               MaxWidth="{ThemeResource WzProseMaxWidth}"
+                               TextWrapping="Wrap"
+                               Text="Poll cadences, the display time zone and units are not on this page yet. The time zone is chosen from the main window's clock; the poll cadences are fixed at the intervals the specification sets." />
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</Page>

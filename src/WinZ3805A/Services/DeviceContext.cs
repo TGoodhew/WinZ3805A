@@ -49,6 +49,11 @@ public sealed class DeviceContext : IAsyncDisposable
         // navigated to it would report a lower bound of a few seconds after a week of uptime.
         Store.PropertyChanged += OnStoreChanged;
         Session.StatusChanged += OnStatusChanged;
+
+        // Subscribed here rather than by the console page, for the reason above applied to a
+        // different figure: a transcript that started recording when the page was opened would
+        // hold nothing about the transaction the user came to look at (§10.11).
+        Session.TransactionCompleted += OnTransactionCompleted;
     }
 
     /// <summary>Which device this is. v1 uses <see cref="DeviceKeys.Primary"/> and only that.</summary>
@@ -75,15 +80,21 @@ public sealed class DeviceContext : IAsyncDisposable
     /// <summary>§10.8's manual-holdover guard, accumulated across the whole session.</summary>
     public PowerUpGuard PowerUp { get; }
 
+    /// <summary>§10.11's record of everything this device has been sent, always recording.</summary>
+    public CommandTranscript Transcript { get; } = new();
+
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
         Store.PropertyChanged -= OnStoreChanged;
         Session.StatusChanged -= OnStatusChanged;
+        Session.TransactionCompleted -= OnTransactionCompleted;
 
         await Poller.DisposeAsync().ConfigureAwait(false);
         await Session.DisposeAsync().ConfigureAwait(false);
     }
+
+    private void OnTransactionCompleted(object? sender, TranscriptEntry entry) => Transcript.Add(entry);
 
     private void OnStoreChanged(object? sender, PropertyChangedEventArgs e)
     {
