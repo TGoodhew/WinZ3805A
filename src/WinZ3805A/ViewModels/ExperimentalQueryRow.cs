@@ -137,13 +137,15 @@ public sealed class ExperimentalQueryRow : INotifyPropertyChanged
 /// <para>
 /// <c>E-113</c> is "undefined header" — the node is not in this firmware's parser at all. §16 names
 /// the source of these keywords as a <b>Z3801A</b> firmware string dump, which is a sibling model,
-/// so five of them being absent here is a difference between models rather than a fault. The card
-/// is what makes that discoverable, and this is the first time anyone has asked. Recorded as #152.
+/// so five of them being absent here is a difference between models rather than a fault. §8.5 now
+/// records both columns and says that <c>E-113</c> is an <b>answer rather than a failure</b> (#152).
+/// The card is what made it discoverable; nobody had asked before.
 /// </para>
 /// <para>
-/// The list is <b>not</b> filtered to the one that works. §8.5 fixes the list, the user opted in to
-/// asking undocumented questions, and "this firmware does not have that node" is the most useful
-/// answer this card can give about five of them.
+/// The list is <b>not</b> filtered to the one that works, and §8.5 now gives the three reasons: the
+/// application would have to probe all six to know which to drop, a list that changed shape by model
+/// would make "exactly" untrue, and a user who opted into asking undocumented questions is owed the
+/// answer rather than a shorter list.
 /// </para>
 /// </remarks>
 public static class ExperimentalQueries

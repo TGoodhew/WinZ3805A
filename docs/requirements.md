@@ -382,16 +382,42 @@ Off by default. Enabled by a toggle in Settings → Advanced, with the text: *"E
 
 When enabled, the Diagnostics window shows an additional read-only card offering exactly:
 
-```
-:DIAG:ROSC:EFC:ABSolute?
-:DIAG:ROSC:EFC:TCOefficient?
-:SYST:STAT:SLOG?
-:DIAG:STACk?
-:DIAG:PROCess?
-:DIAG:MEMory?
-```
+| Query | Z3801A | Z3805A, firmware `1.01.03-A` |
+|---|---|---|
+| `:DIAG:ROSC:EFC:ABSolute?` | in the string dump | **`+436061`** |
+| `:DIAG:ROSC:EFC:TCOefficient?` | in the string dump | `E-113` |
+| `:SYST:STAT:SLOG?` | in the string dump | `E-113` |
+| `:DIAG:STACk?` | in the string dump | `E-113` |
+| `:DIAG:PROCess?` | in the string dump | `E-113` |
+| `:DIAG:MEMory?` | in the string dump | `E-113` |
 
 Each runs on explicit click, never on a poll timer. Results shown as raw text. Any SCPI error is displayed rather than swallowed. This list is fixed — no free-text entry into it.
+
+> **⚠ Amended 20 Aug 2026** (#152). The list above was previously six mnemonics with no indication
+> of where they came from or which models have them. **Both columns are now stated**, because the two
+> are not the same claim and the difference matters to anyone reading a result.
+>
+> The keywords come from the **Z3801A** firmware string dump named in §16 — a sibling model. Being in
+> that dump means the node exists in *that* firmware's parser, and says nothing about any other. Run
+> against the bench **Z3805A** on 20 Aug 2026 through the §10.11 console and the §8.5 card, five of the
+> six answered `E-113` and the receiver's error queue held exactly five entries afterwards.
+
+**`E-113` is an answer, not a failure.** It is SCPI's *undefined header*: the node is not in this
+firmware's parser. For a card whose entire purpose is asking undocumented questions, "this receiver
+does not have that one" is a result, and the most useful one available for five of the six. It is
+displayed like any other, and it is **not** an error in the application, in the transport or in the
+receiver.
+
+**The list stays fixed at six on every model.** It is not filtered to what the connected receiver
+supports, for three reasons: the application would have to probe all six to know, which is what the
+card does anyway; a list that changed shape by model would make the specification's "exactly" untrue;
+and a user who opted into asking undocumented questions is owed the answer rather than a shorter
+list. §8.6 governs model-specific *behaviour*; this list is model-independent by construction.
+
+**Where a query does answer, the answer is not documented either.** `:DIAG:ROSC:EFC:ABSolute?`
+returns `+436061` on this receiver while the documented `:DIAG:ROSC:EFC:RELative?` returns
+`-16.83` per cent at the same moment. Nothing states the units of the first, and nothing may assume
+them: it is shown as raw text and no part of the application computes anything from it.
 
 ### 8.6 Model-specific commands
 
