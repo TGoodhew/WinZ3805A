@@ -21,7 +21,9 @@
         card, one row per satellite, with the state the marker shape encodes written out - the same
         data in a form that needs no sense of the sky.
 
-        Manage is P1-3 (#51), the only satellite command not yet reachable.
+        Manage (P1-3, #51) reads both tracking lists from the receiver and offers the five commands
+        that change them. It stages nothing: every one goes through its own §8.3 confirmation, so
+        closing the dialog sends nothing.
     -->
     <ScrollViewer HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
         <StackPanel Padding="{ThemeResource WzPageMarginThickness}"
@@ -325,7 +327,27 @@
                                Foreground="{ThemeResource WzTextTertiaryBrush}"
                                TextWrapping="Wrap"
                                MaxWidth="{ThemeResource WzProseMaxWidth}"
-                               Text="Choosing which individual satellites to track is the Manage dialog, which is P1-3." />
+                               Text="The elevation mask applies to every satellite. Choosing individual ones is Manage, below." />
+                </StackPanel>
+            </Border>
+
+            <!-- ================================= Manage ================================ -->
+            <Border Style="{ThemeResource WzCardStyle}">
+                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Which satellites" />
+
+                    <TextBlock Style="{ThemeResource WzBodyTextStyle}"
+                               Foreground="{ThemeResource WzTextSecondaryBrush}"
+                               TextWrapping="Wrap"
+                               MaxWidth="{ThemeResource WzProseMaxWidth}"
+                               Text="The receiver keeps an inclusion list and an exclusion list. Manage reads both from the receiver and offers the commands that change them, each behind its own confirmation." />
+
+                    <Button x:Name="ManageButton"
+                            Content="Manage…"
+                            HorizontalAlignment="Left"
+                            Click="OnManageClicked" />
+
+                    <controls:CommandOutcomeBar x:Name="ManageOutcome" />
                 </StackPanel>
             </Border>
 

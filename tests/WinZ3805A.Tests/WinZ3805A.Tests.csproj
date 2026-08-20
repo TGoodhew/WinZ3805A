@@ -166,6 +166,10 @@
              Link="ViewModels\LeapSecondReading.cs" />
     <Compile Include="..\..\src\WinZ3805A\ViewModels\ExperimentalQueryRow.cs"
              Link="ViewModels\ExperimentalQueryRow.cs" />
+    <Compile Include="..\..\src\WinZ3805A\ViewModels\SatelliteTrackingState.cs"
+             Link="ViewModels\SatelliteTrackingState.cs" />
+    <Compile Include="..\..\src\WinZ3805A\ViewModels\SatelliteChoice.cs"
+             Link="ViewModels\SatelliteChoice.cs" />
     <Compile Include="..\..\src\WinZ3805A\Services\JsonPreferenceFile.cs"
              Link="Services\JsonPreferenceFile.cs" />
     <Compile Include="..\..\src\WinZ3805A\Services\SatellitesViewPreferences.cs"
