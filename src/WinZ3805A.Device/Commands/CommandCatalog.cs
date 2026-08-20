@@ -303,9 +303,16 @@ public static class CommandCatalog
                 "Update the tracking inclusion list?",
                 "Put every satellite on the inclusion list."),
 
+            // The consequence text is the stronger one, matching :GPS:SAT:TRAC:IGNore ALL rather
+            // than the ordinary inclusion setter. Emptying the inclusion list and excluding every
+            // satellite are the same outcome reached from two directions, and §8.3 asks the
+            // sentence to state the consequence rather than the operation. This carried the mild
+            // "Update the tracking inclusion list?" until #51 put the two side by side in one
+            // dialog, where a checkbox guarding a sentence that promised nothing looked like a
+            // mistake in the checkbox.
             NeedsConfirmation(":GPS:SAT:TRAC:INCLude NONE", "Include no satellites",
                 "Empties the tracking inclusion list.",
-                "Update the tracking inclusion list?",
+                "Track no satellites? The receiver will lose lock and enter holdover.",
                 "Emptied the inclusion list.",
                 acknowledge: true),
 

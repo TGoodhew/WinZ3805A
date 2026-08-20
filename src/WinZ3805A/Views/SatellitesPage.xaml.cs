@@ -286,6 +286,51 @@ public sealed partial class SatellitesPage : Page
         }
     }
 
+    /// <summary>§10.5's Manage dialog (P1-3).</summary>
+    /// <remarks>
+    /// Opened with the shared <c>DeviceContext</c> rather than its own session. The dialog writes
+    /// nothing itself — every command on it goes through §8.3's confirmation — so there is no
+    /// result to bring back here beyond what the receiver's own next poll reports.
+    /// </remarks>
+    private async void OnManageClicked(object sender, RoutedEventArgs e)
+    {
+        if (_device is not DeviceContext device || _invoker is not CommandInvoker invoker
+            || XamlRoot is null || _busy)
+        {
+            return;
+        }
+
+        _busy = true;
+        ManageOutcome.Clear();
+        Render();
+
+        try
+        {
+            // Show, act, show again. The dialog closes before §8.3's confirmation opens because
+            // WinUI permits only one ContentDialog at a time — and enforces it by killing the
+            // process, from an async void handler, with nothing in the log. Reopening afterwards is
+            // what keeps "adjust the selection, apply, adjust again" a single flow.
+            while (true)
+            {
+                SatelliteManagementDialog dialog = new(device) { XamlRoot = XamlRoot };
+                await dialog.ShowAsync();
+
+                if (dialog.ChosenCommand is not ScpiCommand command)
+                {
+                    return;
+                }
+
+                ManageOutcome.Show(await CommandConfirmation.RunAsync(
+                    XamlRoot, invoker, command, dialog.ChosenArgument, dialog.ChosenArgument));
+            }
+        }
+        finally
+        {
+            _busy = false;
+            Render();
+        }
+    }
+
     /// <summary>Shows whichever form of the sky is selected, and hides the other.</summary>
     /// <param name="hasSatellites">
     /// False when there is nothing to show at all, in which case both forms stay hidden and
