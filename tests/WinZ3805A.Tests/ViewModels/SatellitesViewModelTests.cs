@@ -267,6 +267,110 @@ public sealed class SatellitesViewModelTests
         Assert.Equal(SkyPlotMarkerKind.Predicted, model.SkyPlotSatellites[1].Marker);
     }
 
+    // ------------------------------------------------------ A11Y-11's list alternate (#60, #31)
+
+    /// <summary>
+    /// The alternate view is one list over the same collection the plot draws from, so its rows are
+    /// the plot's markers by construction. What the list has to supply for itself is the one channel
+    /// it does not have: the marker's <i>shape</i>, which encodes tracking state, written as a word.
+    /// </summary>
+    [Fact]
+    public void EveryMarkerSaysInWordsWhatItsShapeEncodes()
+    {
+        SatellitesViewModel model = Connected(Screen(
+            mask: 20,
+            tracked: [new() { Prn = 17, ElevationDegrees = 63, AzimuthDegrees = 64, SignalStrength = 35 }],
+            notTracked:
+            [
+                new() { Prn = 6, ElevationDegrees = 51, AzimuthDegrees = 153 },
+                new() { Prn = 3, ElevationDegrees = 10, AzimuthDegrees = 172 },
+            ]));
+
+        Assert.Equal(
+            ["Tracked", "Predicted", "Below mask"],
+            model.SkyPlotSatellites.Select(satellite => satellite.StateText));
+    }
+
+    /// <summary>
+    /// A list row carries every column the plot's marker does — PRN, both angles, the reading and its
+    /// scale, and the state. #60 rules out a reduced subset in as many words: a list that drops
+    /// azimuth or tracking state is a summary, not an alternate.
+    /// </summary>
+    [Fact]
+    public void AListRowCarriesEverythingTheMarkerDoes()
+    {
+        SkyPlotSatellite row = Connected(Screen(
+            tracked: [new() { Prn = 17, ElevationDegrees = 63, AzimuthDegrees = 64, SignalStrength = 35 }]))
+            .SkyPlotSatellites[0];
+
+        Assert.Equal("17", row.PrnText);
+        Assert.Equal("63°", row.ElevationText);
+        Assert.Equal("64°", row.AzimuthText);
+        Assert.Equal(35, row.SignalStrength);
+        Assert.Equal(SignalStrengthKind.CarrierToNoise, row.Kind);
+        Assert.Equal("Tracked", row.StateText);
+    }
+
+    /// <summary>
+    /// §11.1's em dash reaches the list too. A satellite the receiver named without a position is a
+    /// row of dashes rather than a row of zeros.
+    /// </summary>
+    [Fact]
+    public void AMissingAngleIsAnEmDashInTheListAsWell()
+    {
+        SkyPlotSatellite row = Connected(Screen(
+            notTracked: [new() { Prn = 6 }]))
+            .SkyPlotSatellites[0];
+
+        Assert.Equal("—", row.ElevationText);
+        Assert.Equal("—", row.AzimuthText);
+    }
+
+    /// <summary>
+    /// And that satellite is in the list while being absent from the plot, which is the one place
+    /// the two views legitimately differ. The row says so rather than leaving a user comparing the
+    /// counts to wonder which view is broken.
+    /// </summary>
+    [Fact]
+    public void ASatelliteWithNoPositionIsInTheListAndSaysWhyItIsNotOnThePlot()
+    {
+        SkyPlotSatellite row = Connected(Screen(
+            notTracked: [new() { Prn = 6 }]))
+            .SkyPlotSatellites[0];
+
+        Assert.False(row.CanPlot);
+        Assert.Equal("not on the plot: no position reported", row.PlotNote);
+    }
+
+    [Fact]
+    public void APlottableSatelliteHasNoSuchNote()
+    {
+        SkyPlotSatellite row = Connected(Screen(
+            tracked: [new() { Prn = 17, ElevationDegrees = 63, AzimuthDegrees = 64, SignalStrength = 35 }]))
+            .SkyPlotSatellites[0];
+
+        Assert.True(row.CanPlot);
+        Assert.Equal(string.Empty, row.PlotNote);
+    }
+
+    /// <summary>
+    /// The tables and the list agree about the same satellite, because both format through
+    /// <c>ReadoutFormatter</c> rather than each carrying their own idea of what a degree looks like.
+    /// </summary>
+    [Fact]
+    public void TheListAndTheTableFormatTheSameSatelliteTheSameWay()
+    {
+        SatellitesViewModel model = Connected(Screen(
+            tracked: [new() { Prn = 17, ElevationDegrees = 63, AzimuthDegrees = 64, SignalStrength = 35 }]));
+
+        TrackedSatelliteRow table = model.Tracked[0];
+        SkyPlotSatellite list = model.SkyPlotSatellites[0];
+
+        Assert.Equal(table.PrnText, list.PrnText);
+        Assert.Equal(table.ElevationText, list.ElevationText);
+        Assert.Equal(table.AzimuthText, list.AzimuthText);
+    }
+
     /// <summary>
     /// A tracked marker keeps its scale, so the plot can size and colour it against the right range
     /// — the mistake §9.10.2 warns about for the strength bar, which the plot would otherwise repeat.

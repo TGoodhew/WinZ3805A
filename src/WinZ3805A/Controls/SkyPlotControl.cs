@@ -30,8 +30,9 @@ namespace WinZ3805A.Controls;
 /// <para>
 /// <b>Colour is never the only channel.</b> Tracked is a filled disc and predicted a hollow ring,
 /// so the two are told apart in greyscale and under every form of colour blindness (§9.4.3,
-/// A11Y-12). The ramp adds precision for those who can see it, and the table beside the plot
-/// carries the same numbers for those who cannot — which is also A11Y-11's non-spatial alternate.
+/// A11Y-12). The ramp adds precision for those who can see it, and the tables below the plot carry
+/// the same numbers for those who cannot. A11Y-11's non-spatial alternate is the Plot/List toggle
+/// on the same card, not those tables — see <c>SatellitesPage</c> for why the distinction matters.
 /// </para>
 /// <para>
 /// Hand-drawn on a <c>Canvas</c>, with no charting dependency (P0-9). The shapes involved are
@@ -94,8 +95,9 @@ public sealed class SkyPlotControl : Control
     /// neighbouring satellite's clicks, which is worse than a small target because it silently
     /// selects the wrong one. 24 px roughly doubles the usable area without reaching a neighbour
     /// under 6 degrees away. The compliant paths to every satellite are the keyboard model and the
-    /// table beside the plot, which is what §9.10.2 requires the alternate view for. Recorded as
-    /// #117 rather than left as an oversight.
+    /// list alternate on the same card, which is what §9.10.2 requires the alternate view for — its
+    /// rows are full-width and meet A11Y-5 without qualification. Recorded as #117 rather than left
+    /// as an oversight.
     /// </para>
     /// </remarks>
     private const double MarkerHitSize = 24;

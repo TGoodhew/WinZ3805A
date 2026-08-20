@@ -318,9 +318,7 @@ public sealed class TrackedSatelliteRow
         $"PRN {Prn}, elevation {Describe(ElevationDegrees)}, azimuth {Describe(AzimuthDegrees)}, "
         + SignalStrengthScale.For(Kind).Describe(SignalStrength);
 
-    internal static string Degrees(int? value) => value is int degrees
-        ? $"{degrees.ToString(System.Globalization.CultureInfo.CurrentCulture)}°"
-        : ReadoutFormatter.NoValue;
+    internal static string Degrees(int? value) => ReadoutFormatter.Degrees(value);
 
     private static string Describe(int? value) => value is int degrees
         ? $"{degrees} degrees"

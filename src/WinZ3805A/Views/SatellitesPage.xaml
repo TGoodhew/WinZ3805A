@@ -10,10 +10,16 @@
     mc:Ignorable="d">
 
     <!--
-        §10.5. The plot and the tables carry the same data in two forms, which is A11Y-11's
-        non-spatial alternate: the tables are not a fallback bolted on for it, they are the half
-        that works without a mouse or a working sense of the sky. Selection is shared both ways -
-        clicking a marker highlights its row, and picking a row rings its marker.
+        §10.5. Selection is shared three ways - clicking a marker highlights its row in the tables,
+        picking a row rings its marker, and the list alternate below the toggle stays in step with
+        both.
+
+        A11Y-11 is the Plot/List toggle on the sky plot card, not the tables. This comment used to
+        claim the tables satisfied it. They do not, and the difference is what #60 turns on: the
+        tables split one sky across two cards by tracking state and neither carries that state as a
+        column, so reading either alone tells you less than the plot does. The list alternate is one
+        card, one row per satellite, with the state the marker shape encodes written out - the same
+        data in a form that needs no sense of the sky.
 
         Manage is P1-3 (#51), the only satellite command not yet reachable.
     -->
@@ -40,12 +46,107 @@
             <!-- ================================ Sky plot =============================== -->
             <Border Style="{ThemeResource WzCardStyle}">
                 <StackPanel Spacing="{ThemeResource WzSpaceSm}">
-                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Sky plot" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock x:Name="SkyCardHeading" Grid.Column="0"
+                                   Style="{ThemeResource WzBodyStrongTextStyle}"
+                                   VerticalAlignment="Center"
+                                   Text="Sky plot" />
+
+                        <!--
+                            RadioButtons rather than a ToggleSwitch, matching the Timing page's range
+                            selector: two mutually exclusive views, both worth seeing named, and the
+                            current one legible without opening anything. It sits before the plot in
+                            tab order, which is what #60's "discoverable by keyboard" asks for - a
+                            control a keyboard user meets on the way in rather than one they have to
+                            already know about.
+                        -->
+                        <StackPanel Grid.Column="1"
+                                    Orientation="Horizontal"
+                                    Spacing="{ThemeResource WzSpaceMd}"
+                                    AutomationProperties.Name="Sky view">
+                            <RadioButton x:Name="PlotViewChoice"
+                                         GroupName="SkyView"
+                                         Content="Plot"
+                                         Checked="OnSkyViewChanged" />
+                            <RadioButton x:Name="ListViewChoice"
+                                         GroupName="SkyView"
+                                         Content="List"
+                                         Checked="OnSkyViewChanged" />
+                        </StackPanel>
+                    </Grid>
 
                     <controls:SkyPlotControl x:Name="SkyPlot"
                                              MaxPlotSize="360"
                                              AutomationProperties.Name="Sky plot. Arrow keys move between satellites, Enter selects."
                                              SatelliteInvoked="OnSkyPlotSatelliteInvoked" />
+
+                    <!--
+                        A11Y-11's non-spatial alternate. Bound to the same collection the plot draws
+                        from, so the two cannot drift apart: every column here is a field of the
+                        record the marker was placed from.
+                    -->
+                    <Grid x:Name="SkyListHeader"
+                          ColumnSpacing="{ThemeResource WzSpaceMd}"
+                          Visibility="Collapsed">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="56" />
+                            <ColumnDefinition Width="64" />
+                            <ColumnDefinition Width="64" />
+                            <ColumnDefinition Width="180" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Column="0" Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}" Text="PRN" />
+                        <TextBlock Grid.Column="1" Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}" Text="El" />
+                        <TextBlock Grid.Column="2" Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}" Text="Az" />
+                        <TextBlock x:Name="SkyListStrengthHeader" Grid.Column="3"
+                                   Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}" />
+                        <TextBlock Grid.Column="4" Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}" Text="State" />
+                    </Grid>
+
+                    <ListView x:Name="SkyRows"
+                              SelectionMode="Single"
+                              Visibility="Collapsed"
+                              ItemContainerStyle="{ThemeResource WzDenseListItemStyle}"
+                              AutomationProperties.Name="Satellites, list view"
+                              SelectionChanged="OnSkyRowSelectionChanged">
+                        <ListView.ItemTemplate>
+                            <DataTemplate x:DataType="controls:SkyPlotSatellite">
+                                <Grid ColumnSpacing="{ThemeResource WzSpaceMd}"
+                                      AutomationProperties.Name="{x:Bind Description}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="56" />
+                                        <ColumnDefinition Width="64" />
+                                        <ColumnDefinition Width="64" />
+                                        <ColumnDefinition Width="180" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock Grid.Column="0" Style="{ThemeResource WzMonoTextStyle}"
+                                               Text="{x:Bind PrnText}" />
+                                    <TextBlock Grid.Column="1" Style="{ThemeResource WzMonoTextStyle}"
+                                               Text="{x:Bind ElevationText}" />
+                                    <TextBlock Grid.Column="2" Style="{ThemeResource WzMonoTextStyle}"
+                                               Text="{x:Bind AzimuthText}" />
+                                    <controls:SatelliteStrengthBar Grid.Column="3"
+                                                                   Strength="{x:Bind SignalStrength}"
+                                                                   Kind="{x:Bind Kind}" />
+                                    <TextBlock Grid.Column="4" Style="{ThemeResource WzBodyTextStyle}"
+                                               Text="{x:Bind StateText}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
 
                     <TextBlock x:Name="SkyPlotEmptyText"
                                Style="{ThemeResource WzBodyTextStyle}"

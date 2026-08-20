@@ -1,5 +1,3 @@
-using System.Text.Json;
-
 namespace WinZ3805A.Services;
 
 /// <summary>
@@ -36,19 +34,16 @@ public interface IDetailsViewPreferenceStore
 }
 
 /// <summary>
-/// Keeps <see cref="DetailsViewPreferences"/> in a JSON file beside the other two.
+/// Keeps <see cref="DetailsViewPreferences"/> in a JSON file beside the others.
 /// </summary>
 /// <remarks>
-/// The third store in this shape, and the last that should be written by hand: the next one wants
-/// the file handling factored out. It is not factored out here because doing so would rewrite two
-/// working, tested stores inside a change about a window, and neither of them is asking.
-/// <b>Not <c>ApplicationData.Current</c></b> — see <see cref="LocalConnectionPreferenceStore"/>.
+/// This used to carry its own copy of the file handling, with a note saying the next store to be
+/// written should factor it out. #60 was the next store, so the shared part now lives in
+/// <see cref="JsonPreferenceFile{T}"/> and what is left here is the file name and the default.
 /// </remarks>
 public sealed class LocalDetailsViewPreferenceStore : IDetailsViewPreferenceStore
 {
-    private static readonly JsonSerializerOptions Format = new() { WriteIndented = true };
-
-    private readonly string _path;
+    private readonly JsonPreferenceFile<DetailsViewPreferences> _file;
 
     /// <summary>Creates a store over the default location.</summary>
     public LocalDetailsViewPreferenceStore()
@@ -57,63 +52,15 @@ public sealed class LocalDetailsViewPreferenceStore : IDetailsViewPreferenceStor
     }
 
     /// <summary>Creates a store over a given file, which the tests use.</summary>
-    public LocalDetailsViewPreferenceStore(string path)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(path);
-        _path = path;
-    }
+    public LocalDetailsViewPreferenceStore(string path) =>
+        _file = new JsonPreferenceFile<DetailsViewPreferences>(path, DetailsViewPreferences.Default);
 
     /// <summary>Where the preferences live.</summary>
-    public static string DefaultPath() => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "WinZ3805A",
-        "details-view.json");
+    public static string DefaultPath() => JsonPreferenceFile<DetailsViewPreferences>.PathFor("details-view.json");
 
     /// <inheritdoc />
-    public DetailsViewPreferences Load()
-    {
-        try
-        {
-            if (!File.Exists(_path))
-            {
-                return DetailsViewPreferences.Default;
-            }
-
-            return JsonSerializer.Deserialize<DetailsViewPreferences>(File.ReadAllText(_path))
-                ?? DetailsViewPreferences.Default;
-        }
-        catch (Exception exception) when (IsStorageFault(exception))
-        {
-            return DetailsViewPreferences.Default;
-        }
-    }
+    public DetailsViewPreferences Load() => _file.Load();
 
     /// <inheritdoc />
-    public void Save(DetailsViewPreferences preferences)
-    {
-        ArgumentNullException.ThrowIfNull(preferences);
-
-        try
-        {
-            string? folder = Path.GetDirectoryName(_path);
-            if (folder is not null)
-            {
-                Directory.CreateDirectory(folder);
-            }
-
-            File.WriteAllText(_path, JsonSerializer.Serialize(preferences, Format));
-        }
-        catch (Exception exception) when (IsStorageFault(exception))
-        {
-            // Silent, like the other two. A pane the user has to collapse again is not worth a
-            // dialog, and there is nothing here they could act on.
-        }
-    }
-
-    private static bool IsStorageFault(Exception exception) => exception is
-        IOException or
-        UnauthorizedAccessException or
-        System.Security.SecurityException or
-        NotSupportedException or
-        JsonException;
+    public void Save(DetailsViewPreferences preferences) => _file.Save(preferences);
 }
