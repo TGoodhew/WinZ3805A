@@ -212,7 +212,12 @@ public sealed partial class DetailsWindow : Window
     /// </remarks>
     private void AddAccelerators()
     {
-        for (int number = 1; number <= DetailsDestinations.Numbered.Count; number++)
+        // Capped at nine, not at the destination count. VirtualKey.Number0 + 10 is not a digit —
+        // it is the colon key — so looping to §10.2's cap of twelve would silently bind Ctrl+: and
+        // two more keys nobody asked for. There is no Ctrl+10 to bind instead.
+        int accelerated = Math.Min(DetailsDestinations.Numbered.Count, DetailsDestinations.MaxAccelerated);
+
+        for (int number = 1; number <= accelerated; number++)
         {
             int target = number;
             Add(VirtualKey.Number0 + number, VirtualKeyModifiers.Control, () => GoTo(target));

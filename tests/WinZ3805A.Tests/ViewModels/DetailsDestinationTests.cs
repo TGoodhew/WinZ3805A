@@ -13,14 +13,14 @@ namespace WinZ3805A.Tests.ViewModels;
 public sealed class DetailsDestinationTests
 {
     /// <remarks>
-    /// §10.2 caps the numbered set at eight so <c>Ctrl+1</c>…<c>Ctrl+8</c> stays complete. The
-    /// Advanced Console sits below Settings for the same reason and is not a destination here.
+    /// §10.2 caps the numbered set at twelve as of 19 Aug 2026, raised from eight. The Advanced
+    /// Console still sits below Settings and is not a destination here.
     /// </remarks>
     [Fact]
-    public void ThereAreEightNumberedDestinations()
+    public void TheNumberedSetStaysWithinTheCap()
     {
-        Assert.Equal(DetailsDestinations.MaxNumbered, DetailsDestinations.Numbered.Count);
-        Assert.Equal(DetailsDestinations.MaxNumbered + 1, DetailsDestinations.All.Count);
+        Assert.InRange(DetailsDestinations.Numbered.Count, 1, DetailsDestinations.MaxNumbered);
+        Assert.Equal(DetailsDestinations.Numbered.Count + 1, DetailsDestinations.All.Count);
     }
 
     /// <remarks>
@@ -73,10 +73,42 @@ public sealed class DetailsDestinationTests
 
     [Theory]
     [InlineData(0)]
-    [InlineData(9)]
     [InlineData(-1)]
+    [InlineData(13)]
     public void NoOtherNumberReachesAnything(int number) =>
         Assert.Null(DetailsDestinations.ByNumber(number));
+
+    /// <summary>
+    /// §10.2's cap is twelve but the accelerators stop at nine, because there is no
+    /// <c>Ctrl+10</c>. A destination past the ninth is reachable by pane navigation and by nothing
+    /// on the number row.
+    /// </summary>
+    [Fact]
+    public void NothingPastTheNinthDestinationIsAccelerated()
+    {
+        Assert.Equal(9, DetailsDestinations.MaxAccelerated);
+        Assert.True(DetailsDestinations.MaxAccelerated < DetailsDestinations.MaxNumbered);
+
+        for (int number = DetailsDestinations.MaxAccelerated + 1; number <= DetailsDestinations.MaxNumbered; number++)
+        {
+            Assert.Null(DetailsDestinations.ByNumber(number));
+        }
+    }
+
+    /// <summary>
+    /// The pane's order therefore decides which destinations are one keystroke away, so the ones
+    /// that exist today must all still be inside the accelerated range.
+    /// </summary>
+    [Fact]
+    public void EveryDestinationThatExistsTodayIsStillAccelerated()
+    {
+        Assert.True(DetailsDestinations.Numbered.Count <= DetailsDestinations.MaxAccelerated);
+
+        for (int number = 1; number <= DetailsDestinations.Numbered.Count; number++)
+        {
+            Assert.NotNull(DetailsDestinations.ByNumber(number));
+        }
+    }
 
     [Fact]
     public void DestinationsAreFoundByTag()

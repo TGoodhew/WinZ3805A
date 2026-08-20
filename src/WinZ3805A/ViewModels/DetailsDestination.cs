@@ -42,10 +42,28 @@ public sealed record DetailsDestination
 /// </remarks>
 public static class DetailsDestinations
 {
-    /// <summary>The §10.2 cap on numbered destinations.</summary>
-    public const int MaxNumbered = 8;
+    /// <summary>The §10.2 cap on numbered destinations, raised from eight on 19 Aug 2026.</summary>
+    /// <remarks>
+    /// Provisional. Eight was chosen so <c>Ctrl+1</c>…<c>Ctrl+8</c> addressed every destination;
+    /// twelve makes room for surfaces §10.x had not described — #111's Time &amp; Leap Seconds page
+    /// and #137's EFC drift analysis both arrived with nowhere to live — and is to be revisited
+    /// once it is clear how many the application actually wants.
+    /// </remarks>
+    public const int MaxNumbered = 12;
 
-    /// <summary>The destinations reached by <c>Ctrl+1</c>…<c>Ctrl+8</c>, in pane order.</summary>
+    /// <summary>
+    /// How many destinations can carry a <c>Ctrl+</c>number accelerator.
+    /// </summary>
+    /// <remarks>
+    /// <b>Nine, and it cannot stretch to match <see cref="MaxNumbered"/>, because there is no
+    /// <c>Ctrl+10</c>.</b> Destinations past the ninth are reachable by pointer, by <c>Tab</c> and
+    /// by the pane's arrow keys — A11Y-1 wants every destination keyboard *reachable*, not every
+    /// destination accelerated — but they are second-class for a keyboard user, so the pane's order
+    /// decides which are one keystroke away. Keep the most-used first.
+    /// </remarks>
+    public const int MaxAccelerated = 9;
+
+    /// <summary>The numbered destinations, in pane order. The first nine carry accelerators.</summary>
     public static IReadOnlyList<DetailsDestination> Numbered { get; } =
     [
         new()
@@ -155,6 +173,11 @@ public static class DetailsDestinations
     /// The destination <c>Ctrl+</c><paramref name="number"/> reaches, or <see langword="null"/>.
     /// </summary>
     /// <param name="number">One-based, as the accelerator is written.</param>
+    /// <remarks>
+    /// Bounded by <see cref="MaxAccelerated"/> rather than by how many destinations exist. Past the
+    /// ninth there is no keystroke to ask with, and returning a destination for <c>Ctrl+10</c>
+    /// would describe a shortcut nobody can press.
+    /// </remarks>
     public static DetailsDestination? ByNumber(int number) =>
-        number >= 1 && number <= Numbered.Count ? Numbered[number - 1] : null;
+        number >= 1 && number <= Math.Min(Numbered.Count, MaxAccelerated) ? Numbered[number - 1] : null;
 }

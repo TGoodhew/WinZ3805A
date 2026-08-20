@@ -791,7 +791,7 @@ No page-level `CommandBar`. The commands are card-scoped and a page-level bar wo
 | `Ctrl+Shift+C` | Connect / disconnect |
 | `Ctrl+D` | Open Receiver details |
 | `F5` | Refresh full status now |
-| `Ctrl+1` … `Ctrl+8` | Jump to nav destination 1–8 |
+| `Ctrl+1` … `Ctrl+9` | Jump to nav destination 1–9. There is no `Ctrl+10`: §10.2's cap is twelve destinations but only the first nine can carry an accelerator, so the pane's order decides which are one keystroke away. |
 | `Ctrl+E` | Export current view |
 | `Ctrl+,` | Settings |
 | `Ctrl+Shift+M` | Toggle main window compact mode |
@@ -1015,7 +1015,13 @@ Two behavioural principles remain here because they are functional rather than v
 | Advanced Console | Page in Details, hidden unless enabled | — | Allowlist-validated |
 | About / Device Info | `ContentDialog` | — | |
 
-> **⚠ Amended.** Details window minimum raised from 1000×700 to **1024×720**; rationale in §9.6.2. Nav destinations are capped at eight plus Settings to keep `Ctrl+1`…`Ctrl+8` complete (§9.7.5), which is why Advanced Console appears below Settings and is excluded from the numbered accelerators.
+> **⚠ Amended.** Details window minimum raised from 1000×700 to **1024×720**; rationale in §9.6.2.
+>
+> **Destination cap raised from eight to twelve, 19 Aug 2026.** The original cap was eight plus Settings, chosen so that `Ctrl+1`…`Ctrl+8` addressed every numbered destination. Twelve is a deliberate loosening to make room for surfaces §10.x has not yet described — #111's Time & Leap Seconds page and #137's EFC drift analysis both arrived with nowhere to live — and it is provisional: revisit once it is clear how many destinations the application actually wants.
+>
+> **The accelerators do not stretch with it, and cannot.** There is no `Ctrl+10`. Numbered accelerators therefore cover destinations **1 to 9** and stop; destinations 10 to 12 are reachable by pointer, by `Tab`, and by the pane's own arrow-key navigation, but have no single-keystroke jump. That is the price of the loosening and it is asymmetric — a destination past the ninth is a second-class one for a keyboard user, so **order the pane so that the most-used destinations sit in the first nine**. A11Y-1 requires every destination to be keyboard *reachable*, which pane navigation satisfies; it does not require every destination to have an accelerator.
+>
+> Advanced Console still appears below Settings and outside the numbered set.
 
 ### 10.3 Main window
 
