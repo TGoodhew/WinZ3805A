@@ -264,4 +264,33 @@ public sealed class CsvExportTests
 
         return fields;
     }
+
+    /// <summary>
+    /// The trend is polled at roughly 1 Hz but not exactly, so two samples can land in the same
+    /// second. At whole-second precision they export as identical rows, which reads as duplicated
+    /// data rather than two readings.
+    /// </summary>
+    [Fact]
+    public void TheTrendTimestampKeepsMillisecondsApart()
+    {
+        DateTime first = new(2026, 8, 20, 17, 37, 4, 120, DateTimeKind.Utc);
+        DateTime second = new(2026, 8, 20, 17, 37, 4, 880, DateTimeKind.Utc);
+
+        Assert.NotEqual(CsvDocument.PreciseTimestamp(first), CsvDocument.PreciseTimestamp(second));
+        Assert.Equal("2026-08-20 17:37:04.120", CsvDocument.PreciseTimestamp(first));
+    }
+
+    /// <summary>
+    /// The receiver's log has second resolution, so it keeps the coarser format — milliseconds
+    /// there would be precision the device never claimed.
+    /// </summary>
+    [Fact]
+    public void TheReceiverLogTimestampStaysAtSecondResolution() =>
+        Assert.Equal(
+            "2026-08-20 17:37:04",
+            CsvDocument.Timestamp(new DateTime(2026, 8, 20, 17, 37, 4, 880, DateTimeKind.Utc)));
+
+    [Fact]
+    public void APreciseTimestampOfNothingIsEmpty() =>
+        Assert.Equal(string.Empty, CsvDocument.PreciseTimestamp(null));
 }
