@@ -158,13 +158,13 @@ public sealed class CsvExportTests
         CsvDocument? document = DiagnosticLogCsv.From([Entry(222, "GPS lock started")]);
 
         Assert.NotNull(document);
-        Assert.Equal(["Entry", "Timestamp", "Message", "Raw"], document.Columns);
+        Assert.Equal(["Entry", "Timestamp", "CorrectedTimestamp", "Message", "Raw"], document.Columns);
 
         string[] row = Assert.Single(document.Rows);
         Assert.Equal("222", row[0]);
         Assert.Equal("2026-08-15 09:02:14", row[1]);
-        Assert.Equal("GPS lock started", row[2]);
-        Assert.Contains("Log 222", row[3], StringComparison.Ordinal);
+        Assert.Equal("GPS lock started", row[3]);
+        Assert.Contains("Log 222", row[4], StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -178,10 +178,10 @@ public sealed class CsvExportTests
         Assert.NotNull(document);
         Assert.Contains("\"Holdover started, not tracking GPS\"", document.ToText(), StringComparison.Ordinal);
 
-        // One record, and the header has four columns, so a correct file has exactly four fields
-        // on the data line rather than five.
+        // One record, and the header has five columns, so a correct file has exactly five fields
+        // on the data line rather than six.
         string dataLine = document.ToText().Split("\r\n")[1];
-        Assert.Equal(4, CountFields(dataLine));
+        Assert.Equal(5, CountFields(dataLine));
     }
 
     /// <summary>
@@ -200,7 +200,77 @@ public sealed class CsvExportTests
         string[] row = Assert.Single(document.Rows);
         Assert.Equal(string.Empty, row[0]);
         Assert.Equal(string.Empty, row[1]);
-        Assert.Equal("something unexpected", row[3]);
+        Assert.Equal(string.Empty, row[2]);
+        Assert.Equal("something unexpected", row[4]);
+    }
+
+    // ----------------------------------------------------------------- #132, the rollover column
+
+    /// <summary>
+    /// The bench receiver, which is rollover-affected: it prints 2006 dates and is exactly one
+    /// 1024-week epoch behind. Both columns appear and differ by exactly that.
+    /// </summary>
+    [Fact]
+    public void AnAffectedReceiverGetsBothTheReportedDateAndTheCorrectedOne()
+    {
+        DiagnosticLogEntry entry = new()
+        {
+            Number = 222,
+            Timestamp = new DateTime(2006, 12, 31, 1, 1, 8, DateTimeKind.Utc),
+            Message = "GPS lock started",
+            RawText = "Log 222:20061231.01:01:08:  GPS lock started",
+        };
+
+        CsvDocument? document = DiagnosticLogCsv.From([entry], rolloverEpochs: 1);
+
+        Assert.NotNull(document);
+
+        string[] row = Assert.Single(document.Rows);
+        Assert.Equal("2006-12-31 01:01:08", row[1]);
+        Assert.Equal("2026-08-16 01:01:08", row[2]);
+
+        // 1024 weeks to the second, which is the arithmetic the column is claiming.
+        Assert.Equal(
+            TimeSpan.FromDays(7168),
+            DateTime.Parse(row[2], CultureInfo.InvariantCulture)
+                - DateTime.Parse(row[1], CultureInfo.InvariantCulture));
+    }
+
+    /// <summary>
+    /// And a receiver that has not rolled over leaves the column empty rather than repeating the
+    /// value. Repeating it would say a correction was computed and came to zero, which is a
+    /// different claim.
+    /// </summary>
+    [Fact]
+    public void AnUnaffectedReceiverLeavesTheCorrectedColumnEmpty()
+    {
+        CsvDocument? document = DiagnosticLogCsv.From([Entry(222, "GPS lock started")], rolloverEpochs: 0);
+
+        Assert.NotNull(document);
+
+        string[] row = Assert.Single(document.Rows);
+        Assert.Equal("2026-08-15 09:02:14", row[1]);
+        Assert.Equal(string.Empty, row[2]);
+    }
+
+    /// <summary>An entry with no timestamp has nothing to correct, affected receiver or not.</summary>
+    [Fact]
+    public void AnEntryWithNoTimestampHasNoCorrectedOneEither()
+    {
+        CsvDocument? document = DiagnosticLogCsv.From(
+            [new DiagnosticLogEntry { RawText = "something unexpected", Message = "something unexpected" }],
+            rolloverEpochs: 1);
+
+        Assert.NotNull(document);
+        Assert.Equal(string.Empty, Assert.Single(document.Rows)[2]);
+    }
+
+    [Fact]
+    public void TwoEpochsBehindCorrectsByTwo()
+    {
+        DateTime reported = new(2006, 12, 31, 1, 1, 8, DateTimeKind.Utc);
+
+        Assert.Equal(reported.AddDays(7168 * 2), GpsWeekRollover.Correct(reported, 2));
     }
 
     /// <summary>
