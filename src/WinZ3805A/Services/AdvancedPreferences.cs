@@ -20,6 +20,14 @@ public sealed record AdvancedPreferences
     /// <summary>Whether the §10.11 Advanced Console appears in the navigation pane.</summary>
     public bool IsConsoleEnabled { get; init; }
 
+    /// <summary>Whether §8.5's undocumented read-only queries appear on the Diagnostics page.</summary>
+    /// <remarks>
+    /// Six queries, and nothing else. §8.4 excludes the <i>set</i> forms of undocumented nodes
+    /// permanently and with no override, so this switch cannot reach them — it is the difference
+    /// between six questions being visible and six questions being hidden, not between two modes.
+    /// </remarks>
+    public bool AreExperimentalQueriesEnabled { get; init; }
+
     /// <summary>A fresh install's preferences.</summary>
     public static AdvancedPreferences Default { get; } = new();
 }

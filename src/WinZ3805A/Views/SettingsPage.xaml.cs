@@ -48,18 +48,39 @@ public sealed partial class SettingsPage : Page
         base.OnNavigatedTo(e);
 
         _preferences = App.Services?.GetService<IAdvancedPreferenceStore>();
-        ConsoleSwitch.IsOn = _preferences?.Load().IsConsoleEnabled ?? false;
+
+        AdvancedPreferences stored = _preferences?.Load() ?? AdvancedPreferences.Default;
+        ConsoleSwitch.IsOn = stored.IsConsoleEnabled;
+        ExperimentalSwitch.IsOn = stored.AreExperimentalQueriesEnabled;
+
         _ready = true;
     }
 
-    private void OnConsoleToggled(object sender, RoutedEventArgs e)
+    private void OnConsoleToggled(object sender, RoutedEventArgs e) => Save();
+
+    private void OnExperimentalToggled(object sender, RoutedEventArgs e) => Save();
+
+    /// <summary>
+    /// Writes both switches, because the record is written whole.
+    /// </summary>
+    /// <remarks>
+    /// Saving one field at a time would mean constructing the record from one switch and the
+    /// default for the other, which silently turns the other one off. The record is small; writing
+    /// it whole is both simpler and the only version that is correct.
+    /// </remarks>
+    private void Save()
     {
         if (!_ready)
         {
             return;
         }
 
-        _preferences?.Save(new AdvancedPreferences { IsConsoleEnabled = ConsoleSwitch.IsOn });
+        _preferences?.Save(new AdvancedPreferences
+        {
+            IsConsoleEnabled = ConsoleSwitch.IsOn,
+            AreExperimentalQueriesEnabled = ExperimentalSwitch.IsOn,
+        });
+
         AdvancedChanged?.Invoke(this, EventArgs.Empty);
     }
 }
