@@ -141,6 +141,43 @@ public sealed partial class MainPage : Page
     /// <summary>Toggles compact mode, which §10.3 binds to double-click and Ctrl+Shift+M.</summary>
     public void ToggleCompact() => IsCompact = !IsCompact;
 
+    /// <summary>
+    /// §9.7.5's <c>Esc</c>: leaves compact mode, and does nothing anywhere else.
+    /// </summary>
+    /// <remarks>
+    /// Reports whether it acted, so the caller can leave the key unhandled when the window was not
+    /// compact. Swallowing Escape unconditionally on the main window would take it away from
+    /// anything else that wants it.
+    /// </remarks>
+    public bool ExitCompact()
+    {
+        if (!IsCompact)
+        {
+            return false;
+        }
+
+        IsCompact = false;
+        return true;
+    }
+
+    /// <summary>Whether the window is pinned above others (§10.3).</summary>
+    /// <remarks>
+    /// The page owns the toggle's state because the toggle is on the page; the window owns the
+    /// consequence, because <c>IsAlwaysOnTop</c> is a presenter property the page cannot reach.
+    /// Same division as compact mode.
+    /// </remarks>
+    public bool IsAlwaysOnTop
+    {
+        get => AlwaysOnTopButton.IsChecked == true;
+        set => AlwaysOnTopButton.IsChecked = value;
+    }
+
+    /// <summary>Raised when the user toggles always-on-top.</summary>
+    public event EventHandler? AlwaysOnTopChanged;
+
+    private void OnAlwaysOnTopClicked(object sender, RoutedEventArgs e) =>
+        AlwaysOnTopChanged?.Invoke(this, EventArgs.Empty);
+
     private void OnMedallionDoubleTapped(object sender, DoubleTappedRoutedEventArgs e) => ToggleCompact();
 
     private void OnDetailsClicked(object sender, RoutedEventArgs e) =>
@@ -264,6 +301,12 @@ public sealed partial class MainPage : Page
         ToolTipService.SetToolTip(CoastingPill, _model.CoastingTooltip);
 
         Satellites.Value = _model.SatelliteCount;
+
+        // §9.6.2's compact content. Same property as the tile above, so the two cannot disagree;
+        // the em dash is §11.1's, for a receiver that has not said yet.
+        CompactSatellitesText.Text = _model.SatelliteCount is int count
+            ? $"{count} satellite{(count == 1 ? string.Empty : "s")}"
+            : $"{ReadoutFormatter.NoValue} satellites";
         TimeInterval.Value = _model.TimeIntervalNanoseconds;
 
         RenderMerit(TfomPill, "TFOM", _model.Tfom);

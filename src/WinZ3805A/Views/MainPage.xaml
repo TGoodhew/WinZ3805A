@@ -57,6 +57,21 @@
                                        Severity="Caution"
                                        Text="coasting"
                                        Visibility="Collapsed" />
+
+                <!--
+                    §9.6.2 gives compact mode "mode text and satellite count only", and the count
+                    lives in the readout row that compact mode hides. So it is said again here, in
+                    the same words the tile uses and from the same view-model property - one fact,
+                    two places to draw it, and no second source to drift from.
+
+                    Not a smaller readout tile: §9.6.3 is explicit that compact is a reduced content
+                    mode and not a reduced density one, so this is body text beside body text rather
+                    than a shrunken version of anything.
+                -->
+                <TextBlock x:Name="CompactSatellitesText"
+                           Style="{StaticResource WzBodyTextStyle}"
+                           Foreground="{ThemeResource WzTextSecondaryBrush}"
+                           Visibility="Collapsed" />
             </StackPanel>
         </StackPanel>
 
@@ -148,7 +163,7 @@
         </StackPanel>
 
         <!-- Footer: what we are talking to, and how old what it said is -->
-        <Grid Grid.Row="4" ColumnSpacing="{StaticResource WzSpaceMd}">
+        <Grid x:Name="FooterRow" Grid.Row="4" ColumnSpacing="{StaticResource WzSpaceMd}">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
@@ -166,6 +181,27 @@
                         Content="Details"
                         Click="OnDetailsClicked"
                         ToolTipService.ToolTip="Open the Receiver Details window (Ctrl+D)" />
+                <!--
+                    §10.3's always-on-top toggle. An icon-only command, so §9.9 requires both a
+                    tooltip carrying the label and an AutomationProperties.Name - which the icon gate
+                    checks, and which is why the tooltip is written out rather than left to the
+                    control.
+
+                    The minimum height is A11Y-5's 32 px floor, which §9.6.3 lists among the ones no
+                    mode may reduce. A ToggleButton around a 16 px FontIcon lays out at 29 px on its
+                    own - measured, not guessed - so the floor is stated rather than inherited.
+                -->
+                <ToggleButton x:Name="AlwaysOnTopButton"
+                              MinWidth="40"
+                              MinHeight="32"
+                              AutomationProperties.Name="Keep this window above others"
+                              ToolTipService.ToolTip="Keep this window above others"
+                              Click="OnAlwaysOnTopClicked">
+                    <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                              FontSize="16"
+                              Glyph="&#xE840;" />
+                </ToggleButton>
+
                 <Button x:Name="ConnectButton"
                         Style="{StaticResource AccentButtonStyle}"
                         Click="OnConnectClicked" />
@@ -199,6 +235,12 @@
             -->
             <VisualStateGroup x:Name="DensityStates">
                 <VisualState x:Name="Normal" />
+                <!--
+                    §9.6.2: "Medallion 64 px, mode text and satellite count only; readout row and
+                    footer hidden." All four rows go, and the count comes back as text beside the
+                    mode. Nothing here changes a type size, a target size or a focus visual -
+                    §9.6.3 forbids that, and it is the difference between this and a density switch.
+                -->
                 <VisualState x:Name="CompactDensity">
                     <VisualState.Setters>
                         <Setter Target="Medallion.Size" Value="Compact" />
@@ -206,6 +248,8 @@
                         <Setter Target="MeritRow.Visibility" Value="Collapsed" />
                         <Setter Target="ClockRow.Visibility" Value="Collapsed" />
                         <Setter Target="CoastingPill.Visibility" Value="Collapsed" />
+                        <Setter Target="FooterRow.Visibility" Value="Collapsed" />
+                        <Setter Target="CompactSatellitesText.Visibility" Value="Visible" />
                     </VisualState.Setters>
                 </VisualState>
             </VisualStateGroup>

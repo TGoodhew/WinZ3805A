@@ -422,11 +422,24 @@
                                 </VisualState>
                             </VisualStateGroup>
 
-                            <!-- §10.3 sets the glyph at 56 px in the 160 px medallion. -->
+                            <!--
+                                §9.9's icon table gives the medallion glyph two sizes: 40 compact and
+                                56 standard. 56 is the 160 px medallion the main window shows normally;
+                                40 is the 64 px one it shows in §10.3's compact mode.
+
+                                Compact was 28 until #54, which is when compact mode acquired a
+                                keyboard route and anyone was likely to use it. 40 in a 64 px
+                                medallion is proportionally larger than 56 in a 160 px one, and that
+                                is deliberate rather than an oversight in the table: compact mode is
+                                the ambient-legibility mode, and G1 measures it at two metres.
+
+                                Standard, at 36, is a size nothing currently asks for. It is left
+                                alone rather than adjusted to match a rule §9.9 does not state for it.
+                            -->
                             <VisualStateGroup x:Name="SizeStates">
                                 <VisualState x:Name="Compact">
                                     <VisualState.Setters>
-                                        <Setter Target="Glyph.FontSize" Value="28" />
+                                        <Setter Target="Glyph.FontSize" Value="40" />
                                     </VisualState.Setters>
                                 </VisualState>
                                 <VisualState x:Name="Standard">

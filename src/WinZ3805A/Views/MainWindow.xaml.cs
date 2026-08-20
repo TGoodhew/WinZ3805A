@@ -85,6 +85,16 @@ public sealed partial class MainWindow : Window
         // OnNavigatedTo - is exactly the shape that has twice killed this application at start-up.
         MainPage page = new(services);
         page.CompactChanged += OnCompactChanged;
+        page.AlwaysOnTopChanged += (_, _) =>
+        {
+            ApplyAlwaysOnTop();
+
+            // Saved explicitly, because nothing else will. The placement file is written on a
+            // debounce from AppWindow.Changed, and pinning a window changes neither its size nor
+            // its position — so §10.3's "persists across launches" was true of compact mode only by
+            // accident, since that one resizes. Found by toggling it and restarting.
+            SavePlacement();
+        };
         page.DetailsRequested += (_, _) => ShowDetails();
         _page = page;
         RootFrame.Content = page;
@@ -107,7 +117,7 @@ public sealed partial class MainWindow : Window
             SavePlacement();
         };
 
-        AddDetailsAccelerator();
+        AddAccelerators();
     }
 
     private OverlappedPresenter? Presenter => AppWindow.Presenter as OverlappedPresenter;
@@ -138,28 +148,63 @@ public sealed partial class MainWindow : Window
     }
 
     /// <remarks>
-    /// §9.7.5's <c>Ctrl+D</c>. On the content root rather than the window, because
-    /// <c>Window</c> has no accelerator collection of its own.
+    /// §9.7.5's <c>Ctrl+D</c>, <c>Ctrl+Shift+M</c> and <c>Esc</c>. On the content root rather than
+    /// the window, because <c>Window</c> has no accelerator collection of its own.
     /// </remarks>
-    private void AddDetailsAccelerator()
+    private void AddAccelerators()
     {
         if (Content is not FrameworkElement root)
         {
             return;
         }
 
-        Microsoft.UI.Xaml.Input.KeyboardAccelerator accelerator = new()
-        {
-            Key = Windows.System.VirtualKey.D,
-            Modifiers = Windows.System.VirtualKeyModifiers.Control,
-        };
-        accelerator.Invoked += (_, args) =>
+        Add(Windows.System.VirtualKey.D, Windows.System.VirtualKeyModifiers.Control, () =>
         {
             ShowDetails();
-            args.Handled = true;
-        };
+            return true;
+        });
 
-        root.KeyboardAccelerators.Add(accelerator);
+        Add(
+            Windows.System.VirtualKey.M,
+            Windows.System.VirtualKeyModifiers.Control | Windows.System.VirtualKeyModifiers.Shift,
+            () =>
+            {
+                _page?.ToggleCompact();
+                return true;
+            });
+
+        // §9.7.5 gives Escape three jobs — cancel a dialog, close a flyout, exit compact mode — and
+        // the first two belong to the controls that own them. This one reports whether it acted, so
+        // the key is left unhandled when the window is not compact rather than being swallowed from
+        // whatever else wanted it.
+        Add(Windows.System.VirtualKey.Escape, Windows.System.VirtualKeyModifiers.None, () =>
+            _page?.ExitCompact() == true);
+
+        void Add(Windows.System.VirtualKey key, Windows.System.VirtualKeyModifiers modifiers, Func<bool> action)
+        {
+            Microsoft.UI.Xaml.Input.KeyboardAccelerator accelerator = new()
+            {
+                Key = key,
+                Modifiers = modifiers,
+            };
+
+            accelerator.Invoked += (_, args) => args.Handled = action();
+            root.KeyboardAccelerators.Add(accelerator);
+        }
+    }
+
+    /// <summary>Applies §10.3's always-on-top toggle to the window.</summary>
+    /// <remarks>
+    /// <c>IsAlwaysOnTop</c> is a presenter property, which is why this is the window's job and not
+    /// the page's — the same division as compact mode, where the page holds the state and the window
+    /// owns the size floor that follows from it.
+    /// </remarks>
+    private void ApplyAlwaysOnTop()
+    {
+        if (Presenter is OverlappedPresenter presenter && _page is not null)
+        {
+            presenter.IsAlwaysOnTop = _page.IsAlwaysOnTop;
+        }
     }
 
     private int MinimumHeight => _page?.IsCompact == true ? MinimumCompactHeight : MinimumStandardHeight;
@@ -179,7 +224,10 @@ public sealed partial class MainWindow : Window
         if (stored is not null && _page is not null)
         {
             _page.IsCompact = stored.IsCompact;
+            _page.IsAlwaysOnTop = stored.IsAlwaysOnTop;
         }
+
+        ApplyAlwaysOnTop();
 
         ApplyMinimumSize();
 
@@ -289,6 +337,7 @@ public sealed partial class MainWindow : Window
             // nothing. It is stored as the maximised or restored state it was in before.
             IsMaximized = Presenter?.State == OverlappedPresenterState.Maximized,
             IsCompact = _page?.IsCompact == true,
+            IsAlwaysOnTop = _page?.IsAlwaysOnTop == true,
         });
     }
 }
