@@ -1,0 +1,440 @@
+﻿using System.Globalization;
+using System.Text;
+
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Navigation;
+
+using WinZ3805A.Controls;
+using WinZ3805A.Device.Commands;
+using WinZ3805A.Device.Transport;
+using WinZ3805A.Services;
+using WinZ3805A.ViewModels;
+
+namespace WinZ3805A.Views;
+
+/// <summary>
+/// The §10.11 Advanced Console: a picker over the catalog, and a transcript of the wire.
+/// </summary>
+/// <remarks>
+/// <para>
+/// <b>There is no path from this page to a command the catalog does not hold.</b> The picker's
+/// items come from <see cref="ConsoleCatalog"/>, which projects <see cref="CommandCatalog"/>; the
+/// session takes an <see cref="ScpiCommand"/> and has no overload accepting text; and the one free
+/// text field on the page filters that list rather than feeding it. The §8.4 exclusions are not in
+/// the catalog, so they are not here — absent, not filtered out.
+/// </para>
+/// <para>
+/// <b>Tier C is not relaxed here.</b> A confirm-tier command selected in the console raises the
+/// same §8.3 dialog, with the same consequence sentence and the same acknowledgement checkbox, as
+/// it does from the page that owns it. "Advanced" describes who is looking, not what the rules are.
+/// </para>
+/// </remarks>
+public sealed partial class AdvancedConsolePage : Page, ICsvExportSource
+{
+    private DeviceContext? _device;
+    private CommandInvoker? _invoker;
+    private CommandTranscript? _transcript;
+
+    private ConsoleCommand? _selected;
+    private ConsoleArgument.Result _argument;
+    private bool _busy;
+
+    /// <summary>False until the picker has been populated, so its own events are ignored.</summary>
+    private bool _ready;
+
+    /// <summary>Creates the page.</summary>
+    public AdvancedConsolePage()
+    {
+        InitializeComponent();
+
+        Unloaded += (_, _) =>
+        {
+            if (_transcript is CommandTranscript transcript)
+            {
+                transcript.Changed -= OnTranscriptChanged;
+            }
+        };
+    }
+
+    /// <inheritdoc />
+    protected override void OnNavigatedTo(NavigationEventArgs e)
+    {
+        base.OnNavigatedTo(e);
+
+        if (e?.Parameter is not DeviceContext device)
+        {
+            return;
+        }
+
+        _device = device;
+        _invoker = new CommandInvoker(device.Session);
+        _transcript = device.Transcript;
+        _transcript.Changed += OnTranscriptChanged;
+
+        CommandPicker.ItemsSource = ConsoleCatalog.All;
+        _ready = true;
+
+        if (ConsoleCatalog.All.Count > 0)
+        {
+            CommandPicker.SelectedIndex = 0;
+        }
+
+        RenderTranscript();
+        Render();
+    }
+
+    // ===========================================================================================
+    // The command
+    // ===========================================================================================
+
+    private void OnFilterChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
+    {
+        if (!_ready || args?.Reason != AutoSuggestionBoxTextChangeReason.UserInput)
+        {
+            return;
+        }
+
+        IReadOnlyList<ConsoleCommand> matches = ConsoleCatalog.Matching(FilterBox.Text);
+
+        // The selection is kept when it survives the filter, because a filter that silently
+        // reselected something else would change what Send does without the user touching it.
+        ConsoleCommand? keep = _selected is not null && matches.Contains(_selected) ? _selected : null;
+
+        CommandPicker.ItemsSource = matches;
+        CommandPicker.SelectedItem = keep ?? (matches.Count > 0 ? matches[0] : null);
+    }
+
+    private void OnCommandChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_ready)
+        {
+            return;
+        }
+
+        _selected = CommandPicker.SelectedItem as ConsoleCommand;
+        BuildParameterEditor();
+        Render();
+    }
+
+    /// <summary>
+    /// Shows the one editor this command's parameter needs, and hides the others.
+    /// </summary>
+    /// <remarks>
+    /// Three editors and no text box for a value. A number goes through <c>NumberBox</c> with the
+    /// catalog's own bounds; a keyword is chosen from <see cref="ParameterSpec.Choices"/>, so the
+    /// spelling that reaches the wire is the catalog's; a PRN list is parsed to integers and
+    /// re-rendered, which is what makes a semicolon — SCPI's command separator — unable to survive
+    /// the trip rather than merely discouraged.
+    /// </remarks>
+    private void BuildParameterEditor()
+    {
+        NumberParameter.Visibility = Visibility.Collapsed;
+        KeywordParameter.Visibility = Visibility.Collapsed;
+        PrnParameter.Visibility = Visibility.Collapsed;
+        ParameterError.Visibility = Visibility.Collapsed;
+
+        // Availability is consulted before Parameter, not after: for a command taking two values the
+        // first one alone is half an answer, and an editor showing it would invite sending it.
+        if (_selected?.Availability != ConsoleAvailability.Available
+            || _selected.Parameter is not ParameterSpec parameter)
+        {
+            ParameterPanel.Visibility = Visibility.Collapsed;
+            _argument = new ConsoleArgument.Result(null, null);
+            return;
+        }
+
+        ParameterPanel.Visibility = Visibility.Visible;
+
+        string label = parameter.Unit is null ? parameter.Name : $"{parameter.Name} ({parameter.Unit})";
+
+        switch (parameter.Kind)
+        {
+            case ParameterKind.Keyword:
+                KeywordParameter.Header = label;
+                KeywordParameter.ItemsSource = parameter.Choices;
+                KeywordParameter.SelectedIndex = parameter.Choices is { Count: > 0 } ? 0 : -1;
+                KeywordParameter.Visibility = Visibility.Visible;
+                break;
+
+            case ParameterKind.PrnList:
+                PrnParameter.Header = $"{label} — one or more, comma separated";
+                PrnParameter.Text = string.Empty;
+                PrnParameter.Visibility = Visibility.Visible;
+                break;
+
+            case ParameterKind.Integer or ParameterKind.Decimal:
+                NumberParameter.Header = RangeLabel(parameter, label);
+
+                // Bounds are enforced by the validator rather than by Minimum and Maximum on the
+                // control. §9.11 wants an out-of-range entry explained, not silently replaced —
+                // and the XAML parser widens a literal bound anyway, which is how a maximum of
+                // 0.99 once became 0.9900000095 on the Timing page.
+                NumberParameter.Value = parameter.Minimum ?? 0;
+                NumberParameter.Visibility = Visibility.Visible;
+                break;
+
+            default:
+                // Coordinates, a date, a time. Nothing is shown to type into, deliberately.
+                ParameterPanel.Visibility = Visibility.Collapsed;
+                break;
+        }
+
+        Revalidate();
+    }
+
+    private static string RangeLabel(ParameterSpec parameter, string label) =>
+        (parameter.Minimum, parameter.Maximum) switch
+        {
+            (double low, double high) =>
+                $"{label} ({low.ToString("0.###", CultureInfo.CurrentCulture)}"
+                + $" – {high.ToString("0.###", CultureInfo.CurrentCulture)})",
+            _ => label,
+        };
+
+    private void OnParameterEdited(NumberBox sender, NumberBoxValueChangedEventArgs args) => Revalidate();
+
+    private void OnKeywordEdited(object sender, SelectionChangedEventArgs e) => Revalidate();
+
+    private void OnPrnEdited(object sender, TextChangedEventArgs e) => Revalidate();
+
+    private void Revalidate()
+    {
+        if (_selected?.Availability != ConsoleAvailability.Available
+            || _selected.Parameter is not ParameterSpec parameter)
+        {
+            _argument = new ConsoleArgument.Result(null, null);
+            Render();
+            return;
+        }
+
+        string? typed = parameter.Kind switch
+        {
+            ParameterKind.Keyword => KeywordParameter.SelectedItem as string,
+            ParameterKind.PrnList => PrnParameter.Text,
+            ParameterKind.Integer or ParameterKind.Decimal => double.IsNaN(NumberParameter.Value)
+                ? string.Empty
+                : NumberParameter.Value.ToString("0.###########", CultureInfo.InvariantCulture),
+            _ => null,
+        };
+
+        _argument = ConsoleArgument.For(parameter, typed);
+
+        ParameterError.Text = _argument.Error ?? string.Empty;
+        ParameterError.Visibility = _argument.Error is null ? Visibility.Collapsed : Visibility.Visible;
+
+        Render();
+    }
+
+    private void Render()
+    {
+        bool connected = _device?.Session.Status == ConnectionStatus.Connected;
+        bool available = _selected?.Availability == ConsoleAvailability.Available;
+
+        DescriptionText.Text = _selected?.Description ?? string.Empty;
+
+        UnavailableBar.IsOpen = _selected is not null && !available;
+        UnavailableBar.Message = _selected?.Availability switch
+        {
+            ConsoleAvailability.NeedsCompositeEditor =>
+                $"{_selected.Mnemonic} takes a value made of several fields. Its own page has an editor "
+                + "for that; this console offers one field per command and does not have one, so it will "
+                + "not send it rather than offer a text box.",
+            ConsoleAvailability.TakesSeveralValues =>
+                $"{_selected.Mnemonic} takes {_selected.Command.Parameters.Count} values and this console "
+                + "offers one field. Sending it with the rest left off would be a different command from "
+                + "the one it looks like, so it is not offered at all.",
+            _ => string.Empty,
+        };
+
+        // The preview is what the session will write, produced by the session's own method. A
+        // second expression here that agreed with it today is exactly the thing §10.11's preview
+        // exists to rule out.
+        PreviewText.Text = _selected is null
+            ? ReadoutFormatter.NoValue
+            : DeviceSessionService.TextFor(_selected.Command, _argument.Text);
+
+        SendButton.IsEnabled = connected && available && _argument.IsValid && !_busy;
+        SendButton.Content = _selected?.NeedsConfirmation == true ? "Send…" : "Send";
+    }
+
+    private async void OnSendClicked(object sender, RoutedEventArgs e)
+    {
+        if (_device is not DeviceContext device
+            || _selected is not ConsoleCommand selected
+            || !_argument.IsValid
+            || _busy)
+        {
+            return;
+        }
+
+        _busy = true;
+        SendOutcome.Clear();
+        Render();
+
+        try
+        {
+            if (selected.NeedsConfirmation)
+            {
+                // The same dialog, the same sentence, the same checkbox. Routed through
+                // CommandConfirmation rather than reimplemented, so a change to §8.3's ceremony
+                // reaches this page without anyone remembering it exists.
+                SendOutcome.Show(await CommandConfirmation.RunAsync(
+                    XamlRoot,
+                    _invoker!,
+                    selected.Command,
+                    _argument.Text,
+                    _argument.Text));
+            }
+            else
+            {
+                // Tier S runs on click, which is what tier S means (§8.2). The reply lands in the
+                // transcript below rather than in a message here: this page's answer to "what did
+                // it say" is the transcript, and duplicating it would let the two disagree.
+                await device.Session
+                    .ExecuteAsync(selected.Command, _argument.Text, CommandOrigin.User)
+                    .ConfigureAwait(true);
+            }
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or TransportException)
+        {
+            SendOutcome.Show(null, exception.Message);
+        }
+        finally
+        {
+            _busy = false;
+            Render();
+        }
+    }
+
+    // ===========================================================================================
+    // The transcript
+    // ===========================================================================================
+
+    private void OnTranscriptChanged(object? sender, EventArgs e) =>
+        DispatcherQueue.TryEnqueue(RenderTranscript);
+
+    private void OnShowPollsChanged(object sender, RoutedEventArgs e) => RenderTranscript();
+
+    private void OnClearClicked(object sender, RoutedEventArgs e) => _transcript?.Clear();
+
+    private void OnExportClicked(object sender, RoutedEventArgs e) =>
+        DetailsWindow.ExportFrom(this, XamlRoot);
+
+    private bool ShowPolls => ShowPollsCheck.IsChecked == true;
+
+    /// <summary>
+    /// Redraws the transcript.
+    /// </summary>
+    /// <remarks>
+    /// One <c>TextBlock</c> rather than a <c>ListView</c> of entries. The transcript is read as a
+    /// conversation and copied out whole, which a selectable block does for free and a virtualised
+    /// list makes awkward; and at <see cref="CommandTranscript.Capacity"/> entries the cost of
+    /// rebuilding the string is a few milliseconds against a redraw that happens once a second.
+    /// </remarks>
+    private void RenderTranscript()
+    {
+        if (_transcript is not CommandTranscript transcript)
+        {
+            return;
+        }
+
+        IReadOnlyList<TranscriptEntry> entries = transcript.Snapshot(ShowPolls);
+
+        StringBuilder builder = new();
+        foreach (TranscriptEntry entry in entries)
+        {
+            builder.Append("> ").AppendLine(entry.Sent);
+
+            foreach (string line in entry.Received)
+            {
+                builder.Append("< ").AppendLine(line);
+            }
+
+            // A timeout produces no lines at all, and a transcript that showed nothing after the
+            // ">" would read as a command still in flight rather than one that never answered.
+            if (entry.Outcome != TransactionOutcome.Completed)
+            {
+                builder.Append("! ").AppendLine(entry.Outcome == TransactionOutcome.TimedOut
+                    ? "no response within the timeout"
+                    : "the link faulted");
+            }
+            else if (entry.PromptStatus is string status)
+            {
+                builder.Append("! ").AppendLine(status);
+            }
+        }
+
+        TranscriptText.Text = builder.ToString();
+
+        TranscriptFooter.Text = entries.Count == 0
+            ? "Nothing recorded yet."
+            : $"{entries.Count:N0} of {transcript.Count:N0} transaction(s)"
+              + (ShowPolls ? string.Empty : ", poll traffic hidden")
+              + $". The last {CommandTranscript.Capacity:N0} are kept.";
+
+        ExportAvailabilityChanged?.Invoke(this, EventArgs.Empty);
+
+        // Following the tail is what a transcript is for; scrolling up to read history and being
+        // yanked back a second later is not. Only auto-scroll when already at the bottom.
+        if (TranscriptScroller.VerticalOffset >= TranscriptScroller.ScrollableHeight - 4)
+        {
+            TranscriptScroller.UpdateLayout();
+            TranscriptScroller.ChangeView(null, TranscriptScroller.ScrollableHeight, null, disableAnimation: true);
+        }
+    }
+
+    // ===========================================================================================
+    // §9.7.5's export
+    // ===========================================================================================
+
+    /// <inheritdoc />
+    public event EventHandler? ExportAvailabilityChanged;
+
+    /// <inheritdoc />
+    public bool CanExport => _transcript?.Count > 0;
+
+    /// <inheritdoc />
+    public string SuggestedFileName =>
+        $"receiver-transcript-{(_device?.TimeProvider ?? TimeProvider.System).GetLocalNow():yyyy-MM-dd-HHmm}";
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Exports what is on screen, filter included, for the same reason the log export does: §9.7.5
+    /// calls the command "Export current view", and a file holding poll traffic the user had hidden
+    /// would not be the view they were looking at.
+    /// </remarks>
+    public CsvDocument? BuildCsv()
+    {
+        if (_transcript is not CommandTranscript transcript)
+        {
+            return null;
+        }
+
+        IReadOnlyList<TranscriptEntry> entries = transcript.Snapshot(ShowPolls);
+        if (entries.Count == 0)
+        {
+            return null;
+        }
+
+        CsvDocument document = new("Timestamp", "Origin", "Sent", "Received", "Outcome", "ElapsedMs", "Status");
+
+        foreach (TranscriptEntry entry in entries)
+        {
+            document.AddRow(
+                CsvDocument.PreciseTimestamp(new DateTime(entry.Ticks, DateTimeKind.Utc)),
+                entry.Origin.ToString(),
+
+                // Device-literal, both columns. Multi-line responses keep their line breaks inside
+                // one quoted field rather than becoming several rows — the status screen is one
+                // answer to one question, and splitting it would misrepresent the exchange.
+                entry.Sent,
+                string.Join("\n", entry.Received),
+                entry.Outcome.ToString(),
+                CsvDocument.Number(entry.Elapsed.TotalMilliseconds, 1),
+                entry.PromptStatus);
+        }
+
+        return document;
+    }
+}

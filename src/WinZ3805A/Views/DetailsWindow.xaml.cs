@@ -159,6 +159,8 @@ public sealed partial class DetailsWindow : Window
         ["registers"] = typeof(StatusRegistersPage),
         ["diagnostics"] = typeof(DiagnosticsPage),
         ["time"] = typeof(TimePage),
+        ["settings"] = typeof(SettingsPage),
+        ["console"] = typeof(AdvancedConsolePage),
     };
 
     private OverlappedPresenter? Presenter => AppWindow.Presenter as OverlappedPresenter;
@@ -183,8 +185,56 @@ public sealed partial class DetailsWindow : Window
         // the main list would push a real destination past the eighth accelerator (§10.2).
         Nav.FooterMenuItems.Add(NavigationItem(DetailsDestinations.Settings));
 
+        ApplyAdvancedVisibility();
+        SettingsPage.AdvancedChanged += OnAdvancedChanged;
+
         Nav.IsPaneOpen = _preferences.Load().IsPaneOpen;
         Select(DetailsDestinations.Numbered[0]);
+    }
+
+    private void OnAdvancedChanged(object? sender, EventArgs e) =>
+        DispatcherQueue.TryEnqueue(ApplyAdvancedVisibility);
+
+    /// <summary>
+    /// Adds or removes §10.11's console from the pane to match Settings - Advanced.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Added and removed rather than shown and hidden, so a disabled console is not a
+    /// <c>NavigationViewItem</c> a keyboard user can still Tab onto with <c>Visibility</c> as its
+    /// only defence. §10.11 says hidden by default; absent is the stronger reading and the easier
+    /// one to be sure of.
+    /// </para>
+    /// <para>
+    /// If the console is showing when it is switched off, the pane falls back to the first
+    /// destination. Leaving the frame on a page the pane no longer lists would be a page the user
+    /// cannot navigate back to.
+    /// </para>
+    /// </remarks>
+    private void ApplyAdvancedVisibility()
+    {
+        bool enabled = App.Services?.GetService<IAdvancedPreferenceStore>()?.Load().IsConsoleEnabled == true;
+
+        NavigationViewItem? existing = Nav.FooterMenuItems
+            .OfType<NavigationViewItem>()
+            .FirstOrDefault(item => (string?)item.Tag == DetailsDestinations.AdvancedConsole.Tag);
+
+        if (enabled && existing is null)
+        {
+            Nav.FooterMenuItems.Add(NavigationItem(DetailsDestinations.AdvancedConsole));
+        }
+        else if (!enabled && existing is not null)
+        {
+            bool showing = (string?)(Nav.SelectedItem as NavigationViewItem)?.Tag
+                == DetailsDestinations.AdvancedConsole.Tag;
+
+            Nav.FooterMenuItems.Remove(existing);
+
+            if (showing)
+            {
+                Select(DetailsDestinations.Numbered[0]);
+            }
+        }
     }
 
     /// <remarks>

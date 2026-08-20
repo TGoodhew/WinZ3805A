@@ -156,6 +156,12 @@
              Link="ViewModels\DetailsDestination.cs" />
     <Compile Include="..\..\src\WinZ3805A\Services\DetailsViewPreferences.cs"
              Link="Services\DetailsViewPreferences.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Services\CommandTranscript.cs"
+             Link="Services\CommandTranscript.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Services\AdvancedPreferences.cs"
+             Link="Services\AdvancedPreferences.cs" />
+    <Compile Include="..\..\src\WinZ3805A\ViewModels\AdvancedConsole.cs"
+             Link="ViewModels\AdvancedConsole.cs" />
     <Compile Include="..\..\src\WinZ3805A\Services\JsonPreferenceFile.cs"
              Link="Services\JsonPreferenceFile.cs" />
     <Compile Include="..\..\src\WinZ3805A\Services\SatellitesViewPreferences.cs"

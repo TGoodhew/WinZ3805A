@@ -380,7 +380,7 @@ public sealed class PollingService : IAsyncDisposable
 
         try
         {
-            Transaction transaction = await _session.ExecuteAsync(command, cancellationToken: cancellationToken)
+            Transaction transaction = await _session.ExecuteAsync(command, origin: CommandOrigin.Poll, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
 
             return transaction.Succeeded ? transaction.Text : null;

@@ -77,7 +77,7 @@ public sealed class CommandInvoker
         Transaction transaction;
         try
         {
-            transaction = await _session.ExecuteAsync(command, argument, cancellationToken).ConfigureAwait(true);
+            transaction = await _session.ExecuteAsync(command, argument, cancellationToken: cancellationToken).ConfigureAwait(true);
         }
         catch (OperationCanceledException)
         {

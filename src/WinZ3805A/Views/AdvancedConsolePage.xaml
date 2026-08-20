@@ -1,0 +1,217 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="WinZ3805A.Views.AdvancedConsolePage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:WinZ3805A.Controls"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:vm="using:WinZ3805A.ViewModels"
+    mc:Ignorable="d">
+
+    <!--
+        §10.11. A picker, not a text box.
+
+        The filter box is the only free text on this page and it selects from the catalog rather
+        than contributing to what is sent. §3 lists a general-purpose serial terminal as an explicit
+        non-goal, and the reason is structural rather than tonal: the commands this application will
+        not send are absent from the catalog, so a picker over the catalog cannot reach them, while
+        any text path would have to be defended by a filter that could be got wrong.
+
+        "Will send" is produced by DeviceSessionService.TextFor - the same method that produces the
+        bytes - so the preview cannot disagree with the wire.
+    -->
+    <Grid Padding="{ThemeResource WzPageMarginThickness}"
+          RowSpacing="{ThemeResource WzSpaceLg}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Style="{ThemeResource WzTitleTextStyle}" Text="Advanced console" />
+
+        <!-- ================================ The command ================================ -->
+        <Border Grid.Row="1" Style="{ThemeResource WzCardStyle}">
+            <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+
+                <AutoSuggestBox x:Name="FilterBox"
+                                Header="Filter"
+                                PlaceholderText="Filter by mnemonic or name"
+                                QueryIcon="Find"
+                                MaxWidth="{ThemeResource WzProseMaxWidth}"
+                                HorizontalAlignment="Left"
+                                AutomationProperties.Name="Filter the command list"
+                                TextChanged="OnFilterChanged" />
+
+                <!--
+                    Left, not Stretch. A stretched element with a MaxWidth is centred in the space
+                    it did not fill, which put the picker half a card to the right of the filter box
+                    above it and the preview below it. Seen by running it, not by reading it.
+                -->
+                <ComboBox x:Name="CommandPicker"
+                          Header="Command"
+                          Width="{ThemeResource WzProseMaxWidth}"
+                          HorizontalAlignment="Left"
+                          AutomationProperties.Name="Command"
+                          SelectionChanged="OnCommandChanged">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate x:DataType="vm:ConsoleCommand">
+                            <Grid ColumnSpacing="{ThemeResource WzSpaceMd}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="300" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+
+                                <TextBlock Grid.Column="0"
+                                           Style="{ThemeResource WzMonoTextStyle}"
+                                           Text="{x:Bind Mnemonic}" />
+                                <TextBlock Grid.Column="1"
+                                           Style="{ThemeResource WzBodyTextStyle}"
+                                           Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                           Text="{x:Bind DisplayName}" />
+                            </Grid>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+
+                <TextBlock x:Name="DescriptionText"
+                           Style="{ThemeResource WzBodyTextStyle}"
+                           Foreground="{ThemeResource WzTextSecondaryBrush}"
+                           MaxWidth="{ThemeResource WzProseMaxWidth}"
+                           TextWrapping="Wrap" />
+
+                <!--
+                    One parameter editor, shown only for a command that takes one. Three editors
+                    rather than a text box: a number, a keyword chosen from the catalog's own list,
+                    and a PRN list that is parsed to integers and re-rendered. Nothing the user
+                    types reaches the wire verbatim.
+                -->
+                <StackPanel x:Name="ParameterPanel"
+                            Spacing="{ThemeResource WzSpaceXs}"
+                            Visibility="Collapsed">
+                    <NumberBox x:Name="NumberParameter"
+                               MaxWidth="{ThemeResource WzProseMaxWidth}"
+                               HorizontalAlignment="Left"
+                               SpinButtonPlacementMode="Compact"
+                               Visibility="Collapsed"
+                               ValueChanged="OnParameterEdited" />
+
+                    <ComboBox x:Name="KeywordParameter"
+                              Width="{ThemeResource WzProseMaxWidth}"
+                              HorizontalAlignment="Left"
+                              Visibility="Collapsed"
+                              SelectionChanged="OnKeywordEdited" />
+
+                    <TextBox x:Name="PrnParameter"
+                             MaxWidth="{ThemeResource WzProseMaxWidth}"
+                             HorizontalAlignment="Left"
+                             PlaceholderText="e.g. 3,17,28"
+                             Visibility="Collapsed"
+                             TextChanged="OnPrnEdited" />
+
+                    <TextBlock x:Name="ParameterError"
+                               Style="{ThemeResource WzCaptionTextStyle}"
+                               Foreground="{ThemeResource WzCriticalBrush}"
+                               MaxWidth="{ThemeResource WzProseMaxWidth}"
+                               TextWrapping="Wrap"
+                               Visibility="Collapsed" />
+                </StackPanel>
+
+                <InfoBar x:Name="UnavailableBar"
+                         IsOpen="False"
+                         IsClosable="False"
+                         Severity="Informational"
+                         Title="Not from here"
+                         MaxWidth="{ThemeResource WzContentMaxWidth}" />
+
+                <Grid ColumnSpacing="{ThemeResource WzSpaceMd}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0" Spacing="{ThemeResource WzSpaceXxs}">
+                        <TextBlock Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   Text="Will send" />
+                        <TextBlock x:Name="PreviewText"
+                                   Style="{ThemeResource WzMonoTextStyle}"
+                                   IsTextSelectionEnabled="True"
+                                   TextWrapping="Wrap"
+                                   AutomationProperties.Name="The command that will be sent" />
+                    </StackPanel>
+
+                    <Button x:Name="SendButton"
+                            Grid.Column="1"
+                            Content="Send"
+                            VerticalAlignment="Bottom"
+                            Click="OnSendClicked" />
+                </Grid>
+
+                <controls:CommandOutcomeBar x:Name="SendOutcome" />
+            </StackPanel>
+        </Border>
+
+        <!-- ================================ Transcript ================================= -->
+        <Border Grid.Row="2" Style="{ThemeResource WzCardStyle}">
+            <Grid RowSpacing="{ThemeResource WzSpaceSm}">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <Grid Grid.Row="0" ColumnSpacing="{ThemeResource WzSpaceMd}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Grid.Column="0"
+                               Style="{ThemeResource WzBodyStrongTextStyle}"
+                               VerticalAlignment="Center"
+                               Text="Transcript" />
+
+                    <CheckBox x:Name="ShowPollsCheck"
+                              Grid.Column="1"
+                              Content="Show poll traffic"
+                              IsChecked="True"
+                              VerticalAlignment="Center"
+                              AutomationProperties.Name="Show poll traffic in the transcript"
+                              Checked="OnShowPollsChanged"
+                              Unchecked="OnShowPollsChanged" />
+
+                    <Button x:Name="ClearButton"
+                            Grid.Column="2"
+                            Content="Clear"
+                            Click="OnClearClicked" />
+
+                    <Button x:Name="ExportButton"
+                            Grid.Column="3"
+                            Content="Export"
+                            Click="OnExportClicked" />
+                </Grid>
+
+                <ScrollViewer x:Name="TranscriptScroller"
+                              Grid.Row="1"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollMode="Auto"
+                              HorizontalScrollBarVisibility="Auto">
+                    <TextBlock x:Name="TranscriptText"
+                               Style="{ThemeResource WzMonoTextStyle}"
+                               IsTextSelectionEnabled="True"
+                               AutomationProperties.Name="Transcript" />
+                </ScrollViewer>
+
+                <TextBlock x:Name="TranscriptFooter"
+                           Grid.Row="2"
+                           Style="{ThemeResource WzCaptionTextStyle}"
+                           Foreground="{ThemeResource WzTextTertiaryBrush}"
+                           TextWrapping="Wrap" />
+            </Grid>
+        </Border>
+    </Grid>
+</Page>
