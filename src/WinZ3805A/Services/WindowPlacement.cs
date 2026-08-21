@@ -63,6 +63,15 @@ public sealed record WindowPlacement
     /// <summary>Whether the window was showing the §10.3 compact layout.</summary>
     public bool IsCompact { get; init; }
 
+    /// <summary>Whether the window was pinned above others (§10.3).</summary>
+    /// <remarks>
+    /// Here rather than in a view-preferences record, unlike the Details window's pane state: this
+    /// is a property of the window frame, set on the same <c>OverlappedPresenter</c> that owns the
+    /// size and position beside it, and restored in the same breath. It says nothing about what is
+    /// showing inside.
+    /// </remarks>
+    public bool IsAlwaysOnTop { get; init; }
+
     /// <summary>The restored bounds as a rectangle.</summary>
     /// <remarks>
     /// Not serialised: it is the four fields above in another shape, and letting it into the file
