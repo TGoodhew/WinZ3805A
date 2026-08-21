@@ -158,6 +158,8 @@
              Link="Services\DetailsViewPreferences.cs" />
     <Compile Include="..\..\src\WinZ3805A\Services\CommandTranscript.cs"
              Link="Services\CommandTranscript.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Services\LockWatch.cs"
+             Link="Services\LockWatch.cs" />
     <Compile Include="..\..\src\WinZ3805A\Services\AdvancedPreferences.cs"
              Link="Services\AdvancedPreferences.cs" />
     <Compile Include="..\..\src\WinZ3805A\ViewModels\AdvancedConsole.cs"
