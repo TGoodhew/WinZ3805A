@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Globalization;
 
 using WinZ3805A.Device.Commands;
@@ -140,10 +140,14 @@ public sealed class CommandConfirmationViewModel : INotifyPropertyChanged
                 return null;
             }
 
+            // One parameter names itself. Several describe one thing between them and cannot, so
+            // the command says what to call the whole - "Position" rather than "Value", which is
+            // what a nine-field command would otherwise be labelled in its own dialog.
             ParameterSpec? parameter = Command.Parameters.Count == 1 ? Command.Parameters[0] : null;
             string unit = string.IsNullOrEmpty(parameter?.Unit) ? string.Empty : $" {parameter.Unit}";
+            string label = parameter?.Name ?? Command.ValueLabel ?? "Value";
 
-            return $"{parameter?.Name ?? "Value"}: {value}{unit}";
+            return $"{label}: {value}{unit}";
         }
     }
 

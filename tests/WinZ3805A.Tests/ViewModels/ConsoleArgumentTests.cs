@@ -1,4 +1,4 @@
-using WinZ3805A.Device.Commands;
+﻿using WinZ3805A.Device.Commands;
 using WinZ3805A.ViewModels;
 
 namespace WinZ3805A.Tests.ViewModels;
@@ -58,15 +58,23 @@ public sealed class ConsoleArgumentTests
     public void SurroundingSpaceDoesNotSurviveTheTrip() =>
         Assert.Equal("10", ConsoleArgument.For(Integer(0, 89), "  10  ").Text);
 
+    /// <summary>
+    /// Out of range is refused, and the message says both which field and what range.
+    /// </summary>
+    /// <remarks>
+    /// The field name was added with #147. It did not matter while a command had one
+    /// parameter and the console drew one box; a position takes nine, and "Enter a value
+    /// between 0 and 59." under nine boxes is true of four of them and identifies none.
+    /// </remarks>
     [Theory]
     [InlineData("-1")]
     [InlineData("90")]
-    public void AValueOutsideTheRangeIsRefusedWithTheRange(string value)
+    public void AValueOutsideTheRangeIsRefusedWithTheFieldAndTheRange(string value)
     {
         ConsoleArgument.Result result = ConsoleArgument.For(Integer(0, 89), value);
 
         Assert.False(result.IsValid);
-        Assert.Equal("Enter a value between 0 and 89.", result.Error);
+        Assert.Equal("Mask must be between 0 and 89.", result.Error);
     }
 
     [Fact]
@@ -75,7 +83,7 @@ public sealed class ConsoleArgumentTests
         ParameterSpec delay = new("Delay", ParameterKind.Integer, Unit: "ns", Minimum: 0, Maximum: 999999);
 
         Assert.Equal(
-            "Enter a value between 0 and 999999 ns.",
+            "Delay must be between 0 and 999999 ns.",
             ConsoleArgument.For(delay, "1000000").Error);
     }
 

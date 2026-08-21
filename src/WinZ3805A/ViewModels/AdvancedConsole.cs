@@ -1,42 +1,8 @@
-using System.Globalization;
+﻿using System.Globalization;
 
 using WinZ3805A.Device.Commands;
 
 namespace WinZ3805A.ViewModels;
-
-/// <summary>Why a catalogued command cannot be sent from the §10.11 console.</summary>
-public enum ConsoleAvailability
-{
-    /// <summary>It can be selected, given a value if it needs one, and sent.</summary>
-    Available = 0,
-
-    /// <summary>
-    /// Its parameter is a multi-field composite the console has no editor for.
-    /// </summary>
-    /// <remarks>
-    /// Coordinates, a date and a time. Each already has a validated multi-field editor on the page
-    /// that owns it — nine fields for a position — and a second implementation of that validation
-    /// in a diagnostic console is exactly where the two would drift apart. The console names the
-    /// page instead of offering a text box, because a text box is the thing §10.11 exists to avoid.
-    /// </remarks>
-    NeedsCompositeEditor,
-
-    /// <summary>
-    /// It takes more than one value, and the console offers one field.
-    /// </summary>
-    /// <remarks>
-    /// One command does: <c>:PTIM:TZONe</c>, which takes hours and minutes. Found by a test written
-    /// to pin the console's single-field assumption, which is the only reason it is refused rather
-    /// than sent with the minutes quietly dropped.
-    /// <para>
-    /// Two number boxes would be a small change. What is not small is knowing what separator the
-    /// receiver wants between them — it is a tier C command that changes every reported time, so
-    /// guessing and trying it on a working receiver is not a way to find out. Refused until the
-    /// format can be verified against the manual or a receiver that is not in service.
-    /// </para>
-    /// </remarks>
-    TakesSeveralValues,
-}
 
 /// <summary>
 /// One row of §10.11's command picker.
@@ -53,32 +19,18 @@ public sealed record ConsoleCommand(ScpiCommand Command)
     /// <summary>What it does.</summary>
     public string Description => Command.Description;
 
-    /// <summary>Its first parameter, or null when it takes none.</summary>
+    /// <summary>
+    /// Every parameter the command takes, in the order the receiver wants them.
+    /// </summary>
     /// <remarks>
-    /// Only meaningful where <see cref="Availability"/> is
-    /// <see cref="ConsoleAvailability.Available"/>, which is exactly the case where there is at
-    /// most one. Reading it for a command that takes two would describe half of what it needs.
+    /// <b>There is no longer an "unavailable" row.</b> This used to be a single
+    /// <c>Parameter</c>, and four catalogued commands could not be sent because they take three,
+    /// three, three and nine values between them. The console draws one editor per entry here and
+    /// joins the results with commas, which is the form the 58503A programming guide gives for all
+    /// of them — so the count no longer decides whether a command is reachable, only how many
+    /// boxes appear. See #147.
     /// </remarks>
-    public ParameterSpec? Parameter => Command.Parameters.Count > 0 ? Command.Parameters[0] : null;
-
-    /// <summary>Whether the console can send it, and why not when it cannot.</summary>
-    public ConsoleAvailability Availability
-    {
-        get
-        {
-            if (Command.Parameters.Count > 1)
-            {
-                return ConsoleAvailability.TakesSeveralValues;
-            }
-
-            return Parameter?.Kind switch
-            {
-                ParameterKind.Coordinates or ParameterKind.DateParts or ParameterKind.TimeParts =>
-                    ConsoleAvailability.NeedsCompositeEditor,
-                _ => ConsoleAvailability.Available,
-            };
-        }
-    }
+    public IReadOnlyList<ParameterSpec> Parameters => Command.Parameters;
 
     /// <summary>True for a tier C command, which still raises its §8.3 dialog from here.</summary>
     public bool NeedsConfirmation => Command.Tier == SafetyTier.Confirm;
@@ -189,6 +141,75 @@ public static class ConsoleArgument
     {
         /// <summary>True when the value may be sent.</summary>
         public bool IsValid => Error is null;
+    }
+
+    /// <summary>
+    /// Accepts one value per parameter and builds the argument the receiver wants.
+    /// </summary>
+    /// <param name="parameters">The command's parameters, in order.</param>
+    /// <param name="values">What the user entered, one per parameter and in the same order.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>Comma-separated, which was the whole blocker on #147.</b> The console refused four
+    /// commands for want of a second field, and the reason it refused rather than guessed was that
+    /// the separator was unknown — <c>:PTIM:TZONe</c> is tier C and changes every reported time,
+    /// so trying separators against a receiver in service is not a way to find out. The 58503A
+    /// programming guide settles it in four places, with worked examples
+    /// (<c>:GPS:INIT:DATE 1994,7,4</c>), and the Position page has been joining with commas since
+    /// §15 step 10.
+    /// </para>
+    /// <para>
+    /// <b>Every value goes through the same validator a single value does.</b> That is what makes
+    /// this not a second implementation of the position page's nine-field validation: the ranges
+    /// come from the catalog, so the console cannot accept a latitude the page would reject.
+    /// </para>
+    /// <para>
+    /// The first refusal wins, and the message names its field. Reporting all of them at once
+    /// would be a longer sentence describing a form the user cannot see all of.
+    /// </para>
+    /// </remarks>
+    public static Result For(IReadOnlyList<ParameterSpec> parameters, IReadOnlyList<string?> values)
+    {
+        ArgumentNullException.ThrowIfNull(parameters);
+        ArgumentNullException.ThrowIfNull(values);
+
+        if (parameters.Count == 0)
+        {
+            return new Result(null, null);
+        }
+
+        if (values.Count != parameters.Count)
+        {
+            // Not a user error - the caller built the wrong number of editors - so it is stated
+            // plainly rather than dressed as advice the user could act on.
+            return new Result(null, $"Expected {parameters.Count} values and received {values.Count}.");
+        }
+
+        List<string> parts = new(parameters.Count);
+
+        for (int i = 0; i < parameters.Count; i++)
+        {
+            Result one = For(parameters[i], values[i]);
+
+            if (!one.IsValid)
+            {
+                return one;
+            }
+
+            if (one.Text is not string text)
+            {
+                // An omitted optional parameter. Legal on its own, but it cannot be left out of
+                // the middle of a positional list without shifting every value after it onto the
+                // wrong parameter, which the receiver would accept and misread.
+                return parameters.Count == 1
+                    ? new Result(null, null)
+                    : new Result(null, $"Enter a value for {parameters[i].Name}.");
+            }
+
+            parts.Add(text);
+        }
+
+        return new Result(string.Join(',', parts), null);
     }
 
     /// <summary>Accepts a value for a parameter, or refuses it with §9.11's wording.</summary>
@@ -314,15 +335,23 @@ public static class ConsoleArgument
         return new Result(string.Join(",", prns.Select(prn => prn.ToString(CultureInfo.InvariantCulture))), null);
     }
 
+    /// <summary>§9.11's out-of-range wording, naming the field it is about.</summary>
+    /// <remarks>
+    /// The name used to be left out, and that was reasonable while a command had at most one
+    /// parameter and the console drew one box. A position takes nine, and "Enter a value between
+    /// 0 and 59." beneath a form of nine boxes is a puzzle rather than an error - it is true of
+    /// four of them. Caught by a test written to check exactly this, before anyone saw the form.
+    /// </remarks>
     private static string Range(ParameterSpec parameter)
     {
         string unit = parameter.Unit is null ? string.Empty : $" {parameter.Unit}";
 
         return (parameter.Minimum, parameter.Maximum) switch
         {
-            (double low, double high) => $"Enter a value between {Show(low)} and {Show(high)}{unit}.",
-            (double low, null) => $"Enter a value of {Show(low)}{unit} or more.",
-            (null, double high) => $"Enter a value of {Show(high)}{unit} or less.",
+            (double low, double high) =>
+                $"{parameter.Name} must be between {Show(low)} and {Show(high)}{unit}.",
+            (double low, null) => $"{parameter.Name} must be {Show(low)}{unit} or more.",
+            (null, double high) => $"{parameter.Name} must be {Show(high)}{unit} or less.",
             _ => $"{parameter.Name} is out of range.",
         };
 

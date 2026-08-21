@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 
 namespace WinZ3805A.Device.Commands;
 
@@ -53,6 +53,16 @@ namespace WinZ3805A.Device.Commands;
 /// True for the four commands §9.7.4 names as strong variants, where a checkbox gates the confirm
 /// button. Not in §8.1's record; see the remarks.
 /// </param>
+/// <param name="ValueLabel">
+/// What to call the whole value in a confirmation dialog, when the command takes several
+/// parameters that together describe one thing.
+/// <para>
+/// A command with one parameter is labelled with that parameter's name. A command with nine of
+/// them has no such name, and "Value: N 47° 31′ …" reads as though the dialog gave up. Setting
+/// this to <c>Position</c> restores the sentence without the dialog having to guess which of the
+/// nine parts to name.
+/// </para>
+/// </param>
 /// <param name="IsExperimental">
 /// True for the §8.5 queries, which are undocumented, read-only, off by default, and run only on
 /// an explicit click. Not in §8.1's record; see the remarks.
@@ -69,7 +79,8 @@ public sealed record ScpiCommand(
     string? ConfirmationText = null,
     string? SuccessText = null,
     bool RequiresAcknowledgement = false,
-    bool IsExperimental = false)
+    bool IsExperimental = false,
+    string? ValueLabel = null)
 {
     /// <summary>
     /// Abbreviates a mnemonic to its SCPI short form by dropping the lower-case letters of each

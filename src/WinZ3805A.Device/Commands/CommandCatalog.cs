@@ -1,4 +1,4 @@
-using System.Collections.Frozen;
+﻿using System.Collections.Frozen;
 
 namespace WinZ3805A.Device.Commands;
 
@@ -246,7 +246,8 @@ public static class CommandCatalog
                 "Sets the antenna position the receiver uses for all timing solutions.",
                 "Set fixed antenna position? This cancels any survey in progress and the receiver will use these coordinates for all timing solutions. An incorrect position degrades timing accuracy.",
                 "Set the fixed antenna position.",
-                parameters: [new ParameterSpec("Position", ParameterKind.Coordinates)]),
+                parameters: Position(),
+                valueLabel: "Position"),
 
             NeedsConfirmation(":GPS:POSition LAST", "Restore last position",
                 "Cancels a survey and returns to the previously held position.",
@@ -409,7 +410,7 @@ public static class CommandCatalog
         }
 
         // Acquisition aids, which share a consequence and differ only in what they seed.
-        foreach ((string node, string label, string description, ParameterKind kind) in AcquisitionAids)
+        foreach ((string node, string label, string description, IReadOnlyList<ParameterSpec> parts) in AcquisitionAids)
         {
             commands.Add(NeedsConfirmation(
                 $":GPS:INIT:{node}",
@@ -417,7 +418,8 @@ public static class CommandCatalog
                 description,
                 "Send initial acquisition aid? Only valid before the first satellite is tracked; the receiver will return error −221 otherwise.",
                 $"Sent the {label.ToLowerInvariant()} acquisition aid.",
-                parameters: [new ParameterSpec(label, kind)]));
+                parameters: parts,
+                valueLabel: label));
         }
 
         // The writable half of the status-register grid built in BuildSafe.
@@ -498,11 +500,58 @@ public static class CommandCatalog
             Switch("Echo")),
     ];
 
-    private static readonly (string Node, string Label, string Description, ParameterKind Kind)[] AcquisitionAids =
+    // The parts, in the order the receiver wants them, joined with commas. The 58503A
+    // programming guide gives all three literally - ":GPS:INITial:DATE <four-digit year>,<month>,
+    // <day>" - and prints worked examples: ":GPS:INIT:DATE 1994,7,4" and ":GPS:INIT:TIME
+    // 12,34,56". That is what settled #147: the separator was the blocker, and it was a fact to be
+    // looked up rather than a decision to be made.
+    //
+    // The manual gives no numeric bounds for a date or a time beyond "must be valid", so these are
+    // the calendar's. They are per-field: a day of 31 in a 30-day month passes here and the
+    // receiver rejects it, because cross-field validation is not something a per-parameter spec can
+    // express and inventing a half-version of it would be worse than the receiver's own answer.
+    private static readonly (string Node, string Label, string Description, IReadOnlyList<ParameterSpec> Parts)[] AcquisitionAids =
     [
-        ("DATE", "Initial date", "Seeds the receiver's date to speed first acquisition.", ParameterKind.DateParts),
-        ("TIME", "Initial time", "Seeds the receiver's time to speed first acquisition.", ParameterKind.TimeParts),
-        ("POSition", "Initial position", "Seeds an approximate position to speed first acquisition.", ParameterKind.Coordinates),
+        ("DATE", "Initial date", "Seeds the receiver's date to speed first acquisition. Only effective within about three minutes of the true date.",
+            [
+                new ParameterSpec("Year", ParameterKind.Integer, Minimum: 1980, Maximum: 2099),
+                new ParameterSpec("Month", ParameterKind.Integer, Minimum: 1, Maximum: 12),
+                new ParameterSpec("Day", ParameterKind.Integer, Minimum: 1, Maximum: 31),
+            ]),
+        ("TIME", "Initial time", "Seeds the receiver's time to speed first acquisition. Only effective within about three minutes of the true time.",
+            [
+                new ParameterSpec("Hour", ParameterKind.Integer, Minimum: 0, Maximum: 23),
+                new ParameterSpec("Minute", ParameterKind.Integer, Minimum: 0, Maximum: 59),
+                new ParameterSpec("Second", ParameterKind.Integer, Minimum: 0, Maximum: 59),
+            ]),
+        ("POSition", "Initial position", "Seeds an approximate position to speed first acquisition.", Position()),
+    ];
+
+    /// <summary>The nine parts of a position, in the order the receiver wants them.</summary>
+    /// <remarks>
+    /// <para>
+    /// The ranges are §10.6's, which are the 58503A manual's own table. Written once and used by
+    /// both position commands so that the fixed position and the acquisition aid cannot disagree
+    /// about what a valid latitude is.
+    /// </para>
+    /// <para>
+    /// <b>Height is above mean sea level, not the WGS-84 ellipsoid.</b> The manual is explicit and
+    /// the two differ by tens of metres in most of the world. The position itself <i>is</i> WGS-84;
+    /// it is only the height that is not, which is exactly the sort of detail a label gets wrong.
+    /// See #114.
+    /// </para>
+    /// </remarks>
+    private static IReadOnlyList<ParameterSpec> Position() =>
+    [
+        new ParameterSpec("Latitude hemisphere", ParameterKind.Keyword, Choices: ["N", "S"]),
+        new ParameterSpec("Latitude degrees", ParameterKind.Integer, Unit: "°", Minimum: 0, Maximum: 90),
+        new ParameterSpec("Latitude minutes", ParameterKind.Integer, Unit: "′", Minimum: 0, Maximum: 59),
+        new ParameterSpec("Latitude seconds", ParameterKind.Decimal, Unit: "″", Minimum: 0, Maximum: 59.999),
+        new ParameterSpec("Longitude hemisphere", ParameterKind.Keyword, Choices: ["E", "W"]),
+        new ParameterSpec("Longitude degrees", ParameterKind.Integer, Unit: "°", Minimum: 0, Maximum: 180),
+        new ParameterSpec("Longitude minutes", ParameterKind.Integer, Unit: "′", Minimum: 0, Maximum: 59),
+        new ParameterSpec("Longitude seconds", ParameterKind.Decimal, Unit: "″", Minimum: 0, Maximum: 59.999),
+        new ParameterSpec("Height above mean sea level", ParameterKind.Decimal, Unit: "m", Minimum: -1000, Maximum: 18000),
     ];
 
     private static ParameterSpec Prn() =>
@@ -540,7 +589,9 @@ public static class CommandCatalog
         IReadOnlyList<ParameterSpec>? parameters = null,
         bool acknowledge = false,
         bool isQuery = false,
-        ResponseFormat format = ResponseFormat.None) =>
+        ResponseFormat format = ResponseFormat.None,
+        string? valueLabel = null) =>
         new(mnemonic, ScpiCommand.ToShortForm(mnemonic), SafetyTier.Confirm, isQuery,
-            displayName, description, parameters ?? [], format, confirmationText, successText, acknowledge);
+            displayName, description, parameters ?? [], format, confirmationText, successText,
+            acknowledge, IsExperimental: false, ValueLabel: valueLabel);
 }
