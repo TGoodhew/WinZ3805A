@@ -1,4 +1,4 @@
-using WinZ3805A.Controls;
+﻿using WinZ3805A.Controls;
 
 namespace WinZ3805A.Tests.Controls;
 
@@ -22,8 +22,7 @@ public sealed class AccentRampTests
     [InlineData(false)]
     public void NoSemanticBrushIsEverAssignedFromTheAccent(bool isLightTheme)
     {
-        IEnumerable<string> assigned = AccentRamp.Brand
-            .BrushAssignments(isLightTheme)
+        IEnumerable<string> assigned = Brand.BrushAssignments(isLightTheme)
             .Select(a => a.Key);
 
         foreach (string forbidden in AccentRamp.NeverDerivedFromAccent)
@@ -38,8 +37,7 @@ public sealed class AccentRampTests
     [InlineData(false)]
     public void AllSevenRungsAreAssigned(bool isLightTheme)
     {
-        IEnumerable<string> assigned = AccentRamp.Brand
-            .BrushAssignments(isLightTheme)
+        IEnumerable<string> assigned = Brand.BrushAssignments(isLightTheme)
             .Select(a => a.Key);
 
         foreach (string rung in (string[])
@@ -55,7 +53,7 @@ public sealed class AccentRampTests
     [InlineData(false)]
     public void NoBrushIsAssignedTwice(bool isLightTheme)
     {
-        List<string> assigned = [.. AccentRamp.Brand.BrushAssignments(isLightTheme).Select(a => a.Key)];
+        List<string> assigned = [.. Brand.BrushAssignments(isLightTheme).Select(a => a.Key)];
 
         Assert.Equal(assigned.Count, assigned.Distinct(StringComparer.Ordinal).Count());
     }
@@ -71,7 +69,7 @@ public sealed class AccentRampTests
     [Fact]
     public void TheInteractionBrushesFollowTheThemeRatherThanOneFixedRung()
     {
-        AccentRamp ramp = AccentRamp.Brand;
+        AccentRamp ramp = Brand;
 
         Assert.Equal(ramp.Dark1, Find(ramp.BrushAssignments(true), "WzAccentFillBrush"));
         Assert.Equal(ramp.Light2, Find(ramp.BrushAssignments(false), "WzAccentFillBrush"));
@@ -81,36 +79,24 @@ public sealed class AccentRampTests
     }
 
     /// <summary>
-    /// The brand ramp restated here is the one <c>Colors.xaml</c> defines.
+    /// The brand ramp was read from the dictionary rather than coming back null.
     /// </summary>
     /// <remarks>
-    /// Same reasoning as <see cref="AccentGuardTests.TheSemanticColoursMatchTheTokenDictionary"/>:
-    /// a copy nobody checks goes stale. Here it would show as the accent visibly changing when the
-    /// user toggles the setting off and on again.
+    /// <see cref="AccentRamp.Brand"/> is nullable because it is a lookup now, and every other test
+    /// in this file reaches through <see cref="Brand"/>, which would fail loudly on null anyway.
+    /// This says so directly, and pins the base rung against §9.4.1 so that a dictionary edited
+    /// away from the specification is caught here rather than noticed on screen.
     /// </remarks>
     [Fact]
-    public void TheBrandRampMatchesTheTokenDictionary()
+    public void TheBrandRampIsReadFromTheDictionary()
     {
-        string xaml = File.ReadAllText(
-            Path.Combine(AppContext.BaseDirectory, "Themes", "Colors.xaml"));
-
-        (string Key, Rgb Colour)[] rungs =
-        [
-            ("WzAccentDark3", AccentRamp.Brand.Dark3),
-            ("WzAccentDark2", AccentRamp.Brand.Dark2),
-            ("WzAccentDark1", AccentRamp.Brand.Dark1),
-            ("WzAccentBase", AccentRamp.Brand.Base),
-            ("WzAccentLight1", AccentRamp.Brand.Light1),
-            ("WzAccentLight2", AccentRamp.Brand.Light2),
-            ("WzAccentLight3", AccentRamp.Brand.Light3),
-        ];
-
-        foreach ((string key, Rgb colour) in rungs)
-        {
-            Assert.Contains(
-                $"<Color x:Key=\"{key}\">{colour}</Color>",
-                xaml,
-                StringComparison.OrdinalIgnoreCase);
-        }
+        Assert.NotNull(AccentRamp.Brand);
+        Assert.Equal(new Rgb(0x0E, 0x7C, 0x86), Brand.Base);
+        Assert.Equal(ThemePalette.Colour(ThemePalette.Light, "WzAccentBase"), Brand.Base);
     }
+
+    /// <summary>The ramp, unwrapped, for the tests that only care about its shape.</summary>
+    private static AccentRamp Brand =>
+        AccentRamp.Brand ?? throw new InvalidOperationException(
+            "Themes/Colors.xaml was not embedded, so no test here means anything.");
 }

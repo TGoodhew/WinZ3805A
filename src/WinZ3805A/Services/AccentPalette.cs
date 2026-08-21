@@ -100,7 +100,14 @@ public static class AccentPalette
             return AppliedCount.None;
         }
 
-        AccentRamp ramp = AppearanceViewModel.Resolve(preferences, ReadSystemRamp());
+        // No ramp means the token dictionary could not be read, so there is nothing to substitute
+        // and - importantly - nothing to restore: the brushes still hold the colours the
+        // dictionary gave them, which is exactly what the brand ramp would have set.
+        if (AppearanceViewModel.Resolve(preferences, ReadSystemRamp()) is not AccentRamp ramp)
+        {
+            return AppliedCount.None;
+        }
+
         IReadOnlyList<KeyValuePair<string, Rgb>> assignments =
             ramp.BrushAssignments(root.ActualTheme != ElementTheme.Dark);
 

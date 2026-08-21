@@ -1,4 +1,4 @@
-namespace WinZ3805A.Controls;
+﻿namespace WinZ3805A.Controls;
 
 /// <summary>An sRGB triple, which is as much colour as this layer needs to know about.</summary>
 /// <param name="R">Red.</param>
@@ -34,15 +34,46 @@ public readonly record struct AccentRamp(
     Rgb Light2,
     Rgb Light3)
 {
-    /// <summary>The brand ramp from <c>Themes/Colors.xaml</c>, which is the default.</summary>
-    public static AccentRamp Brand { get; } = new(
-        new Rgb(0x05, 0x2F, 0x33),
-        new Rgb(0x08, 0x47, 0x4D),
-        new Rgb(0x0B, 0x6C, 0x74),
-        new Rgb(0x0E, 0x7C, 0x86),
-        new Rgb(0x18, 0x9A, 0xA6),
-        new Rgb(0x3F, 0xB8, 0xC4),
-        new Rgb(0x7F, 0xD4, 0xDC));
+    /// <summary>
+    /// The brand ramp, read from <c>Themes/Colors.xaml</c>, or null if it cannot be read.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Nullable because it is now a lookup rather than a literal, and a lookup can fail. The
+    /// failure is benign and the type says so: when there is no brand ramp to apply, the right
+    /// thing to do is apply nothing and leave the brushes with the colours the dictionary already
+    /// gave them — which are these colours. A hard-coded fallback would be the second copy this
+    /// change exists to remove.
+    /// </para>
+    /// <para>
+    /// The rungs are read from the Light dictionary. Both themes define the ramp identically —
+    /// only which rung the interaction brushes point at differs, which is
+    /// <see cref="BrushAssignments"/>'s business rather than the ramp's.
+    /// </para>
+    /// </remarks>
+    public static AccentRamp? Brand { get; } = Load();
+
+    private static AccentRamp? Load()
+    {
+        Rgb?[] rungs =
+        [
+            ThemePalette.Colour(ThemePalette.Light, "WzAccentDark3"),
+            ThemePalette.Colour(ThemePalette.Light, "WzAccentDark2"),
+            ThemePalette.Colour(ThemePalette.Light, "WzAccentDark1"),
+            ThemePalette.Colour(ThemePalette.Light, "WzAccentBase"),
+            ThemePalette.Colour(ThemePalette.Light, "WzAccentLight1"),
+            ThemePalette.Colour(ThemePalette.Light, "WzAccentLight2"),
+            ThemePalette.Colour(ThemePalette.Light, "WzAccentLight3"),
+        ];
+
+        // All seven or none. A partial ramp would be worse than no substitution: half the accent
+        // would come from the dictionary and half would be whatever the uninitialised rung held.
+        return Array.TrueForAll(rungs, rung => rung is not null)
+            ? new AccentRamp(
+                rungs[0]!.Value, rungs[1]!.Value, rungs[2]!.Value, rungs[3]!.Value,
+                rungs[4]!.Value, rungs[5]!.Value, rungs[6]!.Value)
+            : null;
+    }
 
     /// <summary>
     /// The <c>Wz*</c> brush keys this ramp sets, and what each becomes, for one theme.

@@ -27,12 +27,11 @@
          and MSBuild must not undo that on the way to the output folder. -->
     <Content Include="Fixtures\**\*.txt" CopyToOutputDirectory="PreserveNewest" />
 
-    <!-- The real token dictionary, so AccentGuardTests can hold its restated semantic colours
-         against it. AccentGuard has to name those colours in C# because headless tests cannot
-         resolve a ThemeResource; copying the XAML here is what stops the two drifting apart. -->
-    <Content Include="..\..\src\WinZ3805A\Themes\Colors.xaml"
-             Link="Themes\Colors.xaml"
-             CopyToOutputDirectory="PreserveNewest" />
+    <!-- The real token dictionary, embedded under the same logical name the application uses, so
+         that ThemePalette reads the same bytes here as it does in the packaged app. This is what
+         lets the guard and the ramp be tested headlessly without restating a single colour. -->
+    <EmbeddedResource Include="..\..\src\WinZ3805A\Themes\Colors.xaml"
+                      LogicalName="WinZ3805A.Themes.Colors.xaml" />
   </ItemGroup>
 
   <ItemGroup>
@@ -60,6 +59,8 @@
          be linked here: the control speaks WinUI, the scale is arithmetic. -->
     <Compile Include="..\..\src\WinZ3805A\Controls\SignalStrengthScale.cs"
              Link="Controls\SignalStrengthScale.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Controls\ThemePalette.cs"
+             Link="Controls\ThemePalette.cs" />
     <Compile Include="..\..\src\WinZ3805A\Controls\ColourDifference.cs"
              Link="Controls\ColourDifference.cs" />
     <Compile Include="..\..\src\WinZ3805A\Controls\AccentGuard.cs"
