@@ -4,7 +4,9 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
 
+using WinZ3805A.Controls;
 using WinZ3805A.Services;
+using WinZ3805A.ViewModels;
 
 namespace WinZ3805A.Views;
 
@@ -18,6 +20,7 @@ namespace WinZ3805A.Views;
 public sealed partial class SettingsPage : Page
 {
     private IAdvancedPreferenceStore? _preferences;
+    private IAppearancePreferenceStore? _appearance;
 
     /// <summary>
     /// Raised when a setting changed that the window has to act on.
@@ -54,7 +57,85 @@ public sealed partial class SettingsPage : Page
         ExperimentalSwitch.IsOn = stored.AreExperimentalQueriesEnabled;
         LockNotificationsSwitch.IsOn = stored.AreLockNotificationsEnabled;
 
+        _appearance = App.Services?.GetService<IAppearancePreferenceStore>();
+        SystemAccentSwitch.IsOn = Appearance.UseSystemAccent;
+
         _ready = true;
+    }
+
+    /// <summary>The stored appearance preferences, or the defaults.</summary>
+    private AppearancePreferences Appearance =>
+        _appearance?.Load() ?? AppearancePreferences.Default;
+
+    /// <summary>
+    /// Saves the accent choice, applies it, and warns if it collides (§9.4.2).
+    /// </summary>
+    /// <remarks>
+    /// The palette is applied before the tip is shown, on purpose: the warning is about a colour
+    /// the user can see, and describing a collision that has not happened yet would leave them
+    /// deciding in the abstract. Switching it on and immediately seeing why is the whole argument.
+    /// </remarks>
+    private void OnSystemAccentToggled(object sender, RoutedEventArgs e)
+    {
+        if (!_ready || _appearance is null)
+        {
+            return;
+        }
+
+        _appearance.Save(Appearance with { UseSystemAccent = SystemAccentSwitch.IsOn });
+        App.ApplyAccent();
+
+        AccentRamp? system = AccentPalette.ReadSystemRamp();
+        AccentCollision? collision = AppearanceViewModel.WarningFor(Appearance, system);
+
+        if (collision is null)
+        {
+            CollisionTip.IsOpen = false;
+            return;
+        }
+
+        CollisionTip.Subtitle = AccentGuard.Describe(collision);
+        CollisionTip.IsOpen = true;
+    }
+
+    /// <summary>
+    /// Takes the tip's offer and goes back to the built-in accent.
+    /// </summary>
+    private void OnRevertAccent(TeachingTip sender, object args)
+    {
+        if (_appearance is null)
+        {
+            return;
+        }
+
+        _appearance.Save(AppearanceViewModel.Revert(Appearance));
+
+        // The switch raises Toggled, which would save and re-evaluate on top of what was just
+        // written. Suppressed rather than reasoned about: the store is already correct.
+        _ready = false;
+        SystemAccentSwitch.IsOn = false;
+        _ready = true;
+
+        App.ApplyAccent();
+        sender.IsOpen = false;
+    }
+
+    /// <summary>
+    /// Dismisses the tip, recording which accent it was dismissed for.
+    /// </summary>
+    /// <remarks>
+    /// The colour is stored so that a later change to a different colliding accent is warned about
+    /// again — see <see cref="AppearanceViewModel.WarningFor"/>.
+    /// </remarks>
+    private void OnKeepAccent(TeachingTip sender, object args)
+    {
+        if (_appearance is not null
+            && AccentPalette.ReadSystemRamp() is AccentRamp system)
+        {
+            _appearance.Save(AppearanceViewModel.Acknowledge(Appearance, system));
+        }
+
+        sender.IsOpen = false;
     }
 
     private void OnConsoleToggled(object sender, RoutedEventArgs e) => Save();

@@ -1,4 +1,4 @@
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 
@@ -15,6 +15,9 @@ public partial class App : Application
 {
     private ServiceProvider? _services;
     private Window? _window;
+
+    /// <summary>Whether <see cref="ApplyAccent"/> has already subscribed to theme changes.</summary>
+    private bool _accentFollowsTheme;
 
     /// <summary>
     /// The §12 composition root, for the few things a page cannot be handed.
@@ -60,6 +63,75 @@ public partial class App : Application
         // looking, and a notifier that only ran while some page was open would be off exactly when
         // it is wanted. Resolving it subscribes it to the store.
         StartLockNotifications();
+
+        ApplyAccent();
+    }
+
+    /// <summary>
+    /// Applies §9.4.2's accent choice, and keeps applying it when the theme changes.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The re-application is not belt and braces. A theme change swaps in the other theme
+    /// dictionary's brush instances, and those have never been touched — so without the
+    /// subscription, a user who had opted in would watch the accent revert to the brand ramp the
+    /// moment Windows went dark at sunset, with no setting having changed.
+    /// </para>
+    /// <para>
+    /// Subscribed once, on the main window's content, because the brushes live in the
+    /// application's resources rather than a window's. Both windows draw from the same instances,
+    /// so one subscription updates both.
+    /// </para>
+    /// </remarks>
+    public static void ApplyAccent()
+    {
+        try
+        {
+            if (Current is not App app
+                || app._window?.Content is not FrameworkElement root
+                || Services?.GetService<IAppearancePreferenceStore>() is not { } store)
+            {
+                return;
+            }
+
+            if (!app._accentFollowsTheme)
+            {
+                root.ActualThemeChanged += (_, _) => ApplyAccent();
+                app._accentFollowsTheme = true;
+            }
+
+            AppearancePreferences preferences = store.Load();
+            AppliedCount applied = AccentPalette.Apply(root, preferences);
+
+            // Logged because the failure this catches is invisible: a brush key renamed in
+            // Colors.xaml and not in AccentRamp leaves one control on the old accent, which reads
+            // as a rendering quirk rather than as the wiring fault it is.
+            ILogger? log = Services?.GetService<ILoggerFactory>()?.CreateLogger("Accent");
+
+            if (applied.IsComplete)
+            {
+                log?.LogInformation(
+                    "Accent applied: {Base}, {Applied} brushes, source {Source}, theme {Theme}.",
+                    applied.Base,
+                    applied.Applied,
+                    preferences.UseSystemAccent ? "Windows" : "built-in",
+                    root.ActualTheme);
+            }
+            else
+            {
+                log?.LogWarning(
+                    "Accent applied to only {Applied} of {Expected} brushes - a key in AccentRamp "
+                    + "does not exist in Colors.xaml.",
+                    applied.Applied,
+                    applied.Expected);
+            }
+        }
+        catch (Exception)
+        {
+            // As with the notifier: an accent is decoration, and decoration must not be able to
+            // stop the application starting. The brand ramp is already in the dictionary, so the
+            // failure mode here is "looks like it always did".
+        }
     }
 
     /// <summary>
@@ -146,6 +218,7 @@ public partial class App : Application
         services.AddSingleton<IDetailsViewPreferenceStore, LocalDetailsViewPreferenceStore>();
         services.AddSingleton<ISatellitesViewPreferenceStore, LocalSatellitesViewPreferenceStore>();
         services.AddSingleton<IAdvancedPreferenceStore, LocalAdvancedPreferenceStore>();
+        services.AddSingleton<IAppearancePreferenceStore, LocalAppearancePreferenceStore>();
 
         // P1-9 (#57). The sink is registered rather than newed at the call site so a test - or a
         // build with no package identity to register under - can substitute a recorder. Resolved
