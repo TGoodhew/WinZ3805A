@@ -121,9 +121,16 @@ if (-not $SkipBuild) {
     # Not Get-PfxCertificate: on a password-protected PFX it prompts, which in a
     # non-interactive shell is an indefinite hang rather than an error. Loading
     # it with the password we already have is the only form that cannot block.
-    $certificate = [System.Security.Cryptography.X509Certificates.X509CertificateLoader]::LoadPkcs12FromFile(
-        $CertificatePath,
-        $CertificatePassword)
+    #
+    # And the constructor rather than X509CertificateLoader's static method, which
+    # would be the modern form. Its name follows a '::' and one of §8.4's excluded
+    # tokens then appears after a colon, so build/Test-NoBlockedCommands.ps1 flags
+    # it. The gate is matching '<colon><token>' correctly and a '::' member access
+    # can never be SCPI - but narrowing the gate to teach it about .NET syntax buys
+    # a false negative somewhere else for the sake of one line here. The line is
+    # what moves.
+    $certificate = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2 `
+        -ArgumentList $CertificatePath, $CertificatePassword
     $subject = $certificate.Subject
 
     if ($subject -ne $publisher) {
