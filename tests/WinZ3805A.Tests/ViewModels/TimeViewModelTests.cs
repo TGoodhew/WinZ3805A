@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Time.Testing;
+﻿using Microsoft.Extensions.Time.Testing;
 
 using WinZ3805A.Controls;
 using WinZ3805A.Device.Models;
@@ -197,5 +197,24 @@ public sealed class TimeViewModelTests
         Assert.Equal(ReadoutFormatter.NoValue, model.ShownTimeText);
         Assert.False(model.IsDateCorrected);
         Assert.Equal(LeapSecondPending.None, model.LeapPending);
+    }
+
+    /// <summary>
+    /// The rollover explanation says the 1 PPS and the time of day are unaffected.
+    /// </summary>
+    /// <remarks>
+    /// #10 names this as an acceptance criterion, and it is the one a user actually needs.
+    /// Someone whose timing reference reports 2006 is not asking about ten-bit week
+    /// numbers; they are asking whether the output they discipline to is wrong. The text
+    /// explained the arithmetic and never answered that until this test was written.
+    /// </remarks>
+    [Fact]
+    public void TheRolloverTextSaysWhatIsNotWrong()
+    {
+        TimeViewModel model = Connected(rolloverEpochs: 1);
+
+        Assert.True(model.IsDateCorrected);
+        Assert.Contains("1 PPS", model.RolloverText, StringComparison.Ordinal);
+        Assert.Contains("unaffected", model.RolloverText, StringComparison.Ordinal);
     }
 }

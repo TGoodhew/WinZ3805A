@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
@@ -373,7 +373,9 @@ public sealed partial class MainPage : Page
         // Never substitute silently — a user who sees the wrong year and no explanation reasonably
         // concludes the receiver has failed.
         RolloverBadge.Visibility = _model.IsDateCorrected ? Visibility.Visible : Visibility.Collapsed;
-        ToolTipService.SetToolTip(RolloverBadge, _model.RawDeviceDate);
-        AutomationProperties.SetName(RolloverBadge, _model.RawDeviceDate ?? string.Empty);
+        // The same sentence to the tooltip and to the automation name, because §9.9 wants an
+        // icon-only control to have both and a screen-reader user has no other route to it.
+        ToolTipService.SetToolTip(RolloverBadge, _model.RolloverExplanation);
+        AutomationProperties.SetName(RolloverBadge, _model.RolloverExplanation ?? string.Empty);
     }
 }

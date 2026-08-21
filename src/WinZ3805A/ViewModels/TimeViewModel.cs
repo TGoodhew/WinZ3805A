@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Globalization;
 
 using WinZ3805A.Controls;
@@ -160,8 +160,15 @@ public sealed class TimeViewModel : INotifyPropertyChanged
                 ? "1 epoch of 1024 weeks added."
                 : $"{RolloverEpochs} epochs of 1024 weeks — {RolloverEpochs * 1024} weeks — added.";
 
+            // The last sentence is the one a user actually needs, and #10 names it as a
+            // criterion rather than a nicety: someone who has just been told their timing
+            // reference thinks it is 2006 wants to know whether the output they are
+            // disciplining to is wrong. It is not. Only the calendar date wraps - the
+            // time of day and the 1 PPS are unaffected, and saying so here is the
+            // difference between an explanation and an alarm.
             return total + " GPS transmits the week number in ten bits, so it wraps about every "
-                + "19.6 years and a receiver of this age reports a date that far in the past.";
+                + "19.6 years and a receiver of this age reports a date that far in the past. "
+                + "The time of day and the 1 PPS output are unaffected: only the date wraps.";
         }
     }
 

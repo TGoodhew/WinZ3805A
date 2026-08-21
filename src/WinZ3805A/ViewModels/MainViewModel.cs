@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Globalization;
 using System.Runtime.CompilerServices;
 using WinZ3805A.Controls;
@@ -200,6 +200,45 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public string? RawDeviceDate => _store.Status?.DeviceDateTime is DateTimeOffset raw
         ? $"Receiver reports {raw.ToString("dd MMM yyyy HH:mm:ss", CultureInfo.CurrentCulture)}"
         : null;
+
+    /// <summary>
+    /// Everything the §7.4 badge has to say: what the receiver reported, what was added,
+    /// and what is <i>not</i> wrong.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The badge used to carry only <see cref="RawDeviceDate"/>. That satisfied §7.4's rule
+    /// against silent substitution - the user could see what the hardware said - but not
+    /// #10's other two criteria, that the badge explain the offset and state plainly that
+    /// the time of day and the 1 PPS are unaffected.
+    /// </para>
+    /// <para>
+    /// That last clause is the point of the whole feature. A user glancing at a timing
+    /// reference and seeing 2006 has one question, and it is not about ten-bit week
+    /// numbers: it is whether the output they are disciplining to is wrong. It is not. A
+    /// badge that explained the arithmetic without answering that would be technically
+    /// complete and useless at the moment it is read.
+    /// </para>
+    /// </remarks>
+    public string? RolloverExplanation
+    {
+        get
+        {
+            if (!IsDateCorrected || RawDeviceDate is not string raw)
+            {
+                return null;
+            }
+
+            int epochs = _store.Status?.WeekRolloverEpochs ?? 0;
+            string added = epochs == 1
+                ? "1024 weeks have been added"
+                : $"{epochs * 1024} weeks have been added";
+
+            return $"{raw}. GPS wraps its week number about every 19.6 years, so {added} "
+                + "to show the true date. The time of day and the 1 PPS output are "
+                + "unaffected: only the date wraps.";
+        }
+    }
 
     /// <summary>The time scale the clock is on, for the line beside it.</summary>
     public TimeScale TimeScale => _store.Status?.TimeScale ?? TimeScale.Unknown;
