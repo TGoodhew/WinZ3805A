@@ -502,3 +502,7 @@ BundleArtifacts/
 
 # WACK reports, written by build/Invoke-Wack.ps1 at the repository root.
 wack-*.xml
+
+# The sideload zip New-SideloadPackage.ps1 builds. Reproducible from a tag,
+# so there is nothing here worth keeping in the repository.
+dist/
