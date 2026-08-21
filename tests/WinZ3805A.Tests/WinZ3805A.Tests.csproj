@@ -66,6 +66,10 @@
              Link="Controls\AccentGuard.cs" />
     <Compile Include="..\..\src\WinZ3805A\Controls\AccentRamp.cs"
              Link="Controls\AccentRamp.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Controls\TrayIconRaster.cs"
+             Link="Controls\TrayIconRaster.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Controls\TrayIconState.cs"
+             Link="Controls\TrayIconState.cs" />
     <Compile Include="..\..\src\WinZ3805A\Services\AppearancePreferences.cs"
              Link="Services\AppearancePreferences.cs" />
     <Compile Include="..\..\src\WinZ3805A\ViewModels\AppearanceViewModel.cs"
