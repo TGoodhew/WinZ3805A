@@ -30,6 +30,23 @@
 .PARAMETER SkipBuild
     Certify the package already in AppPackages rather than rebuilding.
 
+.PARAMETER CertificatePath
+    The PFX to sign with. Defaults to build\devcert.pfx, which is generated on
+    first use and is gitignored.
+
+    **appcert installs the package it certifies, and Windows will not install an
+    unsigned MSIX.** This script used to pass AppxPackageSigningEnabled=true
+    without naming a certificate, which produces a bundle with no signature at
+    all - the build succeeds, and the certification run then fails at the install
+    step for a reason that has nothing to do with the application.
+
+    The certificate's subject must match Package/Identity/Publisher exactly. It
+    is generated from the manifest so the two cannot drift, and it has to be
+    regenerated when the Partner Center publisher DN replaces the placeholder.
+
+.PARAMETER CertificatePassword
+    The PFX password. Defaults to the one 'winapp cert generate' uses.
+
 .NOTES
     The package this produces is signed with a temporary test certificate and is
     for certification and sideloading only. The Store re-signs on ingestion; do
@@ -43,7 +60,11 @@ param(
 
     [switch]$SkipBuild,
 
-    [string]$ReportPath
+    [string]$ReportPath,
+
+    [string]$CertificatePath,
+
+    [string]$CertificatePassword = 'password'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -61,6 +82,10 @@ if (-not (New-Object Security.Principal.WindowsPrincipal($identity)).IsInRole(
     throw 'appcert.exe requires elevation. Re-run this script from an elevated PowerShell.'
 }
 
+if (-not $CertificatePath) {
+    $CertificatePath = Join-Path $PSScriptRoot 'devcert.pfx'
+}
+
 $appcert = 'C:\Program Files (x86)\Windows Kits\10\App Certification Kit\appcert.exe'
 if (-not (Test-Path $appcert)) {
     throw "The Windows App Certification Kit is not installed at $appcert. It ships with the Windows SDK."
@@ -76,6 +101,36 @@ if ($hostArch -ne 'X64') {
 }
 
 if (-not $SkipBuild) {
+    # ---------------------------------------------------------------------
+    # A certificate, because appcert has to install what it certifies.
+    # ---------------------------------------------------------------------
+    if (-not (Test-Path $CertificatePath)) {
+        Write-Host "Generating a development certificate at $CertificatePath..."
+
+        $manifest = Join-Path $repo 'src\WinZ3805A\Package.appxmanifest'
+        & winapp cert generate --manifest $manifest --output $CertificatePath --export-cer --if-exists Overwrite
+        if ($LASTEXITCODE -ne 0) { throw 'Could not generate a signing certificate.' }
+    }
+
+    # The subject has to match Package/Identity/Publisher exactly or the package
+    # will not install, however valid the signature is. Checked here rather than
+    # left to a confusing failure four minutes into a build.
+    [xml]$manifestXml = Get-Content (Join-Path $repo 'src\WinZ3805A\Package.appxmanifest')
+    $publisher = $manifestXml.Package.Identity.Publisher
+
+    # Not Get-PfxCertificate: on a password-protected PFX it prompts, which in a
+    # non-interactive shell is an indefinite hang rather than an error. Loading
+    # it with the password we already have is the only form that cannot block.
+    $certificate = [System.Security.Cryptography.X509Certificates.X509CertificateLoader]::LoadPkcs12FromFile(
+        $CertificatePath,
+        $CertificatePassword)
+    $subject = $certificate.Subject
+
+    if ($subject -ne $publisher) {
+        throw "The certificate is for '$subject' but the manifest declares '$publisher'. " +
+              "Delete $CertificatePath and re-run: it is regenerated from the manifest."
+    }
+
     $msbuild = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" `
         -latest -prerelease -requires Microsoft.Component.MSBuild -find MSBuild\**\Bin\MSBuild.exe |
         Select-Object -First 1
@@ -101,6 +156,8 @@ if (-not $SkipBuild) {
         -p:GenerateAppxPackageOnBuild=true `
         -p:UapAppxPackageBuildMode=SideloadOnly `
         -p:AppxPackageSigningEnabled=true `
+        -p:PackageCertificateKeyFile="$CertificatePath" `
+        -p:PackageCertificatePassword="$CertificatePassword" `
         -p:AppxPackageTestDir="$repo\src\WinZ3805A\AppPackages\" `
         -v:m -nologo
     if ($LASTEXITCODE -ne 0) { throw "Build failed for $Platform." }
@@ -110,6 +167,19 @@ $bundle = Get-ChildItem (Join-Path $repo 'src\WinZ3805A\AppPackages') -Recurse -
     Sort-Object LastWriteTime -Descending | Select-Object -First 1
 
 if (-not $bundle) { throw 'No .msixbundle found under src\WinZ3805A\AppPackages.' }
+
+# Signed, and signed by something this machine trusts. The first is the script's
+# job and is checked above; the second is a one-off machine change that needs
+# elevation of its own, so it is reported rather than done silently.
+$signature = Get-AuthenticodeSignature $bundle.FullName
+if ($signature.Status -eq 'NotSigned') {
+    throw "$($bundle.Name) is not signed, so appcert cannot install it. Re-run without -SkipBuild."
+}
+
+if ($signature.Status -ne 'Valid') {
+    Write-Warning "The package is signed but the certificate is not trusted on this machine ($($signature.Status))."
+    Write-Warning "appcert will fail to install it. Trust it once with:  winapp cert install $CertificatePath"
+}
 
 Write-Host "Certifying $($bundle.Name) ($([math]::Round($bundle.Length / 1MB, 2)) MB)"
 Write-Host 'This installs, launches and uninstalls the application. Leave the machine alone until it finishes.'
