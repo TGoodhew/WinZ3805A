@@ -135,12 +135,22 @@ public sealed class LockNotifier : IDisposable
         try
         {
             _sink.Show(title, body);
+
+            // Logged at Information, not Debug, and on the success path rather than only the
+            // failure one. The application log is "what this application saw" — the port opening,
+            // every connection change, the receiver's mode whenever it moves — and a notification
+            // raised belongs in that account: it is the record a user has when they want to know
+            // whether they were told, and the only one, since a toast the shell has retired leaves
+            // no trace anywhere else.
+            _logger.LogInformation("Notified: {Title}", title);
         }
         catch (Exception exception)
         {
             // Never fatal. See the class remarks: a notification that fails is a notification not
-            // shown, and the window and the poll loop are not the shell's to take down.
-            _logger.LogDebug(exception, "Raising the lock notification failed.");
+            // shown, and the window and the poll loop are not the shell's to take down. At warning
+            // rather than debug, because the file log keeps Information and above — a failure
+            // recorded below the level anyone keeps is a failure nobody can find.
+            _logger.LogWarning(exception, "Raising the lock notification failed.");
         }
     }
 }
