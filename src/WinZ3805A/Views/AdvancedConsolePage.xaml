@@ -82,33 +82,23 @@
                            TextWrapping="Wrap" />
 
                 <!--
-                    One parameter editor, shown only for a command that takes one. Three editors
-                    rather than a text box: a number, a keyword chosen from the catalog's own list,
-                    and a PRN list that is parsed to integers and re-rendered. Nothing the user
-                    types reaches the wire verbatim.
+                    One editor per parameter the selected command takes, built from the catalog's
+                    own specs: a number with the catalog's range, or a keyword chosen from the
+                    catalog's list. Never a free-text parameter box - that is the one thing §10.11
+                    rules out, and it is why these four commands waited for an editor rather than
+                    getting a text field.
                 -->
                 <StackPanel x:Name="ParameterPanel"
                             Spacing="{ThemeResource WzSpaceXs}"
                             Visibility="Collapsed">
-                    <NumberBox x:Name="NumberParameter"
-                               MaxWidth="{ThemeResource WzProseMaxWidth}"
-                               HorizontalAlignment="Left"
-                               SpinButtonPlacementMode="Compact"
-                               Visibility="Collapsed"
-                               ValueChanged="OnParameterEdited" />
-
-                    <ComboBox x:Name="KeywordParameter"
-                              Width="{ThemeResource WzProseMaxWidth}"
-                              HorizontalAlignment="Left"
-                              Visibility="Collapsed"
-                              SelectionChanged="OnKeywordEdited" />
-
-                    <TextBox x:Name="PrnParameter"
-                             MaxWidth="{ThemeResource WzProseMaxWidth}"
-                             HorizontalAlignment="Left"
-                             PlaceholderText="e.g. 3,17,28"
-                             Visibility="Collapsed"
-                             TextChanged="OnPrnEdited" />
+                    <!--
+                        Built in code rather than declared here, because how many fields there are
+                        is the command's to say and runs from none to nine. Three fixed editors
+                        used to sit here, shown one at a time by parameter kind, and that is
+                        precisely why four catalogued commands could not be sent at all (#147).
+                    -->
+                    <StackPanel x:Name="ParameterFields"
+                                Spacing="{ThemeResource WzSpaceXs}" />
 
                     <TextBlock x:Name="ParameterError"
                                Style="{ThemeResource WzCaptionTextStyle}"
@@ -118,12 +108,6 @@
                                Visibility="Collapsed" />
                 </StackPanel>
 
-                <InfoBar x:Name="UnavailableBar"
-                         IsOpen="False"
-                         IsClosable="False"
-                         Severity="Informational"
-                         Title="Not from here"
-                         MaxWidth="{ThemeResource WzContentMaxWidth}" />
 
                 <Grid ColumnSpacing="{ThemeResource WzSpaceMd}">
                     <Grid.ColumnDefinitions>

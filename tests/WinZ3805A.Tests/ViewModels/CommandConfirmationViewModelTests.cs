@@ -1,4 +1,4 @@
-using WinZ3805A.Device.Commands;
+﻿using WinZ3805A.Device.Commands;
 using WinZ3805A.ViewModels;
 
 namespace WinZ3805A.Tests.ViewModels;
@@ -251,4 +251,42 @@ public class CommandConfirmationViewModelTests
     [Fact]
     public void ASafeCommandCannotBeGivenAConfirmationDialog() =>
         Assert.Throws<ArgumentException>(() => new CommandConfirmationViewModel(Command(":SYNC:STAT?")));
+    // -------------------------------------------------------------------------------------
+    // What the dialog calls the value
+    // -------------------------------------------------------------------------------------
+
+    /// <summary>One parameter names itself in the dialog.</summary>
+    /// <remarks>
+    /// A register mask rather than the antenna delay, which would have been the obvious
+    /// choice: §8.3 gives the delay the sentence "Set antenna delay to {0} ns?", so its
+    /// summary is deliberately null - repeating the value under a sentence that already
+    /// carries it is the redundancy this property exists to avoid.
+    /// </remarks>
+    [Fact]
+    public void ASingleParameterIsLabelledWithItsOwnName()
+    {
+        CommandConfirmationViewModel model = new(Command(":STAT:OPER:ENABle"), "255", "255");
+
+        Assert.Equal("Mask: 255", model.ValueSummary);
+    }
+
+    /// <summary>
+    /// Several parameters are labelled with the command's own word for the whole.
+    /// </summary>
+    /// <remarks>
+    /// #147 turned the position commands from one parameter into nine, which is what let the
+    /// console offer them at all. Without <c>ValueLabel</c> that would have quietly changed the
+    /// Position page's confirmation dialog from "Position: N 47° …" to "Value: N 47° …" — a
+    /// regression in a tier C dialog, caused by a change made somewhere else entirely.
+    /// </remarks>
+    [Fact]
+    public void SeveralParametersAreLabelledWithTheCommandsOwnWord()
+    {
+        CommandConfirmationViewModel model = new(
+            Command(":GPS:POSition"),
+            "N,47,31,18.822,W,122,12,22.152,100",
+            "N 47° 31′ 18.822″, W 122° 12′ 22.152″, 100.00 m");
+
+        Assert.StartsWith("Position: ", model.ValueSummary, StringComparison.Ordinal);
+    }
 }

@@ -1,4 +1,4 @@
-using WinZ3805A.Device.Commands;
+﻿using WinZ3805A.Device.Commands;
 using WinZ3805A.ViewModels;
 
 namespace WinZ3805A.Tests.ViewModels;
@@ -108,37 +108,119 @@ public sealed class AdvancedConsoleTests
     }
 
     /// <summary>
-    /// The page shows one parameter editor, so a command taking more than one is refused rather
-    /// than sent with the rest left off.
+    /// Every parameter of every catalogued command is a kind the console has an editor for.
     /// </summary>
     /// <remarks>
-    /// This test was written expecting no command took more than one. <c>:PTIM:TZONe</c> takes two,
-    /// hours and minutes, and without this the console would have sent the hours alone — a
-    /// different command from the one the preview showed. Kept as the assertion it became.
+    /// <para>
+    /// #147's acceptance criterion, and it replaces three tests that asserted the opposite. They
+    /// were right when written: the console drew one editor, four commands wanted three, three,
+    /// three and nine values between them, and the tests pinned the refusal so none could quietly
+    /// be sent with the rest left off.
+    /// </para>
+    /// <para>
+    /// Stated as editor coverage rather than by building a sample value for each parameter. The
+    /// first attempt did that and failed on two commands that had nothing to do with this issue —
+    /// a keyword with no choices, and a baud rate whose legal values are a list rather than a
+    /// range — because constructing a valid sample means reimplementing the validator in the test,
+    /// and a test that reimplements what it checks is testing itself.
+    /// </para>
     /// </remarks>
     [Fact]
-    public void ACommandTakingSeveralValuesIsNotOffered() =>
+    public void EveryParameterHasAnEditor() =>
         Assert.All(
-            ConsoleCatalog.All.Where(entry => entry.Command.Parameters.Count > 1),
-            entry => Assert.Equal(ConsoleAvailability.TakesSeveralValues, entry.Availability));
+            ConsoleCatalog.All.SelectMany(entry => entry.Parameters),
+            parameter => Assert.Contains(
+                parameter.Kind,
+                new[]
+                {
+                    ParameterKind.Integer,
+                    ParameterKind.Decimal,
+                    ParameterKind.Keyword,
+                    ParameterKind.PrnList,
+                }));
 
-    [Fact]
-    public void TheTimeZoneCommandIsTheOneThatTakesTwo()
+    /// <summary>The four commands #147 named, each now taking the values it actually wants.</summary>
+    [Theory]
+    [InlineData(":PTIM:TZONe", 2)]
+    [InlineData(":GPS:INIT:DATE", 3)]
+    [InlineData(":GPS:INIT:TIME", 3)]
+    [InlineData(":GPS:INIT:POSition", 9)]
+    [InlineData(":GPS:POSition", 9)]
+    public void TheCompositeCommandsDeclareTheirParts(string mnemonic, int parts)
     {
         ConsoleCommand entry = Assert.Single(
             ConsoleCatalog.All,
-            candidate => candidate.Command.Parameters.Count > 1);
+            candidate => candidate.Mnemonic == mnemonic);
 
-        Assert.Equal(":PTIM:TZONe", entry.Mnemonic);
-        Assert.Equal(ConsoleAvailability.TakesSeveralValues, entry.Availability);
+        Assert.Equal(parts, entry.Parameters.Count);
     }
 
-    /// <summary>Everything the console does offer takes at most one value.</summary>
+    /// <summary>
+    /// A date is joined with commas, which is the form the manual gives and the whole reason
+    /// these commands were refused rather than guessed at.
+    /// </summary>
+    /// <remarks>
+    /// The 58503A programming guide prints this exact example: <c>:GPS:INIT:DATE 1994,7,4</c>.
+    /// Pinned as a literal so that a change of separator has to be a deliberate edit to a test
+    /// carrying its source, rather than a plausible-looking tidy-up.
+    /// </remarks>
     [Fact]
-    public void EverythingOfferedTakesAtMostOneValue() =>
-        Assert.All(
-            ConsoleCatalog.All.Where(entry => entry.Availability == ConsoleAvailability.Available),
-            entry => Assert.True(entry.Command.Parameters.Count <= 1));
+    public void SeveralValuesAreJoinedWithCommas()
+    {
+        ConsoleCommand date = Assert.Single(
+            ConsoleCatalog.All,
+            candidate => candidate.Mnemonic == ":GPS:INIT:DATE");
+
+        Assert.Equal("1994,7,4", ConsoleArgument.For(date.Parameters, ["1994", "7", "4"]).Text);
+    }
+
+    /// <summary>One bad field refuses the whole thing, and the message names that field.</summary>
+    /// <remarks>
+    /// Naming it matters more here than for a single value: with nine boxes on screen, "out of
+    /// range" without a field name is a puzzle rather than an error.
+    /// </remarks>
+    [Fact]
+    public void ABadFieldRefusesTheWholeArgumentAndNamesItself()
+    {
+        ConsoleCommand time = Assert.Single(
+            ConsoleCatalog.All,
+            candidate => candidate.Mnemonic == ":GPS:INIT:TIME");
+
+        ConsoleArgument.Result result = ConsoleArgument.For(time.Parameters, ["12", "61", "56"]);
+
+        Assert.False(result.IsValid);
+        Assert.Null(result.Text);
+        Assert.Contains("Minute", result.Error!, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A missing value in the middle refuses rather than shifting every later value one place left.
+    /// </summary>
+    /// <remarks>
+    /// The failure this prevents is silent and severe: dropping the minutes from a position would
+    /// send the seconds as minutes and the hemisphere as nothing, and the receiver would accept a
+    /// coordinate the user never typed.
+    /// </remarks>
+    [Fact]
+    public void AnOmittedValueInTheMiddleIsRefused()
+    {
+        ConsoleCommand date = Assert.Single(
+            ConsoleCatalog.All,
+            candidate => candidate.Mnemonic == ":GPS:INIT:DATE");
+
+        Assert.False(ConsoleArgument.For(date.Parameters, ["1994", "", "4"]).IsValid);
+    }
+
+    /// <summary>The wrong number of values is refused rather than padded or truncated.</summary>
+    [Fact]
+    public void TheWrongNumberOfValuesIsRefused()
+    {
+        ConsoleCommand date = Assert.Single(
+            ConsoleCatalog.All,
+            candidate => candidate.Mnemonic == ":GPS:INIT:DATE");
+
+        Assert.False(ConsoleArgument.For(date.Parameters, ["1994", "7"]).IsValid);
+    }
 
     /// <summary>
     /// What a screen reader hears for a picker row. A <c>ComboBox</c> item announces the item
@@ -238,31 +320,6 @@ public sealed class AdvancedConsoleTests
             candidate => candidate.Mnemonic == "*IDN?");
 
         Assert.False(entry.NeedsConfirmation);
-        Assert.Equal(ConsoleAvailability.Available, entry.Availability);
     }
 
-    /// <summary>
-    /// The stated gap. A multi-field value has an editor on the page that owns it, and the console
-    /// refuses rather than offering a text box — which is the thing §10.11 exists to avoid.
-    /// </summary>
-    [Theory]
-    [InlineData(ParameterKind.Coordinates)]
-    [InlineData(ParameterKind.DateParts)]
-    [InlineData(ParameterKind.TimeParts)]
-    public void ACompositeParameterIsRefusedRatherThanTyped(ParameterKind kind)
-    {
-        ConsoleCommand entry = ConsoleCatalog.All.First(
-            candidate => candidate.Parameter?.Kind == kind);
-
-        Assert.Equal(ConsoleAvailability.NeedsCompositeEditor, entry.Availability);
-        Assert.False(ConsoleArgument.For(entry.Parameter, "0,0,0").IsValid);
-    }
-
-    [Fact]
-    public void OnlyTheThreeCompositeKindsAreUnavailable() =>
-        Assert.All(
-            ConsoleCatalog.All.Where(entry => entry.Availability == ConsoleAvailability.Available),
-            entry => Assert.DoesNotContain(
-                entry.Parameter?.Kind,
-                new ParameterKind?[] { ParameterKind.Coordinates, ParameterKind.DateParts, ParameterKind.TimeParts }));
 }

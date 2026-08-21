@@ -38,6 +38,12 @@ public sealed partial class AdvancedConsolePage : Page, ICsvExportSource
 
     private ConsoleCommand? _selected;
     private ConsoleArgument.Result _argument;
+    /// <summary>The width every parameter editor shares, so a nine-field form lines up.</summary>
+    private const int FieldWidth = 320;
+
+    /// <summary>How to read each editor, in the order the receiver wants the values.</summary>
+    private readonly List<Func<string?>> _readers = [];
+
     private bool _busy;
 
     /// <summary>False until the picker has been populated, so its own events are ignored.</summary>
@@ -129,15 +135,11 @@ public sealed partial class AdvancedConsolePage : Page, ICsvExportSource
     /// </remarks>
     private void BuildParameterEditor()
     {
-        NumberParameter.Visibility = Visibility.Collapsed;
-        KeywordParameter.Visibility = Visibility.Collapsed;
-        PrnParameter.Visibility = Visibility.Collapsed;
+        ParameterFields.Children.Clear();
+        _readers.Clear();
         ParameterError.Visibility = Visibility.Collapsed;
 
-        // Availability is consulted before Parameter, not after: for a command taking two values the
-        // first one alone is half an answer, and an editor showing it would invite sending it.
-        if (_selected?.Availability != ConsoleAvailability.Available
-            || _selected.Parameter is not ParameterSpec parameter)
+        if (_selected is not ConsoleCommand selected || selected.Parameters.Count == 0)
         {
             ParameterPanel.Visibility = Visibility.Collapsed;
             _argument = new ConsoleArgument.Result(null, null);
@@ -146,41 +148,87 @@ public sealed partial class AdvancedConsolePage : Page, ICsvExportSource
 
         ParameterPanel.Visibility = Visibility.Visible;
 
+        foreach (ParameterSpec parameter in selected.Parameters)
+        {
+            _readers.Add(AddEditor(parameter));
+        }
+
+        Revalidate();
+    }
+
+    /// <summary>
+    /// Adds one editor for one parameter and returns how to read what it holds.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A closure rather than a list of controls to be re-inspected by kind later. The kind is
+    /// already known here, where the control is made; deciding it a second time when reading is how
+    /// the reader and the editor come to disagree about which control holds the value.
+    /// </para>
+    /// <para>
+    /// Every editor is typed. A number gets a NumberBox carrying the catalog&apos;s range, a keyword a
+    /// ComboBox over the catalog&apos;s own list, and a PRN list the only text field there is - which is
+    /// parsed to integers and re-rendered, so a semicolon, SCPI&apos;s command separator, cannot survive
+    /// the trip.
+    /// </para>
+    /// </remarks>
+    private Func<string?> AddEditor(ParameterSpec parameter)
+    {
         string label = parameter.Unit is null ? parameter.Name : $"{parameter.Name} ({parameter.Unit})";
 
         switch (parameter.Kind)
         {
             case ParameterKind.Keyword:
-                KeywordParameter.Header = label;
-                KeywordParameter.ItemsSource = parameter.Choices;
-                KeywordParameter.SelectedIndex = parameter.Choices is { Count: > 0 } ? 0 : -1;
-                KeywordParameter.Visibility = Visibility.Visible;
-                break;
+                ComboBox keyword = new()
+                {
+                    Header = label,
+                    Width = FieldWidth,
+                    HorizontalAlignment = HorizontalAlignment.Left,
+                    ItemsSource = parameter.Choices,
+                    SelectedIndex = parameter.Choices is { Count: > 0 } ? 0 : -1,
+                };
+
+                keyword.SelectionChanged += (_, _) => Revalidate();
+                ParameterFields.Children.Add(keyword);
+
+                return () => keyword.SelectedItem as string;
 
             case ParameterKind.PrnList:
-                PrnParameter.Header = $"{label} — one or more, comma separated";
-                PrnParameter.Text = string.Empty;
-                PrnParameter.Visibility = Visibility.Visible;
-                break;
+                TextBox prn = new()
+                {
+                    Header = $"{label} - one or more, comma separated",
+                    MaxWidth = FieldWidth,
+                    HorizontalAlignment = HorizontalAlignment.Left,
+                    PlaceholderText = "e.g. 3,17,28",
+                };
 
-            case ParameterKind.Integer or ParameterKind.Decimal:
-                NumberParameter.Header = RangeLabel(parameter, label);
+                prn.TextChanged += (_, _) => Revalidate();
+                ParameterFields.Children.Add(prn);
 
-                // Bounds are enforced by the validator rather than by Minimum and Maximum on the
-                // control. §9.11 wants an out-of-range entry explained, not silently replaced —
-                // and the XAML parser widens a literal bound anyway, which is how a maximum of
-                // 0.99 once became 0.9900000095 on the Timing page.
-                NumberParameter.Value = parameter.Minimum ?? 0;
-                NumberParameter.Visibility = Visibility.Visible;
-                break;
+                return () => prn.Text;
 
             default:
-                // Coordinates, a date, a time. Nothing is shown to type into, deliberately.
-                ParameterPanel.Visibility = Visibility.Collapsed;
-                break;
-        }
+                NumberBox number = new()
+                {
+                    Header = RangeLabel(parameter, label),
+                    MaxWidth = FieldWidth,
+                    HorizontalAlignment = HorizontalAlignment.Left,
+                    SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact,
 
-        Revalidate();
+                    // Bounds are enforced by the validator rather than by Minimum and Maximum on
+                    // the control. §9.11 wants an out-of-range entry explained, not silently
+                    // replaced - and the XAML parser widens a literal bound anyway, which is how a
+                    // maximum of 0.99 once became 0.9900000095 on the Timing page.
+                    Value = parameter.Minimum ?? 0,
+                };
+
+                number.ValueChanged += (_, _) => Revalidate();
+                ParameterFields.Children.Add(number);
+
+                return () => double.IsNaN(number.Value)
+                    ? string.Empty
+                    : number.Value.ToString("0.###########", CultureInfo.InvariantCulture);
+        }
     }
 
     private static string RangeLabel(ParameterSpec parameter, string label) =>
@@ -192,33 +240,18 @@ public sealed partial class AdvancedConsolePage : Page, ICsvExportSource
             _ => label,
         };
 
-    private void OnParameterEdited(NumberBox sender, NumberBoxValueChangedEventArgs args) => Revalidate();
-
-    private void OnKeywordEdited(object sender, SelectionChangedEventArgs e) => Revalidate();
-
-    private void OnPrnEdited(object sender, TextChangedEventArgs e) => Revalidate();
-
     private void Revalidate()
     {
-        if (_selected?.Availability != ConsoleAvailability.Available
-            || _selected.Parameter is not ParameterSpec parameter)
+        if (_selected is not ConsoleCommand selected)
         {
             _argument = new ConsoleArgument.Result(null, null);
             Render();
             return;
         }
 
-        string? typed = parameter.Kind switch
-        {
-            ParameterKind.Keyword => KeywordParameter.SelectedItem as string,
-            ParameterKind.PrnList => PrnParameter.Text,
-            ParameterKind.Integer or ParameterKind.Decimal => double.IsNaN(NumberParameter.Value)
-                ? string.Empty
-                : NumberParameter.Value.ToString("0.###########", CultureInfo.InvariantCulture),
-            _ => null,
-        };
+        string?[] values = Array.ConvertAll(_readers.ToArray(), read => read());
 
-        _argument = ConsoleArgument.For(parameter, typed);
+        _argument = ConsoleArgument.For(selected.Parameters, values);
 
         ParameterError.Text = _argument.Error ?? string.Empty;
         ParameterError.Visibility = _argument.Error is null ? Visibility.Collapsed : Visibility.Visible;
@@ -229,23 +262,8 @@ public sealed partial class AdvancedConsolePage : Page, ICsvExportSource
     private void Render()
     {
         bool connected = _device?.Session.Status == ConnectionStatus.Connected;
-        bool available = _selected?.Availability == ConsoleAvailability.Available;
 
         DescriptionText.Text = _selected?.Description ?? string.Empty;
-
-        UnavailableBar.IsOpen = _selected is not null && !available;
-        UnavailableBar.Message = _selected?.Availability switch
-        {
-            ConsoleAvailability.NeedsCompositeEditor =>
-                $"{_selected.Mnemonic} takes a value made of several fields. Its own page has an editor "
-                + "for that; this console offers one field per command and does not have one, so it will "
-                + "not send it rather than offer a text box.",
-            ConsoleAvailability.TakesSeveralValues =>
-                $"{_selected.Mnemonic} takes {_selected.Command.Parameters.Count} values and this console "
-                + "offers one field. Sending it with the rest left off would be a different command from "
-                + "the one it looks like, so it is not offered at all.",
-            _ => string.Empty,
-        };
 
         // The preview is what the session will write, produced by the session's own method. A
         // second expression here that agreed with it today is exactly the thing §10.11's preview
@@ -254,7 +272,7 @@ public sealed partial class AdvancedConsolePage : Page, ICsvExportSource
             ? ReadoutFormatter.NoValue
             : DeviceSessionService.TextFor(_selected.Command, _argument.Text);
 
-        SendButton.IsEnabled = connected && available && _argument.IsValid && !_busy;
+        SendButton.IsEnabled = connected && _selected is not null && _argument.IsValid && !_busy;
         SendButton.Content = _selected?.NeedsConfirmation == true ? "Send…" : "Send";
     }
 

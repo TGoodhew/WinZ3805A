@@ -1,4 +1,4 @@
-namespace WinZ3805A.Device.Commands;
+﻿namespace WinZ3805A.Device.Commands;
 
 /// <summary>What kind of value a command parameter takes.</summary>
 /// <remarks>
@@ -20,14 +20,12 @@ public enum ParameterKind
     /// <summary>One or more satellite PRN numbers.</summary>
     PrnList,
 
-    /// <summary>A latitude, longitude, and height triple.</summary>
-    Coordinates,
-
-    /// <summary>A year, month, and day triple.</summary>
-    DateParts,
-
-    /// <summary>An hour, minute, and second triple.</summary>
-    TimeParts,
+    // Coordinates, DateParts and TimeParts used to live here, one value standing for a whole
+    // date, time or position. They were removed with #147. A "kind" that means "several numbers,
+    // and some editor elsewhere knows how many" is not a description of a parameter - it is a
+    // note about the user interface, in a library that is not allowed to have one, and it left
+    // four catalogued commands unsendable because the console could not know what to draw. Those
+    // commands now declare their parts: three ParameterSpecs for a date, nine for a position.
 }
 
 /// <summary>
