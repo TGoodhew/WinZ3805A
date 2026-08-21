@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Time.Testing;
+﻿using Microsoft.Extensions.Time.Testing;
 using WinZ3805A.Controls;
 using WinZ3805A.Services;
 using WinZ3805A.ViewModels;
@@ -194,6 +194,50 @@ public class MainViewModelTests
         Assert.True(model.IsDateCorrected);
         Assert.Equal(2026, model.DisplayTime!.Value.Year);
         Assert.Contains("2006", model.RawDeviceDate);
+    }
+
+    /// <summary>
+    /// The badge explains the offset and says what is not wrong, not only what was reported.
+    /// </summary>
+    /// <remarks>
+    /// #10 asks for three things and the badge carried one: the raw date. It now also
+    /// explains the correction and states that the time of day and the 1 PPS are
+    /// unaffected - which is the question a user actually has on seeing 2006 on a timing
+    /// reference, and the one the arithmetic does not answer.
+    /// </remarks>
+    [Fact]
+    public void TheBadgeExplainsTheOffsetAndWhatIsUnaffected()
+    {
+        (MainViewModel model, ReceiverStateStore store, _) = Build();
+
+        store.UpdateFull(new Device.Models.ReceiverStatus
+        {
+            DeviceDateTime = new DateTimeOffset(2006, 12, 27, 14, 45, 2, TimeSpan.Zero),
+            CorrectedDateTime = new DateTimeOffset(2026, 8, 12, 14, 45, 2, TimeSpan.Zero),
+            WeekRolloverEpochs = 1,
+        });
+
+        string explanation = model.RolloverExplanation!;
+
+        Assert.Contains("2006", explanation, StringComparison.Ordinal);
+        Assert.Contains("1024 weeks", explanation, StringComparison.Ordinal);
+        Assert.Contains("1 PPS", explanation, StringComparison.Ordinal);
+        Assert.Contains("unaffected", explanation, StringComparison.Ordinal);
+    }
+
+    /// <summary>An uncorrected date has nothing to explain, so the badge says nothing.</summary>
+    [Fact]
+    public void AnUncorrectedDateHasNoExplanation()
+    {
+        (MainViewModel model, ReceiverStateStore store, _) = Build();
+
+        store.UpdateFull(new Device.Models.ReceiverStatus
+        {
+            DeviceDateTime = new DateTimeOffset(2026, 8, 12, 14, 45, 2, TimeSpan.Zero),
+            WeekRolloverEpochs = 0,
+        });
+
+        Assert.Null(model.RolloverExplanation);
     }
 
     [Fact]
