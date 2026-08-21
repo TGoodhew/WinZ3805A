@@ -44,8 +44,15 @@ TO REMOVE IT
 
   Settings > Apps > Installed apps > WinZ3805A > Uninstall.
 
-  That leaves the certificate behind. To remove that too, run certlm.msc,
-  open Trusted People > Certificates, and delete the entry.
+  Uninstalling deletes what the application has stored: your remembered
+  connection, your settings, and the recorded trend history. If you want to
+  keep those - to reinstall a newer version, say - uninstall from PowerShell
+  instead:
+
+    Get-AppxPackage WinZ3805A | Remove-AppxPackage -PreserveApplicationData
+
+  Either way the certificate stays behind. To remove that too, run
+  certlm.msc, open Trusted People > Certificates, and delete the entry.
 
 
 WHAT IT NEEDS

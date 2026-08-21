@@ -152,9 +152,12 @@ catch {
         throw 'This machine already has a development registration of WinZ3805A, which a packaged ' +
               'build cannot replace. Remove it and run this installer again:' + [Environment]::NewLine +
               [Environment]::NewLine +
-              '    Get-AppxPackage WinZ3805A | Remove-AppxPackage' + [Environment]::NewLine +
+              '    Get-AppxPackage WinZ3805A | Remove-AppxPackage -PreserveApplicationData' + [Environment]::NewLine +
               [Environment]::NewLine +
-              'That only unregisters the development copy; it deletes nothing from the repository.'
+              'The -PreserveApplicationData is not optional. Without it Windows deletes everything ' +
+              'the application has stored under this identity: the remembered connection, the ' +
+              'settings, the logs, and the whole trend database. Nothing in the repository is ' +
+              'touched either way.'
     }
 
     if ($_.Exception.Message -match '0x800B0109|0x80073CF0') {
