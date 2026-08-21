@@ -1,6 +1,7 @@
 <#
 .SYNOPSIS
-    CI gate for A11Y-3 / §9.9: no icon-only control lacks an automation name or a tooltip.
+    CI gate for A11Y-3, A11Y-5 and §9.9: every icon-only control is named, explained,
+    and big enough to hit.
 
 .DESCRIPTION
     §9.9 permits a label-less icon only when it has BOTH an AutomationProperties.Name
@@ -16,7 +17,28 @@
         - it has no literal text child, and
         - it does have an icon: an *Icon element (FontIcon, SymbolIcon, PathIcon,
           BitmapIcon, ImageIcon, AnimatedIcon), an Icon/Content property element
-          containing one, or a Glyph/Symbol/Icon attribute.
+          containing one, a Glyph/Symbol/Icon attribute, or a TextBlock set in a
+          symbol font.
+
+    That last form is not a nicety. The main window's time-zone button draws its glyph
+    with a TextBlock in SymbolThemeFontFamily rather than a FontIcon, and this gate did
+    not see it as an icon control at all - so A11Y-3 was never checked on it. Both
+    idioms are legitimate XAML; a gate that knows only one is a gate with a hole in it.
+
+    SIZE (A11Y-5, §9.6.3)
+    §9.6.3 lists the pointer target among the "fixed floors that no mode may reduce":
+    at least 32 x 32 px. An icon-only control has no text to give it width, so its size
+    comes from padding and glyph alone and lands wherever that falls - the time-zone
+    button at 20 x 20, the title-bar buttons at 38 x 27. All of them looked fine and
+    all of them were wrong, which is exactly the kind of thing manual review misses and
+    a gate does not.
+
+    A static check cannot measure layout, so it requires the floor to be DECLARED:
+    MinWidth/MinHeight (or Width/Height) of at least 32 on each axis. That turns the
+    floor from something emergent into something stated, which is what §9.6.3 means by
+    a floor. A control that genuinely cannot meet it needs a written exception, as the
+    sky plot's 24 px markers have in #117 - and those are built in code, not XAML, so
+    they never reach this gate.
 
     XAML is parsed as XML rather than grepped, so attributes and property elements are
     both handled and comments are ignored.
@@ -44,6 +66,9 @@ $buttonTypes = @('Button', 'ToggleButton', 'AppBarButton', 'AppBarToggleButton',
                  'HyperlinkButton', 'DropDownButton', 'SplitButton', 'RepeatButton')
 $iconTypes   = @('FontIcon', 'SymbolIcon', 'PathIcon', 'BitmapIcon', 'ImageIcon',
                  'AnimatedIcon', 'IconSourceElement')
+
+# §9.6.3's pointer-target floor, which no mode may reduce.
+$minimumTarget = 32
 
 $files = Get-ChildItem -Path $src -Recurse -Filter '*.xaml' -File |
     Where-Object { $_.FullName -notmatch '\\(bin|obj)\\' }
@@ -89,6 +114,11 @@ foreach ($f in $files) {
         }
         foreach ($d in $node.SelectNodes('.//*')) {
             if ($iconTypes -contains $d.LocalName) { $hasIcon = $true }
+
+            # A TextBlock in a symbol font is an icon whatever the element is called.
+            if ($d.LocalName -eq 'TextBlock' -and $d.GetAttribute('FontFamily') -match 'Symbol|Fluent Icons|MDL2') {
+                $hasIcon = $true
+            }
         }
         if (-not $hasIcon) { continue }
 
@@ -109,6 +139,28 @@ foreach ($f in $files) {
         $missing = @()
         if (-not ($name -and $name.Trim())) { $missing += 'AutomationProperties.Name' }
         if (-not ($tip  -and $tip.Trim()))  { $missing += 'ToolTipService.ToolTip' }
+
+        # --- and the target floor ------------------------------------------
+        foreach ($axis in @(@('Width', 'MinWidth'), @('Height', 'MinHeight'))) {
+            $fixed   = $node.GetAttribute($axis[0])
+            $floor   = $node.GetAttribute($axis[1])
+            $declared = $null
+
+            foreach ($candidate in @($floor, $fixed)) {
+                if ($candidate -and [double]::TryParse($candidate, [ref] $null)) {
+                    $value = [double] $candidate
+                    if ($null -eq $declared -or $value -gt $declared) { $declared = $value }
+                }
+            }
+
+            if ($null -eq $declared) {
+                $missing += "$($axis[1]) (A11Y-5 needs $minimumTarget, and nothing states one)"
+            }
+            elseif ($declared -lt $minimumTarget) {
+                $missing += "$($axis[1]) >= $minimumTarget (it is $declared)"
+            }
+        }
+
         if ($missing.Count -eq 0) { continue }
 
         # Line number of this element's Nth occurrence in the source text.
@@ -135,7 +187,7 @@ Write-Host "Scanned $($files.Count) XAML file(s) for icon-only controls."
 
 if ($hits.Count -gt 0) {
     Write-Host ''
-    Write-Host "FAIL: $($hits.Count) icon-only control(s) missing a required affordance." -ForegroundColor Red
+    Write-Host "FAIL: $($hits.Count) icon-only control(s) missing a required affordance or size." -ForegroundColor Red
     foreach ($h in $hits) {
         $who = if ($h.Name) { "$($h.Element) '$($h.Name)'" } else { $h.Element }
         Write-Host ("  {0}:{1}  {2} is missing {3}" -f $h.File, $h.Line, $who, $h.Missing) -ForegroundColor Red
@@ -151,5 +203,5 @@ if ($hits.Count -gt 0) {
     exit 1
 }
 
-Write-Host 'PASS: every icon-only control has an automation name and a tooltip.' -ForegroundColor Green
+Write-Host 'PASS: every icon-only control has an automation name, a tooltip and a target floor.' -ForegroundColor Green
 exit 0

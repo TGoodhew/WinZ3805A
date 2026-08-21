@@ -51,6 +51,8 @@
                         and an automation name. All three, no exceptions - and CI checks it.
                     -->
                     <Button x:Name="RefreshButton"
+                            MinWidth="32"
+                            MinHeight="32"
                             Click="OnRefreshClicked"
                             Background="Transparent"
                             BorderThickness="0"
@@ -59,6 +61,8 @@
                         <FontIcon Glyph="&#xE72C;" FontSize="16" />
                     </Button>
                     <Button x:Name="ExportButton"
+                            MinWidth="32"
+                            MinHeight="32"
                             Click="OnExportClicked"
                             Background="Transparent"
                             BorderThickness="0"
@@ -67,6 +71,8 @@
                         <FontIcon Glyph="&#xEDE1;" FontSize="16" />
                     </Button>
                     <Button x:Name="SettingsButton"
+                            MinWidth="32"
+                            MinHeight="32"
                             Click="OnSettingsClicked"
                             Background="Transparent"
                             BorderThickness="0"

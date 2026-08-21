@@ -110,7 +110,15 @@
                 window (§10.2), which is #5 in M4; until that exists it lives here so the setting is
                 reachable at all. Icon-only, so §9.9 requires both an automation name and a tooltip.
             -->
+            <!--
+                A11Y-5's 32 px floor, which §9.6.3 lists among the ones no mode may reduce. The
+                glyph stays 12 px - only the hit area grows, which is what the criterion asks for.
+                This measured 20 x 20 until #159; it looked right, and looking right is exactly why
+                the gate now checks it rather than a reviewer.
+            -->
             <Button x:Name="ZoneButton"
+                    MinWidth="32"
+                    MinHeight="32"
                     Padding="{StaticResource WzSpaceXxsThickness}"
                     Background="Transparent"
                     BorderThickness="0"
