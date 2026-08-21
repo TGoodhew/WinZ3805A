@@ -80,6 +80,49 @@
                 </StackPanel>
             </Border>
 
+            <!-- ============================== Appearance =============================== -->
+            <Border Style="{ThemeResource WzCardStyle}">
+                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Appearance" />
+
+                    <ToggleSwitch x:Name="SystemAccentSwitch"
+                                  Header="Use the Windows accent colour"
+                                  OnContent="Windows"
+                                  OffContent="This app&apos;s own"
+                                  AutomationProperties.Name="Use the Windows accent colour"
+                                  Toggled="OnSystemAccentToggled" />
+
+                    <!--
+                        §9.4.2 in the user's terms. What it does not say is as deliberate as what it
+                        does: it never promises the app will look "correct" either way, because both
+                        are correct. The reason to prefer the built-in accent is stated as a fact
+                        about the severity colours rather than as a recommendation, so a user who
+                        wants their desktop accent is not being told they are wrong.
+                    -->
+                    <TextBlock Style="{ThemeResource WzCaptionTextStyle}"
+                               Foreground="{ThemeResource WzTextTertiaryBrush}"
+                               MaxWidth="{ThemeResource WzProseMaxWidth}"
+                               TextWrapping="Wrap"
+                               Text="Selected items, buttons and links follow the accent you set in Windows. The colours that mean caution and critical never change - they are chosen to stay distinct from the built-in accent, so a Windows accent in the same family as one of them is harder to tell apart at a glance. You will be told if the one you have picked is close." />
+
+                    <!--
+                        Anchored to the switch rather than shown as a dialog. The user has just made
+                        a choice and is looking at the control they made it with; a modal would
+                        interrupt to say something they can act on without leaving the page - and
+                        §9.4.2 makes this advice, not a permission gate.
+                    -->
+                    <TeachingTip x:Name="CollisionTip"
+                                 Target="{x:Bind SystemAccentSwitch}"
+                                 Title="This accent is close to a warning colour"
+                                 PreferredPlacement="Bottom"
+                                 IsLightDismissEnabled="False"
+                                 ActionButtonContent="Use the app&apos;s accent"
+                                 ActionButtonClick="OnRevertAccent"
+                                 CloseButtonContent="Keep the Windows accent"
+                                 CloseButtonClick="OnKeepAccent" />
+                </StackPanel>
+            </Border>
+
             <!-- ================================ Alerts ================================= -->
             <Border Style="{ThemeResource WzCardStyle}">
                 <StackPanel Spacing="{ThemeResource WzSpaceSm}">
