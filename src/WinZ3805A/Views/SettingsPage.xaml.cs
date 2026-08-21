@@ -52,6 +52,7 @@ public sealed partial class SettingsPage : Page
         AdvancedPreferences stored = _preferences?.Load() ?? AdvancedPreferences.Default;
         ConsoleSwitch.IsOn = stored.IsConsoleEnabled;
         ExperimentalSwitch.IsOn = stored.AreExperimentalQueriesEnabled;
+        LockNotificationsSwitch.IsOn = stored.AreLockNotificationsEnabled;
 
         _ready = true;
     }
@@ -59,6 +60,8 @@ public sealed partial class SettingsPage : Page
     private void OnConsoleToggled(object sender, RoutedEventArgs e) => Save();
 
     private void OnExperimentalToggled(object sender, RoutedEventArgs e) => Save();
+
+    private void OnLockNotificationsToggled(object sender, RoutedEventArgs e) => Save();
 
     /// <summary>
     /// Writes both switches, because the record is written whole.
@@ -79,7 +82,13 @@ public sealed partial class SettingsPage : Page
         {
             IsConsoleEnabled = ConsoleSwitch.IsOn,
             AreExperimentalQueriesEnabled = ExperimentalSwitch.IsOn,
+            AreLockNotificationsEnabled = LockNotificationsSwitch.IsOn,
         });
+
+        // The notifier reads its own switch rather than being told, so this is one call whatever
+        // changed - and switching it off resets the policy as well as silencing it, so turning it
+        // back on cannot announce an outage that began while nobody was listening.
+        App.StartLockNotifications();
 
         AdvancedChanged?.Invoke(this, EventArgs.Empty);
     }

@@ -28,6 +28,16 @@ public sealed record AdvancedPreferences
     /// </remarks>
     public bool AreExperimentalQueriesEnabled { get; init; }
 
+    /// <summary>Whether losing GPS lock raises a Windows notification (P1-9).</summary>
+    /// <remarks>
+    /// <b>On by default</b>, unlike the two switches above it, and for the opposite reason: those
+    /// two reveal surfaces a user has to go looking for, while this one exists precisely for the
+    /// user who is <i>not</i> looking. It is safe to default on only because <see cref="LockWatch"/>
+    /// stays quiet through the flapping that dominates a real receiver's log — without that
+    /// restraint the honest default would be off.
+    /// </remarks>
+    public bool AreLockNotificationsEnabled { get; init; } = true;
+
     /// <summary>A fresh install's preferences.</summary>
     public static AdvancedPreferences Default { get; } = new();
 }

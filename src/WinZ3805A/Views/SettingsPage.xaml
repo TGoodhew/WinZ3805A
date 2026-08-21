@@ -80,6 +80,26 @@
                 </StackPanel>
             </Border>
 
+            <!-- ================================ Alerts ================================= -->
+            <Border Style="{ThemeResource WzCardStyle}">
+                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Alerts" />
+
+                    <ToggleSwitch x:Name="LockNotificationsSwitch"
+                                  Header="Tell me when the receiver loses GPS lock"
+                                  OnContent="On"
+                                  OffContent="Off"
+                                  AutomationProperties.Name="Notify when the receiver loses GPS lock"
+                                  Toggled="OnLockNotificationsToggled" />
+
+                    <TextBlock Style="{ThemeResource WzCaptionTextStyle}"
+                               Foreground="{ThemeResource WzTextTertiaryBrush}"
+                               MaxWidth="{ThemeResource WzProseMaxWidth}"
+                               TextWrapping="Wrap"
+                               Text="A Windows notification when the receiver stops disciplining to GPS, and one when it starts again. Brief drop-outs are not reported: a loss has to last a minute before it is worth telling you about, and a receiver that recovers inside that minute is never mentioned at all." />
+                </StackPanel>
+            </Border>
+
             <!-- ============================== Not built yet ============================ -->
             <Border Style="{ThemeResource WzCardStyle}">
                 <StackPanel Spacing="{ThemeResource WzSpaceSm}">

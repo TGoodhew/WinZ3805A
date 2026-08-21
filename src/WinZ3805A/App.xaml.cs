@@ -55,6 +55,37 @@ public partial class App : Application
         _window = new MainWindow(_services);
         _window.Closed += OnMainWindowClosed;
         _window.Activate();
+
+        // Started here rather than by a page: P1-9's whole point is telling a user who is not
+        // looking, and a notifier that only ran while some page was open would be off exactly when
+        // it is wanted. Resolving it subscribes it to the store.
+        StartLockNotifications();
+    }
+
+    /// <summary>
+    /// Switches P1-9's notifications on or off to match Settings → Advanced.
+    /// </summary>
+    /// <remarks>
+    /// Guarded whole. The feature is a convenience; resolving it must not be able to stop the
+    /// application launching, and an unpackaged run has no identity to register a notification
+    /// under at all.
+    /// </remarks>
+    public static void StartLockNotifications()
+    {
+        try
+        {
+            if (Services?.GetService<LockNotifier>() is not LockNotifier notifier)
+            {
+                return;
+            }
+
+            notifier.IsEnabled = Services.GetService<IAdvancedPreferenceStore>()
+                ?.Load().AreLockNotificationsEnabled ?? false;
+        }
+        catch (Exception)
+        {
+            // Deliberately broad and deliberately silent. See the remarks.
+        }
     }
 
     /// <summary>
@@ -115,6 +146,20 @@ public partial class App : Application
         services.AddSingleton<IDetailsViewPreferenceStore, LocalDetailsViewPreferenceStore>();
         services.AddSingleton<ISatellitesViewPreferenceStore, LocalSatellitesViewPreferenceStore>();
         services.AddSingleton<IAdvancedPreferenceStore, LocalAdvancedPreferenceStore>();
+
+        // P1-9 (#57). The sink is registered rather than newed at the call site so a test - or a
+        // build with no package identity to register under - can substitute a recorder. Resolved
+        // lazily, because registering with the shell is a WinRT call and the launch path is where
+        // this application has twice been killed by one.
+        services.AddSingleton<IToastSink>(provider =>
+            new AppNotificationSink(provider.GetService<ILogger<AppNotificationSink>>()));
+
+        services.AddSingleton(provider => new LockNotifier(
+            provider.GetRequiredKeyedService<DeviceContext>(DeviceKeys.Primary).Store,
+            provider.GetRequiredKeyedService<DeviceContext>(DeviceKeys.Primary).Session,
+            provider.GetRequiredKeyedService<DeviceContext>(DeviceKeys.Primary).TimeProvider,
+            provider.GetRequiredService<IToastSink>(),
+            provider.GetService<ILogger<LockNotifier>>()));
         services.AddSingleton<SerialPortEnumerator>();
 
         // Keyed by window: each keeps its own file, because the two are different sizes on
