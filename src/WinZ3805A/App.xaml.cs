@@ -2,6 +2,8 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 
+using Windows.ApplicationModel;
+
 using WinZ3805A.Device.Transport;
 using WinZ3805A.Services;
 using WinZ3805A.Views;
@@ -18,6 +20,9 @@ public partial class App : Application
 
     /// <summary>Whether <see cref="ApplyAccent"/> has already subscribed to theme changes.</summary>
     private bool _accentFollowsTheme;
+
+    /// <summary>P1-10's tray icon, while the window is open.</summary>
+    private TrayIconService? _tray;
 
     /// <summary>
     /// The §12 composition root, for the few things a page cannot be handed.
@@ -65,6 +70,59 @@ public partial class App : Application
         StartLockNotifications();
 
         ApplyAccent();
+        StartTrayIcon();
+    }
+
+    /// <summary>
+    /// Shows P1-10's tray icon and points it at the primary receiver.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Constructed here rather than registered in the container because it needs the window's
+    /// dispatcher, which does not exist until <c>OnLaunched</c> has made one. It is disposed with
+    /// the window: an icon whose process exits without removing it stays on the taskbar as a ghost
+    /// until the user happens to wave the pointer across it.
+    /// </para>
+    /// <para>
+    /// Guarded whole, like the notifier. A tray icon is a convenience, and no failure to draw one
+    /// is a reason for the application not to start.
+    /// </para>
+    /// </remarks>
+    private void StartTrayIcon()
+    {
+        try
+        {
+            if (_services is null || _window is null)
+            {
+                return;
+            }
+
+            DeviceContext device = _services.GetRequiredKeyedService<DeviceContext>(DeviceKeys.Primary);
+
+            _tray = new TrayIconService(
+                device.Store,
+                device.Session,
+                _window.DispatcherQueue,
+                Package.Current.DisplayName,
+                _services.GetService<ILoggerFactory>()?.CreateLogger("Tray"));
+
+            // The one thing a user expects of a tray icon. Not a menu: there is nothing to put on
+            // one that the window does not already do, and every command worth reaching goes
+            // through §8's tiers rather than a shell context menu.
+            _tray.Activated += (_, _) => _window?.Activate();
+
+            _services.GetService<ILoggerFactory>()?.CreateLogger("Tray")
+                .LogInformation("Tray icon started.");
+        }
+        catch (Exception exception)
+        {
+            // Broad, but not silent. Swallowing this without a word made "the shell refused the
+            // icon" and "this never ran at all" look identical from the log, which cost an hour
+            // of staring at an empty notification area. The feature stays non-fatal; the reason
+            // it did not happen is recorded.
+            _services?.GetService<ILoggerFactory>()?.CreateLogger("Tray")
+                .LogWarning(exception, "The tray icon could not be started.");
+        }
     }
 
     /// <summary>
@@ -256,6 +314,9 @@ public partial class App : Application
     /// </remarks>
     private async void OnMainWindowClosed(object sender, WindowEventArgs args)
     {
+        _tray?.Dispose();
+        _tray = null;
+
         if (_services is ServiceProvider services)
         {
             _services = null;
