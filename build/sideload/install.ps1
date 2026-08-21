@@ -141,6 +141,22 @@ catch {
     # which will not help: the download is fine and the trust is not. Measured,
     # not assumed: this is exactly what installing the package without the
     # certificate produces.
+    # 0x80073CFB: something is already registered under this identity. On a
+    # machine that has never built the application that cannot happen — but the
+    # person most likely to run this installer repeatedly is whoever is
+    # developing it, and on their machine `winapp run` has registered the loose
+    # build output under exactly the same identity. The package family name
+    # differs only by a hash of the publisher, so the two look like separate
+    # installs and are not: a packaged build cannot replace a registered one.
+    if ($_.Exception.Message -match '0x80073CFB') {
+        throw 'This machine already has a development registration of WinZ3805A, which a packaged ' +
+              'build cannot replace. Remove it and run this installer again:' + [Environment]::NewLine +
+              [Environment]::NewLine +
+              '    Get-AppxPackage WinZ3805A | Remove-AppxPackage' + [Environment]::NewLine +
+              [Environment]::NewLine +
+              'That only unregisters the development copy; it deletes nothing from the repository.'
+    }
+
     if ($_.Exception.Message -match '0x800B0109|0x80073CF0') {
         throw 'Windows will not install the application because it does not trust the signature. ' +
               'That usually means the certificate step above was skipped or declined. ' +
