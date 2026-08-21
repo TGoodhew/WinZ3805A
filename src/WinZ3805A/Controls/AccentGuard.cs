@@ -1,4 +1,4 @@
-namespace WinZ3805A.Controls;
+﻿namespace WinZ3805A.Controls;
 
 /// <summary>One semantic colour the accent must not be mistaken for.</summary>
 /// <param name="Name">What it means, for the warning's wording.</param>
@@ -31,21 +31,54 @@ public readonly record struct AccentCollision(SemanticColour Colour, double Diff
 /// Four comparisons cost nothing and the answer then holds whatever the desktop does.
 /// </para>
 /// <para>
-/// <b>These values are copied from <c>Themes/Colors.xaml</c> and must not drift from it.</b> Headless
-/// test code cannot resolve a <c>ThemeResource</c>, so they are restated here — and a test reads the
-/// XAML and asserts the two agree, which is the only thing that keeps a copy honest.
+/// <b>The colours come from <c>Themes/Colors.xaml</c> itself</b>, through
+/// <see cref="ThemePalette"/>. They used to be restated here with a test holding the copy against
+/// the XAML, which caught drift rather than preventing it; now there is only one place a semantic
+/// colour is written down, which is what §9.13 asks for.
 /// </para>
 /// </remarks>
 public static class AccentGuard
 {
     /// <summary>The colours §9.4.3 reserves for severity, across both themes.</summary>
-    public static IReadOnlyList<SemanticColour> Semantics { get; } =
-    [
-        new("caution", "light", 0x8A, 0x53, 0x00),
-        new("critical", "light", 0xB2, 0x2B, 0x2B),
-        new("caution", "dark", 0xF2, 0xB1, 0x55),
-        new("critical", "dark", 0xFF, 0x6B, 0x6B),
-    ];
+    /// <remarks>
+    /// <para>
+    /// Read from the token dictionary. HighContrast is deliberately not among them: there both
+    /// severities resolve to <c>SystemColorWindowTextColor</c>, so there is no fixed colour to
+    /// measure against — and §9.4 hands the palette to the system in that theme anyway, which
+    /// makes the accent question moot rather than unanswered.
+    /// </para>
+    /// <para>
+    /// A token that fails to resolve is skipped rather than defaulted, so the guard never measures
+    /// against a colour the application does not actually use. <c>AccentGuardTests</c> asserts all
+    /// four are present, which is where a dictionary that stopped defining one would be caught.
+    /// </para>
+    /// </remarks>
+    public static IReadOnlyList<SemanticColour> Semantics { get; } = Load();
+
+    private static IReadOnlyList<SemanticColour> Load()
+    {
+        List<SemanticColour> semantics = [];
+
+        (string Name, Severity Severity)[] severities =
+            [("caution", Severity.Caution), ("critical", Severity.Critical)];
+
+        // The label is lower case because it is user-facing copy, not the dictionary key.
+        (string Key, string Label)[] themes =
+            [(ThemePalette.Light, "light"), (ThemePalette.Dark, "dark")];
+
+        foreach ((string name, Severity severity) in severities)
+        {
+            foreach ((string theme, string label) in themes)
+            {
+                if (ThemePalette.Colour(theme, ThemePalette.BrushKey(severity)) is Rgb colour)
+                {
+                    semantics.Add(new SemanticColour(name, label, colour.R, colour.G, colour.B));
+                }
+            }
+        }
+
+        return semantics;
+    }
 
     /// <summary>
     /// The nearest semantic colour to an accent if it is too near, or null if the accent is clear.

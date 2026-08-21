@@ -1,4 +1,4 @@
-using WinZ3805A.Controls;
+﻿using WinZ3805A.Controls;
 using WinZ3805A.Services;
 
 namespace WinZ3805A.ViewModels;
@@ -17,13 +17,16 @@ public static class AppearanceViewModel
     /// <summary>The ramp to draw the accent from.</summary>
     /// <param name="preferences">What the user has chosen.</param>
     /// <param name="system">The Windows accent ramp, or null if it could not be read.</param>
-    /// <returns>The system ramp when opted in and available, otherwise the brand ramp.</returns>
+    /// <returns>
+    /// The system ramp when opted in and available, otherwise the brand ramp — or null when
+    /// neither can be had, which means "change nothing".
+    /// </returns>
     /// <remarks>
     /// Falling back to the brand ramp rather than failing is the whole reason this returns a value
     /// instead of throwing: an accent is decoration, and an application that would not start
     /// because it could not read one would have its priorities backwards.
     /// </remarks>
-    public static AccentRamp Resolve(AppearancePreferences preferences, AccentRamp? system) =>
+    public static AccentRamp? Resolve(AppearancePreferences preferences, AccentRamp? system) =>
         preferences.UseSystemAccent && system is AccentRamp ramp ? ramp : AccentRamp.Brand;
 
     /// <summary>

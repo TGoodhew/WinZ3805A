@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
@@ -39,6 +39,15 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The token dictionary, embedded as well as compiled. ThemePalette reads the §9 colours out
+         of it at run time so that no value from this file is ever restated in C#; a packaged app
+         has no Themes/Colors.xaml beside the executable to open, so it travels in the binary. The
+         logical name is fixed because the test assembly embeds the same file and must find it
+         under the same name. -->
+    <EmbeddedResource Include="Themes\Colors.xaml" LogicalName="WinZ3805A.Themes.Colors.xaml" />
+  </ItemGroup>
 
   <ItemGroup>
     <!--

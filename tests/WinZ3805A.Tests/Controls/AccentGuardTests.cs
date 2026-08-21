@@ -1,7 +1,4 @@
-using System.Globalization;
-using System.Xml.Linq;
-
-using WinZ3805A.Controls;
+﻿using WinZ3805A.Controls;
 
 namespace WinZ3805A.Tests.Controls;
 
@@ -15,58 +12,30 @@ namespace WinZ3805A.Tests.Controls;
 /// </remarks>
 public sealed class AccentGuardTests
 {
-    // -------------------------------------------------- the copy of Colors.xaml must stay honest
+    // ------------------------------------------------- the palette comes from the dictionary
 
     /// <summary>
-    /// Every colour <see cref="AccentGuard.Semantics"/> restates is the one the token dictionary
-    /// actually defines.
+    /// All four semantic colours were found, and they are the ones the dictionary defines.
     /// </summary>
     /// <remarks>
-    /// The guard cannot read a <c>ThemeResource</c> from a headless test, so it names the four
-    /// semantic colours in C#. A restatement that nobody checks is a restatement that goes stale:
-    /// change <c>WzCriticalBrush</c> in the XAML and the guard would go on measuring against a
-    /// colour the app no longer shows, silently and with every test still green. This reads the
-    /// real dictionary out of the build output and fails if the two ever disagree.
+    /// <see cref="AccentGuard.Semantics"/> skips a token it cannot resolve rather than defaulting
+    /// it, which is the right behaviour and also a silent one: a dictionary that stopped defining
+    /// <c>WzCautionBrush</c> would leave the guard quietly measuring against three colours instead
+    /// of four, and every collision test below would still pass. This is where that is caught.
     /// </remarks>
     [Fact]
-    public void TheSemanticColoursMatchTheTokenDictionary()
+    public void EverySemanticColourWasReadFromTheDictionary()
     {
-        XDocument dictionary = XDocument.Load(
-            Path.Combine(AppContext.BaseDirectory, "Themes", "Colors.xaml"));
-
-        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
-        XNamespace p = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
+        Assert.Equal(4, AccentGuard.Semantics.Count);
 
         foreach (SemanticColour semantic in AccentGuard.Semantics)
         {
-            string key = $"Wz{char.ToUpper(semantic.Name[0], CultureInfo.InvariantCulture)}"
-                + $"{semantic.Name[1..]}Brush";
+            string theme = semantic.Theme == "dark" ? ThemePalette.Dark : ThemePalette.Light;
+            string key = semantic.Name == "caution" ? "WzCautionBrush" : "WzCriticalBrush";
 
-            // The theme dictionaries are keyed "Light" / "Dark"; the guard spells them lower case
-            // because its strings are also user-facing copy.
-            string theme = char.ToUpper(semantic.Theme[0], CultureInfo.InvariantCulture)
-                + semantic.Theme[1..];
-
-            XElement? themed = dictionary
-                .Descendants(p + "ResourceDictionary")
-                .FirstOrDefault(d => (string?)d.Attribute(x + "Key") == theme);
-
-            Assert.True(themed is not null, $"Colors.xaml has no {theme} dictionary");
-
-            string? declared = themed!
-                .Elements(p + "SolidColorBrush")
-                .FirstOrDefault(b => (string?)b.Attribute(x + "Key") == key)
-                ?.Attribute("Color")?.Value;
-
-            Assert.True(declared is not null, $"{theme} defines no {key}");
-
-            string restated = $"#{semantic.R:X2}{semantic.G:X2}{semantic.B:X2}";
-
-            Assert.True(
-                string.Equals(declared, restated, StringComparison.OrdinalIgnoreCase),
-                $"AccentGuard says {theme} {key} is {restated}, but Colors.xaml says {declared}. "
-                + "Update AccentGuard.Semantics — the measured thresholds in its remarks may also "
-                + "need rechecking.");
+            Assert.Equal(
+                ThemePalette.Colour(theme, key),
+                new Rgb(semantic.R, semantic.G, semantic.B));
         }
     }
 

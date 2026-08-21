@@ -176,8 +176,7 @@ public sealed class TrayIcon : IDisposable
         // shape is already carrying the whole message.
         if (IsHighContrast())
         {
-            uint colour = GetSysColor(ColorWindowText);
-            return new Rgb((byte)colour, (byte)(colour >> 8), (byte)(colour >> 16));
+            return SystemWindowText();
         }
 
         bool light = true;
@@ -194,17 +193,12 @@ public sealed class TrayIcon : IDisposable
             // An unreadable theme preference is not worth failing over; light is the default.
         }
 
-        return (severity, light) switch
-        {
-            (Severity.Success, true) => new Rgb(0x0F, 0x7B, 0x3C),
-            (Severity.Success, false) => new Rgb(0x4C, 0xC3, 0x8A),
-            (Severity.Caution, true) => new Rgb(0x8A, 0x53, 0x00),
-            (Severity.Caution, false) => new Rgb(0xF2, 0xB1, 0x55),
-            (Severity.Critical, true) => new Rgb(0xB2, 0x2B, 0x2B),
-            (Severity.Critical, false) => new Rgb(0xFF, 0x6B, 0x6B),
-            (_, true) => new Rgb(0x61, 0x61, 0x61),
-            (_, false) => new Rgb(0x9A, 0x9A, 0x9A),
-        };
+        // Straight out of the token dictionary, so the taskbar cannot drift from the pages.
+        // If the token does not resolve - it never should for Light or Dark, both of which give
+        // every severity a literal - the system window text colour is a legible last resort on
+        // whatever the taskbar is, which is the property that actually matters here.
+        return ThemePalette.Colour(light ? ThemePalette.Light : ThemePalette.Dark,
+            ThemePalette.BrushKey(severity)) ?? SystemWindowText();
     }
 
     /// <summary>Builds an <c>HICON</c> from a premultiplied BGRA buffer.</summary>
@@ -300,6 +294,16 @@ public sealed class TrayIcon : IDisposable
         {
             DestroyWindow(_window);
         }
+    }
+
+    /// <summary>The system window text colour, which is legible on whatever the taskbar is.</summary>
+    private static Rgb SystemWindowText()
+    {
+        uint colour = GetSysColor(ColorWindowText);
+
+        // COLORREF is 0x00BBGGRR, not RGB. Getting this backwards is invisible for a grey and
+        // obvious for anything else, which is a poor way to find out.
+        return new Rgb((byte)colour, (byte)(colour >> 8), (byte)(colour >> 16));
     }
 
     /// <summary>Whether Windows is in a high-contrast theme.</summary>
