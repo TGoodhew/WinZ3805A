@@ -85,6 +85,16 @@ else {
     Write-Info 'for applications you install by hand, and for nothing else - it'
     Write-Info 'cannot vouch for a website or for code you did not choose to run.'
     Write-Info ''
+    Write-Info "The certificate is $($certificate.Name) in this folder. Double-click it"
+    Write-Info 'if you would rather look at it first.'
+    Write-Info ''
+
+    # Wait for the reader before raising the prompt. Without this the UAC dialog
+    # appears over the explanation within a fraction of a second, so the text is
+    # on screen and unread — which is worse than not writing it, because it
+    # looks like consent was informed when it could not have been. Reported by
+    # the first person to run this.
+    Read-Host '  Press Enter to continue, or close this window to stop'
 
     $elevated = Start-Process powershell.exe -Verb RunAs -Wait -PassThru -ArgumentList @(
         '-NoProfile', '-ExecutionPolicy', 'Bypass',
