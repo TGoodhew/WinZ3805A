@@ -179,8 +179,8 @@ The device is plain RS-232 with no vendor driver SDK, no COM interop, and no P/I
 
 | Feature | Where | Why |
 |---|---|---|
-| `System.IO.Pipelines` | `LineProtocol` read loop | The core parsing problem — scan an incoming byte stream for a `scpi> ` sentinel that can straddle buffer boundaries, without copying — is precisely what Pipelines exists for. Use `PipeReader` over `SerialPort.BaseStream` and `SequenceReader<byte>` to find delimiters. Do **not** hand-roll a growing `byte[]` with manual compaction. |
-| `SearchValues<byte>` | Delimiter scanning | Vectorised search for CR/LF and prompt bytes. |
+| `System.IO.Pipelines` | `LineProtocol` read loop | The core parsing problem — scan an incoming byte stream for a prompt sentinel that can straddle buffer boundaries (§7.2 gives its grammar — it is not a fixed string), without copying — is precisely what Pipelines exists for. Use `PipeReader` over `SerialPort.BaseStream` and `SequenceReader<byte>` to find delimiters. Do **not** hand-roll a growing `byte[]` with manual compaction. |
+| ~~`SearchValues<byte>`~~ span `IndexOfAny` | Delimiter scanning | **Corrected 21 Aug 2026 (#78).** This row and §7.2’s `SequenceReader<byte>` requirement cannot both be met: .NET 10 ships no `SequenceReader<T>` overload accepting a `SearchValues<T>`. `SequenceReader` wins, because §7.2 needs it for the straddling-buffer case. Nothing is lost — `SearchValues<T>` earns its keep by amortising set preprocessing across a large set, and a two-value CR/LF `IndexOfAny` is already vectorised. `LineProtocol` uses `TryReadToAny` with a two-byte delimiter span, and says so at the call site. |
 | `System.Threading.Channels` | Command queue in `DeviceSessionService` | Single-consumer `Channel<PendingCommand>` enforces the one-transaction-at-a-time constraint (§7.2) with no locks. |
 | `PeriodicTimer` | Fast and full poll cadences | Async-native, no reentrancy hazard, cancels cleanly. Replaces `DispatcherTimer` / `System.Timers.Timer`. |
 | `TimeProvider` (abstract, injected) | Poller, staleness calculation, week-rollover detection | **Important for testability.** The rollover logic in §7.4 compares device time to system time; injecting `TimeProvider` lets the fixture tests assert the 2006→2026 correction deterministically instead of depending on wall clock. Use `FakeTimeProvider` from `Microsoft.Extensions.TimeProvider.Testing` in tests. |
@@ -228,10 +228,89 @@ Z3805A ships 9600-8-N-1. Sibling units differ — the Z3801A is commonly 19200-7
 
 This is the fiddliest part of the implementation. Get it right before building any UI.
 
-- **Transmit:** command text followed by `\r\n`.
-- **Echo:** the receiver defaults to `FDUPlex ON`, meaning **it echoes every character you send.** The read path must consume and discard the echoed command line before treating anything as a response. Do not assume echo is off; detect it by comparing the first received line to the transmitted line.
-- **Response terminator:** responses end `\r\n`.
-- **Prompt sentinel:** after a response the device emits `scpi> `. Treat the prompt as end-of-transaction. A command that produces no response (a setter) returns only the prompt.
+> **⚠ Corrected 21 Aug 2026 (#78).** Everything below was rewritten against
+> `SYMMETRICOM,Z3805A,3625A02931,1.01.03-A` at 9600-8-N-1. The original text described a receiver
+> that does not exist, and three of its statements stop a client dead rather than degrading it: the
+> prompt was given as a literal that never matches, echo was given as always-on when this unit
+> echoes nothing, and the connect sequence omitted both a banner and a discarded first command.
+> Anyone implementing this section from the previous text wrote a client that could not connect.
+
+- **Transmit:** command text followed by `CR LF`. The receiver terminates on the `CR`; a trailing
+  `LF` is harmless. `CR`, `LF` and `CR LF` all work — verified against a drained error queue, and
+  none of the three leaves anything behind.
+- **Echo:** **both duplex settings occur in the field, and neither may be assumed.** The manual says
+  the receiver defaults to `FDUPlex ON` and echoes every character; the bench Z3805A echoes nothing.
+  Detect echo by comparing the first received line to the line transmitted, and discard it only when
+  it matches. A client that assumes echo-on eats the first line of every response the day it meets a
+  unit with echo off; one that assumes echo-off reads its own command back as the answer.
+- **Response terminator:** responses end `CR LF`.
+- **Response values carry a leading space.** `:SYNC:TFOM?` answers `␣+3`, not `+3`. Trim before
+  parsing rather than treating the space as part of the field. This affects every scalar parse
+  in §11.
+- **Prompt sentinel — a grammar, not a literal.** The prompt marks end-of-transaction and carries
+  **no trailing newline**. It has two forms:
+
+  ```
+  prompt := "scpi > "            the error queue is empty
+          | "E-" digits "> "     the error queue is not empty, e.g. "E-113> "
+  ```
+
+  **The two forms space differently**: `scpi > ` has a space before the `>` and the error form does
+  not. The only reliable invariant is that a prompt ends with `>` followed by a space. Matching the
+  literal `scpi> ` that this section used to specify never terminates a transaction at all, so every
+  command runs to its full timeout.
+
+  A command the receiver rejects answers with **the prompt and nothing else**. There is no error
+  body on the wire; the reason must be fetched separately with `:SYST:ERR?`.
+
+- **The prompt reflects the ERROR QUEUE, not the command that just ran.** This is the correction
+  most easily got wrong, because the wrong reading is plausible and stays self-consistent for as
+  long as the queue happens to be empty.
+
+  Measured with one error queued, then three *successful* commands issued:
+
+  | Command | Response body | Prompt |
+  |---|---|---|
+  | `*IDN?` (queue empty) | `SYMMETRICOM,Z3805A,3625A02931,1.01.03-A` | `scpi > ` |
+  | *one bad command queues* `-113` | | |
+  | `*IDN?` | `SYMMETRICOM,Z3805A,3625A02931,1.01.03-A` | **`E-113> `** |
+  | `:SYNC:STAT?` | `LOCK` | **`E-113> `** |
+  | `:GPS:SAT:TRAC:COUN?` | `+2` | **`E-113> `** |
+
+  Every one of those succeeded and returned correct data under an error prompt. **A client that
+  infers "this command failed" from an error prompt is wrong** — and wrong in the direction that
+  reports a working command as broken. §7.3.1 records the instance of exactly that.
+
+  Two further details, each measured in both orders:
+
+  - **The prompt names the *newest* queued error; `:SYST:ERR?` returns the *oldest* first.** They
+    read opposite ends of the same FIFO. Queue `-113` and then `-109`, and the prompt reads
+    `E-109> ` while the first `:SYST:ERR?` answers `-113`.
+  - **The prompt returns to `scpi > ` only once the queue is fully drained**, and it reflects the
+    queue as of the end of the transaction — the read that empties the queue already comes back
+    with `scpi > `.
+
+  Read correctly the prompt is a free signal: it says whether the queue is non-empty without
+  spending a round trip. It never says which command put something in it.
+
+- **Connect sequence — three steps, in order, before any command whose answer matters.** Asserting
+  DTR on open has two separate effects, and skipping either step corrupts the session silently
+  rather than failing:
+
+  1. **Absorb the banner.** The receiver emits its identity string and a prompt with nothing asked
+     of it. The announcement arrives late enough to land *after* a first command has gone out, so a
+     client that transacts immediately reads the banner as its first response and every reply
+     afterwards is one behind — with nothing reporting an error, because every transaction still
+     completes.
+  2. **Spend the framing glitch.** The same DTR assertion reaches the receiver as a character. It
+     answers the next thing it is asked with `-362`, "Framing error in program message", having
+     dropped that command unexecuted. The first command after opening must therefore be one whose
+     response nobody wants. During auto-detect the alternative is losing the identity query that
+     decides whether a receiver is present at all.
+  3. **Then transact.**
+
+  The glitch is directly observable: open the port and send `*IDN?` first and it answers `E-362> `
+  with no identity string; send anything else first and `*IDN?` answers normally.
 - **Read strategy:** a transaction completes when the stream yields the prompt sentinel, or on timeout. Never rely on `ReadLine()` alone — `:SYST:STAT?` is a multi-line block of ~1900 bytes that will span many reads. Implement with `PipeReader` over `SerialPort.BaseStream` and `SequenceReader<byte>` for sentinel detection (§6.4); this handles the straddling-buffer case for free and avoids the manual compaction bugs that plague hand-rolled versions.
 - **Timeouts:** 3000 ms default; 15000 ms for `:SYST:STAT?` (≈1900 bytes at 9600 baud ≈ 2 s of wire time, plus device latency); 30000 ms for `*TST?` and `:DIAG:TEST?`.
 - **Concurrency:** the device is strictly one-transaction-at-a-time. `DeviceSessionService` owns a single-consumer `Channel<PendingCommand>`; all callers `await` their turn. No exceptions to this.
