@@ -396,8 +396,14 @@ public sealed record ScpiCommand(
     string Description,
     IReadOnlyList<ParameterSpec> Parameters,
     ResponseFormat ResponseFormat,
-    string? ConfirmationText = null);
+    string? ConfirmationText = null,
+    string? SuccessText = null,          // §9.7.4
+    bool RequiresAcknowledgement = false,// §9.7.4’s four "I understand" commands
+    bool IsExperimental = false,         // §8.5, off by default and never polled
+    string? ValueLabel = null);          // names a composite value in a confirmation
 ```
+
+> **⚠ Corrected 21 Aug 2026 (#85).** The record carries four more members than this section originally declared, and three are safety-relevant. `RequiresAcknowledgement` keeps §9.7.4’s four strong-variant commands in the catalog rather than as a hard-coded list in the dialog layer — a second home for a safety fact, in the layer least able to test it. `IsExperimental` keeps §8.5’s opt-in queries out of `CommandCatalog.Safe`, so they cannot reach a poll timer or the everyday command surface. The remaining two carry §9.7.4’s success text and §10.6’s composite value label.
 
 **Blocked commands are not present in the catalog at all.** They are not entries with a flag; they do not exist as data. The `SafetyTier.Blocked` value exists only so the validator in the Advanced Console can reject a user-typed string by pattern match and log the attempt. A blocked command must never appear in any list, picker, autocomplete, help text, or log the user can see.
 
@@ -474,7 +480,9 @@ All queries plus non-disruptive actions.
 | `*TST?` | "Run receiver self-test? This takes up to 30 seconds and may briefly interrupt normal operation." |
 | `:DIAG:TEST? <subsystem>` | "Run *subsystem* diagnostic? This may briefly interrupt normal operation." |
 
-Confirmation dialogs use `ContentDialog` with the destructive action as the **secondary** button styled `AccentButtonStyle` only where safe; for the strong variants (`IGN:ALL`, `INCL:NONE`, `SYST:PRESet`, `HOLD:INIT`) require the user to also tick "I understand" before the confirm button enables.
+**Dialog construction, button roles, styling and focus behaviour are specified in §9.7.4**, which is the authority for them. The rule that stood here previously — destructive action on the *secondary* button, styled `AccentButtonStyle` — was superseded by §9.7.4 and is removed rather than left 450 lines from its own correction (#84). It mattered: §9.7.4 puts the destructive action on the **PrimaryButton** styled `WzDestructiveButtonStyle` with Cancel as the `CloseButton` and `DefaultButton`, precisely because *accent means the safe thing to do next*. Anyone reading §8 in order and implementing from it would have built the opposite.
+
+The four commands needing an additional "I understand" tick are named in §9.7.4 and carried in the catalog by `RequiresAcknowledgement` (see §8.1), not by a list held in the dialog layer. **§8.3’s confirmation-text table below is untouched by that amendment** — §9.7.4 changes button roles only.
 
 ### 8.4 Tier B — Blocked (absent from catalog; never displayed)
 
@@ -491,7 +499,9 @@ Plus, categorically:
 - **Any undocumented node in set form.** The Z3801A firmware string table contains parser keywords with no published documentation (`TCOefficient`, `PSTARTUP`, `DOUTput`, `RESTricted`, `OUTPut:PINS:PIN1..PIN8`, `SOURce`, `IREFerence`, `EGRESPONSE`, and others). Query forms of a small subset may be enabled per §8.5. **Set forms are permanently blocked with no override.**
 - `:SYSTem:LANGuage?` — query only, harmless, but omitted anyway so the `LANGuage` node never appears in any UI surface. Its value is not useful to the target users.
 
-The blocked list lives in `CommandCatalog.BlockedPatterns` as regex patterns used **only** by the Advanced Console validator. It must not be enumerable through any public API that a view binds to.
+The blocked list is **private to the `WinZ3805A.Device` assembly**, held in one file as regex patterns, and reachable from outside only as a predicate — `CommandCatalog.IsBlocked(string)`, which answers one bool about one candidate. Nothing can enumerate it, bind to it, or render it into a list. Its only caller is the Advanced Console validator, which rejects a typed string and logs the attempt.
+
+> **⚠ Corrected 21 Aug 2026 (#85).** This paragraph previously named the list `CommandCatalog.BlockedPatterns` and then required, in the same sentence, that it "must not be enumerable through any public API that a view binds to". A public member of that name is enumerable by definition. **The requirement wins over the name.** `build/Test-NoBlockedCommands.ps1` enforces that the one file stays the only place these names occur.
 
 ### 8.5 Experimental queries (opt-in, query-only)
 
@@ -981,7 +991,9 @@ Declared as `KeyboardAccelerator` on the command, with `KeyboardAcceleratorPlace
 
 | Moment | Animation | Duration | Easing | Reduced-motion fallback |
 |---|---|---|---|---|
-| Nav page change | `SlideNavigationTransitionInfo`, vertical (`FromBottom`/`FromTop` by index direction) | `Normal` | `WzEaseStandard` | `EntranceNavigationTransitionInfo` with opacity only |
+| Nav page change | `SlideNavigationTransitionInfo` with `FromBottom` — **one direction, always** | `Normal` | `WzEaseStandard` | `SuppressNavigationTransitionInfo` |
+
+> **⚠ Corrected 21 Aug 2026 (#120).** This row named two APIs the Windows App SDK does not have, failing in opposite directions. **`SlideNavigationTransitionEffect` has no `FromTop`** — it never has, in UWP or WinUI — so the "by index direction" rule was half-unbuildable, and the two effects that do exist besides `FromBottom` are horizontal, which this section’s own *Directional consistency* paragraph forbids four lines further down. So the transition is one direction, always. **`EntranceNavigationTransitionInfo` cannot be reduced to opacity**: WinUI 3 dropped the `FromHorizontalOffset` and `FromVerticalOffset` properties UWP carried, leaving nothing to zero. That one is the worse of the two — it compiles, and then animates anyway, which is the opposite of what a reduced-motion fallback is for. `SuppressNavigationTransitionInfo` is what actually suppresses motion.
 | Main → Details window | `ConnectedAnimation` on the medallion → Overview medallion | `Normal` | `WzEaseDecelerate` | No connected animation; Details opens directly |
 | Card enter on page load | Implicit show, opacity + 8 px translate up, 30 ms stagger, max 4 cards | `Normal` | `WzEaseDecelerate` | Opacity only, no stagger, no translate |
 | `Expander` toggle | Stock expand/collapse | `Normal` | `WzEaseStandard` | Instant height change |
@@ -1060,6 +1072,27 @@ Construction rules:
 | **`ConnectionStatusPill`** | Title-bar element. Severity shape + state text + port name. Click opens the connection dialog. Does not dim on window deactivation. |
 | **`TrendChart`** | Fallback if OQ-5 rejects LiveCharts. Line series, zero-anchored y-axis for TI, diverging fill (§9.4.4), time x-axis, range selector. Must support 604 800 points via decimation without dropping excursions — decimate by min/max per pixel column, never by sampling, or a 1-second glitch vanishes at the 7-day range. |
 
+**`SkyPlotControl` is A11Y-5’s one recorded exception, and the specification names the compliant path (#117).**
+A marker is 8–18 px across and **its position is the data** — it is the satellite’s actual position in the sky and
+cannot be moved to make room. Growing the hit area past a point stops helping and starts hurting: on a 360 px plot,
+a 32 px target covers roughly 8° of projected sky and satellites routinely sit closer than that, so the failure mode
+becomes **silently selecting the wrong satellite** — worse than a small target, because a missed click is obvious and
+a wrong selection is not. This is the case WCAG 2.5.8 carves out as *essential*: "a particular presentation of the
+target is essential to the information being conveyed".
+
+What is required instead:
+
+- The visible disc is inset inside a **24 × 24 px transparent hit area** — about four times the disc’s own clickable
+  area, without reaching a neighbour under roughly 6° away.
+- **The keyboard model reaches every satellite regardless of size.** The plot is one tab stop, arrow keys move a ring
+  through markers in PRN order, Enter selects. No pointer precision is involved.
+- **The tracked/not-tracked tables are the compliant path**, and A11Y-11 is their acceptance criterion. Their rows are
+  full-width and past 40 px, they carry the same data, and selection is shared both ways.
+
+The Accessibility Insights target-size check **will flag these markers**. This paragraph is the answer to that flag,
+not a claim that it is wrong to raise it. If the deviation is ever judged unacceptable, the fix is not a bigger marker
+— it is promoting P1-12’s explicit list/plot toggle out of P1, so a user can turn the spatial form off entirely.
+
 ### 9.11 State matrix
 
 | State | Surface | Copy pattern | Notes |
@@ -1101,7 +1134,7 @@ Testable statements. Each is verified by the stated method, not by inspection al
 | A11Y-2 | The focus visual is visible on every focusable element in all three themes, with ≥ 3:1 contrast against both adjacent surfaces, including on accent-filled buttons | Accessibility Insights colour contrast tool at each focus stop |
 | A11Y-3 | No icon-only control lacks both `AutomationProperties.Name` and a `ToolTip` | Automated XAML scan in CI: fail the build on any `Button`/`ToggleButton` whose content is only an icon and which lacks both |
 | A11Y-4 | All text meets §9.4.5 contrast floors in Light, Dark, and HighContrast | **Light and Dark: `build/Test-ContrastFloor.ps1`, which gates CI** — added 21 Aug 2026 (#24). It composites each token over what sits beneath it, because almost every stock Fluent colour is semi-transparent and reading one as opaque gives a confident wrong answer. **HighContrast stays a manual Accessibility Insights pass** and cannot be otherwise: its tokens resolve to `SystemColor*`, which are the user’s own choices. The manual pass also remains the only way to measure the Mica case, where the true backdrop is a live blur of the wallpaper. |
-| A11Y-5 | Pointer targets ≥ 32 × 32 px; touch targets ≥ 40 × 40 px | Accessibility Insights target-size check |
+| A11Y-5 | Pointer targets ≥ 32 × 32 px; touch targets ≥ 40 × 40 px. **`SkyPlotControl`’s markers are an exception, recorded in §9.10.2** | Accessibility Insights target-size check, which will flag the sky plot markers — §9.10.2 is the answer to that flag |
 | A11Y-6 | At 200% text scaling, no text clips and no control overlaps, at every breakpoint | Manual pass at 100 / 150 / 200% text scale × three breakpoints |
 | A11Y-7 | At 100–350% display scaling, layout remains usable and the title bar drag region stays correct | Manual pass at 100 / 150 / 200 / 250 / 350% |
 | A11Y-8 | High contrast is a first-class theme: no hard-coded brush survives, the medallion remains legible, severity is distinguishable | Manual pass in all four Windows HC themes |
@@ -1326,7 +1359,9 @@ Health items map from `:STAT:OPER:HARD:COND?` where bit meanings are known, and 
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
-- Sky plot: polar, north up, 0° elevation at rim, 90° at centre. Dashed circle at the elevation mask angle. Marker size scales with C/N; colour green ≥ 40, amber 35–39, red < 35. Tap a marker to select the matching row.
+- Sky plot: polar, north up, 0° elevation at rim, 90° at centre. Dashed circle at the elevation mask angle. Marker area scales with C/N; **fill from §9.4.4’s sequential ramp**. Tap a marker to select the matching row.
+
+  > **⚠ Corrected 21 Aug 2026 (#116).** This line previously read "colour green ≥ 40, amber 35–39, red < 35". That is the semantic triple — `WzSuccessBrush` / `WzCautionBrush` / `WzCriticalBrush` — and §9.4.4 forbids reusing semantic tokens for charting in its opening sentence, with the reason: *a trace coloured `WzCriticalBrush` implies an alarm that is not being asserted*. A C/N of 34 is an ordinary satellite low in the sky; painting it the red the medallion uses for a lost lock asserts a fault nobody raised. §9.10.2 already specified the sequential ramp for this control, so two sections agreed against one, and both of those gave a reason. Appendix A records §10 being "reconciled" when §9 was added; this reads as a line missed in that pass.
 - Data comes exclusively from `:SYST:STAT?` parsing (§11) — there is no per-satellite query.
 - **Manage…** opens a dialog listing PRN 1–32 with include/ignore toggles, backed by `:GPS:SAT:TRAC:IGNore` / `:INCLude`. All writes are tier C.
 
@@ -1357,11 +1392,24 @@ Health items map from `:STAT:OPER:HARD:COND?` where bit meanings are known, and 
 │  ┌─ Set position manually ────────────────────────────────────────────┐  │
 │  │  Lat [N▾] [47]° [31]′ [18.822]″                                    │  │
 │  │  Lon [W▾] [122]° [12]′ [22.152]″                                   │  │
-│  │  Height [ 38.00 ] m         ⓘ WGS-84, GPS ellipsoid                │  │
+│  │  Height [ 38.00 ] m         ⓘ same datum the receiver reports         │  │
 │  │                                              [ Apply position ]    │  │
 │  └────────────────────────────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
+
+> **⚠ Corrected 21 Aug 2026 (#114).** This field was annotated "WGS-84, GPS ellipsoid". The 58503B manual is
+> not consistent with itself about the same command: its syntax line, printed four times, takes
+> `<height above mean sea level, in meters>`, while its prose two paragraphs below says position is on the
+> WGS-84 datum. Those differ by the geoid separation — tens of metres across most of the inhabited world,
+> over 100 m in places — and the error goes straight into the position the receiver uses for every timing
+> solution, with nothing in the interface to show it.
+>
+> **The field therefore asserts no datum of its own.** It states the one the receiver said it was reporting
+> and asks for the value on the same one, which is knowable and checkable, where picking a side between the
+> manual’s two halves is neither. The bench receiver reports `(MSL)`. This mirrors the read path, which
+> already prints `(MSL)` or `(WGS-84 ellipsoid)` from `ReceiverStatus.HeightDatum` — only the entry field
+> had been asserting a datum on the user’s behalf.
 
 Validation before send: lat degrees 0–90, lon degrees 0–180, minutes 0–59, seconds 0–59.999 (0.001 resolution), height −1000.00 to +18000.00 m (0.01 resolution). Reject client-side rather than letting the device error.
 

@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 
 using WinZ3805A.Controls;
 using WinZ3805A.Device.Models;
@@ -221,11 +221,12 @@ public sealed class PositionViewModel : INotifyPropertyChanged
     /// The note beside the height entry field, naming the datum the receiver reported.
     /// </summary>
     /// <remarks>
-    /// §10.6 annotates this field "WGS-84, GPS ellipsoid", while the 58503B manual documents
-    /// the same command as taking "height above mean sea level" in its syntax line and WGS-84 in
-    /// its prose, two paragraphs apart. Those differ by the geoid separation, which is tens of
-    /// metres in most of the world. Filed as #114; until it is settled the page states which datum
-    /// the receiver said it was reporting rather than asserting one for the value being typed.
+    /// The 58503B manual is not consistent with itself: the same command takes "height above mean
+    /// sea level" in its syntax line and WGS-84 in its prose, two paragraphs apart, and those differ
+    /// by the geoid separation — tens of metres in most of the world. **#114 settled it in favour of
+    /// asserting neither.** §10.6 no longer annotates the field "WGS-84, GPS ellipsoid"; the page
+    /// states which datum the receiver said it was reporting and asks for the value on the same one.
+    /// That is knowable and checkable, where picking a side between the manual's two halves is not.
     /// </remarks>
     public string HeightEntryNote => Status?.HeightDatum switch
     {
