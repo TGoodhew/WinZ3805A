@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 
 using WinZ3805A.Device.Commands;
 using WinZ3805A.Device.Transport;
@@ -130,7 +130,10 @@ public sealed class CommandInvoker
             };
         }
 
-        if (error is null && transaction.HasDeviceError)
+        // Sound only because the tier C path drains the queue *before* sending (§7.3.1, #158): on a
+        // queue known empty beforehand, a token in the prompt afterwards was put there by this
+        // command. Nothing outside that path may reason this way (#173).
+        if (error is null && transaction.ErrorQueueNotEmpty)
         {
             // The prompt said the command was rejected but the queue would not say why — an empty
             // queue after E-nnn means something else drained it. Report what is known rather than

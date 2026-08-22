@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -185,16 +185,26 @@ public sealed partial class HoldoverPage : Page
         {
             Transaction reply = await device.Session.ExecuteAsync(command).ConfigureAwait(true);
 
+            // These are setters, so the receiver answers with the prompt alone whether or not the
+            // command worked, and §7.2 establishes that the prompt reports the *error queue* rather
+            // than the command just sent. There is therefore nothing here that can distinguish
+            // "rejected" from "succeeded while something older sat in the queue" — and the error
+            // read that could is tier C's alone, which is why this path does not use CommandInvoker.
+            //
+            // So a dirty queue is reported as a qualifier rather than a verdict. Calling a recovery
+            // that worked "couldn't recover" is the worse error of the two, and it is the one this
+            // used to make (#173).
             return new CommandOutcome
             {
-                Kind = reply.Succeeded && !reply.HasDeviceError
-                    ? CommandOutcomeKind.Succeeded
-                    : CommandOutcomeKind.Failed,
+                Kind = reply.Succeeded ? CommandOutcomeKind.Succeeded : CommandOutcomeKind.Failed,
                 Command = command,
-                Message = reply.Succeeded && !reply.HasDeviceError
-                    ? $"{command.DisplayName} sent."
-                    : $"Couldn't {char.ToLower(command.DisplayName[0], CultureInfo.CurrentCulture)}"
-                      + $"{command.DisplayName[1..]}. {DescribeFailure(reply)}",
+                Message = !reply.Succeeded
+                    ? $"Couldn't {char.ToLower(command.DisplayName[0], CultureInfo.CurrentCulture)}"
+                      + $"{command.DisplayName[1..]}. {DescribeFailure(reply)}"
+                    : reply.ErrorQueueNotEmpty
+                        ? $"{command.DisplayName} sent. The receiver's error queue is not empty "
+                          + $"({reply.PromptStatus}) — see Diagnostics for what is in it."
+                        : $"{command.DisplayName} sent.",
             };
         });
     }
@@ -219,11 +229,16 @@ public sealed partial class HoldoverPage : Page
         }
     }
 
+    /// <remarks>
+    /// Only reached when the transaction itself did not complete. The rejection arm no longer claims
+    /// the receiver rejected the command — for a setter the prompt cannot establish that (§7.2) —
+    /// and reports what is actually known instead.
+    /// </remarks>
     private static string DescribeFailure(Transaction reply) => reply.Outcome switch
     {
         TransactionOutcome.TimedOut => "The receiver did not answer.",
         TransactionOutcome.Faulted => reply.FaultMessage ?? "The serial link failed.",
-        _ => $"The receiver rejected it ({reply.PromptStatus}).",
+        _ => $"The transaction did not complete ({reply.PromptStatus ?? "no error reported"}).",
     };
 
     private static string WithUnit((string Value, string Unit) reading) =>

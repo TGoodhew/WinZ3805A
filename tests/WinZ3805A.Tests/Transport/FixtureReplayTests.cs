@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using Microsoft.Extensions.Time.Testing;
 using WinZ3805A.Device.Transport;
 
@@ -105,7 +105,8 @@ public class FixtureReplayTests
         Transaction transaction = await protocol.ExecuteAsync(":SYST:COMM:SER2:BAUD?").WaitAsync(s_testTimeout);
 
         Assert.Equal(TransactionOutcome.Completed, transaction.Outcome);
-        Assert.True(transaction.HasDeviceError);
+        Assert.True(transaction.ErrorQueueNotEmpty);
+        Assert.True(transaction.WasRejected);
         Assert.Equal("E-113", transaction.PromptStatus);
         Assert.Empty(transaction.Lines);
     }
@@ -120,8 +121,43 @@ public class FixtureReplayTests
 
         Transaction transaction = await protocol.ExecuteAsync(":SYNC:STAT?").WaitAsync(s_testTimeout);
 
-        Assert.False(transaction.HasDeviceError);
+        Assert.False(transaction.ErrorQueueNotEmpty);
+        Assert.False(transaction.WasRejected);
         Assert.Null(transaction.PromptStatus);
+    }
+
+    /// <summary>
+    /// A body arriving under an error prompt is an <i>answer</i>, not a rejection (#173).
+    /// </summary>
+    /// <remarks>
+    /// This is the case the whole of #173 turns on, and the one no synthetic run had ever produced.
+    /// §7.2 records it measured on hardware: the prompt reports the receiver's error queue, so a
+    /// query that answers perfectly well still carries <c>E-nnn&gt;</c> while anything at all is
+    /// queued. A caller that reads the prompt as a verdict throws the answer away.
+    /// </remarks>
+    [Fact]
+    public async Task AnAnswerUnderAnErrorPromptIsNotARejection()
+    {
+        await using FakeTransport transport = new(_ => "LOCK")
+        {
+            EchoCommands = DeviceEchoes,
+            Prompt = "E-230> ",
+        };
+
+        LineProtocol protocol = new(transport, new FakeTimeProvider());
+        await transport.OpenAsync();
+
+        Transaction transaction = await protocol.ExecuteAsync(":SYNC:STAT?").WaitAsync(s_testTimeout);
+
+        Assert.Equal(TransactionOutcome.Completed, transaction.Outcome);
+        Assert.Equal("LOCK", transaction.FirstLine);
+
+        // The queue is dirty, and that is all the prompt establishes.
+        Assert.True(transaction.ErrorQueueNotEmpty);
+        Assert.Equal("E-230", transaction.PromptStatus);
+
+        // The command itself answered, so it was not rejected.
+        Assert.False(transaction.WasRejected);
     }
 
     /// <summary>
