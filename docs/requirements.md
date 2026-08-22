@@ -726,6 +726,21 @@ Enforced in every theme, no exceptions:
 | Non-text UI: strokes, icons carrying meaning, chart lines, medallion ring | **3 : 1** |
 | Focus visual against both its adjacent surfaces | **3 : 1** |
 
+> **⚠ Two clarifications from measurement, 21 Aug 2026 (#24).**
+>
+> **Disabled text is exempt.** WCAG 1.4.3 excludes text in an inactive control, and a disabled
+> field meeting the same floor as an enabled one stops reading as disabled — the reduced contrast
+> *is* the affordance. `WzTextDisabledBrush` is therefore not checked.
+>
+> **"Strokes" is broader here than WCAG is, and the gate follows WCAG.** This row lists strokes
+> under the 3:1 non-text floor without qualification, but §9.4.1 maps `WzStrokeSubtleBrush` and
+> `WzStrokeDefaultBrush` onto stock Fluent hairlines that measure **1.06:1 to 1.24:1** — they are
+> 6% black by design. WCAG 1.4.11 applies to UI components and *meaningful* graphics, and a card
+> border that is nobody’s only indicator of anything is neither. Taken literally this row would
+> require abandoning Fluent’s card styling wholesale. **Unresolved rather than quietly dropped:**
+> the gate checks meaningful non-text — severity colours, chart series — and does not check
+> decorative strokes. If a stroke ever becomes the sole carrier of meaning, it moves into scope.
+
 ### 9.5 Typography
 
 #### 9.5.1 Faces
@@ -1085,7 +1100,7 @@ Testable statements. Each is verified by the stated method, not by inspection al
 | A11Y-1 | Every interactive element is reachable and operable by keyboard alone; tab order follows visual reading order on every page | Manual keyboard-only pass per page, recorded in the PR |
 | A11Y-2 | The focus visual is visible on every focusable element in all three themes, with ≥ 3:1 contrast against both adjacent surfaces, including on accent-filled buttons | Accessibility Insights colour contrast tool at each focus stop |
 | A11Y-3 | No icon-only control lacks both `AutomationProperties.Name` and a `ToolTip` | Automated XAML scan in CI: fail the build on any `Button`/`ToggleButton` whose content is only an icon and which lacks both |
-| A11Y-4 | All text meets §9.4.5 contrast floors in Light, Dark, and HighContrast | Accessibility Insights automated pass per theme, zero errors |
+| A11Y-4 | All text meets §9.4.5 contrast floors in Light, Dark, and HighContrast | **Light and Dark: `build/Test-ContrastFloor.ps1`, which gates CI** — added 21 Aug 2026 (#24). It composites each token over what sits beneath it, because almost every stock Fluent colour is semi-transparent and reading one as opaque gives a confident wrong answer. **HighContrast stays a manual Accessibility Insights pass** and cannot be otherwise: its tokens resolve to `SystemColor*`, which are the user’s own choices. The manual pass also remains the only way to measure the Mica case, where the true backdrop is a live blur of the wallpaper. |
 | A11Y-5 | Pointer targets ≥ 32 × 32 px; touch targets ≥ 40 × 40 px | Accessibility Insights target-size check |
 | A11Y-6 | At 200% text scaling, no text clips and no control overlaps, at every breakpoint | Manual pass at 100 / 150 / 200% text scale × three breakpoints |
 | A11Y-7 | At 100–350% display scaling, layout remains usable and the title bar drag region stays correct | Manual pass at 100 / 150 / 200 / 250 / 350% |
