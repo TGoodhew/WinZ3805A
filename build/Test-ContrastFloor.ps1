@@ -205,11 +205,9 @@ $inheritTokens = $surfaces + $bodyText + @('WzTextDisabledBrush', 'WzStrokeDefau
 # Known failures, each with the issue that owns it. The gate locks in "nothing new"; it does
 # not pretend these pass. A baseline entry is a debt with a number on it, not an exemption -
 # remove the row when the issue closes and the pair starts passing.
-$baseline = @{
-    'Light|WzSeries4Brush|WzCardFillBrush'               = '#177'
-    'Light|WzSeries5Brush|WzCardFillBrush'               = '#177'
-    'Dark|WzSeries5Brush|WzCardFillBrush'                = '#177'
-}
+# Empty, and worth keeping that way: every known failure this gate has ever recorded has been
+# fixed rather than accepted (#176 in PR #180, #177 with #87 in PR #181).
+$baseline = @{}
 
 $checked = 0
 $failures = @()

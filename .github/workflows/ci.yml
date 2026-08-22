@@ -68,6 +68,27 @@ jobs:
         shell: pwsh
         run: ./build/Test-ContrastFloor.ps1
 
+      # §9.4.4 / A11Y-12. Added 22 Aug 2026 (#87, #177). §9.4.4 said the categorical
+      # palette was derived from Okabe-Ito, which separates every pair under the
+      # common dichromacies; three of its eight entries had since been substituted
+      # for values that read better as thin lines, and the substitution silently
+      # gave up exactly that property. Series 1 and 7 sat 4.5 dE00 apart under
+      # deuteranopia - one colour - and survived three months of review, because
+      # nobody can eyeball a dichromat simulation.
+      #
+      # Checks all 28 pairs in both themes under normal vision, deuteranopia and
+      # protanopia, plus two rules the derivation learned the hard way: a minimum
+      # hue gap, because two browns separated by lightness satisfy the arithmetic
+      # and fail a person; and clearance from the §9.4.3 severity colours, because
+      # "a separate namespace" is a perceptual claim as well as a naming one.
+      #
+      # HighContrast is not checked and cannot be: its series alternate between two
+      # SystemColor* values, so eight traces are not separable by colour there at
+      # all. A pass here is not a statement that the chart is accessible.
+      - name: Chart series stay distinguishable under dichromacy
+        shell: pwsh
+        run: ./build/Test-SeriesSeparation.ps1
+
   # ---------------------------------------------------------------------------
   # P0-7 / §8.4. Separate from the design-system gates because it guards a
   # different thing: that no excluded command is named anywhere but the single
