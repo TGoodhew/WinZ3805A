@@ -1,0 +1,66 @@
+# Stock Fluent colours, measured from the running application.
+#
+# WHY THIS FILE EXISTS
+#
+# §9.4.1 maps most surface and text tokens onto stock WinUI colours - Colors.xaml says
+# Color="{ThemeResource TextFillColorPrimary}" rather than a literal - so ThemePalette
+# resolves them to null by design, and A11Y-4's contrast floors cannot be computed from
+# source alone. The Windows App SDK package ships no XAML either; these values live in
+# compiled XBF inside the framework binaries.
+#
+# So they were measured instead, the same way the status-screen fixtures were: by asking
+# the real thing and writing down what it said. This is recorded measurement, not an
+# invented constant, and it carries its provenance for the same reason a fixture does.
+#
+# THIS IS NOT A §9.13 VIOLATION. That rule forbids hard-coding *this project's* colours
+# outside Colors.xaml, and Test-NoHexLiterals enforces it over src/. These are the
+# platform's colours, recorded in build tooling, and nothing renders from them.
+#
+# NOTE THE ALPHA. Almost every one of these is semi-transparent - TextFillColorPrimary is
+# 89% black, LayerFillColorDefault is 50% white, CardStrokeColorDefault is 6% black. A
+# contrast check that treats them as opaque computes nonsense. Test-ContrastFloor.ps1
+# composites each over what sits beneath it before measuring.
+#
+# HOW TO RE-MEASURE, when the Windows App SDK is upgraded
+#
+#   1. Temporarily patch App.OnLaunched to log each name from Application.Current.Resources
+#      as #AARRGGBB. Resolve in OnLaunched, NOT the constructor - setting RequestedTheme
+#      there kills the process before any of it runs, uncatchably.
+#   2. Run once under each system theme. The application follows Windows and has no theme
+#      override, so Dark needs HKCU:\...\Themes\Personalize\AppsUseLightTheme set to 0 and
+#      then restored.
+#   3. Replace the rows below and update the provenance line.
+#   4. Revert the patch. Re-run Test-ContrastFloor.ps1 and expect the same verdicts.
+#
+# HighContrast is deliberately absent. Its tokens resolve to SystemColor*, which are the
+# user's own choices rather than anything this repository can know, and A11Y-4's HighContrast
+# pass stays manual for exactly that reason.
+#
+# PROVENANCE: Windows App SDK as restored on 21 Aug 2026, Windows 11 Pro 10.0.26200,
+#             measured from WinZ3805A running packaged, x64 Debug.
+
+Light  CardBackgroundFillColorDefault    #B3FFFFFF
+Light  CardBackgroundFillColorSecondary  #80F6F6F6
+Light  CardStrokeColorDefault            #0F000000
+Light  ControlStrokeColorDefault         #0F000000
+Light  LayerFillColorDefault             #80FFFFFF
+Light  SolidBackgroundFillColorBase      #FFF3F3F3
+Light  SubtleFillColorSecondary          #09000000
+Light  SubtleFillColorTertiary           #06000000
+Light  TextFillColorDisabled             #5C000000
+Light  TextFillColorPrimary              #E4000000
+Light  TextFillColorSecondary            #9E000000
+Light  TextFillColorTertiary             #72000000
+
+Dark   CardBackgroundFillColorDefault    #0DFFFFFF
+Dark   CardBackgroundFillColorSecondary  #08FFFFFF
+Dark   CardStrokeColorDefault            #19000000
+Dark   ControlStrokeColorDefault         #12FFFFFF
+Dark   LayerFillColorDefault             #4C3A3A3A
+Dark   SolidBackgroundFillColorBase      #FF202020
+Dark   SubtleFillColorSecondary          #0FFFFFFF
+Dark   SubtleFillColorTertiary           #0AFFFFFF
+Dark   TextFillColorDisabled             #5DFFFFFF
+Dark   TextFillColorPrimary              #FFFFFFFF
+Dark   TextFillColorSecondary            #C5FFFFFF
+Dark   TextFillColorTertiary             #87FFFFFF

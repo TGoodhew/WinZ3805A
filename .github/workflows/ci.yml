@@ -53,6 +53,21 @@ jobs:
         shell: pwsh
         run: ./build/Test-SpacingScale.ps1
 
+      # A11Y-4 / §9.4.5. Added 21 Aug 2026 (#24), which had claimed to gate CI since
+      # the backlog was written while nothing in the repository computed a contrast
+      # ratio. It found tertiary text at 3.28:1 against a 4.5:1 floor in Light, in
+      # 117 places (#176), and two chart series below the 3:1 line (#177) - none of
+      # which review had caught in three months, because contrast is not something
+      # anyone eyeballs correctly.
+      #
+      # Needs build/fluent-stock-colours.txt: §9.4.1 maps the text and surface tokens
+      # onto stock Fluent colours, which are not readable from source, so they were
+      # measured from the running app and recorded. HighContrast is not checked and
+      # cannot be - those tokens are the user's own SystemColor* choices.
+      - name: Text and graphics meet the §9.4.5 contrast floors
+        shell: pwsh
+        run: ./build/Test-ContrastFloor.ps1
+
   # ---------------------------------------------------------------------------
   # P0-7 / §8.4. Separate from the design-system gates because it guards a
   # different thing: that no excluded command is named anywhere but the single

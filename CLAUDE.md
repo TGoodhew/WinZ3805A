@@ -169,9 +169,10 @@ pwsh build/Test-NoHexLiterals.ps1        # P0-17 / §9.13 item 2
 pwsh build/Test-IconOnlyButtons.ps1      # A11Y-3 / §9.9
 pwsh build/Test-ThemeDictionaryParity.ps1  # §9.4 / A11Y-8
 pwsh build/Test-NoBlockedCommands.ps1    # P0-7 / §8.4
+pwsh build/Test-ContrastFloor.ps1        # A11Y-4 / §9.4.5
 ```
 
-`.github/workflows/ci.yml` runs all five first, before any restore, so a token,
+`.github/workflows/ci.yml` runs all six first, before any restore, so a token,
 accessibility, or safety regression fails in seconds rather than after a full build. It then
 builds both Configuration × Platform combinations — Debug and Release against x64,
 since §6.1 dropped ARM64 on 15 Aug 2026 — and runs the tests.
@@ -188,7 +189,19 @@ runs the app and HighContrast is not — testing it means switching the whole
 desktop over. A token defined in one theme and not another compiles, passes
 review, and then fails at run time for precisely the user who needs that theme.
 
-The spacing gate is the newest, added after the §15 step 11 anti-pattern audit found
+The contrast gate is the newest, added 21 Aug 2026 for #24 — which had carried a `ci-gate`
+label since the backlog was written while nothing in the repository computed a contrast ratio.
+It needed `build/fluent-stock-colours.txt`, because §9.4.1 maps the text and surface tokens onto
+**stock Fluent colours** that are not readable from source: the SDK ships no XAML, so they were
+measured from the running app and recorded with provenance, the way a fixture is. Two traps are
+worth not rediscovering — almost every stock token is **semi-transparent**, so a check that reads
+them as opaque produces confident nonsense, and **HighContrast cannot be checked at all**, its
+tokens being the user's own `SystemColor*` choices. It found tertiary text at 3.28:1 against a
+4.5:1 floor in Light in 117 places (#176), and two chart series under 3:1 (#177). Both are
+baselined against their issue numbers — **a baseline row is a debt with a number on it, not an
+exemption**.
+
+The spacing gate was the previous newest, added after the §15 step 11 anti-pattern audit found
 **nine** off-scale values that had each passed review — `Padding="0,3"`,
 `Margin="0,0,0,6"`, `Margin="28,0,0,0"`. None of them is visible one at a time, which
 is exactly how a spacing scale stops being one. It strips XML comments before
