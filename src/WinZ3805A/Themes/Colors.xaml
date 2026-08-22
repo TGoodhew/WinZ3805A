@@ -37,7 +37,26 @@
             <SolidColorBrush x:Key="WzStrokeDefaultBrush" Color="{ThemeResource ControlStrokeColorDefault}" />
             <SolidColorBrush x:Key="WzTextPrimaryBrush" Color="{ThemeResource TextFillColorPrimary}" />
             <SolidColorBrush x:Key="WzTextSecondaryBrush" Color="{ThemeResource TextFillColorSecondary}" />
-            <SolidColorBrush x:Key="WzTextTertiaryBrush" Color="{ThemeResource TextFillColorTertiary}" />
+            <!--
+                §9.4.1 note — the one text token this project owns rather than inherits.
+
+                Stock TextFillColorTertiary is 45% black in Light, which measures 3.28:1 on
+                the layer fill against §9.4.5's 4.5:1 floor for small text. Fluent intends
+                tertiary for de-emphasised, non-essential text; this application uses it as
+                the standard caption colour in 117 places, 114 of them at 12 px, so the
+                stock value is being asked to do a job it was not chosen for (#176).
+
+                54.9% black clears the floor on all four §9.4.1 surfaces — 4.60:1 on the
+                overlay, 4.72:1 on the card — while staying lighter than WzTextSecondaryBrush
+                at 62%, so §9.5.2's three text levels survive. They sit closer together in
+                Light than Fluent draws them; that is the cost of the floor, paid knowingly.
+                Dark measures 5.09–5.51 already and still inherits.
+
+                build/Test-ContrastFloor.ps1 records this pair in $ownedTokens with that
+                reason. Every other text and surface token must still inherit its colour from
+                Fluent, and the gate fails the day one of them stops.
+            -->
+            <SolidColorBrush x:Key="WzTextTertiaryBrush" Color="#8C000000" />
             <SolidColorBrush x:Key="WzTextDisabledBrush" Color="{ThemeResource TextFillColorDisabled}" />
 
             <!--
