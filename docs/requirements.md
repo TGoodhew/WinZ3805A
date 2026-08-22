@@ -732,30 +732,57 @@ The four severity shapes are drawn as `Path` geometry, not as glyphs from a font
 
 Charting colour is a separate concern from UI colour and must not reuse semantic tokens — a trace coloured `WzCriticalBrush` implies an alarm that is not being asserted.
 
-**Categorical** (satellite traces, up to 8 series). Derived from the Okabe–Ito colour-universal palette, which is designed for dichromat separability, with per-theme luminance adjustment:
+**Categorical** (satellite traces, up to 8 series). Re-derived 22 Aug 2026 for #87 and #177, replacing a ramp that had been described as derived from Okabe–Ito:
 
 | Index | Light | Dark |
 |---|---|---|
-| 1 | `#0072B2` blue | `#56B4E9` sky |
-| 2 | `#D55E00` vermillion | `#E69F00` orange |
-| 3 | `#009E73` bluish green | `#3FD9A8` |
-| 4 | `#CC79A7` reddish purple | `#E0A3C8` |
-| 5 | `#56B4E9` sky | `#0072B2` blue |
-| 6 | `#8C6D1F` olive | `#D9C36B` |
-| 7 | `#6E4B9E` violet | `#B79CE0` |
+| 1 | `#BD5572` rose | `#DD7F97` |
+| 2 | `#B4684E` terracotta | `#E97E59` |
+| 3 | `#766110` olive | `#EAC96A` |
+| 4 | `#455530` moss | `#B5C79C` |
+| 5 | `#109180` teal | `#07AE9A` |
+| 6 | `#45849F` steel | `#7CB9D6` |
+| 7 | `#085AA6` blue | `#719BEA` |
 | 8 | `#4A4A4A` graphite | `#C4C4C4` |
 
-Assign by index in a stable order (PRN ascending), never by hash — a satellite must keep its colour across sessions.
+Assign by index in a stable order (PRN ascending), never by hash — a satellite must keep its colour across sessions. A hue belongs to an index in **both** themes, so series 5 is the teal one wherever it is drawn; a satellite must not change identity when the desktop theme does.
+
+> **⚠ Why this ramp replaced the Okabe–Ito one, 22 Aug 2026 (#87, #177).**
+>
+> **The old ramp was not Okabe–Ito.** Three of its eight entries — olive, violet and graphite — had been substituted for values that read better as thin lines. That was a defensible change, and it silently gave up the one property Okabe–Ito had been chosen for: **series 1 and 7 measured 4.5 ΔE₀₀ apart under deuteranopia**, which is not two colours. Two entries were also under §9.4.5's 3:1 chart-line floor. Both defects survived three months of review because nothing in the repository computed either number.
+>
+> **The two were solved together**, because they share the same eight values and fixing either alone re-breaks the other.
+>
+> | | old | this ramp |
+> |---|---|---|
+> | Light — worst pair, all three vision models | 2.8 | **10.6** |
+> | Dark — worst pair | 3.1 | **10.5** |
+> | Light — worst contrast, all four §9.4.1 surfaces | 2.23, two failing | **3.52, all passing** |
+> | Dark — worst contrast | 2.73, one failing | **5.08, all passing** |
+> | Closest approach to a §9.4.3 semantic colour | 6.4 | 10.2 |
+>
+> **The Light ramp is darker and more muted than the one it replaces, and that is forced.** A colour light enough to look bright on a near-white card cannot reach 3:1 against it — the two Light entries that were failing, `#56B4E9` and `#CC79A7`, failed *because* they were light. Any palette that clears the floor here is a palette of darker colours.
+
+**Constraints this palette is held to.** Four, and three of them exist because a first attempt got them wrong:
+
+1. **Every pair separates**, not merely adjacent entries — all 28, under normal vision, deuteranopia and protanopia, in both themes. Adjacency was the old wording and it is the wrong test: up to eight traces are on one chart *simultaneously*, so every pair has to hold.
+2. **≥3:1 against the worst §9.4.1 surface**, not only against the card. The layer, secondary card and overlay differ by a few points of luminance, and a candidate cleared 3.50 on the card while sitting at 3.26 on the Light overlay.
+3. **A minimum hue gap.** Maximising the smallest colour difference, on its own, produces a ramp with two browns and two purples separated by lightness. That satisfies the arithmetic and fails a person asked which trace is which; categorical colours have to be *nameable*.
+4. **Clear of §9.4.3 by ≥10 ΔE₀₀** — the opening sentence of this section is a perceptual claim, not only a naming one, so it is measured. **The neutral series is exempt**: series 8 is grey and `WzNeutralBrush` is grey, and both mean *nothing is being asserted*.
 
 **Sequential** — signal strength (C/N or SS). Single-hue teal ramp anchored on the brand:
 `#DFF1F3` → `#A8DDE3` → `#6FC5CE` → `#3FB8C4` → `#189AA6` → `#0B6C74` → `#08474D`
+
+Its adjacent steps measure low under simulation (4.4 ΔE₀₀ protanopia) and that is correct rather than a defect: a sequential ramp is read by lightness, and the simulated ramp stays monotonic. Neighbouring steps of a ramp are meant to be similar.
 
 **Diverging** — 1 PPS time interval, zero-anchored (negative / zero / positive):
 `#08474D` ← `#3FB8C4` ← `#DDE4E5` → `#F0A882` → `#B23A00`
 
 The neutral midpoint must map to exactly 0 ns, not to the data midpoint. A TI chart whose colour break drifts with the data is misleading.
 
-**Verification requirement.** All three palettes must be checked at build-review time by simulating deuteranopia and protanopia and confirming adjacent entries remain distinguishable. Record the check in the PR description.
+**Verification.** `build/Test-SeriesSeparation.ps1` gates CI on the categorical palette: all 28 pairs, both themes, three vision models, plus the hue-gap and semantic-clearance rules above. `build/palette/` holds the derivation, and `build/palette/validate.py` checks the colour maths against the figures published on #87 before anything trusts it.
+
+**HighContrast is not checked and cannot be.** Its series alternate between `SystemColorWindowTextColor` and `SystemColorHighlightColor` — the user's own two colours — so **eight traces cannot be separated by colour there at all.** A pass from the gate is not a statement that the chart is accessible. A second channel (dash pattern plus direct labelling) is required for HighContrast regardless of what this ramp contains, and is tracked on #87.
 
 #### 9.4.5 Contrast floor
 
@@ -1180,7 +1207,7 @@ Testable statements. Each is verified by the stated method, not by inspection al
 | A11Y-9 | Mode changes, connection changes, and command results are announced as live regions | Narrator pass: force each transition, confirm announcement |
 | A11Y-10 | `StatusMedallion` and `SkyPlotControl` expose complete automation peers per §9.10.2 | Accessibility Insights tree inspection |
 | A11Y-11 | `SkyPlotControl` offers a non-spatial `ListView` alternate carrying the same data | Manual |
-| A11Y-12 | No information is conveyed by colour alone anywhere in the app | Greyscale screenshot review of every page and state |
+| A11Y-12 | No information is conveyed by colour alone anywhere in the app | Greyscale screenshot review of every page and state. For the §9.4.4 chart series specifically, **`build/Test-SeriesSeparation.ps1` gates CI** — added 22 Aug 2026 (#87, #177) — checking all 28 pairs in both themes under deuteranopia and protanopia as well as normal vision. It does **not** discharge this requirement: under HighContrast the series alternate between two `SystemColor*` values, so eight traces cannot be separated by colour there at all, and a second channel (dash pattern plus direct labelling) is required regardless. The greyscale review stays the check for everything that is not a chart series. |
 | A11Y-13 | With animations disabled system-wide, no animation runs and no layout differs from the animated path | Manual pass with the system setting off |
 
 A11Y-3 and A11Y-4 run in CI. The rest are a release checklist item.

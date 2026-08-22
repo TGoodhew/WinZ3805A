@@ -170,9 +170,10 @@ pwsh build/Test-IconOnlyButtons.ps1      # A11Y-3 / §9.9
 pwsh build/Test-ThemeDictionaryParity.ps1  # §9.4 / A11Y-8
 pwsh build/Test-NoBlockedCommands.ps1    # P0-7 / §8.4
 pwsh build/Test-ContrastFloor.ps1        # A11Y-4 / §9.4.5
+pwsh build/Test-SeriesSeparation.ps1     # A11Y-12 / §9.4.4
 ```
 
-`.github/workflows/ci.yml` runs all six first, before any restore, so a token,
+`.github/workflows/ci.yml` runs all seven first, before any restore, so a token,
 accessibility, or safety regression fails in seconds rather than after a full build. It then
 builds both Configuration × Platform combinations — Debug and Release against x64,
 since §6.1 dropped ARM64 on 15 Aug 2026 — and runs the tests.
@@ -209,6 +210,24 @@ scanning, because `Spacing.xaml`'s own header quotes §9.13's `Margin="13,7,13,9
 example. `BorderThickness` is deliberately **not** checked: a stroke width is §9.2's
 business rather than the spacing scale's, and `SkyPlotControl`'s 1 px and 1.5 px
 marker outlines are correct.
+
+The series-separation gate is the newest, added 22 Aug 2026 for #87 and #177. §9.4.4 claimed the
+categorical palette was derived from **Okabe–Ito**, which separates every pair under the common
+dichromacies — but three of its eight entries had been substituted for values that read better as
+thin lines, and the substitution silently gave up precisely that property. Series 1 and 7 measured
+**4.5 ΔE₀₀ apart under deuteranopia**, which is one colour, and it survived three months of review
+because nobody eyeballs a dichromat simulation correctly. The gate checks all 28 pairs in both
+themes under three vision models, plus two rules the derivation learned by getting them wrong: a
+**minimum hue gap**, because two browns separated by lightness satisfy the arithmetic and fail a
+person asked which trace is which; and **clearance from the §9.4.3 severity colours**, because "a
+separate namespace" is a perceptual claim as well as a naming one. Two things worth not
+rediscovering — the **neutral series must be exempt** from that second rule (series 8 is grey and
+`WzNeutralBrush` is grey, and requiring them apart makes it unsatisfiable), and **HighContrast
+cannot be checked at all**, its series alternating between two `SystemColor*` values, so eight
+traces are not separable by colour there under any ramp. `build/palette/` holds the derivation;
+`validate.py` there checks the colour maths against #87's published figures before anything trusts
+it. Note also that **PowerShell's comma binds tighter than binary minus** — `@($a - 1, $b)` parses
+as a subtraction of an array, which is how the gate's Lab conversion failed on first run.
 
 The blocked-command gate reads its tokens out of
 `src/WinZ3805A.Device/Commands/BlockedCommands.cs` rather than restating them, so

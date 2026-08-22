@@ -115,14 +115,28 @@
                 on purpose: a trace coloured as critical implies an alarm nobody asserted.
                 Assign by index in PRN order, never by hash — a satellite keeps its colour
                 across sessions.
+
+                Re-derived for #87 and #177. The previous ramp was described as derived from
+                Okabe–Ito, but three of its eight entries had been substituted, and the
+                substitution gave up the property Okabe–Ito was chosen for: series 1 and 7
+                were 4.5 ΔE₀₀ apart under deuteranopia, which is one colour. Two entries also
+                sat under §9.4.5's 3:1 chart-line floor.
+
+                These eight solve both at once, plus three constraints the first attempts got
+                wrong — see §9.4.4. build/Test-SeriesSeparation.ps1 holds them to it, and
+                build/derive-series-palette.py records how they were found.
+
+                A hue is shared between the themes, so series 5 is the teal one in both. Light
+                is darker and more muted than the ramp it replaces; that is forced by the floor,
+                because a light colour on a near-white card cannot reach 3:1.
             -->
-            <SolidColorBrush x:Key="WzSeries1Brush" Color="#0072B2" />
-            <SolidColorBrush x:Key="WzSeries2Brush" Color="#D55E00" />
-            <SolidColorBrush x:Key="WzSeries3Brush" Color="#009E73" />
-            <SolidColorBrush x:Key="WzSeries4Brush" Color="#CC79A7" />
-            <SolidColorBrush x:Key="WzSeries5Brush" Color="#56B4E9" />
-            <SolidColorBrush x:Key="WzSeries6Brush" Color="#8C6D1F" />
-            <SolidColorBrush x:Key="WzSeries7Brush" Color="#6E4B9E" />
+            <SolidColorBrush x:Key="WzSeries1Brush" Color="#BD5572" />
+            <SolidColorBrush x:Key="WzSeries2Brush" Color="#B4684E" />
+            <SolidColorBrush x:Key="WzSeries3Brush" Color="#766110" />
+            <SolidColorBrush x:Key="WzSeries4Brush" Color="#455530" />
+            <SolidColorBrush x:Key="WzSeries5Brush" Color="#109180" />
+            <SolidColorBrush x:Key="WzSeries6Brush" Color="#45849F" />
+            <SolidColorBrush x:Key="WzSeries7Brush" Color="#085AA6" />
             <SolidColorBrush x:Key="WzSeries8Brush" Color="#4A4A4A" />
 
             <!-- Sequential: signal strength. Read by lightness, so the ramp is monotonic. -->
@@ -216,13 +230,13 @@
             <SolidColorBrush x:Key="WzInfoBrush" Color="{StaticResource WzAccentLight2}" />
             <SolidColorBrush x:Key="WzNeutralBrush" Color="#9A9A9A" />
 
-            <SolidColorBrush x:Key="WzSeries1Brush" Color="#56B4E9" />
-            <SolidColorBrush x:Key="WzSeries2Brush" Color="#E69F00" />
-            <SolidColorBrush x:Key="WzSeries3Brush" Color="#3FD9A8" />
-            <SolidColorBrush x:Key="WzSeries4Brush" Color="#E0A3C8" />
-            <SolidColorBrush x:Key="WzSeries5Brush" Color="#0072B2" />
-            <SolidColorBrush x:Key="WzSeries6Brush" Color="#D9C36B" />
-            <SolidColorBrush x:Key="WzSeries7Brush" Color="#B79CE0" />
+            <SolidColorBrush x:Key="WzSeries1Brush" Color="#DD7F97" />
+            <SolidColorBrush x:Key="WzSeries2Brush" Color="#E97E59" />
+            <SolidColorBrush x:Key="WzSeries3Brush" Color="#EAC96A" />
+            <SolidColorBrush x:Key="WzSeries4Brush" Color="#B5C79C" />
+            <SolidColorBrush x:Key="WzSeries5Brush" Color="#07AE9A" />
+            <SolidColorBrush x:Key="WzSeries6Brush" Color="#7CB9D6" />
+            <SolidColorBrush x:Key="WzSeries7Brush" Color="#719BEA" />
             <SolidColorBrush x:Key="WzSeries8Brush" Color="#C4C4C4" />
 
             <SolidColorBrush x:Key="WzSequential1Brush" Color="#DFF1F3" />
