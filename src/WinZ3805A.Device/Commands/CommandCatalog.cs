@@ -170,6 +170,7 @@ public static class CommandCatalog
 
             // ---- Precision time ------------------------------------------------------------
             Query(":PTIM:TCOD?", "Time code", "Reads the current time code output.", ResponseFormat.Text),
+            Query(":PTIM:TCOD:FORM?", "Time code format", "Reads which of the two time code formats the receiver emits. Answers F1 or F2; without it a time code cannot be decoded.", ResponseFormat.Keyword),
             Query(":PTIM:DATE?", "Date", "Reads the date on the selected time scale.", ResponseFormat.IntegerList),
             Query(":PTIM:TIME?", "Time", "Reads the time on the selected time scale.", ResponseFormat.IntegerList),
             Query(":PTIM:TIME:STR?", "Time as text", "Reads the time already formatted as a string.", ResponseFormat.Text),

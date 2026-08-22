@@ -342,7 +342,8 @@ All queries plus non-disruptive actions.
 :GPS:SAT:TRAC:IGN?   :GPS:SAT:TRAC:IGN:COUN?  :GPS:SAT:TRAC:IGN:STAT? <PRN>
 :GPS:SAT:TRAC:INCL?  :GPS:SAT:TRAC:INCL:COUN? :GPS:SAT:TRAC:INCL:STAT? <PRN>
 :GPS:SAT:VIS:PRED?   :GPS:SAT:VIS:PRED:COUN?
-:PTIM:TCOD?          :PTIM:DATE?             :PTIM:TIME?        :PTIM:TIME:STR?
+:PTIM:TCOD?          :PTIM:TCOD:FORM?        :PTIM:DATE?        :PTIM:TIME?
+:PTIM:TIME:STR?
 :PTIM:TZON?
 :PTIM:LEAP:ACC?      :PTIM:LEAP:DATE?        :PTIM:LEAP:DUR?    :PTIM:LEAP:STAT?
 :LED:ALAR?           :LED:GPSL?              :LED:HOLD?
@@ -1605,6 +1606,12 @@ settings page more than to most.
 │  │  ⬤ None announced                                                  │  │
 │  │  GPS − UTC   +18 s accumulated                                     │  │
 │  └────────────────────────────────────────────────────────────────────┘  │
+│                                                                          │
+│  ┌─ Time code output ─────────────────────────────────────────────────┐  │
+│  │  Format      F2 — messages begin T2                                │  │
+│  │  Calendar date and time of the next 1 PPS, on the receiver's       │  │
+│  │  selected time scale. 23 characters.                               │  │
+│  └────────────────────────────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -1638,10 +1645,34 @@ page that asked all four on arrival would put two errors in the error queue ever
 GPS time to UTC needs, it is always available, and it is the one figure on this page that justifies
 the section title on a day when nothing is announced.
 
-> **Not yet built.** The page as shipped shows only the status screen's pending flag and direction;
-> none of the four queries is called. Filed as **#149**, with the measurements above as its evidence.
-> This section states what the page is for, which is the job of a specification; the gap between it
-> and the code is recorded rather than written out of the requirement.
+> **Built** as **#149**, closed 20 Aug 2026. The page reads `ACC?` and `STAT?` on arrival and on
+> reconnect, and asks `DATE?` and `DUR?` only when `STAT?` reports an announcement. The ordering
+> rule lives in `LeapSecondQueries` so it can be asserted without a receiver.
+
+**The time code output has a format, and it is not the documented default.** `:PTIM:TCOD?` emits a
+message naming the time of the next 1 PPS, in one of two notations. Which one is a receiver setting,
+and `z3801.pdf` states that "T1 is the default time code format" — while the bench Z3805A answers
+`F2`:
+
+| Query | On the bench receiver, 21 Aug 2026 |
+|---|---|
+| `:PTIM:TCOD:FORM?` | `F2` — messages begin `T2`, 23 characters |
+
+So the page **reads the format rather than assuming it**. Anything written against the documented
+default would mis-parse every message this receiver sends. The card names both spellings, because
+the command's parameter is `F1`/`F2` while the header the message carries is `T1`/`T2`, and a user
+comparing the page against a raw time code has to recognise those as the same thing.
+
+**The page shows the format and deliberately not the time code itself.** `:PTIM:TCOD?` does not
+answer when asked: it answers on the receiver's own 1 Hz cadence, about **509 ms** before the 1 PPS
+it names, with jitter under 2.5 ms. A request therefore lands in the next emission slot and the
+transaction blocks for up to a second — a cost a read-only page has no reason to pay, and one that
+would be charged again on every refresh. The format is the part that does not change and the part
+without which the message cannot be read at all. **#37** records the measurement, the worked
+decode and the checksum rule.
+
+> This query reached the catalog late. It is documented in `z3801.pdf` rather than the 58503A
+> programming guide the catalog was first derived from, so the §16 inventory missed it; see #154.
 
 #### 10.14.1 The three questions #111 raised
 
@@ -1652,7 +1683,8 @@ carry as data of its own, going stale on a schedule nobody controls. What the se
 and the receiver can support is the *accumulated offset* and the *pending announcement*, and that is
 what the page holds.
 
-**2. Does the page set anything?** **No. It is read-only.** `:PTIM:TZONe` would set the offset the
+**2. Does the page set anything?** **No. It is read-only**, the time code card included —
+`:PTIM:TCOD:FORMat` has a setter, and it is not catalogued (see §16). `:PTIM:TZONe` would set the offset the
 receiver itself reports in, which is a different thing from the zone this application displays in, and
 it is tier C. Changing it would move every reported time including the timecode output, for a
 cosmetic gain the display-zone picker already provides without touching the device.
@@ -1828,7 +1860,7 @@ something might later branch on.
 | OQ-1 | Bit assignments for `:STAT:OPER:*` and `:STAT:QUES:*` registers are not in the fetched portion of the manual. Chapter 5 pp. 5-48 to 5-70 of 097-58503-13 contains the full status-reporting section. **Retrieve and transcribe these before implementing §10.10.** Until then, ship the register page showing raw values with unmapped bits. | Engineering | Blocks P1-4 only |
 | OQ-2 | Does the Z3805A accept `:SYST:COMM:SER2:*`? The second port is TOD-broadcast-only, but the parser may still respond. Probe at connect and record the result. | Engineering | No |
 | OQ-3 | Is there a documented `PROMpt` node (`:SYST:COMM:SER1:PROM OFF`) to suppress the `scpi>` prompt? The keyword appears in the firmware string table and GPSCon requires the prompt *on*, implying it is settable. If it exists and works, it simplifies the read loop — but treat it as tier C and keep prompt-tolerant parsing regardless. | Engineering | No |
-| OQ-4 | Exact `:PTIM:TCOD?` response format and its 20–980 ms lead relative to the 1 PPS. Needed only if P2-2 or a high-accuracy clock display is built. | Engineering | No |
+| OQ-4 | ~~Exact `:PTIM:TCOD?` response format and its 20–980 ms lead relative to the 1 PPS.~~ **Answered 21 Aug 2026 (#37).** The bench receiver is in **T2**, not the documented T1 default — read `:PTIM:TCOD:FORM?` and branch, never assume. The message is 23 characters, its checksum is the sum of the 21 preceding characters mod 256 (verified on 103/103 samples), and it is emitted on the receiver’s own 1 Hz cadence **509 ms** before the 1 PPS it names, jitter ≤ 2.4 ms. It does **not** answer on demand. Worked decode in #37; the format query is now catalogued (§8.2, §10.14). | Engineering | Closed |
 | OQ-5 | Confirm `LiveChartsCore.SkiaSharpView.WinUI` supports Windows App SDK 2.3.x. If not, hand-roll the trend renderer on `Canvas`. | Engineering | Blocks P1-1 |
 | OQ-6 | Publisher identity and privacy policy URL from Partner Center. | Product | Blocks P0-15 |
 | OQ-8 | Does `WinZ3805A` survive Store certification as a display name, or should the display name be descriptive (e.g. *"GPSDO Monitor for Z3805A"*) with `WinZ3805A` kept only as package identity and assembly name? See §6.3. Decide before first submission, not before first commit — the two are deliberately decoupled. | Product | No |
@@ -1866,6 +1898,12 @@ something might later branch on.
 - Symmetricom, *58503B GPS Time and Frequency Reference Receiver and 59551A GPS Measurements Synchronization Module — Operating and Programming Guide*, 097-58503-13 Issue 1, March 2000. Chapter 4 (command quick reference) and Chapter 5 (command reference) are the normative source for all command syntax, ranges, and defaults in this document. Available at `leapsecond.com/museum/hp58503a/097-58503-13-iss-1.pdf`.
 - Symmetricom, *Z3801A GPS Receiver User's Guide*, 097-z3801-01 Issue 1.
 - Z3801A firmware string dump, `leapsecond.com/museum/z3801a/eeprom.htm` — source for the undocumented parser keywords listed in §8.4 and §8.5.
+
+**The Z3801A guide is a source, not only a cross-reference.** `:PTIM:TCOD:FORMat` is documented in its Table 4-2 and in no part of the 58503B guide, so a catalog derived from the 58503B guide alone misses it — which is what happened, and what #154 records. When a command is absent from the 58503B guide, check the Z3801A guide before concluding the receiver does not have it: the Z3801A is the closer sibling, and the 58503B guide is a **joint** 58503A/59551A document whose `(59551A Only)` sections describe hardware the Z3805A does not have.
+
+**Model qualifiers in the guides do not predict what the parser accepts.** Measured on the bench Z3805A on 21 Aug 2026: `:PULS:CONT:STAT?`, `:SENS:DATA:POIN?` and `:FORM:DATA?` all answer despite being marked 59551A-only, while `:PTIM:PPS:EDGE?` and `:PULS:REF:EDGE?` are rejected with `E-113`. Subsystems are split rather than present or absent as blocks, so the note below — probe at connect, disable on error — is the operative rule and the model column is not.
+
+**`:PTIM:TCOD:FORMat` is catalogued as a query only; its setter is deliberately absent.** Changing the format changes what every consumer of the time code output sees, which makes it tier C by the same reasoning §8.3 applies to `:PTIM:TZONe`. It is not catalogued because nothing in the application reads the time code, so the setter would be a tier C write existing solely to break other equipment's decoding. It goes in when something needs it, with a §8.3 consequence line of its own.
 
 **Note on the Z3805A specifically:** no Z3805A-specific programming manual was published. The command set is inherited from the 58503A/B SmartClock firmware family, which is why the 58503B guide is the reference. Where behaviour diverges — Port 2 being TOD-only, dual 10 MHz and dual 1 PPS outputs, 9600-8-N-1 default rather than the Z3801A's 19200-7-E-1 — this document calls it out explicitly. Any command whose Z3805A behaviour is unverified should be probed at connect and disabled if it errors, rather than assumed present.
 
