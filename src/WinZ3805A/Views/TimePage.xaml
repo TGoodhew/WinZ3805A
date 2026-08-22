@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 <Page
     x:Class="WinZ3805A.Views.TimePage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -137,6 +137,53 @@
                                TextWrapping="Wrap"
                                MaxWidth="{ThemeResource WzProseMaxWidth}"
                                Text="The accumulated offset is how far GPS time has run ahead of UTC since 1980. An announced leap second is a step the 1 PPS will take, which anything downstream counting seconds needs to expect." />
+                </StackPanel>
+            </Border>
+
+            <!-- ================================ Time code ============================== -->
+            <Border Style="{ThemeResource WzCardStyle}">
+                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Time code output" />
+
+                    <!--
+                        The format only, never the time code itself. :PTIM:TCOD? answers on the
+                        receiver's own 1 Hz cadence rather than on demand, so reading it blocks for
+                        up to a second - see #37. The format is the part that does not change, and
+                        the part without which the message cannot be read at all.
+                    -->
+                    <Grid ColumnSpacing="{ThemeResource WzSpaceMd}" RowSpacing="{ThemeResource WzSpaceXxs}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="200" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Column="0"
+                                   Style="{ThemeResource WzBodyTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   Text="Format" />
+                        <TextBlock x:Name="TimeCodeFormatText" Grid.Column="1"
+                                   Style="{ThemeResource WzMonoTextStyle}" />
+                    </Grid>
+
+                    <TextBlock x:Name="TimeCodeContentText"
+                               Style="{ThemeResource WzCaptionTextStyle}"
+                               Foreground="{ThemeResource WzTextTertiaryBrush}"
+                               TextWrapping="Wrap"
+                               MaxWidth="{ThemeResource WzProseMaxWidth}"
+                               Visibility="Collapsed" />
+
+                    <TextBlock x:Name="TimeCodeErrorText"
+                               Style="{ThemeResource WzCaptionTextStyle}"
+                               Foreground="{ThemeResource WzTextTertiaryBrush}"
+                               TextWrapping="Wrap"
+                               MaxWidth="{ThemeResource WzProseMaxWidth}"
+                               Visibility="Collapsed" />
+
+                    <TextBlock Style="{ThemeResource WzCaptionTextStyle}"
+                               Foreground="{ThemeResource WzTextTertiaryBrush}"
+                               TextWrapping="Wrap"
+                               MaxWidth="{ThemeResource WzProseMaxWidth}"
+                               Text="The time code is a message the receiver sends about 0.5 s before each 1 PPS, naming the time that pulse will carry. The two formats say the same thing in different notations, so anything decoding it has to be told which one this receiver is set to." />
                 </StackPanel>
             </Border>
 

@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -26,6 +26,9 @@ public sealed partial class TimePage : Page
 
     /// <summary>§10.14's leap-second detail, read on arrival and on reconnect.</summary>
     private LeapSecondReading _leap = LeapSecondReading.Unknown;
+
+    /// <summary>§10.14's time code format, read on arrival and on reconnect.</summary>
+    private TimeCodeReading _timeCode = TimeCodeReading.Unknown;
 
     /// <summary>Cancels a read in flight when the page is left.</summary>
     private CancellationTokenSource? _reading;
@@ -75,7 +78,7 @@ public sealed partial class TimePage : Page
         // second is applied, which is at most twice a year, and §7.3 gives the poller sole ownership
         // of anything that repeats. It is re-read on reconnect, because a different receiver may
         // have been plugged in.
-        _ = ReadLeapAsync();
+        _ = ReadOnceAsync();
     }
 
     /// <summary>
@@ -93,9 +96,9 @@ public sealed partial class TimePage : Page
     /// Nothing here is a setter and nothing here is tier C. The whole card is four queries.
     /// </para>
     /// </remarks>
-    private async Task ReadLeapAsync()
+    private async Task ReadOnceAsync()
     {
-        if (_device is not DeviceContext device)
+        if (_device is not DeviceContext)
         {
             return;
         }
@@ -105,6 +108,25 @@ public sealed partial class TimePage : Page
         _reading = new CancellationTokenSource();
         CancellationToken token = _reading.Token;
 
+        try
+        {
+            await ReadLeapAsync(token).ConfigureAwait(true);
+            await ReadTimeCodeAsync(token).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        if (_ready)
+        {
+            Render();
+        }
+    }
+
+    /// <summary>Reads the leap-second detail, asking only what the receiver will answer.</summary>
+    private async Task ReadLeapAsync(CancellationToken token)
+    {
         try
         {
             int? accumulated = await AskAsync(LeapSecondQueries.Accumulated, token).ConfigureAwait(true);
@@ -128,18 +150,44 @@ public sealed partial class TimePage : Page
                     ? "The receiver did not answer the leap-second queries."
                     : null);
         }
-        catch (OperationCanceledException)
-        {
-            return;
-        }
         catch (Exception exception) when (exception is InvalidOperationException or TransportException)
         {
             _leap = LeapSecondReading.Unknown with { Error = exception.Message };
         }
+    }
 
-        if (_ready)
+    /// <summary>
+    /// Reads which time code format the receiver emits (§10.14).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>One query, and deliberately not the time code itself.</b> <c>:PTIM:TCOD?</c> does not
+    /// answer when asked — it answers on the receiver's own 1 Hz cadence, roughly 509 ms before the
+    /// 1 PPS it names, so a request lands in the next emission slot and the transaction blocks for
+    /// up to a second. That is a poll budget this page has no use for, and #37 records the
+    /// measurement. The format is the part that does not change and is the part a reader needs.
+    /// </para>
+    /// <para>
+    /// Read on arrival rather than on a timer, for the same reason as the leap-second card: it is a
+    /// fact about the receiver, and §7.3 gives the poller sole ownership of anything that repeats.
+    /// </para>
+    /// </remarks>
+    private async Task ReadTimeCodeAsync(CancellationToken token)
+    {
+        try
         {
-            Render();
+            IReadOnlyList<string>? lines = await AskLinesAsync(TimeCodeFormats.Query, token)
+                .ConfigureAwait(true);
+
+            _timeCode = lines is [string first, ..]
+                ? new TimeCodeReading(TimeCodeFormats.Parse(first), null)
+                : new TimeCodeReading(
+                    TimeCodeFormat.Unknown,
+                    "The receiver did not answer the time code format query.");
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or TransportException)
+        {
+            _timeCode = TimeCodeReading.Unknown with { Error = exception.Message };
         }
     }
 
@@ -204,7 +252,7 @@ public sealed partial class TimePage : Page
             // §9.11's rule that stale is dimmed and timestamped, never blanked.
             if (e.Status == ConnectionStatus.Connected)
             {
-                _ = ReadLeapAsync();
+                _ = ReadOnceAsync();
             }
         });
 
@@ -263,6 +311,16 @@ public sealed partial class TimePage : Page
 
         LeapErrorText.Text = _leap.Error ?? string.Empty;
         LeapErrorText.Visibility = _leap.Error is null ? Visibility.Collapsed : Visibility.Visible;
+
+        TimeCodeFormatText.Text = _timeCode.FormatText;
+
+        TimeCodeContentText.Text = _timeCode.ContentText ?? string.Empty;
+        TimeCodeContentText.Visibility = _timeCode.ContentText is null
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+
+        TimeCodeErrorText.Text = _timeCode.Error ?? string.Empty;
+        TimeCodeErrorText.Visibility = _timeCode.Error is null ? Visibility.Collapsed : Visibility.Visible;
 
         FooterText.Text = model.AgeDescription;
     }

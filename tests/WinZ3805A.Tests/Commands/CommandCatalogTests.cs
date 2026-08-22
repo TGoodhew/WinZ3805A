@@ -1,4 +1,4 @@
-using WinZ3805A.Device.Commands;
+﻿using WinZ3805A.Device.Commands;
 
 namespace WinZ3805A.Tests.Commands;
 
@@ -116,6 +116,7 @@ public class CommandCatalogTests
     [InlineData(":GPS:POS:SURV:PROG?")]
     [InlineData(":GPS:SAT:TRAC:COUN?")]
     [InlineData(":PTIM:LEAP:STAT?")]
+    [InlineData(":PTIM:TCOD:FORM?")]
     [InlineData(":LED:GPSL?")]
     [InlineData(":DIAG:ROSC:EFC:REL?")]
     [InlineData(":DIAG:LOG:READ:ALL?")]

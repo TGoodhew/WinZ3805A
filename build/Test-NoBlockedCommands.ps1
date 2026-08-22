@@ -68,8 +68,45 @@ if ($blocks.Count -eq 0) {
 }
 
 # Tokens that may never appear, and tokens that may appear only as a query.
-$neverTokens = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
-$queryOnlyTokens = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+#
+# A token is a *pair* - the pattern's abbreviated stem and its fully spelled form, taken from
+# the way the patterns themselves write it, 'STEM(?:REMAINDER)?'. A node is a hit when it falls
+# between the two: the stem, the full spelling, and every SCPI abbreviation in between. A node
+# that merely starts with the same letters and then diverges is a different node and is not.
+#
+# Matching the stem as a bare prefix instead - which this gate did until 21 Aug 2026 - is wrong
+# in both directions. It flags any node beginning with those letters, and it then reports the
+# collision as though the excluded command had been named. It also misses nothing the pair rule
+# catches, so this is strictly the more precise test rather than a relaxation. A catalogued
+# query whose node shares four leading letters with one of the undocumented nodes is what found
+# it; the runtime validator never matched that command, because its alternation is anchored to
+# a whole node and this scan was not.
+#
+# Note the gate holds itself to the same rule: a comment here that spelled the tokens out would
+# be a hit, which is why this one describes the shape instead of giving an example.
+$neverTokens = [System.Collections.Generic.List[object]]::new()
+$queryOnlyTokens = [System.Collections.Generic.List[object]]::new()
+
+# 'STEM(SUFFIX)?' and 'STEM(?:SUFFIX)?' alike - the patterns use both spellings.
+$pairPattern = '(?<stem>[A-Z][A-Z0-9]{2,})\((?:\?:)?(?<suffix>[A-Z0-9]+)\)\?'
+
+function Get-ExclusionToken {
+    param([string] $Text)
+
+    $tokens = [System.Collections.Generic.List[object]]::new()
+
+    foreach ($m in [regex]::Matches($Text, $pairPattern)) {
+        $stem = $m.Groups['stem'].Value
+        $tokens.Add([pscustomobject]@{ Stem = $stem; Full = $stem + $m.Groups['suffix'].Value })
+    }
+
+    # Whatever is left once the pairs are removed is spelled only one way.
+    foreach ($m in [regex]::Matches(($Text -replace $pairPattern, ' '), '[A-Z]{3,}')) {
+        $tokens.Add([pscustomobject]@{ Stem = $m.Value; Full = $m.Value })
+    }
+
+    return $tokens
+}
 
 foreach ($block in $blocks) {
     $body = $block.Groups['body'].Value
@@ -77,22 +114,42 @@ foreach ($block in $blocks) {
 
     if ($name -eq 'UndocumentedSetFormPattern') {
         # The whole alternation is the leaf set here.
-        foreach ($m in [regex]::Matches($body, '[A-Z]{3,}')) {
-            [void]$queryOnlyTokens.Add($m.Value)
-        }
+        foreach ($t in @(Get-ExclusionToken -Text $body)) { [void]$queryOnlyTokens.Add($t) }
     }
     else {
         # Only the last node matters: the parents (':DIAG', ':SYST') are ordinary and are
         # named legitimately all over the catalog.
         $leaf = ($body -split ':')[-1]
-        foreach ($m in [regex]::Matches($leaf, '[A-Z]{3,}')) {
-            [void]$neverTokens.Add($m.Value)
-        }
+        foreach ($t in @(Get-ExclusionToken -Text $leaf)) { [void]$neverTokens.Add($t) }
     }
 }
 
 if ($neverTokens.Count -eq 0 -and $queryOnlyTokens.Count -eq 0) {
     Write-Error "Parsed $($blocks.Count) pattern(s) from '$permittedRelative' but extracted no tokens. Fix the parse rather than removing the check."
+}
+
+# True when $node - the letters after a colon - names $token.
+#
+# Two ways to name it, and both are hits:
+#
+#   - It lies between the stem and the full spelling, which covers the stem itself, the full
+#     spelling, and every SCPI abbreviation in between.
+#   - It begins with the full spelling and runs on. The full name is still spelled out in the
+#     text, which is what the "may not be named at all" rule is about, so this stays a hit even
+#     though the receiver would parse it as some other node.
+#
+# What is deliberately *not* a hit is a node that starts with the stem and then diverges before
+# reaching the full spelling. That is a different node which merely shares an opening, and
+# treating it as a hit is what this gate did wrong until 21 Aug 2026.
+function Test-ExclusionToken {
+    param([string] $Node, [object] $Token)
+
+    $betweenStemAndFull =
+        $Node.StartsWith($Token.Stem, [StringComparison]::OrdinalIgnoreCase) -and
+        $Token.Full.StartsWith($Node, [StringComparison]::OrdinalIgnoreCase)
+
+    return $betweenStemAndFull -or
+           $Node.StartsWith($Token.Full, [StringComparison]::OrdinalIgnoreCase)
 }
 
 # ---------------------------------------------------------------------------
@@ -118,20 +175,26 @@ foreach ($file in $targets) {
     foreach ($line in (Get-Content -LiteralPath $file.FullName)) {
         $number++
 
-        foreach ($token in $neverTokens) {
-            foreach ($m in [regex]::Matches($line, ":$token[A-Za-z]*", 'IgnoreCase')) {
-                $hits += [pscustomobject]@{
-                    File = $relative; Line = $number; Text = $m.Value; Context = $line.Trim()
-                    Why  = 'named in §8.4 and must not appear outside the exclusion patterns'
+        # Every ':NODE' on the line, once - then asked which token it is, rather than each
+        # token being pattern-matched against the raw text.
+        foreach ($m in [regex]::Matches($line, ':(?<node>[A-Za-z]+)')) {
+            $node = $m.Groups['node'].Value
+            $after = $m.Index + $m.Length
+            $isQuery = $after -lt $line.Length -and $line[$after] -eq '?'
+
+            foreach ($token in $neverTokens) {
+                if (Test-ExclusionToken -Node $node -Token $token) {
+                    $hits += [pscustomobject]@{
+                        File = $relative; Line = $number; Text = $m.Value; Context = $line.Trim()
+                        Why  = 'named in §8.4 and must not appear outside the exclusion patterns'
+                    }
                 }
             }
-        }
 
-        foreach ($token in $queryOnlyTokens) {
-            foreach ($m in [regex]::Matches($line, ":$token[A-Za-z]*", 'IgnoreCase')) {
-                $after = $m.Index + $m.Length
-                $isQuery = $after -lt $line.Length -and $line[$after] -eq '?'
-                if (-not $isQuery) {
+            if ($isQuery) { continue }
+
+            foreach ($token in $queryOnlyTokens) {
+                if (Test-ExclusionToken -Node $node -Token $token) {
                     $hits += [pscustomobject]@{
                         File = $relative; Line = $number; Text = $m.Value; Context = $line.Trim()
                         Why  = 'an undocumented node in set form, which §8.4 blocks permanently with no override'
