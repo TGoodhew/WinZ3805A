@@ -54,6 +54,13 @@ parsing rather than treating the space as part of the field.
 §11.1 asks for eight states. These five need the receiver put into them, which is a person
 at the bench rather than a query:
 
+> **Four of these five happen on their own during a hardware move**, which is the only time
+> they are all reachable without deliberately disturbing a working receiver. Run
+> `pwsh build/Capture-Fixtures.ps1` before touching anything and leave it running: it watches
+> the screen, writes one file per state it has not seen, and reconnects by itself when the
+> power goes and the adapter re-enumerates. Captures land in `captured/`; promoting one is a
+> move up a level plus a row in the table above.
+
 | State | How to reach it |
 |---|---|
 | Power-up (0 tracked) | Capture immediately after power is applied |
