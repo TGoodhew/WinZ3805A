@@ -1,4 +1,4 @@
-namespace WinZ3805A.Device.Transport;
+﻿namespace WinZ3805A.Device.Transport;
 
 /// <summary>How a transaction ended.</summary>
 public enum TransactionOutcome
@@ -50,17 +50,49 @@ public sealed record Transaction
     /// ordinary prompt.
     /// </summary>
     /// <remarks>
-    /// The prompt doubles as an error indicator on this firmware: a command it rejects answers with
-    /// the prompt alone, spelled <c>E-nnn&gt;</c>. That makes an empty response self-explaining,
-    /// which matters because §7.2 only queries the error queue after tier-C commands — every other
-    /// failure would otherwise be silent. The token is kept verbatim rather than parsed to a signed
-    /// number: SCPI's standard codes are negative and the prompt prints no sign, and inventing one
-    /// would put a guess into the Diagnostics page.
+    /// <para>
+    /// <b>This reports the receiver's error queue, not this command.</b> §7.2 records the
+    /// measurement: with a single error queued, three successive commands that each succeeded and
+    /// returned correct data all carried an <c>E-113</c> prompt. The prompt names the <i>newest</i>
+    /// queued error while <c>:SYST:ERR?</c> returns the oldest first, and it reverts to the ordinary
+    /// prompt only once the queue is fully drained.
+    /// </para>
+    /// <para>
+    /// The token is kept verbatim rather than parsed to a signed number: SCPI's standard codes are
+    /// negative and the prompt prints no sign, and inventing one would put a guess into the
+    /// Diagnostics page.
+    /// </para>
     /// </remarks>
     public string? PromptStatus { get; init; }
 
-    /// <summary>True when the receiver reported an error in the prompt.</summary>
-    public bool HasDeviceError => PromptStatus is not null;
+    /// <summary>
+    /// True when the receiver's error queue was not empty as of the end of this transaction.
+    /// </summary>
+    /// <remarks>
+    /// <b>This says nothing about whether this command succeeded</b>, and the name says so because
+    /// the previous one — <c>HasDeviceError</c> — did not, and three call sites read it as a verdict
+    /// on the command they had just sent (#173). Something queued by an earlier poll makes this true
+    /// for a command that worked perfectly.
+    /// </remarks>
+    public bool ErrorQueueNotEmpty => PromptStatus is not null;
+
+    /// <summary>
+    /// True when the receiver answered with an error prompt and <b>no response body</b>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is the honest test for "the receiver rejected this <i>query</i>", and it is sound
+    /// because §7.2 establishes that a rejected command answers with the prompt and nothing else.
+    /// A query that came back with lines came back with an answer, whatever is sitting in the queue.
+    /// </para>
+    /// <para>
+    /// <b>It is not sound for a setter</b>, which answers with the prompt alone whether it worked or
+    /// not — there is no body to distinguish the two. Nothing about the prompt can tell a caller
+    /// whether a setter succeeded; that needs the queue drained beforehand or <c>:SYST:ERR?</c>
+    /// afterwards, which §7.2 gives to tier C alone.
+    /// </para>
+    /// </remarks>
+    public bool WasRejected => PromptStatus is not null && Lines.Count == 0;
 
     /// <summary>The link failure, when <see cref="Outcome"/> is <see cref="TransactionOutcome.Faulted"/>.</summary>
     public TransportFault Fault { get; init; } = TransportFault.None;

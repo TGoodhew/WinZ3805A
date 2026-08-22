@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -119,7 +119,10 @@ public sealed partial class PositionPage : Page
         {
             Transaction reply = await device.Session.ExecuteAsync(ReadPowerUp).ConfigureAwait(true);
 
-            if (reply.Succeeded && !reply.HasDeviceError && reply.FirstLine is string answer)
+            // The body is the test, not the prompt. §7.2: a rejected query answers with the prompt
+            // and nothing else, so a query that returned a line returned an answer — whatever an
+            // earlier poll happens to have left in the receiver's error queue (#173).
+            if (reply.Succeeded && !reply.WasRejected && reply.FirstLine is string answer)
             {
                 string text = answer.Trim();
                 if (_model is PositionViewModel model)

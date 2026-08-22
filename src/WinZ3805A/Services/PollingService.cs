@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -463,7 +463,10 @@ public sealed class PollingService : IAsyncDisposable
             Transaction transaction = await _session.ExecuteAsync(command, origin: CommandOrigin.Poll, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
 
-            return (transaction.Succeeded ? transaction.Text : null, transaction.HasDeviceError);
+            // WasRejected, not ErrorQueueNotEmpty: this drives the "do not ask again until the
+            // sync state changes" suppression, and an unrelated queued error must not silence a
+            // query that is answering perfectly well (#173).
+            return (transaction.Succeeded ? transaction.Text : null, transaction.WasRejected);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

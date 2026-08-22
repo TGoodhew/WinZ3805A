@@ -1,4 +1,4 @@
-using System.Buffers;
+﻿using System.Buffers;
 using System.IO.Pipelines;
 using System.Text;
 using Microsoft.Extensions.Logging;
@@ -269,7 +269,9 @@ public sealed class LineProtocol
         Transaction cleared = await ExecuteAsync(ClearStatusCommand, TransactionTimeouts.AutoDetectProbe, cancellationToken)
             .ConfigureAwait(false);
 
-        if (!cleared.Succeeded || cleared.HasDeviceError)
+        // ErrorQueueNotEmpty is the right test here, unusually: this wants "not clean yet", not
+        // "that command failed". Spending the glitch is done when the queue is empty.
+        if (!cleared.Succeeded || cleared.ErrorQueueNotEmpty)
         {
             await ExecuteAsync(ClearStatusCommand, TransactionTimeouts.AutoDetectProbe, cancellationToken)
                 .ConfigureAwait(false);
