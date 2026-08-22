@@ -199,16 +199,34 @@ public static class ThemePalette
         return inner.Length == 0 ? null : inner;
     }
 
-    /// <summary>Parses <c>#RRGGBB</c> or <c>#AARRGGBB</c>.</summary>
+    /// <summary>Parses an opaque <c>#RRGGBB</c> or <c>#FFRRGGBB</c>.</summary>
     /// <remarks>
-    /// The alpha of an eight-digit value is discarded. Every consumer of this type wants a colour to
-    /// draw with rather than a composite, and none of the tokens it reads is translucent.
+    /// <para>
+    /// Every consumer of this type wants a colour to draw with rather than a composite, and
+    /// <see cref="Rgb"/> has nowhere to carry an alpha. So a <b>translucent</b> value is treated as
+    /// not knowable from here and answers null, the same as a <c>ThemeResource</c> does — rather
+    /// than being flattened to its own RGB, which would hand the caller a colour that is wrong and
+    /// looks entirely plausible.
+    /// </para>
+    /// <para>
+    /// One token is translucent today: <c>WzTextTertiaryBrush</c> in Light is 54.9% black, because
+    /// #176 took it off stock Fluent to clear §9.4.5's 4.5:1 floor. Reading it as opaque black would
+    /// claim 21:1 for text that measures 4.60:1.
+    /// </para>
     /// </remarks>
     private static bool TryParseHex(string value, out Rgb colour)
     {
         colour = default;
 
         if (value.Length is not (7 or 9) || value[0] != '#')
+        {
+            return false;
+        }
+
+        // An eight-digit value is #AARRGGBB. Anything but a fully opaque alpha is a composite this
+        // type cannot express, so it is refused above rather than silently flattened.
+        if (value.Length == 9
+            && !value.AsSpan(1, 2).Equals("FF", StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }

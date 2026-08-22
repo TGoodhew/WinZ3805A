@@ -188,16 +188,24 @@ $graphics = @('WzSuccessBrush', 'WzCautionBrush', 'WzCriticalBrush', 'WzInfoBrus
               'WzSeries1Brush', 'WzSeries2Brush', 'WzSeries3Brush', 'WzSeries4Brush',
               'WzSeries5Brush', 'WzSeries6Brush', 'WzSeries7Brush', 'WzSeries8Brush')
 
+
+# Tokens this project has deliberately taken off stock Fluent, each with the issue that decided
+# it and the reason. Check 2 exempts exactly these Theme|Token pairs and nothing else, so
+# ownership stays a decision someone made rather than a thing that quietly happened.
+#
+# A row here is the OPPOSITE of a baseline row below: baselined means "fails, and we know";
+# owned means "passes because we changed it, and we now own the relationship Fluent used to
+# guarantee". Both still have to clear the floor - an owned token gets no contrast exemption.
+$ownedTokens = @{
+    'Light|WzTextTertiaryBrush' = '#176 - stock TextFillColorTertiary is 45% black, 3.28:1 against a 4.5:1 floor for the 12 px captions this application uses it for. Owned at 54.9% black. Dark still inherits.'
+}
+
 $inheritTokens = $surfaces + $bodyText + @('WzTextDisabledBrush', 'WzStrokeDefaultBrush', 'WzStrokeSubtleBrush')
 
 # Known failures, each with the issue that owns it. The gate locks in "nothing new"; it does
 # not pretend these pass. A baseline entry is a debt with a number on it, not an exemption -
 # remove the row when the issue closes and the pair starts passing.
 $baseline = @{
-    'Light|WzTextTertiaryBrush|WzLayerFillBrush'         = '#176'
-    'Light|WzTextTertiaryBrush|WzCardFillBrush'          = '#176'
-    'Light|WzTextTertiaryBrush|WzCardFillSecondaryBrush' = '#176'
-    'Light|WzTextTertiaryBrush|WzOverlayFillBrush'       = '#176'
     'Light|WzSeries4Brush|WzCardFillBrush'               = '#177'
     'Light|WzSeries5Brush|WzCardFillBrush'               = '#177'
     'Dark|WzSeries5Brush|WzCardFillBrush'                = '#177'
@@ -211,6 +219,7 @@ foreach ($theme in @('Light', 'Dark')) {
 
     # ---- check 2, first: inheritance ----
     foreach ($token in $inheritTokens) {
+        if ($ownedTokens.ContainsKey("$theme|$token")) { continue }
         if (-not (Test-Inherited $theme $token)) {
             $failures += [pscustomobject]@{
                 Theme = $theme; What = $token; Against = '(inheritance)'; Ratio = 0.0; Floor = 0.0
@@ -275,6 +284,15 @@ foreach ($theme in @('Light', 'Dark')) {
 Write-Host "Checked $checked pair(s) across Light and Dark, composited over the §9.4.1 opaque page background."
 Write-Host "HighContrast is not checked: its tokens are the user's own SystemColor* choices (manual pass)."
 
+if ($ownedTokens.Count -gt 0) {
+    Write-Host ''
+    Write-Host "$($ownedTokens.Count) token(s) deliberately owned rather than inherited:" -ForegroundColor Cyan
+    foreach ($pair in $ownedTokens.GetEnumerator() | Sort-Object Name) {
+        Write-Host ("  {0}" -f $pair.Name) -ForegroundColor Cyan
+        Write-Host ("    {0}" -f $pair.Value) -ForegroundColor DarkCyan
+    }
+}
+
 if ($known.Count -gt 0) {
     Write-Host ''
     Write-Host "$($known.Count) known failure(s), each owned by an open issue:" -ForegroundColor DarkYellow
@@ -306,5 +324,5 @@ if ($failures.Count -gt 0) {
 }
 
 Write-Host ''
-Write-Host 'PASS: every measured pair meets its §9.4.5 floor, and every text and surface token still inherits its colour from Fluent.' -ForegroundColor Green
+Write-Host 'PASS: every measured pair meets its §9.4.5 floor, and every text and surface token either inherits its colour from Fluent or is listed above as owned.' -ForegroundColor Green
 exit 0

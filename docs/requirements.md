@@ -646,15 +646,47 @@ All colour is declared in `Themes/Colors.xaml` as three `ResourceDictionary` ent
 | `WzPageBackgroundFallbackBrush` | `#F3F3F3` | `#202020` | `SystemColorWindowColor` | Solid backdrop when Mica is unavailable |
 | `WzLayerFillBrush` | → `LayerFillColorDefaultBrush` | → same | `SystemColorWindowColor` | L1 page region |
 | `WzCardFillBrush` | → `CardBackgroundFillColorDefaultBrush` | → same | `SystemColorWindowColor` | L2 card |
+| `WzCardFillSecondaryBrush` | → `CardBackgroundFillColorSecondaryBrush` | → same | `SystemColorWindowColor` | L2 card, recessed row |
 | `WzOverlayFillBrush` | → `SolidBackgroundFillColorBaseBrush` | → same | `SystemColorWindowColor` | L3 transient |
 | `WzStrokeSubtleBrush` | → `CardStrokeColorDefaultBrush` | → same | `SystemColorWindowTextColor` | Card hairline |
 | `WzStrokeDefaultBrush` | → `ControlStrokeColorDefaultBrush` | → same | `SystemColorWindowTextColor` | Input borders, dividers |
 | `WzTextPrimaryBrush` | → `TextFillColorPrimaryBrush` | → same | `SystemColorWindowTextColor` | Readouts, headings |
 | `WzTextSecondaryBrush` | → `TextFillColorSecondaryBrush` | → same | `SystemColorWindowTextColor` | Labels, units, captions |
-| `WzTextTertiaryBrush` | → `TextFillColorTertiaryBrush` | → same | `SystemColorGrayTextColor` | Footers, timestamps, staleness |
+| `WzTextTertiaryBrush` | `#8C000000` — **owned, see below** | → `TextFillColorTertiaryBrush` | `SystemColorGrayTextColor` | Footers, timestamps, staleness |
 | `WzTextDisabledBrush` | → `TextFillColorDisabledBrush` | → same | `SystemColorGrayTextColor` | Disabled |
 
 Mapping to stock WinUI resources rather than redefining them is deliberate: it means the app inherits any future Fluent refinement for free, and the custom layer is only where the app genuinely differs. The custom names still exist so that a later change has one place to happen.
+
+> **⚠ One text token is owned rather than inherited, decided 22 Aug 2026 (#176).**
+>
+> `WzTextTertiaryBrush` in **Light** is a literal `#8C000000` — 54.9% black — and not stock
+> `TextFillColorTertiary`. Dark is unchanged and still inherits.
+>
+> **Why.** Stock tertiary is 45% black in Light, which measures **3.28 : 1** on the layer fill
+> against §9.4.5's 4.5 : 1 floor. Fluent chose that value for de-emphasised, non-essential text;
+> this application uses it as the standard caption colour in **117 places, 114 of them at 12 px**,
+> which is a job it was not chosen for. The mismatch is this project's, so the fix is this
+> project's too.
+>
+> **What it measures now**, composited over the opaque page background:
+>
+> | Surface | Was | Is |
+> |---|---|---|
+> | `WzLayerFillBrush` | 3.28 : 1 | **4.70 : 1** |
+> | `WzCardFillBrush` | 3.29 : 1 | **4.72 : 1** |
+> | `WzCardFillSecondaryBrush` | 3.30 : 1 | **4.68 : 1** |
+> | `WzOverlayFillBrush` | 3.28 : 1 | **4.60 : 1** |
+>
+> **What it costs.** `WzTextSecondaryBrush` is 62% black, so the gap between secondary and
+> tertiary narrows from 17 percentage points to 7. §9.5.2's three text levels survive and stay
+> ordered, but they are closer together in Light than Fluent draws them. That is the price of the
+> floor and it is paid knowingly: text nobody can read is not a hierarchy.
+>
+> **How it stays honest.** `build/Test-ContrastFloor.ps1` requires every other §9.4.5 text and
+> surface token to resolve to a stock Fluent colour and fails the day one stops. This token is
+> exempt from that check by name, in the gate's `$ownedTokens` table, carrying this issue number
+> and this reason. Ownership is a decision someone made, never something that quietly happened.
+> An owned token gets **no** contrast exemption — it still has to clear the floor, and does.
 
 #### 9.4.2 Brand accent ramp
 
@@ -779,6 +811,13 @@ No display or brand face is introduced. The type personality comes from the **Se
 | `WzDisplayTextStyle` | Variable Display | 68 / 80 | Semibold | −0.02 em | Reserved; not used in v1 |
 
 Each maps to a WinUI stock style where one exists (`BodyTextBlockStyle`, `SubtitleTextBlockStyle`, `TitleTextBlockStyle`) with only the documented deltas applied.
+
+**`WzCaptionTextStyle` is small text, and that decides its colour.** At 12 px it is under every
+threshold in §9.4.5's 3 : 1 row, so it carries the 4.5 : 1 floor wherever it appears — including
+the timestamps, units and helper text it is named for. That floor, not appearance, is why
+`WzTextTertiaryBrush` is a value this project owns in Light rather than one it inherits; §9.4.1
+records the measurement and the cost. **Caption text may still be tertiary.** The point of owning
+the token was to keep it legible at that size, so nothing here needs moving to secondary.
 
 #### 9.5.3 Numeric and tabular treatment
 

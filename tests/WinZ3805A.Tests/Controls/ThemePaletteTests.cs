@@ -127,4 +127,22 @@ public sealed class ThemePaletteTests
         Assert.NotNull(ThemePalette.Colour(ThemePalette.Light, key));
         Assert.NotNull(ThemePalette.Colour(ThemePalette.Dark, key));
     }
+
+    /// <summary>A translucent value answers null rather than being flattened to its own RGB.</summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="Rgb"/> has nowhere to carry an alpha, so the honest answer for a translucent token
+    /// is the same one <c>{ThemeResource}</c> gets: not knowable from here. Flattening would be
+    /// worse than useless — <c>WzTextTertiaryBrush</c> in Light is 54.9% black, and read as opaque
+    /// it claims 21 : 1 for text that measures 4.60 : 1 on the surface it is drawn on.
+    /// </para>
+    /// <para>
+    /// This is not hypothetical caution. #176 took that token off stock Fluent to clear §9.4.5's
+    /// floor, and the value it landed on is the first translucent literal the dictionary has ever
+    /// held. It will not be the last.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void ATranslucentValueIsNotFlattenedToAnOpaqueColour() =>
+        Assert.Null(ThemePalette.Colour(ThemePalette.Light, "WzTextTertiaryBrush"));
 }
