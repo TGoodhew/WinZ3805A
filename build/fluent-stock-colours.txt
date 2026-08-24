@@ -64,3 +64,29 @@ Dark   TextFillColorDisabled             #5DFFFFFF
 Dark   TextFillColorPrimary              #FFFFFFFF
 Dark   TextFillColorSecondary            #C5FFFFFF
 Dark   TextFillColorTertiary             #87FFFFFF
+
+# FOCUS VISUAL STROKES, measured 24 Aug 2026 for A11Y-2 (#22, decision in #187)
+#
+# MEASURED DIFFERENTLY FROM EVERYTHING ABOVE, and that matters. The values above were read
+# out of Application.Current.Resources. These were sampled from RENDERED PIXELS: focus was
+# moved to ConnectButton with `winapp ui focus`, the window screenshotted, and a horizontal
+# line of pixels read straight across the ring. So they are already composited and opaque -
+# do NOT composite them again.
+#
+# They are recorded because the contrast gate cannot see focus visuals at all, and Light's
+# primary-vs-accent pair measured 3.06:1 against a 3:1 floor. That is a 2% margin on a
+# colour §9.4.2 explicitly permits re-deriving. A gate built on these rows would catch it.
+#
+# Measured ratios at the time of recording, against WzAccentBrush and the page background:
+#   Light  primary vs background 17.10:1   primary vs accent 3.06:1   secondary vs accent 5.59:1
+#   Dark   primary vs background 14.87:1   primary vs accent 2.01:1   secondary vs accent 9.79:1
+# Primary stroke width measured at 2 px in both themes (§9.6.3 requires >= 2 px).
+#
+# TO RE-MEASURE: focus an accent-filled button, screenshot the window, and read a pixel row
+# across the ring. The ring is the run of pixels between the page background and the accent
+# fill - primary outermost, secondary inside it.
+
+Light  FocusVisualPrimary                #FF1B1A1B
+Light  FocusVisualSecondary              #FFFEFDFE
+Dark   FocusVisualPrimary                #FFFFFFFF
+Dark   FocusVisualSecondary              #FF0C0B0C
