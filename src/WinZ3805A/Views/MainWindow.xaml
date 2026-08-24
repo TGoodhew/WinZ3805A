@@ -16,11 +16,19 @@
         this file.
     -->
 
-    <Window.SystemBackdrop>
-        <MicaBackdrop />
-    </Window.SystemBackdrop>
+    <!--
+        No <Window.SystemBackdrop> here on purpose. §9.2 requires Mica Alt where the platform has
+        it and WzPageBackgroundFallbackBrush where it does not, and says "never let an unsupported
+        backdrop produce a transparent or black window". So the SOLID is the default declared in
+        markup and Services/WindowBackdrop upgrades it to Mica Alt at construction. Declaring Mica
+        here and stripping it when unsupported would make the black window the thing that happens
+        when a code path does not run (#191).
 
-    <Grid>
+        Background is a ThemeResource, so the fallback follows a theme change on its own. Do not
+        replace it with a brush captured from Application.Current.Resources.
+    -->
+
+    <Grid Background="{ThemeResource WzPageBackgroundFallbackBrush}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
