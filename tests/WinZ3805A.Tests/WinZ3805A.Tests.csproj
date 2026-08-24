@@ -46,6 +46,12 @@
          and force a TFM this project has no reason to carry. The linked file has no UI using at
          all, which is what makes this safe - if that ever stops being true, the build breaks here
          rather than silently passing. -->
+    <!-- #189's high-contrast decision. Linked for the same reason as the others: it speaks no
+         WinUI, only System.Runtime.InteropServices and Microsoft.Extensions.Logging, so it compiles
+         headlessly. Only the pure Decide() is exercised - IsEnabled() calls user32 and would just
+         report whatever the test machine happens to be set to. -->
+    <Compile Include="..\..\src\WinZ3805A\Services\HighContrast.cs"
+             Link="Services\HighContrast.cs" />
     <Compile Include="..\..\src\WinZ3805A\Controls\ReadoutFormatter.cs"
              Link="Formatting\ReadoutFormatter.cs" />
     <Compile Include="..\..\src\WinZ3805A\Controls\MedallionRingMath.cs"

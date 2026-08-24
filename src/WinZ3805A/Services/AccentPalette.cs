@@ -1,4 +1,6 @@
-﻿using Microsoft.UI.Xaml;
+﻿using Microsoft.Extensions.Logging;
+
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
 
 using Windows.UI.ViewManagement;
@@ -86,16 +88,24 @@ public static class AccentPalette
     /// merged.
     /// </param>
     /// <param name="preferences">What the user has chosen.</param>
+    /// <param name="logger">
+    /// Where an indeterminate high-contrast reading is recorded. Optional, but worth passing:
+    /// that reading now suppresses the ramp entirely, and without a line in the log a missing
+    /// brand accent looks like a preference that did not save rather than a guard that fired.
+    /// </param>
     /// <remarks>
     /// Call this on startup and again on every theme change. A theme change swaps in the other
     /// theme dictionary's brush instances, which are untouched by any earlier call — without the
     /// second call, switching from light to dark would silently restore the brand ramp.
     /// </remarks>
     /// <returns>How many brushes were reached, for the log to report.</returns>
-    public static AppliedCount Apply(FrameworkElement root, AppearancePreferences preferences)
+    public static AppliedCount Apply(
+        FrameworkElement root,
+        AppearancePreferences preferences,
+        ILogger? logger = null)
     {
         // Nothing sensible to substitute: see the remarks on the class.
-        if (Application.Current is not Application application || IsHighContrast())
+        if (Application.Current is not Application application || HighContrast.IsEnabled(logger))
         {
             return AppliedCount.None;
         }
@@ -124,17 +134,5 @@ public static class AccentPalette
         }
 
         return new AppliedCount(applied, assignments.Count, ramp.Base);
-
-        static bool IsHighContrast()
-        {
-            try
-            {
-                return new AccessibilitySettings().HighContrast;
-            }
-            catch (Exception)
-            {
-                return false;
-            }
-        }
     }
 }
