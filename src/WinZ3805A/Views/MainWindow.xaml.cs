@@ -148,8 +148,11 @@ public sealed partial class MainWindow : Window
     }
 
     /// <remarks>
-    /// §9.7.5's <c>Ctrl+D</c>, <c>Ctrl+Shift+M</c> and <c>Esc</c>. On the content root rather than
-    /// the window, because <c>Window</c> has no accelerator collection of its own.
+    /// §9.7.5's <c>Ctrl+D</c>, <c>Ctrl+Shift+C</c>, <c>Ctrl+Shift+M</c> and <c>Esc</c>. On the
+    /// content root rather than the window, because <c>Window</c> has no accelerator collection of
+    /// its own - and, for <c>Ctrl+Shift+C</c>, because §9.6.2's compact mode collapses the footer
+    /// that hosts <c>ConnectButton</c>. An accelerator attached to that button would vanish with
+    /// it, which is precisely the state a keyboard-only user would need it in.
     /// </remarks>
     private void AddAccelerators()
     {
@@ -170,6 +173,22 @@ public sealed partial class MainWindow : Window
             () =>
             {
                 _page?.ToggleCompact();
+                return true;
+            });
+
+        Add(
+            Windows.System.VirtualKey.C,
+            Windows.System.VirtualKeyModifiers.Control | Windows.System.VirtualKeyModifiers.Shift,
+            () =>
+            {
+                if (_page is null)
+                {
+                    return false;
+                }
+
+                // Fire and forget deliberately: KeyboardAccelerator.Invoked is void-returning, and
+                // the command already owns its own re-entrancy guard and its own error surface.
+                _ = _page.ToggleConnectionAsync();
                 return true;
             });
 
