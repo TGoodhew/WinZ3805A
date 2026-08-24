@@ -159,12 +159,15 @@ public partial class App : Application
             }
 
             AppearancePreferences preferences = store.Load();
-            AppliedCount applied = AccentPalette.Apply(root, preferences);
 
             // Logged because the failure this catches is invisible: a brush key renamed in
             // Colors.xaml and not in AccentRamp leaves one control on the old accent, which reads
-            // as a rendering quirk rather than as the wiring fault it is.
+            // as a rendering quirk rather than as the wiring fault it is. The logger is resolved
+            // BEFORE the call, not after, because Apply now reports an indeterminate high-contrast
+            // reading through it - and that one is invisible too (#189).
             ILogger? log = Services?.GetService<ILoggerFactory>()?.CreateLogger("Accent");
+
+            AppliedCount applied = AccentPalette.Apply(root, preferences, log);
 
             if (applied.IsComplete)
             {

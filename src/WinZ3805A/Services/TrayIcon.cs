@@ -40,8 +40,6 @@ public sealed class TrayIcon : IDisposable
     private const uint WmLeftButtonUp = 0x0202;
     private const int SmallIconMetric = 49;
     private const int ColorWindowText = 8;
-    private const uint SpiGetHighContrast = 0x0042;
-    private const uint HighContrastOn = 0x00000001;
 
     private readonly WndProc _wndProc;
     private readonly nint _window;
@@ -174,7 +172,11 @@ public sealed class TrayIcon : IDisposable
         // SystemColorWindowTextColor, and the tray is not the place to make an exception. A user
         // who has asked Windows for two colours is not asking this application for five, and the
         // shape is already carrying the whole message.
-        if (IsHighContrast())
+        //
+        // No logger: this is static and runs on every severity change, so an indeterminate reading
+        // would repeat rather than inform. AccentPalette logs it once at startup, which is where a
+        // reader would look, and both now get the same answer from the same place (#189).
+        if (HighContrast.IsEnabled())
         {
             return SystemWindowText();
         }
@@ -306,20 +308,6 @@ public sealed class TrayIcon : IDisposable
         return new Rgb((byte)colour, (byte)(colour >> 8), (byte)(colour >> 16));
     }
 
-    /// <summary>Whether Windows is in a high-contrast theme.</summary>
-    /// <remarks>
-    /// <c>SystemParametersInfo</c> rather than <c>AccessibilitySettings</c>: the WinRT type wants a
-    /// thread with a <c>CoreWindow</c>-ish context and this is called from wherever the poll
-    /// happens to have marshalled to. The Win32 call has no such requirement.
-    /// </remarks>
-    private static bool IsHighContrast()
-    {
-        HIGHCONTRAST info = new() { cbSize = Marshal.SizeOf<HIGHCONTRAST>() };
-
-        return SystemParametersInfo(SpiGetHighContrast, (uint)info.cbSize, ref info, 0)
-            && (info.dwFlags & HighContrastOn) != 0;
-    }
-
     // ------------------------------------------------------------------------------- interop
 
     private delegate nint WndProc(nint window, uint message, nint wParam, nint lParam);
@@ -377,14 +365,6 @@ public sealed class TrayIcon : IDisposable
         public int biClrImportant;
     }
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct HIGHCONTRAST
-    {
-        public int cbSize;
-        public uint dwFlags;
-        public nint lpszDefaultScheme;
-    }
-
     [StructLayout(LayoutKind.Sequential)]
     private struct ICONINFO
     {
@@ -434,11 +414,6 @@ public sealed class TrayIcon : IDisposable
 
     [DllImport("user32.dll")]
     private static extern uint GetSysColor(int index);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SystemParametersInfo(
-        uint action, uint param, ref HIGHCONTRAST info, uint update);
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern nint CreateIconIndirect(ref ICONINFO icon);
