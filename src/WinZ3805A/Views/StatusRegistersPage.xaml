@@ -125,21 +125,27 @@
                                         Each carries its own automation name because a bare checkbox
                                         in a grid announces only "checkbox"; the row's own name says
                                         which bit, but not which of three columns has focus.
+
+                                        MinWidth is 32, not 0. WinUI's default CheckBoxMinWidth is
+                                        120, which would force these 48 px columns open - that is
+                                        what the 0 here was for. But 0 let the box render 28 px wide,
+                                        under A11Y-5's 32 px pointer floor, measured on all 21 of
+                                        them. 32 satisfies the floor and still fits the column.
                                     -->
                                     <CheckBox Grid.Column="3"
-                                              MinWidth="0"
+                                              MinWidth="32"
                                               IsChecked="{x:Bind EnableBit, Mode=TwoWay}"
                                               IsEnabled="{x:Bind CanEditEnable}"
                                               AutomationProperties.Name="{x:Bind EnableName}"
                                               ToolTipService.ToolTip="Enable mask" />
                                     <CheckBox Grid.Column="4"
-                                              MinWidth="0"
+                                              MinWidth="32"
                                               IsChecked="{x:Bind PositiveBit, Mode=TwoWay}"
                                               IsEnabled="{x:Bind CanEditPositive}"
                                               AutomationProperties.Name="{x:Bind PositiveName}"
                                               ToolTipService.ToolTip="Positive-transition mask" />
                                     <CheckBox Grid.Column="5"
-                                              MinWidth="0"
+                                              MinWidth="32"
                                               IsChecked="{x:Bind NegativeBit, Mode=TwoWay}"
                                               IsEnabled="{x:Bind CanEditNegative}"
                                               AutomationProperties.Name="{x:Bind NegativeName}"
