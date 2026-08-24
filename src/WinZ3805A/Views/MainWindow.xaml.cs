@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Logging;
+using Microsoft.UI.Xaml.Controls;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -67,6 +69,14 @@ public sealed partial class MainWindow : Window
         _placements = services.GetRequiredKeyedService<IWindowPlacementStore>(PlacementKey);
 
         InitializeComponent();
+
+        // §9.2's backdrop. The root already carries the solid fallback from XAML; this upgrades it
+        // to Mica Alt where the platform has it. See Services/WindowBackdrop for why that direction
+        // rather than the other one (#191).
+        WindowBackdrop.Apply(
+            this,
+            (Panel)Content,
+            services.GetService<ILoggerFactory>()?.CreateLogger("Backdrop"));
 
         // §6.3: the display name is read from the manifest, never hard-coded.
         // Package identity is effectively permanent; the display name is a
