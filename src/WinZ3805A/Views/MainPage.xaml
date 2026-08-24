@@ -41,17 +41,35 @@
                    IsHitTestVisible="False"
                    AutomationProperties.LiveSetting="Polite" />
 
-        <!-- Medallion and mode -->
-        <StackPanel x:Name="HeaderRow" Orientation="Horizontal" Spacing="{StaticResource WzSpaceXl}">
+        <!--
+            Medallion and mode. A Grid rather than a horizontal StackPanel, and the text blocks
+            wrap: a horizontal StackPanel hands every child its full desired width regardless of
+            what is available, so at 200% text scaling the mode text ran past the right edge of a
+            380 px window and was cut mid-word by the window itself. A11Y-6 (#26) allows no text to
+            clip at any breakpoint. The starred column gives the text somewhere to wrap into, and
+            the medallion keeps its natural size in the Auto column.
+
+            Note the UIA tree does NOT show this: a clipped TextBlock still reports a bounding
+            rectangle inside its parent, so the overflow is invisible to a bounds check and only a
+            rendered capture catches it.
+        -->
+        <Grid x:Name="HeaderRow" ColumnSpacing="{StaticResource WzSpaceXl}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
             <controls:StatusMedallion x:Name="Medallion"
+                                      Grid.Column="0"
                                       Size="Large"
                                       DoubleTapped="OnMedallionDoubleTapped" />
-            <StackPanel VerticalAlignment="Center" Spacing="{StaticResource WzSpaceXxs}">
+            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="{StaticResource WzSpaceXxs}">
                 <TextBlock x:Name="ModeText"
                            Style="{StaticResource WzSubtitleTextStyle}"
+                           TextWrapping="Wrap"
                            Foreground="{ThemeResource WzTextPrimaryBrush}" />
                 <TextBlock x:Name="ModeDetailText"
                            Style="{StaticResource WzBodyTextStyle}"
+                           TextWrapping="Wrap"
                            Foreground="{ThemeResource WzTextSecondaryBrush}" />
                 <controls:SeverityPill x:Name="CoastingPill"
                                        Severity="Caution"
@@ -70,10 +88,11 @@
                 -->
                 <TextBlock x:Name="CompactSatellitesText"
                            Style="{StaticResource WzBodyTextStyle}"
+                           TextWrapping="Wrap"
                            Foreground="{ThemeResource WzTextSecondaryBrush}"
                            Visibility="Collapsed" />
             </StackPanel>
-        </StackPanel>
+        </Grid>
 
         <!-- The two figures that share top billing (§10.3) -->
         <StackPanel x:Name="ReadoutRow"
