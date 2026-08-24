@@ -241,6 +241,15 @@ public sealed partial class DetailsWindow : Window
     /// The tooltip is set explicitly rather than left to the control. <c>NavigationView</c> supplies
     /// one from <c>Content</c> only while the pane is a rail, and §9.9 wants the label reachable in
     /// every mode - including <c>Left</c>, where a truncated long label is otherwise unreadable.
+    /// <para>
+    /// It carries the accelerator too, where the destination has one. §9.7.5 requires icon-only
+    /// controls to show accelerator text in their tooltip, and in the rail these items ARE
+    /// icon-only - so the tooltip is the only place <c>Ctrl</c>+<i>n</i> can be learned. The number
+    /// is resolved through <see cref="DetailsDestinations.ByNumber"/> rather than from a counter
+    /// local to the caller, so what the tooltip advertises cannot drift from what
+    /// <see cref="AddAccelerators"/> binds: both read the same list, and a destination past
+    /// <see cref="DetailsDestinations.MaxAccelerated"/> gets no accelerator and claims none.
+    /// </para>
     /// </remarks>
     private static NavigationViewItem NavigationItem(DetailsDestination destination)
     {
@@ -251,8 +260,24 @@ public sealed partial class DetailsWindow : Window
             Icon = new FontIcon { Glyph = destination.Glyph },
         };
 
-        ToolTipService.SetToolTip(item, destination.Label);
+        ToolTipService.SetToolTip(item, ToolTipFor(destination));
         return item;
+    }
+
+    /// <summary>
+    /// The label, plus the <c>Ctrl</c>+<i>n</i> accelerator where one is bound to this destination.
+    /// </summary>
+    private static string ToolTipFor(DetailsDestination destination)
+    {
+        for (int number = 1; number <= DetailsDestinations.MaxAccelerated; number++)
+        {
+            if (ReferenceEquals(DetailsDestinations.ByNumber(number), destination))
+            {
+                return $"{destination.Label} (Ctrl+{number})";
+            }
+        }
+
+        return destination.Label;
     }
 
     /// <remarks>

@@ -232,7 +232,26 @@ public sealed partial class MainPage : Page
         }
     }
 
-    private async void OnConnectClicked(object sender, RoutedEventArgs e)
+    private async void OnConnectClicked(object sender, RoutedEventArgs e) =>
+        await ToggleConnectionAsync();
+
+    /// <summary>
+    /// §9.7.5's <c>Ctrl+Shift+C</c>: connects if disconnected, disconnects if connected.
+    /// </summary>
+    /// <remarks>
+    /// Public because the accelerator lives on the window's content root, not on
+    /// <c>ConnectButton</c> - and it has to. §9.6.2's compact mode collapses the footer that hosts
+    /// that button, so an accelerator attached to the button would go with it and leave a
+    /// keyboard-only user in compact mode with no route to connect or disconnect at all. Ctrl+D and
+    /// Ctrl+Shift+M already survive compact for the same reason.
+    /// <para>
+    /// The button is disabled around the dialog rather than the command being re-entrancy-guarded,
+    /// which is why the guard has to tolerate the button being collapsed: setting
+    /// <c>IsEnabled</c> on a collapsed element is harmless, and the dialog is modal, so a second
+    /// Ctrl+Shift+C cannot arrive while one is open.
+    /// </para>
+    /// </remarks>
+    public async Task ToggleConnectionAsync()
     {
         if (!_model.CanConnect)
         {
