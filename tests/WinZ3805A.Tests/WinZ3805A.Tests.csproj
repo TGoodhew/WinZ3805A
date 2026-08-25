@@ -84,6 +84,13 @@
     <Compile Include="..\..\src\WinZ3805A\Controls\SkyPlotGeometry.cs"
              Link="Controls\SkyPlotGeometry.cs" />
 
+    <!-- The sky plot's other silent half. §9.10.2 says only "arrow keys move a ring through markers
+         in PRN order", which is complete until the constellation changes underneath the ring - and
+         it changes on the poll cadence, not when the user chooses. The cases that matter are a
+         satellite appearing or disappearing at a chosen moment, which a bench cannot arrange. -->
+    <Compile Include="..\..\src\WinZ3805A\Controls\SkyPlotCursor.cs"
+             Link="Controls\SkyPlotCursor.cs" />
+
     <!-- §9.10.2's TrendChart, following the same split as the sky plot: the geometry is arithmetic
          and is tested here, the control only draws. This half is why #38 rejected LiveCharts - the
          min/max-per-column rule is what stops a one-second excursion vanishing at the 7-day range,

@@ -108,8 +108,14 @@ public sealed class SkyPlotControl : Control
     /// <summary>The satellites currently plotted, in PRN order — the keyboard's order too.</summary>
     private IReadOnlyList<SkyPlotSatellite> _plotted = [];
 
-    /// <summary>Where the arrow keys are, as an index into <see cref="_plotted"/>.</summary>
-    private int _cursor = -1;
+    /// <summary>
+    /// Which satellite the arrow keys are on, <b>by PRN</b>, or null before they have moved.
+    /// </summary>
+    /// <remarks>
+    /// A PRN and not an index into <see cref="_plotted"/>, which is rebuilt and re-sorted on every
+    /// reading. See <see cref="SkyPlotCursor"/> for what an index cost and what a PRN buys.
+    /// </remarks>
+    private int? _cursorPrn;
 
     /// <summary>Initialises a new sky plot.</summary>
     public SkyPlotControl()
@@ -204,20 +210,23 @@ public sealed class SkyPlotControl : Control
                 return;
 
             case VirtualKey.Home:
-                SetCursor(0);
+                SetCursor(PlottedPrns[0]);
                 e.Handled = true;
                 return;
 
             case VirtualKey.End:
-                SetCursor(_plotted.Count - 1);
+                SetCursor(PlottedPrns[^1]);
                 e.Handled = true;
                 return;
 
             case VirtualKey.Enter:
             case VirtualKey.Space:
-                if (_cursor >= 0 && _cursor < _plotted.Count)
+                // Only a satellite that is currently plotted can be selected. A cursor left on a
+                // PRN that has since dropped out selects nothing at all rather than whatever now
+                // occupies its old place, which is the whole point of keying on the PRN.
+                if (CursorSatellite is { } target)
                 {
-                    Invoke(_plotted[_cursor].Prn);
+                    Invoke(target.Prn);
                     e.Handled = true;
                 }
 
@@ -237,24 +246,26 @@ public sealed class SkyPlotControl : Control
     private static void OnSelectionChanged(DependencyObject sender, DependencyPropertyChangedEventArgs e) =>
         ((SkyPlotControl)sender).Rebuild();
 
-    private void MoveCursor(int delta)
-    {
-        int start = _cursor < 0 ? (delta > 0 ? -1 : 0) : _cursor;
-        int next = ((start + delta) % _plotted.Count + _plotted.Count) % _plotted.Count;
-        SetCursor(next);
-    }
+    /// <summary>The satellite the cursor is on, or null when its PRN is not currently plotted.</summary>
+    private SkyPlotSatellite? CursorSatellite =>
+        _cursorPrn is int prn ? _plotted.FirstOrDefault(satellite => satellite.Prn == prn) : null;
 
-    private void SetCursor(int index)
+    /// <summary>
+    /// §9.10.2's keyboard order, as <see cref="SkyPlotCursor"/> wants it.
+    /// </summary>
+    /// <remarks>
+    /// Projected on demand rather than cached beside <see cref="_plotted"/>. A dozen ints per key
+    /// press costs nothing, and a second field would be one more thing that has to be rebuilt in
+    /// step with the first — which is the class of mistake this whole change is repairing.
+    /// </remarks>
+    private IReadOnlyList<int> PlottedPrns => _plotted.Select(satellite => satellite.Prn).ToList();
+
+    private void MoveCursor(int delta) => SetCursor(SkyPlotCursor.Step(PlottedPrns, _cursorPrn, delta));
+
+    private void SetCursor(int? prn)
     {
-        _cursor = index;
+        _cursorPrn = prn;
         UpdateCursorRing();
-
-        // Announced as the cursor moves rather than only on Enter, so a screen-reader user hears
-        // what they are on before deciding to select it.
-        if (_cursor >= 0 && _cursor < _plotted.Count)
-        {
-            AutomationProperties.SetName(this, $"Sky plot. {_plotted[_cursor].Description}");
-        }
     }
 
     private void Invoke(int prn)
@@ -407,10 +418,10 @@ public sealed class SkyPlotControl : Control
             .OrderBy(satellite => satellite.Prn)
             .ToList();
 
-        if (_cursor >= _plotted.Count)
-        {
-            _cursor = _plotted.Count - 1;
-        }
+        // Nothing clamps or rewrites the cursor here, and that absence is the fix: this method runs
+        // on every reading, and any adjustment made from it moves the ring at a moment the user did
+        // not choose. _cursorPrn survives the rebuild untouched; UpdateCursorRing decides what can
+        // be drawn for it.
 
         foreach (SkyPlotSatellite satellite in _plotted)
         {
@@ -453,7 +464,7 @@ public sealed class SkyPlotControl : Control
             {
                 if (sender is Button clicked && clicked.Tag is int prn)
                 {
-                    _cursor = _plotted.ToList().FindIndex(candidate => candidate.Prn == prn);
+                    _cursorPrn = prn;
                     Invoke(prn);
                 }
             };
@@ -514,12 +525,15 @@ public sealed class SkyPlotControl : Control
             return;
         }
 
+        SkyPlotSatellite? satellite = CursorSatellite;
+        RenderCursorName(satellite);
+
         foreach (UIElement existing in _canvas.Children.Where(child => child is Ellipse { Tag: "cursor" }).ToList())
         {
             _canvas.Children.Remove(existing);
         }
 
-        if (FocusState == FocusState.Unfocused || _cursor < 0 || _cursor >= _plotted.Count)
+        if (FocusState == FocusState.Unfocused || satellite is null)
         {
             return;
         }
@@ -527,7 +541,6 @@ public sealed class SkyPlotControl : Control
         double side = _canvas.Width;
         double centre = side / 2;
         double radius = centre - Inset;
-        SkyPlotSatellite satellite = _plotted[_cursor];
 
         (double x, double y) = SkyPlotGeometry.Project(
             satellite.ElevationDegrees!.Value, satellite.AzimuthDegrees!.Value, radius);
@@ -548,6 +561,37 @@ public sealed class SkyPlotControl : Control
         Canvas.SetLeft(ring, centre + x - ringRadius);
         Canvas.SetTop(ring, centre + y - ringRadius);
         _canvas.Children.Add(ring);
+    }
+
+    /// <summary>Says where the cursor is, for a reader that cannot see the ring.</summary>
+    /// <remarks>
+    /// <para>
+    /// Set as the cursor moves rather than only on Enter, so a screen-reader user hears what they
+    /// are on before deciding to select it — and refreshed from every rebuild, so it cannot go on
+    /// describing a satellite that has since dropped out of the plot.
+    /// </para>
+    /// <para>
+    /// A cursor whose PRN is no longer plotted says so. Losing the satellite you were on is a thing
+    /// that happened, and the ring disappearing is not information a reader receives.
+    /// </para>
+    /// <para>
+    /// An unset cursor is left alone. The name it still carries is the hint the page put there —
+    /// "arrow keys move between satellites, Enter selects" — which is the right thing to hear
+    /// before the arrows have been pressed and cannot be reconstructed from here.
+    /// </para>
+    /// </remarks>
+    private void RenderCursorName(SkyPlotSatellite? satellite)
+    {
+        if (satellite is not null)
+        {
+            AutomationProperties.SetName(this, $"Sky plot. {satellite.Description}");
+            return;
+        }
+
+        if (_cursorPrn is int prn)
+        {
+            AutomationProperties.SetName(this, $"Sky plot. PRN {prn} is no longer shown.");
+        }
     }
 
     /// <summary>
