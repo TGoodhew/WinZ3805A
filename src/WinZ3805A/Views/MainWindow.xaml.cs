@@ -68,6 +68,9 @@ public sealed partial class MainWindow : Window
     /// <summary>The physical floor last applied, for the layout the page is currently showing.</summary>
     private SizeInt32 _minimum;
 
+    /// <summary>Recomputes the §10.3 floor when the display scaling under the window changes.</summary>
+    private readonly ScalingWatch _scaling;
+
     /// <summary>Creates the window over the application's services.</summary>
     /// <param name="services">
     /// The §12 composition root. Passed on to the page as the navigation parameter rather than
@@ -122,7 +125,17 @@ public sealed partial class MainWindow : Window
         _page = page;
         RootFrame.Content = page;
 
+        _scaling = new ScalingWatch(ApplyMinimumSize);
+
         RestorePlacement();
+
+        // The scaling is only knowable once there is a XamlRoot, which is after the content loads.
+        // Until then the floor above was computed against 1.0 — right on a 100% display, and three
+        // and a half times too small at the scaling A11Y-7 asks for.
+        if (Content is FrameworkElement root)
+        {
+            root.Loaded += (_, _) => _scaling.Watch(root.XamlRoot);
+        }
 
         AppWindow.Changed += OnAppWindowChanged;
         _saveAfterIdle.Tick += (_, _) =>
@@ -368,6 +381,14 @@ public sealed partial class MainWindow : Window
                 sender.Position.Y,
                 sender.Size.Width,
                 sender.Size.Height);
+        }
+
+        // A move is how the window reaches a display of a different size, and two displays can
+        // differ in resolution without differing in scaling, so the scaling watch does not cover
+        // this. Position only: recomputing on a size change would fight a resize drag.
+        if (args.DidPositionChange)
+        {
+            ApplyMinimumSize();
         }
 
         ScheduleSave();

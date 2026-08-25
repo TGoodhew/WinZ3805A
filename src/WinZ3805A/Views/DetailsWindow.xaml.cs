@@ -65,6 +65,9 @@ public sealed partial class DetailsWindow : Window
     private readonly bool _ready;
     private SizeInt32 _minimum;
 
+    /// <summary>Recomputes the §9.6.2 floor when the display scaling under the window changes.</summary>
+    private readonly ScalingWatch _scaling;
+
     /// <summary>
     /// The §9.7.1 pane index of the page currently showing, or -1 before the first navigation.
     /// </summary>
@@ -116,6 +119,8 @@ public sealed partial class DetailsWindow : Window
         // exactly what this replaced.
         ContentFrame.Navigated += (_, e) => RenderExportAvailability(e.Content);
 
+        _scaling = new ScalingWatch(ApplyMinimumSize);
+
         BuildNavigation();
         AddAccelerators();
         RestorePlacement();
@@ -124,7 +129,7 @@ public sealed partial class DetailsWindow : Window
         // and it changes when the window is dragged to a display at a different scaling.
         if (Content is FrameworkElement root)
         {
-            root.Loaded += (_, _) => ApplyMinimumSize();
+            root.Loaded += (_, _) => _scaling.Watch(root.XamlRoot);
         }
 
         _device.Session.StatusChanged += OnSessionStatusChanged;
@@ -651,9 +656,11 @@ public sealed partial class DetailsWindow : Window
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Called again whenever the window's scaling changes, which is what happens when it is dragged
-    /// between displays at different settings. A floor computed once at 100% would let the window
-    /// be resized below the Expanded breakpoint on the second display and stay there.
+    /// Called again whenever the window's scaling changes or it moves, which is what happens when it
+    /// is dragged between displays at different settings. A floor computed once at 100% would let
+    /// the window be resized below the Expanded breakpoint on the second display and stay there —
+    /// and, in the other direction, would strand a 350%-scaled floor on a display that cannot hold
+    /// it. Nothing used to call it a second time, although this comment has always said so (#27).
     /// </para>
     /// <para>
     /// The clamp is the last step, after the scaling has been applied: see
@@ -703,6 +710,14 @@ public sealed partial class DetailsWindow : Window
         {
             _restoredBounds = new WindowRect(
                 sender.Position.X, sender.Position.Y, sender.Size.Width, sender.Size.Height);
+        }
+
+        // A move is how the window reaches a display of a different size, and two displays can
+        // differ in resolution without differing in scaling, so the scaling watch does not cover
+        // this. Position only: recomputing on size change would fight a resize drag.
+        if (args.DidPositionChange)
+        {
+            ApplyMinimumSize();
         }
 
         _saveAfterIdle.Stop();
