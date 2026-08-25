@@ -22,9 +22,19 @@ public sealed partial class MainWindow : Window
     public const string PlacementKey = "window";
 
     /// <summary>The §10.3 floor: 380 x 240 standard, 380 x 120 in the compact layout.</summary>
-    private const int MinimumWidth = 380;
-    private const int MinimumStandardHeight = 240;
-    private const int MinimumCompactHeight = 120;
+    /// <remarks>
+    /// <b>Content sizes, in effective pixels</b>, converted to a physical window size by
+    /// <see cref="WindowSizing"/> — the reading #101 forced on the Details window's 1024 x 720,
+    /// applied here because the two figures are the same kind of figure. §10.3 builds its compact
+    /// wireframe out of a 32 px title bar and a 64 px medallion, which are effective pixels by
+    /// construction, while <c>OverlappedPresenter.PreferredMinimum*</c> is physical. Written
+    /// straight into the presenter the floor shrank with every step of display scaling — 380
+    /// physical is 109 effective at the 350% A11Y-7 requires — and no chrome was added, so even at
+    /// 100% the client area was about 364 px against the 380 the wireframe needs (#27).
+    /// </remarks>
+    private const int MinimumContentWidth = 380;
+    private const int MinimumStandardContentHeight = 240;
+    private const int MinimumCompactContentHeight = 120;
 
     private readonly IWindowPlacementStore _placements;
     private readonly IServiceProvider _services;
@@ -54,6 +64,9 @@ public sealed partial class MainWindow : Window
     /// rectangle, and storing that would leave the next launch with nowhere to un-maximise to.
     /// </remarks>
     private WindowRect? _restoredBounds;
+
+    /// <summary>The physical floor last applied, for the layout the page is currently showing.</summary>
+    private SizeInt32 _minimum;
 
     /// <summary>Creates the window over the application's services.</summary>
     /// <param name="services">
@@ -236,7 +249,8 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private int MinimumHeight => _page?.IsCompact == true ? MinimumCompactHeight : MinimumStandardHeight;
+    private int MinimumContentHeight =>
+        _page?.IsCompact == true ? MinimumCompactContentHeight : MinimumStandardContentHeight;
 
     /// <summary>
     /// Puts the window back where it was left, if that is still somewhere the user can see it.
@@ -263,8 +277,8 @@ public sealed partial class MainWindow : Window
         WindowPlacement? placement = WindowPlacementPolicy.Restore(
             stored,
             DisplayWorkAreas.Current(),
-            MinimumWidth,
-            MinimumHeight);
+            _minimum.Width,
+            _minimum.Height);
 
         if (placement is null)
         {
@@ -287,28 +301,50 @@ public sealed partial class MainWindow : Window
 
     /// <summary>Applies the §10.3 minimum size for the layout the page is currently showing.</summary>
     /// <remarks>
+    /// <para>
     /// <c>OverlappedPresenter</c> enforces the floor while the frame is being dragged, which is
     /// what §9.6.2 asks for and what the previous implementation — resizing back after the fact
     /// from inside the change handler — could not do without fighting the user's mouse.
+    /// </para>
+    /// <para>
+    /// The three steps are the Details window's, in the same order and for the same reasons: read
+    /// §10.3 as content, convert it to a window size at this window's scaling and chrome, then cap
+    /// it at the display so the floor can never exceed the screen it is enforced on.
+    /// </para>
     /// </remarks>
     private void ApplyMinimumSize()
     {
+        double scale = Content?.XamlRoot?.RasterizationScale ?? 1.0;
+
+        // AppWindow reports both, so the chrome is measured on the window it applies to rather than
+        // assumed from a border width that varies with theme, DPI and window style.
+        int chromeWidth = Math.Max(0, AppWindow.Size.Width - AppWindow.ClientSize.Width);
+        int chromeHeight = Math.Max(0, AppWindow.Size.Height - AppWindow.ClientSize.Height);
+
+        (int width, int height) = WindowSizing.PhysicalMinimum(
+            MinimumContentWidth, MinimumContentHeight, scale, chromeWidth, chromeHeight);
+
+        (width, height) = WindowSizing.ClampToWorkArea(
+            width, height, DisplayWorkAreas.ForWindow(AppWindow));
+
+        _minimum = new SizeInt32(width, height);
+
         if (Presenter is not OverlappedPresenter presenter)
         {
             return;
         }
 
-        presenter.PreferredMinimumWidth = MinimumWidth;
-        presenter.PreferredMinimumHeight = MinimumHeight;
+        presenter.PreferredMinimumWidth = width;
+        presenter.PreferredMinimumHeight = height;
 
         // Raising the floor does not grow a window that is already under it, which is the case
         // every time the user leaves compact mode.
-        int width = Math.Max(AppWindow.Size.Width, MinimumWidth);
-        int height = Math.Max(AppWindow.Size.Height, MinimumHeight);
+        int grownWidth = Math.Max(AppWindow.Size.Width, width);
+        int grownHeight = Math.Max(AppWindow.Size.Height, height);
 
-        if (width != AppWindow.Size.Width || height != AppWindow.Size.Height)
+        if (grownWidth != AppWindow.Size.Width || grownHeight != AppWindow.Size.Height)
         {
-            AppWindow.Resize(new SizeInt32(width, height));
+            AppWindow.Resize(new SizeInt32(grownWidth, grownHeight));
         }
     }
 
