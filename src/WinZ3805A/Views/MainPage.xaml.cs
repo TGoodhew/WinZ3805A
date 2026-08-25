@@ -84,8 +84,13 @@ public sealed partial class MainPage : Page
 
         _ready = true;
 
+        // §9.6.2's main row. The window enforces the floor; the page decides what fits inside it,
+        // and it has to re-decide on every resize because the two thresholds sit 232 px apart.
+        SizeChanged += (_, _) => ApplyLayoutState();
+
         Loaded += async (_, _) =>
         {
+            ApplyLayoutState();
             Render();
             await ConnectOnLaunchAsync();
         };
@@ -119,10 +124,49 @@ public sealed partial class MainPage : Page
             }
 
             _compact = value;
-            VisualStateManager.GoToState(this, value ? "CompactDensity" : "Normal", useTransitions: false);
+            ApplyLayoutState();
             CompactChanged?.Invoke(this, EventArgs.Empty);
         }
     }
+
+    /// <summary>
+    /// The height below which §9.6.2's main row applies, as <b>this page</b> measures it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Measured, not derived.</b> Swept at 8 px steps against the built layout: the footer's
+    /// Connect button has no height at all below 436 px of content, 4 px at 440, and first reaches
+    /// §9.6.3's fixed 32 px pointer floor — the one no mode may reduce — at 472. A button that is
+    /// present and 20 px tall is worse than one that is not present, because it is still a target.
+    /// </para>
+    /// <para>
+    /// <b>440, not §9.6.2's 472, and the difference is the title bar.</b> §9.6.2's figures are the
+    /// window's whole content area, which under <c>ExtendsContentIntoTitleBar</c> includes the
+    /// 32 px <c>TitleBar</c>; this page is in the row beneath it, so its <c>ActualHeight</c> is
+    /// always 32 less. Comparing §9.6.2's number against the page's own height directly would put
+    /// the switch a title bar too late — which it did, and the sweep found it.
+    /// </para>
+    /// </remarks>
+    private const double ShortLayoutHeight = 472 - 32;
+
+    /// <summary>Picks the one §10.3 layout that fits, and applies it.</summary>
+    /// <remarks>
+    /// <para>
+    /// One visual state group and therefore one decision, rather than a height group layered over
+    /// the density group. Two groups would set <c>Visibility</c> on the same four rows, and a
+    /// <c>VisualState</c> reverts its setters when it is left — so leaving the short state while
+    /// compact mode was on would restore the rows compact mode had collapsed. States within a group
+    /// are mutually exclusive, which removes the interaction rather than documenting it.
+    /// </para>
+    /// <para>
+    /// Compact wins, because the user asked for it (§10.3) and the height did not.
+    /// </para>
+    /// </remarks>
+    private void ApplyLayoutState() =>
+        VisualStateManager.GoToState(
+            this,
+            _compact ? "CompactDensity" : ActualHeight < ShortLayoutHeight ? "ShortLayout" : "Normal",
+            useTransitions: false);
 
     /// <summary>Raised when the user asks for the §10.4 Details window.</summary>
     /// <remarks>
