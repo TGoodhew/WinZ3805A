@@ -78,4 +78,122 @@ public sealed class WindowSizingTests
         Assert.Equal(DetailsWidth, width);
         Assert.Equal(DetailsHeight, height);
     }
+
+    /// <summary>A floor that fits stays exactly as it was computed.</summary>
+    [Fact]
+    public void AFloorInsideTheWorkAreaIsUntouched()
+    {
+        (int width, int height) = WindowSizing.ClampToWorkArea(1040, 728, Screen(3840, 2120));
+
+        Assert.Equal(1040, width);
+        Assert.Equal(728, height);
+    }
+
+    /// <remarks>
+    /// The defect this was written for. At 350% §9.6.2's content size needs 3600 px of window, and
+    /// enforcing that on a 1920-wide display opens the Details window wider than the screen with no
+    /// gesture that brings it back — the resize edges are past the right edge of the desktop.
+    /// </remarks>
+    [Theory]
+    [InlineData(2.0, 2048 + 16, 1920)]
+    [InlineData(3.5, 3584 + 16, 1920)]
+    public void AFloorWiderThanTheDisplayIsCappedAtIt(double scale, int unclamped, int expected)
+    {
+        (int width, _) = WindowSizing.PhysicalMinimum(DetailsWidth, DetailsHeight, scale, 16, 8);
+        Assert.Equal(unclamped, width);
+
+        (int clamped, _) = WindowSizing.ClampToWorkArea(width, 720, Screen(1920, 1032));
+
+        Assert.Equal(expected, clamped);
+    }
+
+    /// <summary>Each axis is capped on its own — the taskbar takes height, not width.</summary>
+    [Fact]
+    public void HeightIsCappedIndependentlyOfWidth()
+    {
+        (int width, int height) = WindowSizing.ClampToWorkArea(1600, 1200, Screen(1920, 1032));
+
+        Assert.Equal(1600, width);
+        Assert.Equal(1032, height);
+    }
+
+    /// <remarks>
+    /// The work area is at the display's own origin, which is negative for a display to the left of
+    /// the primary. Only the extent may cap the floor; a rectangle at (-1920, 0) constrains a window
+    /// exactly as much as the same rectangle at the origin.
+    /// </remarks>
+    [Fact]
+    public void OnlyTheExtentOfTheWorkAreaMatters()
+    {
+        WindowRect left = new(-1920, -120, 1920, 1032);
+
+        (int width, int height) = WindowSizing.ClampToWorkArea(3600, 2528, left);
+
+        Assert.Equal(1920, width);
+        Assert.Equal(1032, height);
+    }
+
+    /// <remarks>
+    /// <c>DisplayArea.GetFromWindowId</c> is documented to answer for any window, but it is a
+    /// nullable projection and the window may not be shown yet. Returning the computed floor
+    /// unclamped is the honest answer: it is the floor that was asked for, and the next move of the
+    /// window recomputes it against a display that does exist.
+    /// </remarks>
+    [Fact]
+    public void AnUnknownDisplayLeavesTheFloorAlone()
+    {
+        (int width, int height) = WindowSizing.ClampToWorkArea(3600, 2528, null);
+
+        Assert.Equal(3600, width);
+        Assert.Equal(2528, height);
+    }
+
+    /// <summary>A work area of no extent is not a constraint, it is a display that is not there.</summary>
+    [Theory]
+    [InlineData(0, 1032)]
+    [InlineData(1920, 0)]
+    [InlineData(-1, -1)]
+    public void AnEmptyWorkAreaLeavesTheFloorAlone(int areaWidth, int areaHeight)
+    {
+        (int width, int height) = WindowSizing.ClampToWorkArea(3600, 2528, Screen(areaWidth, areaHeight));
+
+        Assert.Equal(3600, width);
+        Assert.Equal(2528, height);
+    }
+
+    /// <remarks>
+    /// The two functions compose in one direction only. Clamping first and scaling afterwards would
+    /// multiply the display's own size by the scaling factor, which is how a floor ends up larger
+    /// than the screen by exactly the amount the clamp was supposed to remove.
+    /// </remarks>
+    [Fact]
+    public void TheClampIsTheLastStep()
+    {
+        (int width, int height) = WindowSizing.PhysicalMinimum(DetailsWidth, DetailsHeight, 3.5, 16, 8);
+        (width, height) = WindowSizing.ClampToWorkArea(width, height, Screen(1920, 1032));
+
+        Assert.Equal(1920, width);
+        Assert.Equal(1032, height);
+
+        // What the reversed order gives, for the record: 1920 x 1032 of display, multiplied.
+        (int reversedWidth, _) = WindowSizing.PhysicalMinimum(1920, 1032, 3.5, 16, 8);
+        Assert.True(reversedWidth > 1920);
+    }
+
+    /// <remarks>
+    /// §10.3's compact layout, at the scaling A11Y-7 requires, on the smallest display Windows 11
+    /// supports. 380 x 120 of content is 1330 x 420 of window there — the height fits, the width
+    /// does not, and the main window has to remain draggable either way.
+    /// </remarks>
+    [Fact]
+    public void TheCompactMainWindowIsAlsoCappedAtTheDisplay()
+    {
+        (int width, int height) = WindowSizing.PhysicalMinimum(380, 120, 3.5, 16, 8);
+        (width, height) = WindowSizing.ClampToWorkArea(width, height, Screen(1024, 720));
+
+        Assert.Equal(1024, width);
+        Assert.Equal(428, height);
+    }
+
+    private static WindowRect Screen(int width, int height) => new(0, 0, width, height);
 }

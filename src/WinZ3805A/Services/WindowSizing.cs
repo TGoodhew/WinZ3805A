@@ -62,4 +62,41 @@ public static class WindowSizing
             (int)Math.Ceiling(contentWidth * factor) + Math.Max(0, chromeWidth),
             (int)Math.Ceiling(contentHeight * factor) + Math.Max(0, chromeHeight));
     }
+
+    /// <summary>
+    /// Caps a window size at the display it is on, so a floor can never exceed the screen.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="PhysicalMinimum"/> multiplies a content requirement by the scaling factor, and
+    /// nothing in that arithmetic knows how big the display is. §9.6.2's 1024 x 720 needs 3600 x
+    /// 2528 physical pixels at 350%, and A11Y-7 requires the app to be usable there. Written
+    /// straight into <c>PreferredMinimumWidth</c> that floor is larger than any display it would
+    /// be read on, so the window opens bigger than the screen, the title bar is off the top or the
+    /// resize edges are off the sides, and there is no gesture that brings it back.
+    /// </para>
+    /// <para>
+    /// Capping gives up the breakpoint rather than the window. Above roughly 190% scaling on a
+    /// 1920-wide display the content falls below §9.6.1's 640 px Compact floor and
+    /// <c>NavigationView</c> shows the Minimal pane — a layout §9.6.1 does not describe, which is
+    /// the open half of #101. A pane behind a hamburger is a worse layout; a window that cannot be
+    /// moved is not a layout at all.
+    /// </para>
+    /// </remarks>
+    /// <param name="width">The wanted window width in physical pixels.</param>
+    /// <param name="height">The wanted window height in physical pixels.</param>
+    /// <param name="workArea">
+    /// The desktop area of the display the window is on, taskbar excluded, or
+    /// <see langword="null"/> when no display could be identified — in which case the wanted size
+    /// is returned untouched rather than guessed at.
+    /// </param>
+    public static (int Width, int Height) ClampToWorkArea(int width, int height, WindowRect? workArea)
+    {
+        if (workArea is not { IsEmpty: false } area)
+        {
+            return (width, height);
+        }
+
+        return (Math.Min(width, area.Width), Math.Min(height, area.Height));
+    }
 }

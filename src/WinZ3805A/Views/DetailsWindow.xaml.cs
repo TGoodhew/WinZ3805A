@@ -646,12 +646,20 @@ public sealed partial class DetailsWindow : Window
     }
 
     /// <summary>
-    /// Sets the floor from the §9.6.2 content size, this window's scaling, and its own chrome.
+    /// Sets the floor from the §9.6.2 content size, this window's scaling, its own chrome and the
+    /// display it is on.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Called again whenever the window's scaling changes, which is what happens when it is dragged
     /// between displays at different settings. A floor computed once at 100% would let the window
     /// be resized below the Expanded breakpoint on the second display and stay there.
+    /// </para>
+    /// <para>
+    /// The clamp is the last step, after the scaling has been applied: see
+    /// <see cref="WindowSizing.ClampToWorkArea"/> for why a floor larger than the screen is worse
+    /// than losing the breakpoint it was protecting.
+    /// </para>
     /// </remarks>
     private void ApplyMinimumSize()
     {
@@ -664,6 +672,9 @@ public sealed partial class DetailsWindow : Window
 
         (int width, int height) = WindowSizing.PhysicalMinimum(
             MinimumContentWidth, MinimumContentHeight, scale, chromeWidth, chromeHeight);
+
+        (width, height) = WindowSizing.ClampToWorkArea(
+            width, height, DisplayWorkAreas.ForWindow(AppWindow));
 
         _minimum = new SizeInt32(width, height);
 
