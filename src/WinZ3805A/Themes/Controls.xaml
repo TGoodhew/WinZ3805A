@@ -100,21 +100,29 @@
     <!-- into a scrolling one. §9.6.3 commits to a single density, so the container is -->
     <!-- trimmed to the row's own padding rather than the density being changed.       -->
     <!--                                                                              -->
-    <!-- MinHeight is 32, not 0. Trimming the padding is right; removing the floor was -->
-    <!-- not. With 0 these rows rendered 26-28 px - measured live at 632x26 on the     -->
-    <!-- Satellites page - under A11Y-5's 32 px pointer floor, on a row that is a      -->
-    <!-- selection target. It is a FLOOR and not a fixed height, so rows still grow    -->
-    <!-- with scaled text, which is what the 0 was protecting.                         -->
+    <!-- MinHeight is 40, not 0 and no longer 32. Trimming the padding is right;      -->
+    <!-- removing the floor was not. With 0 these rows rendered 26-28 px - measured    -->
+    <!-- live at 632x26 on the Satellites page - under A11Y-5's 32 px pointer floor,   -->
+    <!-- on a row that is a selection target. It is a FLOOR and not a fixed height, so -->
+    <!-- rows still grow with scaled text, which is what the 0 was protecting.         -->
     <!--                                                                              -->
     <!-- This one is load-bearing beyond its own criterion: §9.10.2 grants the sky     -->
     <!-- plot's 24 px markers the app's only recorded A11Y-5 exception on the grounds  -->
-    <!-- that the table rows are an alternate route and are "past 40 px". At 26 px     -->
-    <!-- they were not, so both the primary and the alternate target were under the    -->
-    <!-- floor and the exception rested on a false premise.                            -->
+    <!-- that the table rows are an alternate route and clear 40 px. At 26 px they     -->
+    <!-- were not, so both the primary and the alternate target were under the floor   -->
+    <!-- and the exception rested on a false premise. 32 restored the pointer floor    -->
+    <!-- and left the exception's own claim still untrue by 8 px.                      -->
+    <!--                                                                              -->
+    <!-- 40 is A11Y-5's TOUCH floor, and #186 records that this application has no     -->
+    <!-- touch-optimised mode for it to apply to. It is met here anyway, deliberately: -->
+    <!-- these three tables are the compliant alternate to a control that cannot meet  -->
+    <!-- either floor, so the argument in §9.10.2 should rest on the stronger number   -->
+    <!-- rather than on the weaker one it happens to need. It also costs nothing but   -->
+    <!-- height in a scrolling list.                                                   -->
     <!-- =========================================================================== -->
 
     <Style x:Key="WzDenseListItemStyle" TargetType="ListViewItem" BasedOn="{StaticResource DefaultListViewItemStyle}">
-        <Setter Property="MinHeight" Value="32" />
+        <Setter Property="MinHeight" Value="40" />
         <Setter Property="Padding" Value="{ThemeResource WzSpaceXxsThickness}" />
         <Setter Property="Margin" Value="0" />
         <Setter Property="HorizontalContentAlignment" Value="Stretch" />

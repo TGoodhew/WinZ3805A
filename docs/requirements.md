@@ -895,21 +895,79 @@ Page margin `WzSpaceXl` (24) at Medium and Wide, `WzSpaceMd` (16) at Compact.
 
 | Name | Width | NavigationView | Content grid | Behaviour |
 |---|---|---|---|---|
+| **Minimal** | < 640 | `Minimal` (hamburger; the pane opens as an overlay over the content) | 1 column | As Compact, except that the pane is not persistently visible and every destination is reached through the hamburger. Not reachable by dragging a window: it exists because §9.6.2's minimum is a *content* size and the work-area clamp may lower it below 640 at high display scaling. |
 | **Compact** | 640 – 1023 | `LeftCompact` (48 px icon rail, flyout on expand) | 1 column | Sky plot and satellite table stack vertically; the plot caps at 360 px. Inspectors become full-width `ContentDialog`. Table columns beyond PRN / El / Az / signal collapse into an expander per row. |
 | **Medium** | 1024 – 1439 | `Left` (pane 260 px, user-collapsible) | 2 columns | Default target. Sky plot beside table. |
 | **Wide** | ≥ 1440 | `Left` | 2 columns within 1320 max-width, centred | A third inspector column may appear on the Satellites page for per-satellite history; it is an addition, not a redistribution. |
 
-`NavigationView` is set to `Auto` display mode with these thresholds configured via `CompactModeThresholdWidth="640"` and `ExpandedModeThresholdWidth="1024"` — do not hand-roll breakpoint logic where the control already implements it.
+`NavigationView` is set to `Auto` display mode with these thresholds configured via `CompactModeThresholdWidth="640"` and `ExpandedModeThresholdWidth="1024"` — do not hand-roll breakpoint logic where the control already implements it. `Minimal` is what `Auto` selects below the compact threshold; the row above states what the app expects there rather than adding logic.
+
+> **⚠ The Minimal row was added after the fact, and A11Y-7 is why.** §9.6.1 previously began at 640
+> and §9.6.2 sets the Details minimum at 1024, so Compact was the narrowest state the document
+> described and — read as a window size — the narrowest reachable. Reading the minimum as *content*
+> (below) and capping it at the display work area both changed that: at 200 % scaling on a
+> 1920-wide display the Details window has 1920 physical pixels to spend and about 960 effective
+> pixels of content, and at 350 % about 548. A11Y-7 requires the application to be usable at 350 %,
+> so a state below 640 is not an edge case to be excluded — it is the state A11Y-7 is about. The
+> alternative considered and rejected was to floor the clamp at 640 effective pixels, which on a
+> 1920-wide display puts the enforced minimum back above the screen at the scaling this is for.
 
 #### 9.6.2 Minimum window sizes
 
-| Window | Minimum | Behaviour at minimum |
+**Every figure in this table is a size of _content_, in effective pixels** — the same units as
+§9.6.1's breakpoints, and *not* the units `OverlappedPresenter.PreferredMinimumWidth/Height` takes.
+See the amendment below the table before implementing one of them.
+
+| Window | Minimum (content) | Behaviour at minimum |
 |---|---|---|
-| Main | 380 × 240 | Medallion 96 px, one readout row, footer wraps to two lines |
-| Main, compact mode | 380 × 120 | Medallion 64 px, mode text and satellite count only; readout row and footer hidden |
+| Main | 380 × 240 | Medallion 160 px and the two mode lines. The readout row, the figures of merit, the clock line and the footer are **collapsed** — not clipped, not scrolled: they are removed from the layout, so nothing is focusable or hit-testable off-screen (A11Y-1, A11Y-6). |
+| Main, compact mode | 380 × 144 | Medallion 64 px, mode text and satellite count only; readout row and footer hidden |
 | Receiver Details | **1024 × 720** | Medium breakpoint; `NavigationView` in `Left` mode; no horizontal scrolling |
 
 > **⚠ Amends §10.2.** The Details window minimum was previously specified as 1000 × 700. That sits 24 px below the `Left`-mode threshold, so the window would open in `LeftCompact` at its own minimum size — the pane would be an icon rail at the exact width the layout was designed around. Raised to **1024 × 720** so the default state is the Medium breakpoint. Enforced via `AppWindow` `OverlappedPresenter.PreferredMinimumWidth/Height`.
+
+> **⚠ Amends this section: the figures are content sizes, and the mechanism is not the unit.**
+> Every number here was previously ambiguous between a window size and a content size, and the
+> sentence naming `PreferredMinimumWidth/Height` settled it the wrong way — that property is a
+> **window** size in **physical** pixels, while §9.6.1's thresholds, which the same numbers are
+> chosen against, are **content** sizes in **effective** pixels. The two coincide only at 100 %
+> scaling on a window with no chrome, and neither condition ever holds.
+>
+> Read literally the table contradicted itself. A 1024 px *window* has a 1008 px client area, so
+> the Details window opened in `LeftCompact` at its own minimum — the exact failure the amendment
+> above raised the number to prevent, in its own words. And at 150 % a 1024 physical window carries
+> 683 effective pixels of content, at 350 % just 293, so the `Left` mode this table promises could
+> not be reached at any scaling above 100 %. The main window was worse: 380 physical is 253
+> effective at 150 % and 109 at 350 %, so its floor shrank with every step of the user's scaling
+> setting — and at 100 % its client area was about 364 px against the 380 §10.3's wireframe is
+> drawn from.
+>
+> **The implementation therefore converts.** A figure in this table is multiplied by the window's
+> `RasterizationScale` and has the window's measured non-client chrome added, and the result is what
+> `PreferredMinimumWidth/Height` receives. The conversion is recomputed whenever the scaling under
+> the window changes or the window moves to another display. `PreferredMinimumWidth/Height` remains
+> the mechanism; it is not the unit.
+>
+> **The converted floor is then capped at the work area of the display the window is on.** At 350 %
+> the Details minimum needs 3600 × 2528 physical pixels, which is larger than any display it would
+> be read on: the window opens wider than the screen, its resize edges are past the desktop, and no
+> gesture brings it back. Capping gives up the breakpoint rather than the window, and it is why
+> §9.6.1 now describes a state below 640.
+>
+> **Compact mode is 144, not 120.** Under the content reading its own contents no longer fit: a
+> 32 px title bar inside the client area, `WzSpaceXl` (24) of page margin, §9.10.2's 64 px medallion
+> and 24 more of margin come to 144. Nothing may be dropped to reach 120 — the compact layout is
+> already down to a medallion and one line of text, §9.6.3 forbids reducing the margin as a density
+> change, and §9.10.2 sets the medallion at 64. The figure was raised rather than the layout cut.
+>
+> **The main window's row was rewritten to describe what the window does.** It previously read
+> "medallion 96 px, one readout row, footer wraps to two lines", none of which was ever built:
+> §10.3's own wireframe draws the medallion at 160, no size-driven state existed, and the footer is
+> `NoWrap`. Measured on the built layout, the footer's Connect button does not reach §9.6.3's 32 px
+> pointer floor until **472** effective pixels of content height — nearly twice this table's figure
+> — so at 240 the readout row and footer were simply clipped out of sight while remaining in the
+> visual tree. That is an A11Y-1 and A11Y-6 defect rather than a layout: a focusable button the user
+> cannot see or reach. The rows are now collapsed at that threshold and the table says so.
 
 #### 9.6.3 Density
 
@@ -1153,7 +1211,20 @@ What is required instead:
 - **The keyboard model reaches every satellite regardless of size.** The plot is one tab stop, arrow keys move a ring
   through markers in PRN order, Enter selects. No pointer precision is involved.
 - **The tracked/not-tracked tables are the compliant path**, and A11Y-11 is their acceptance criterion. Their rows are
-  full-width and past 40 px, they carry the same data, and selection is shared both ways.
+  full-width and **at least 40 px**, they carry the same data, and selection is shared both ways.
+
+> **⚠ This bullet was false when it was written, and the number is now enforced rather than asserted.**
+> `WzDenseListItemStyle` set `ListViewItem.MinHeight` to 0 to escape the stock 40, and the rows
+> measured **26–28 px** — under A11Y-5's 32 px *pointer* floor, on a row that is itself a selection
+> target. The sky plot's exception therefore rested on an alternate that was no more compliant than
+> the thing it was excusing. The floor was restored to 32 on 24 Aug 2026 (#25), which fixed A11Y-5
+> for the tables but left this sentence untrue by 8 px, and to **40** with this amendment.
+>
+> 40 is A11Y-5's *touch* floor, and #186 records that the application has no touch-optimised mode
+> for it to apply to. It is met here deliberately: these tables are the compliant alternate to a
+> control that can meet neither floor, so the argument above should rest on the stronger number
+> rather than on the weaker one it happens to need. `MinHeight` is a floor and not a fixed height,
+> so rows still grow with scaled text (A11Y-6).
 
 The Accessibility Insights target-size check **will flag these markers**. This paragraph is the answer to that flag,
 not a claim that it is wrong to raise it. If the deviation is ever judged unacceptable, the fix is not a bigger marker
@@ -1258,7 +1329,7 @@ Two behavioural principles remain here because they are functional rather than v
 
 | Window | Type | Min size | Notes |
 |---|---|---|---|
-| Main | `Window`, resizable | 380×240 (compact mode 380×120) | Status medallion. Optional always-on-top. |
+| Main | `Window`, resizable | 380×240 (compact mode 380×144) | Content sizes, per §9.6.2. Status medallion. Optional always-on-top. |
 | Receiver Details | `Window` | **1024×720** | `NavigationView` `Left`, per §9.6.1–9.6.2 |
 | Connection | `ContentDialog` on Main | — | Port, baud, auto-detect |
 | Position & Survey | Page in Details | — | |
@@ -1314,7 +1385,7 @@ Two behavioural principles remain here because they are functional rather than v
 └────────────────────────────────────────────────┘
 ```
 
-**Compact mode — 380 × 120**
+**Compact mode — 380 × 144**
 
 ```
 ┌────────────────────────────────────────────────┐

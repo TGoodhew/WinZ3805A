@@ -34,7 +34,7 @@ public sealed partial class MainWindow : Window
     /// </remarks>
     private const int MinimumContentWidth = 380;
     private const int MinimumStandardContentHeight = 240;
-    private const int MinimumCompactContentHeight = 120;
+    private const int MinimumCompactContentHeight = 144;
 
     private readonly IWindowPlacementStore _placements;
     private readonly IServiceProvider _services;

@@ -96,8 +96,10 @@ public sealed class SkyPlotControl : Control
     /// selects the wrong one. 24 px roughly doubles the usable area without reaching a neighbour
     /// under 6 degrees away. The compliant paths to every satellite are the keyboard model and the
     /// list alternate on the same card, which is what §9.10.2 requires the alternate view for — its
-    /// rows are full-width and meet A11Y-5 without qualification. Recorded as #117 rather than left
-    /// as an oversight.
+    /// rows are full-width and clear <b>both</b> of A11Y-5's floors, the 40 px touch one included,
+    /// which is what makes them an alternate rather than a second exception. That was not true when
+    /// this comment was first written: the rows measured 26 px (#25). Recorded as #117 rather than
+    /// left as an oversight.
     /// </para>
     /// </remarks>
     private const double MarkerHitSize = 24;

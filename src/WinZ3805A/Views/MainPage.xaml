@@ -18,7 +18,9 @@
         Every colour, size, radius and gap is a §9 token. Severity is never carried by colour alone:
         each one goes through SeverityPill, which adds shape and text (§9.13 item 10).
     -->
-    <Grid Padding="{StaticResource WzPageMarginThickness}" RowSpacing="{StaticResource WzSpaceXl}">
+    <Grid x:Name="RootGrid"
+          Padding="{StaticResource WzPageMarginThickness}"
+          RowSpacing="{StaticResource WzSpaceXl}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -263,6 +265,31 @@
             <VisualStateGroup x:Name="DensityStates">
                 <VisualState x:Name="Normal" />
                 <!--
+                    §9.6.2's main row: at the 380 x 240 minimum the window shows the medallion and
+                    the two mode lines, and everything below them is collapsed.
+
+                    Collapsed, not clipped. Before this state existed the rows stayed in the tree
+                    and were pushed off the bottom edge, so the Connect and Details buttons were
+                    focusable, hit-testable and invisible - an A11Y-1 and A11Y-6 defect rather than
+                    a small window. Measured on the built layout, the footer's Connect button does
+                    not reach §9.6.3's 32 px pointer floor until 472 effective pixels of content
+                    height, which is where MainPage switches.
+
+                    RowSpacing goes with them. A Grid still spaces its row definitions apart when
+                    the children in them are collapsed, so leaving it at WzSpaceXl would keep 96 px
+                    of gaps for four rows that are no longer there - and that is 96 px out of the
+                    240 the medallion has to fit into.
+                -->
+                <VisualState x:Name="ShortLayout">
+                    <VisualState.Setters>
+                        <Setter Target="RootGrid.RowSpacing" Value="0" />
+                        <Setter Target="ReadoutRow.Visibility" Value="Collapsed" />
+                        <Setter Target="MeritRow.Visibility" Value="Collapsed" />
+                        <Setter Target="ClockRow.Visibility" Value="Collapsed" />
+                        <Setter Target="FooterRow.Visibility" Value="Collapsed" />
+                    </VisualState.Setters>
+                </VisualState>
+                <!--
                     §9.6.2: "Medallion 64 px, mode text and satellite count only; readout row and
                     footer hidden." All four rows go, and the count comes back as text beside the
                     mode. Nothing here changes a type size, a target size or a focus visual -
@@ -270,6 +297,7 @@
                 -->
                 <VisualState x:Name="CompactDensity">
                     <VisualState.Setters>
+                        <Setter Target="RootGrid.RowSpacing" Value="0" />
                         <Setter Target="Medallion.Size" Value="Compact" />
                         <Setter Target="ReadoutRow.Visibility" Value="Collapsed" />
                         <Setter Target="MeritRow.Visibility" Value="Collapsed" />
