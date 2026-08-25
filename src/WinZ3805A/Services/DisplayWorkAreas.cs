@@ -37,4 +37,30 @@ public static class DisplayWorkAreas
 
         return areas;
     }
+
+    /// <summary>
+    /// The work area of the display <paramref name="window"/> is on, or <see langword="null"/> if
+    /// no display could be identified.
+    /// </summary>
+    /// <remarks>
+    /// A single display rather than the whole set, because the caller — <see cref="WindowSizing
+    /// .ClampToWorkArea"/> — is asking how large this window is allowed to be, and that is a
+    /// property of the screen it is on. <c>DisplayAreaFallback.Nearest</c> answers even for a
+    /// window whose rectangle has been dragged wholly off the desktop, which is precisely the
+    /// state the clamp exists to make unreachable.
+    /// </remarks>
+    public static WindowRect? ForWindow(AppWindow window)
+    {
+        ArgumentNullException.ThrowIfNull(window);
+
+        DisplayArea? display = DisplayArea.GetFromWindowId(window.Id, DisplayAreaFallback.Nearest);
+
+        if (display is null)
+        {
+            return null;
+        }
+
+        RectInt32 work = display.WorkArea;
+        return new WindowRect(work.X, work.Y, work.Width, work.Height);
+    }
 }
