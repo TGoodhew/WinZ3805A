@@ -1211,7 +1211,20 @@ What is required instead:
 - **The keyboard model reaches every satellite regardless of size.** The plot is one tab stop, arrow keys move a ring
   through markers in PRN order, Enter selects. No pointer precision is involved.
 - **The tracked/not-tracked tables are the compliant path**, and A11Y-11 is their acceptance criterion. Their rows are
-  full-width and past 40 px, they carry the same data, and selection is shared both ways.
+  full-width and **at least 40 px**, they carry the same data, and selection is shared both ways.
+
+> **⚠ This bullet was false when it was written, and the number is now enforced rather than asserted.**
+> `WzDenseListItemStyle` set `ListViewItem.MinHeight` to 0 to escape the stock 40, and the rows
+> measured **26–28 px** — under A11Y-5's 32 px *pointer* floor, on a row that is itself a selection
+> target. The sky plot's exception therefore rested on an alternate that was no more compliant than
+> the thing it was excusing. The floor was restored to 32 on 24 Aug 2026 (#25), which fixed A11Y-5
+> for the tables but left this sentence untrue by 8 px, and to **40** with this amendment.
+>
+> 40 is A11Y-5's *touch* floor, and #186 records that the application has no touch-optimised mode
+> for it to apply to. It is met here deliberately: these tables are the compliant alternate to a
+> control that can meet neither floor, so the argument above should rest on the stronger number
+> rather than on the weaker one it happens to need. `MinHeight` is a floor and not a fixed height,
+> so rows still grow with scaled text (A11Y-6).
 
 The Accessibility Insights target-size check **will flag these markers**. This paragraph is the answer to that flag,
 not a claim that it is wrong to raise it. If the deviation is ever judged unacceptable, the fix is not a bigger marker
