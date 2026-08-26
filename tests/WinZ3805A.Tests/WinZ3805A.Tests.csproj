@@ -202,6 +202,12 @@
              Link="Services\CommandTranscript.cs" />
     <Compile Include="..\..\src\WinZ3805A\Services\LockWatch.cs"
              Link="Services\LockWatch.cs" />
+
+    <!-- #12's survey trail. A survey runs for two hours and is polled every second, so what to
+         write down is a policy rather than a formatting choice, and it is one that can be replayed
+         in a millisecond instead of waited out. -->
+    <Compile Include="..\..\src\WinZ3805A\Services\SurveyWatch.cs"
+             Link="Services\SurveyWatch.cs" />
     <Compile Include="..\..\src\WinZ3805A\Services\AdvancedPreferences.cs"
              Link="Services\AdvancedPreferences.cs" />
     <Compile Include="..\..\src\WinZ3805A\ViewModels\AdvancedConsole.cs"
