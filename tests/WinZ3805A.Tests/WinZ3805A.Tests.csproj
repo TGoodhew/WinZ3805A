@@ -32,6 +32,13 @@
          lets the guard and the ramp be tested headlessly without restating a single colour. -->
     <EmbeddedResource Include="..\..\src\WinZ3805A\Themes\Colors.xaml"
                       LogicalName="WinZ3805A.Themes.Colors.xaml" />
+
+    <!-- The control styles, for the same reason and by the same route: a rule about what every
+         control declares is only worth having if it is checked against the file the application
+         actually loads. #22 is why - Control.IsTabStop defaults to True, five controls said
+         otherwise and the sixth did not, and Tab landed in a hole nobody could see. -->
+    <EmbeddedResource Include="..\..\src\WinZ3805A\Themes\Generic.xaml"
+                      LogicalName="WinZ3805A.Themes.Generic.xaml" />
   </ItemGroup>
 
   <ItemGroup>
