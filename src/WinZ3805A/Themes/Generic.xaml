@@ -511,6 +511,20 @@
     <!-- =========================================================================== -->
 
     <Style TargetType="controls:TrendChart">
+        <!--
+            Not a tab stop, like every other non-interactive control in this file (A11Y-1, A11Y-2,
+            #22). Control.IsTabStop defaults to True, so a custom control is in the tab order unless
+            it says otherwise, and this was the one that never did: Tab landed on both charts on the
+            Timing page and nothing was drawn, because there is no focus visual and nothing to give
+            focus to. A stop that neither responds nor indicates is a hole a keyboard user falls
+            into - focus vanishes, and the next Tab moves on.
+
+            The alternative, a focus visual, would be decoration on a control with no keyboard model.
+            SkyPlotControl is a tab stop because its arrow keys do something; this draws a picture.
+            Nothing is lost: the range selector beside it is focusable, the CSV export button is, and
+            AutomationProperties.Name still reaches a screen reader, which does not navigate by Tab.
+        -->
+        <Setter Property="IsTabStop" Value="False" />
         <Setter Property="MinHeight" Value="120" />
         <Setter Property="HorizontalAlignment" Value="Stretch" />
         <Setter Property="Template">
