@@ -502,12 +502,43 @@ public sealed class DeviceSessionService : IAsyncDisposable
     /// <see cref="TimeProvider"/> rather than <c>Task.Delay</c> so a test can step a 30 s cap
     /// instantly instead of waiting for it.
     /// </remarks>
+    /// <remarks>
+    /// <para>
+    /// <b>Every attempt is logged at Information, and that is deliberate</b> (#14). P0-14's only
+    /// verification is a person unplugging the adapter once and watching what happens, and its
+    /// acceptance is a pair of durations — Disconnected within 10 s, reconnected within 30 s of
+    /// replug. Those are measurable from the log, which timestamps to the millisecond, but only if
+    /// the log says what happened between the two status lines.
+    /// </para>
+    /// <para>
+    /// It used to say nothing. The failure path that <i>throws</i> was logged at Debug, below the
+    /// level the application ships at; the failure path that simply returns <see langword="false"/>
+    /// — the adapter is back but the receiver is not answering yet, which is the ordinary case
+    /// after a power cycle — was not logged at all. A recovery that took forty-five seconds left
+    /// forty-five seconds of silence, with no way to tell one slow attempt from fifteen fast ones.
+    /// </para>
+    /// <para>
+    /// This is not chatter: the session has already announced <c>Reconnecting</c> before the loop
+    /// starts, every line here is news within an abnormal state, and they stop when it connects.
+    /// The backoff is named in each line, so the log also demonstrates §7.2's 2 / 4 / 8 / 30 second
+    /// schedule rather than merely obeying it.
+    /// </para>
+    /// </remarks>
     private async Task ReconnectLoopAsync()
     {
         TimeSpan backoff = FirstBackoff;
+        int attempt = 0;
 
         while (StayConnected && !_disposed && Status == ConnectionStatus.Reconnecting)
         {
+            attempt++;
+
+            // Computed before the attempt so a failure can say what happens next, rather than the
+            // reader having to hold §7.2's schedule in their head while reading a log at a bench.
+            TimeSpan next = backoff < MaximumBackoff
+                ? TimeSpan.FromTicks(Math.Min(backoff.Ticks * 2, MaximumBackoff.Ticks))
+                : MaximumBackoff;
+
             try
             {
                 await Task.Delay(backoff, _timeProvider, CancellationToken.None).ConfigureAwait(false);
@@ -525,6 +556,14 @@ public sealed class DeviceSessionService : IAsyncDisposable
                     {
                         return;
                     }
+
+                    // No exception, no connection: the port opened or did not, and the receiver did
+                    // not answer. Silent before #14, and the commonest shape after a power cycle.
+                    _logger.LogInformation(
+                        "Reconnect attempt {Attempt} to {Port} did not answer; next try in {Backoff}.",
+                        attempt,
+                        PortName,
+                        next);
                 }
                 finally
                 {
@@ -533,12 +572,15 @@ public sealed class DeviceSessionService : IAsyncDisposable
             }
             catch (Exception exception) when (TransportFaults.IsTransportFault(exception))
             {
-                _logger.LogDebug(exception, "Reconnect attempt to {Port} failed.", PortName);
+                _logger.LogInformation(
+                    exception,
+                    "Reconnect attempt {Attempt} to {Port} failed; next try in {Backoff}.",
+                    attempt,
+                    PortName,
+                    next);
             }
 
-            backoff = backoff < MaximumBackoff
-                ? TimeSpan.FromTicks(Math.Min(backoff.Ticks * 2, MaximumBackoff.Ticks))
-                : MaximumBackoff;
+            backoff = next;
         }
     }
 
