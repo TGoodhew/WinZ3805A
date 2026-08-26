@@ -142,6 +142,13 @@
          known slope, a known daily cycle and a known settling period are the only way to tell. -->
     <Compile Include="..\..\src\WinZ3805A\ViewModels\EfcDrift.cs"
              Link="ViewModels\EfcDrift.cs" />
+
+    <!-- #182's sentences. The fit was always testable and the sentences reporting it were not, so
+         a card whose arithmetic agreed with an independent fit to five decimal places printed
+         "0.00 %" for two numbers that were not zero. Wording that states a measurement is a
+         measurement. -->
+    <Compile Include="..\..\src\WinZ3805A\ViewModels\DriftAdvisory.cs"
+             Link="ViewModels\DriftAdvisory.cs" />
     <Compile Include="..\..\src\WinZ3805A\ViewModels\Staleness.cs"
              Link="ViewModels\Staleness.cs" />
     <Compile Include="..\..\src\WinZ3805A\ViewModels\DisplayTime.cs"

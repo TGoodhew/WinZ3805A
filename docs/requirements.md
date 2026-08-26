@@ -866,7 +866,7 @@ This is the part that separates a careful instrument app from a sloppy one, and 
 3. **Units are typeset, not concatenated.** The unit is a separate `Run` in `WzCaptionTextStyle` / `WzTextSecondaryBrush`, separated by a hair space (`\u200A`), never bolded, never part of the numeric string. `−33.1` is `WzReadoutMedium`; ` ns` is caption-secondary.
 4. **Minus sign, not hyphen.** Use U+2212 MINUS SIGN in readouts. A hyphen is optically too short and sits too high next to lining figures. Format with a custom `NumberFormatInfo` where `NegativeSign = "\u2212"`. Raw SCPI text in `WzMonoTextStyle` is exempt — it is reproduced verbatim.
 5. **Right-align numeric table columns**, left-align text columns, and align on the decimal separator where fractional digits vary.
-6. **Fixed decimal places per quantity**, never variable: TI 1 dp, EFC 1 dp, holdover uncertainty 1 dp, C/N integer, percentages 1 dp. A column that changes its precision row to row is unreadable.
+6. **Fixed decimal places per quantity**, never variable: TI 1 dp, EFC 1 dp, holdover uncertainty 1 dp, C/N integer, percentages 1 dp, **EFC drift rate, scatter and diurnal amplitude 1 dp in ppm of control range** (§10.7.1). A column that changes its precision row to row is unreadable. Where a figure is too small to survive its quantity's precision, **change the unit, not the number of decimals** — the rule is about a reader comparing two lines, and it does not stop applying because a surface is prose. Chart axis labels take the precision their step requires, fixed per chart and not varying with the selected range (§9.10.2).
 7. **Coordinates in Cascadia Mono**, DMS with fixed field widths, so latitude and longitude align vertically.
 
 **Prose line length** is capped at **72 characters** (`MaxWidth` ≈ 640 px at `WzBodyTextStyle`). Applies to descriptions, confirmation dialog bodies, empty states, and error text.
@@ -1642,13 +1642,33 @@ decimated per §9.10.2 (minimum and maximum per pixel column, never a sample).
 > differs between quantities.
 
 **The drift advisory reports what the fit can support and refuses what it cannot.** It states the
-secular slope in %/day, the sample count, the span actually fitted, the residual, and a projection to
-±100 % as both a count of days and a date — and it withholds the projection where the window cannot
-support one. A slope without a sense of scatter is a number pretending to be a measurement.
+secular slope in **ppm of control range per day**, the sample count, the span actually fitted, the
+residual, and a projection to ±100 % as both a count of days and a date — and it withholds the
+projection where the window cannot support one. A slope without a sense of scatter is a number
+pretending to be a measurement.
+
+**The fit's own figures are counted in ppm of control range, the projection in per cent.** One per
+cent of range is 10 000 ppm; EFC is already a percentage *of* that range, so ppm here needs no second
+reference. The rails are at ±100 % and stay there — a projection is about reaching them, and saying
+so in ppm would be arithmetic for its own sake.
 
 - **Diurnal swing is reported separately from secular drift**, and only where the window is long
   enough to tell them apart. Below a day of data the fit drops to a plain line and says so, rather
   than reporting a daily amplitude of zero — which would be a measurement.
+
+> **⚠ Amends this section and §9.11 item 6** (#182). The advisory reported its figures as
+> percentages, and on a good oscillator every one of them rounded away. Measured on the 22–24 Aug
+> 2026 capture: a secular drift of **−0.00086 %/day**, a diurnal amplitude of **0.00034 %** and a
+> residual rms of **0.00324 %** printed as `−0.001 %/day`, `±0.00 %` and `0.00 %`. The arithmetic
+> was right — it agreed with an independent fit over the same basis to five decimal places — so the
+> card was committing precisely the failure the bullet above forbids, and doing it past a day of
+> data rather than below one. A double-oven oscillator holding 0.05 % of range across two days is
+> the *good* case, and the card could not say so.
+>
+> **The unit changed rather than the precision**, because §9.11 item 6's reason — a reader cannot
+> compare two lines whose precision differs — does not stop being true for a card. The same three
+> figures counted in ppm of range are **−8.6 ppm/day**, **±3.4 ppm** and **32.4 ppm**, all readable
+> at the one decimal place item 6 already required.
 - **There is no internal temperature query on this receiver.** The daily component is inferred from
   EFC's own periodicity, and the interface must say so: a user who reads "diurnal" will otherwise
   assume something measured it.
