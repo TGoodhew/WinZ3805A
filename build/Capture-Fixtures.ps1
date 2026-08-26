@@ -45,6 +45,16 @@
     Seconds between screens once connected. Default 3. The screen is about 1,900 bytes, which
     is roughly two seconds of wire time at 9600 baud, so much below 3 buys nothing.
 
+.PARAMETER SelfTest
+    Exercises the framing, signature and file-naming logic against the delivered fixture and
+    exits, without opening a serial port. Run this BEFORE the day: the states this harness
+    exists to catch happen once, while the hardware is being moved, and a parsing bug found
+    afterwards cannot be retried without moving it again.
+
+.EXAMPLE
+    pwsh build/Capture-Fixtures.ps1 -SelfTest
+    # Checks the half that does not need hardware. Run it before the move.
+
 .EXAMPLE
     pwsh build/Capture-Fixtures.ps1
     # Start it, move the hardware, press Ctrl+C when the receiver is settled again.
@@ -54,7 +64,8 @@ param(
     [string] $Port = 'COM3',
     [string] $OutputDirectory,
     [int]    $BaudRate = 9600,
-    [int]    $IntervalSeconds = 3
+    [int]    $IntervalSeconds = 3,
+    [switch] $SelfTest
 )
 
 Set-StrictMode -Version Latest
@@ -253,6 +264,173 @@ function Get-Slug {
     if ($Facts.Health -and $Facts.Health -ne 'OK') { $slug = $slug + '-health-fail' }
 
     return $slug
+}
+
+# ---------------------------------------------------------------------------
+# Self-test. Everything above this line is pure, and tomorrow is a one-shot.
+# ---------------------------------------------------------------------------
+
+if ($SelfTest) {
+    # The watch loop wants 'Continue' - losing the receiver mid-move is normal there. A check
+    # does not: the first version of this block threw four PropertyNotFoundExceptions and then
+    # printed "All checks passed", because the exceptions never reached the failure counter.
+    # A pre-flight that can go green while erroring is worse than no pre-flight at all.
+    $ErrorActionPreference = 'Stop'
+    trap {
+        Write-Host ("FAIL  unhandled: {0}" -f $_.Exception.Message) -ForegroundColor Red
+        exit 1
+    }
+
+    $fixture = Join-Path (Split-Path -Parent $PSScriptRoot) 'tests\WinZ3805A.Tests\Fixtures\locked-stabilizing.txt'
+
+    Write-Host ''
+    Write-Host 'Capture-Fixtures self-test - no serial port is opened.' -ForegroundColor Cyan
+    Write-Host ("  fixture   {0}" -f $fixture)
+    Write-Host ''
+
+    if (-not (Test-Path $fixture)) {
+        Write-Host "FAIL  the delivered fixture is missing; there is nothing to test against." -ForegroundColor Red
+        exit 1
+    }
+
+    $screen = [System.IO.File]::ReadAllBytes($fixture)
+    $failures = 0
+
+    function Assert-True {
+        param([string] $What, [bool] $Condition, [string] $Detail = '')
+
+        if ($Condition) {
+            Write-Host ("  ok    {0}" -f $What) -ForegroundColor DarkGray
+        }
+        else {
+            Write-Host ("  FAIL  {0}{1}" -f $What, $(if ($Detail) { " - $Detail" } else { '' })) -ForegroundColor Red
+            $script:failures++
+        }
+    }
+
+    function Join-Bytes {
+        param([byte[]] $A, [byte[]] $B, [byte[]] $C)
+
+        $out = New-Object byte[] ($A.Length + $B.Length + $C.Length)
+        [Array]::Copy($A, 0, $out, 0, $A.Length)
+        [Array]::Copy($B, 0, $out, $A.Length, $B.Length)
+        [Array]::Copy($C, 0, $out, $A.Length + $B.Length, $C.Length)
+        return , $out
+    }
+
+    $ascii = [System.Text.Encoding]::ASCII
+    $prompt = $ascii.GetBytes('scpi > ')
+
+    # -----------------------------------------------------------------------
+    # 1. The framing comes off and the bytes are unchanged. This is the whole
+    #    contract: Fixtures/README.md says the exact bytes are the point,
+    #    because the parser derives satellite columns from token positions.
+    # -----------------------------------------------------------------------
+
+    Write-Host 'Framing' -ForegroundColor White
+
+    $noEcho = Join-Bytes @() $screen $prompt
+    $stripped = Remove-Framing -Raw $noEcho -Command ':SYST:STAT?'
+    Assert-True 'a screen with no echo survives byte for byte' `
+        ([System.Linq.Enumerable]::SequenceEqual([byte[]]$stripped, [byte[]]$screen)) `
+        ("got {0} bytes, expected {1}" -f $stripped.Length, $screen.Length)
+
+    # #78: the bench unit does not echo, but the guide says FDUPlex ON is the
+    # default, so both shapes have to work and neither may be assumed.
+    $withEcho = Join-Bytes ($ascii.GetBytes(":SYST:STAT?`r`n")) $screen $prompt
+    $stripped = Remove-Framing -Raw $withEcho -Command ':SYST:STAT?'
+    Assert-True 'an echoed command is removed and the screen survives byte for byte' `
+        ([System.Linq.Enumerable]::SequenceEqual([byte[]]$stripped, [byte[]]$screen)) `
+        ("got {0} bytes, expected {1}" -f $stripped.Length, $screen.Length)
+
+    $stripped = Remove-Framing -Raw ([byte[]]@()) -Command ':SYST:STAT?'
+    Assert-True 'an empty read yields an empty screen rather than throwing' ($stripped.Length -eq 0)
+
+    $stripped = Remove-Framing -Raw ($ascii.GetBytes('scpi > ')) -Command ':SYST:STAT?'
+    Assert-True 'a prompt with no screen behind it yields nothing' ($stripped.Length -eq 0)
+
+    # -----------------------------------------------------------------------
+    # 2. The facts come off the real screen.
+    # -----------------------------------------------------------------------
+
+    Write-Host 'Facts' -ForegroundColor White
+
+    $facts = Get-ScreenFacts -Screen $screen
+    Assert-True 'mode reads from the >> marker' ($facts.Mode -eq 'Locked to GPS: stabilizing frequency') $facts.Mode
+    Assert-True 'SYNCHRONIZATION bracket' ($facts.Sync -eq 'Outputs Valid/Reduced Accuracy') $facts.Sync
+    Assert-True 'ACQUISITION bracket' ($facts.Acquisition -eq 'GPS 1PPS Valid') $facts.Acquisition
+    Assert-True 'HEALTH MONITOR bracket' ($facts.Health -eq 'OK') $facts.Health
+    Assert-True 'tracking count' ($facts.Tracking -eq '1') $facts.Tracking
+
+    # -----------------------------------------------------------------------
+    # 3. States that differ are told apart. Guessing what "acquiring" prints
+    #    and only matching that is how a capture run ends with nothing in it,
+    #    so the signature is what has to discriminate - mutating a real screen
+    #    is the only way to check that without the states themselves.
+    # -----------------------------------------------------------------------
+
+    Write-Host 'Discrimination' -ForegroundColor White
+
+    function Signature {
+        param([object] $F)
+        return '{0}|{1}|{2}|{3}' -f $F.Mode, $F.Sync, $F.Acquisition, $F.Health
+    }
+
+    function Mutate {
+        param([string] $From, [string] $To)
+
+        $text = [System.Text.Encoding]::Latin1.GetString($screen)
+        if (-not $text.Contains($From)) { throw "self-test is stale: '$From' is not in the fixture" }
+        return , [System.Text.Encoding]::Latin1.GetBytes($text.Replace($From, $To))
+    }
+
+    $base = Signature $facts
+
+    $holdover = Get-ScreenFacts -Screen (Mutate '>> Locked to GPS: stabilizing frequency' '>> Holdover                           ')
+    Assert-True 'a different mode is a different state' ((Signature $holdover) -ne $base)
+    Assert-True 'and slugs to its own file name' ((Get-Slug -Facts $holdover) -eq 'holdover') (Get-Slug -Facts $holdover)
+
+    $reduced = Get-ScreenFacts -Screen (Mutate '[ Outputs Valid/Reduced Accuracy ]' '[ Outputs Valid                 ]')
+    Assert-True 'the same mode with a different SYNCHRONIZATION bracket is a different state' `
+        ((Signature $reduced) -ne $base)
+
+    $sick = Get-ScreenFacts -Screen (Mutate '[ OK ]' '[ FAIL ]')
+    Assert-True 'a failing health monitor is a different state' ((Signature $sick) -ne $base)
+    Assert-True 'and qualifies the slug rather than replacing it' `
+        ((Get-Slug -Facts $sick) -eq 'locked-to-gps-stabilizing-frequency-health-fail') (Get-Slug -Facts $sick)
+
+    # Tracking deliberately stays out of the signature: it changes every reading
+    # and would write a fixture per satellite count.
+    $moreSats = Get-ScreenFacts -Screen (Mutate 'Tracking: 1 ____' 'Tracking: 6 ____')
+    Assert-True 'a changed satellite count is NOT a new state' ((Signature $moreSats) -eq $base)
+    Assert-True 'though it is still read, for the log' ($moreSats.Tracking -eq '6') $moreSats.Tracking
+
+    # -----------------------------------------------------------------------
+    # 4. Every slug is a legal file name, whatever the receiver prints.
+    # -----------------------------------------------------------------------
+
+    Write-Host 'File names' -ForegroundColor White
+
+    $invalid = [System.IO.Path]::GetInvalidFileNameChars()
+    foreach ($f in @($facts, $holdover, $reduced, $sick)) {
+        $slug = Get-Slug -Facts $f
+        # @() around the pipeline: under Set-StrictMode -Version Latest an empty pipeline is
+        # $null, and $null.Count throws rather than being zero. That is the whole bug above.
+        Assert-True ("'{0}' is a legal file name" -f $slug) `
+            (@($slug.ToCharArray() | Where-Object { $invalid -contains $_ }).Count -eq 0)
+    }
+
+    $blank = Get-ScreenFacts -Screen ($ascii.GetBytes("nothing useful here`r`n"))
+    Assert-True 'a screen with no >> marker still yields a usable name' ((Get-Slug -Facts $blank) -eq 'unknown-mode') (Get-Slug -Facts $blank)
+
+    Write-Host ''
+    if ($failures -gt 0) {
+        Write-Host ("{0} check(s) failed. Do not rely on this harness until they pass." -f $failures) -ForegroundColor Red
+        exit 1
+    }
+
+    Write-Host 'All checks passed. The parsing half of the harness works; the serial half needs the receiver.' -ForegroundColor Green
+    exit 0
 }
 
 # ---------------------------------------------------------------------------
