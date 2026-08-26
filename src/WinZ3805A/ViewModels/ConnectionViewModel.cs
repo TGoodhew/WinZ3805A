@@ -28,7 +28,13 @@ public sealed class ConnectionViewModel : INotifyPropertyChanged
     private readonly ISerialPortSource _ports;
     private readonly IConnectionPreferenceStore _preferences;
 
-    private CancellationTokenSource? _attempt;
+    /// <summary>The attempt in flight, or null between attempts.</summary>
+    /// <remarks>
+    /// <c>volatile</c> because it is written by the attempt and read by a <c>Progress&lt;T&gt;</c>
+    /// callback delivered on another thread (#198). Reference assignment is already atomic; what
+    /// this buys is that the callback cannot go on seeing a stale non-null after the attempt ended.
+    /// </remarks>
+    private volatile CancellationTokenSource? _attempt;
 
     private IReadOnlyList<SerialPortInfo> _available = [];
     private SerialPortInfo? _selectedPort;
@@ -274,7 +280,7 @@ public sealed class ConnectionViewModel : INotifyPropertyChanged
         try
         {
             bool connected = IsAutoDetect
-                ? await AutoDetectAsync(port.PortName, attempt.Token).ConfigureAwait(false)
+                ? await AutoDetectAsync(port.PortName, attempt, attempt.Token).ConfigureAwait(false)
                 : await ManualConnectAsync(port.PortName, attempt.Token).ConfigureAwait(false);
 
             if (connected)
@@ -398,7 +404,24 @@ public sealed class ConnectionViewModel : INotifyPropertyChanged
             + "receiver's front panel, or use Auto-detect.",
     };
 
-    private async Task<bool> AutoDetectAsync(string portName, CancellationToken cancellationToken)
+    /// <remarks>
+    /// <b>The callback checks that its own attempt is still running before it paints anything</b>
+    /// (#198). <c>Progress&lt;T&gt;</c> posts to the captured synchronization context, or to the
+    /// thread pool when there is none, and either way it is <i>not</i> ordered against the task
+    /// <see cref="ConnectAsync"/> is awaiting. So the last candidate's callback can be delivered
+    /// after the receiver has answered and after the <c>finally</c> has cleared the line, leaving
+    /// §10.12's dialog reading "Trying 9600-8-N-1 — 1 of 8" underneath a connected receiver.
+    /// <para>
+    /// Comparing against <see cref="_attempt"/> makes both orderings safe rather than making one of
+    /// them fast enough: delivered during the attempt, the line is painted and the <c>finally</c>
+    /// clears it afterwards; delivered after, the field has already been nulled and the callback
+    /// does nothing.
+    /// </para>
+    /// </remarks>
+    private async Task<bool> AutoDetectAsync(
+        string portName,
+        CancellationTokenSource source,
+        CancellationToken cancellationToken)
     {
         int attempt = 0;
         int total = SerialSettings.AutoDetectSequence.Count;
@@ -406,7 +429,11 @@ public sealed class ConnectionViewModel : INotifyPropertyChanged
         Progress<SerialSettings> progress = new(candidate =>
         {
             attempt++;
-            ProgressText = $"Trying {candidate} — {attempt} of {total}";
+
+            if (ReferenceEquals(_attempt, source))
+            {
+                ProgressText = $"Trying {candidate} — {attempt} of {total}";
+            }
         });
 
         return await _session.AutoDetectAsync(portName, progress, cancellationToken).ConfigureAwait(false)
