@@ -1,3 +1,5 @@
+using System.Globalization;
+
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -79,6 +81,27 @@ public sealed class TrendChart : Control
         new PropertyMetadata(50.0, OnChartChanged));
 
     /// <summary>Identifies the <see cref="States"/> dependency property.</summary>
+    /// <summary>Identifies the <see cref="Anchoring"/> dependency property.</summary>
+    public static readonly DependencyProperty AnchoringProperty = DependencyProperty.Register(
+        nameof(Anchoring),
+        typeof(TrendAnchoring),
+        typeof(TrendChart),
+        new PropertyMetadata(TrendAnchoring.Zero, OnChartChanged));
+
+    /// <summary>Identifies the <see cref="MinimumSpan"/> dependency property.</summary>
+    public static readonly DependencyProperty MinimumSpanProperty = DependencyProperty.Register(
+        nameof(MinimumSpan),
+        typeof(double),
+        typeof(TrendChart),
+        new PropertyMetadata(1.0, OnChartChanged));
+
+    /// <summary>Identifies the <see cref="Decimals"/> dependency property.</summary>
+    public static readonly DependencyProperty DecimalsProperty = DependencyProperty.Register(
+        nameof(Decimals),
+        typeof(int),
+        typeof(TrendChart),
+        new PropertyMetadata(0, OnChartChanged));
+
     public static readonly DependencyProperty StatesProperty = DependencyProperty.Register(
         nameof(States),
         typeof(IReadOnlyList<TrendSample>),
@@ -145,6 +168,39 @@ public sealed class TrendChart : Control
         set => SetValue(FloorProperty, value);
     }
 
+    /// <summary>What the y-axis is framed on (§10.7.1). Zero by default, which is §9.10.2's TI rule.</summary>
+    public TrendAnchoring Anchoring
+    {
+        get => (TrendAnchoring)GetValue(AnchoringProperty);
+        set => SetValue(AnchoringProperty, value);
+    }
+
+    /// <summary>
+    /// The smallest total range a <see cref="TrendAnchoring.Data"/> axis will show, in the value's
+    /// own units. Ignored when <see cref="Anchoring"/> is <see cref="TrendAnchoring.Zero"/>, which
+    /// uses <see cref="Floor"/> instead.
+    /// </summary>
+    /// <remarks>
+    /// Two properties rather than one that changes meaning with the mode. A half-range and a span
+    /// differ by a factor of two, and a number whose unit depends on a neighbouring property is how
+    /// #101 and #27 happened.
+    /// </remarks>
+    public double MinimumSpan
+    {
+        get => (double)GetValue(MinimumSpanProperty);
+        set => SetValue(MinimumSpanProperty, value);
+    }
+
+    /// <summary>
+    /// Decimal places on the axis labels. <b>Fixed per chart, never varying with the range</b>
+    /// (§9.11 item 6).
+    /// </summary>
+    public int Decimals
+    {
+        get => (int)GetValue(DecimalsProperty);
+        set => SetValue(DecimalsProperty, value);
+    }
+
     /// <inheritdoc />
     protected override void OnApplyTemplate()
     {
@@ -176,21 +232,30 @@ public sealed class TrendChart : Control
         IReadOnlyList<TrendColumn> columns = TrendDecimation.ToColumns(
             Samples ?? [], FromTicks, ToTicks, (int)Math.Floor(width));
 
-        (double minimum, double maximum) = TrendDecimation.ZeroAnchoredBounds(columns, Floor);
+        (double minimum, double maximum) = Anchoring == TrendAnchoring.Data
+            ? TrendDecimation.AutoBounds(columns, MinimumSpan)
+            : TrendDecimation.ZeroAnchoredBounds(columns, Floor);
 
-        // The axis is symmetric about zero by construction, so the zero line is the vertical
-        // centre. §9.4.4 requires the diverging fill's neutral point to be exactly there.
-        double zeroY = height / 2;
-        double scale = (height / 2) / maximum;
+        double span = maximum - minimum;
+
+        if (span <= 0 || double.IsNaN(span) || double.IsInfinity(span))
+        {
+            return;
+        }
+
+        // General in the bounds rather than symmetric about zero. Under Zero anchoring minimum is
+        // exactly -maximum, so the middle of the plot is still exactly 0 and §9.4.4's requirement
+        // that the diverging fill's neutral point map to zero is met by the same arithmetic.
+        double scale = height / span;
 
         DrawStateShading(surface, height);
-        DrawZeroLine(surface, width, zeroY);
+        DrawMidLine(surface, width, height / 2);
 
         foreach (TrendColumn column in columns)
         {
             double x = column.Column + 0.5;
-            double top = zeroY - (column.Maximum * scale);
-            double bottom = zeroY - (column.Minimum * scale);
+            double top = height - ((column.Maximum - minimum) * scale);
+            double bottom = height - ((column.Minimum - minimum) * scale);
 
             // A single-sample column has top == bottom; give it a pixel so it still marks.
             if (Math.Abs(bottom - top) < 1)
@@ -211,7 +276,7 @@ public sealed class TrendChart : Control
             });
         }
 
-        DrawAxisLabels(surface, width, height, maximum);
+        DrawAxisLabels(surface, width, height, minimum, maximum);
     }
 
     /// <summary>
@@ -265,21 +330,34 @@ public sealed class TrendChart : Control
     }
 
     /// <summary>
-    /// Picks the diverging colour for a column from which side of zero it sits on.
+    /// Picks the stroke for a column: §9.4.4's diverging ramp, or one flat series colour.
     /// </summary>
     /// <remarks>
-    /// §9.4.4's ramp, keyed on the column's own extreme rather than on the data's midpoint. A
-    /// column that straddles zero takes the neutral token, which is the honest answer: within that
-    /// eight-minute bucket the receiver was on both sides.
+    /// <para>
+    /// The diverging ramp is keyed on the column's own extreme rather than on the data's midpoint.
+    /// A column that straddles zero takes the neutral token, which is the honest answer: within
+    /// that eight-minute bucket the receiver was on both sides.
+    /// </para>
+    /// <para>
+    /// <b>It applies only to a zero-anchored axis, and that is not a coincidence.</b> §9.4.4 asks
+    /// the neutral midpoint to map to <i>exactly</i> zero; on an axis that does not contain zero
+    /// there is nothing for it to map to, and anchoring it on the window mean would make the same
+    /// colour break mean "on time" on one chart and "near where it has lately been" on the other.
+    /// A data-framed series therefore takes a single stroke from §9.4.4's categorical palette and
+    /// carries no colour-borne value at all — which is also the first thing in the application to
+    /// consume that palette.
+    /// </para>
     /// </remarks>
     private Brush BrushFor(TrendColumn column)
     {
-        string key = column switch
-        {
-            { Minimum: < 0, Maximum: > 0 } => "WzDivergingZeroBrush",
-            { Maximum: <= 0 } => "WzDivergingNegativeBrush",
-            _ => "WzDivergingPositiveBrush",
-        };
+        string key = Anchoring == TrendAnchoring.Data
+            ? "WzSeries1Brush"
+            : column switch
+            {
+                { Minimum: < 0, Maximum: > 0 } => "WzDivergingZeroBrush",
+                { Maximum: <= 0 } => "WzDivergingNegativeBrush",
+                _ => "WzDivergingPositiveBrush",
+            };
 
         return Resource<Brush>(key) ?? new SolidColorBrush(Microsoft.UI.Colors.Gray);
     }
@@ -303,7 +381,12 @@ public sealed class TrendChart : Control
         where T : class =>
         Application.Current.Resources.TryGetValue(key, out object? value) ? value as T : null;
 
-    private void DrawZeroLine(Canvas surface, double width, double zeroY) =>
+    /// <remarks>
+    /// The line under the middle axis label. On a zero-anchored chart that is zero itself; on a
+    /// data-framed one it is the midpoint of the window, and it is drawn because three labels down
+    /// the left edge are easier to read against a rule than against nothing.
+    /// </remarks>
+    private void DrawMidLine(Canvas surface, double width, double zeroY) =>
         surface.Children.Add(new Line
         {
             X1 = 0,
@@ -315,15 +398,24 @@ public sealed class TrendChart : Control
         });
 
     /// <remarks>
-    /// Three labels and no more: the two extremes and zero. §9.1's restraint applies to a chart as
-    /// much as to a readout — a grid of ten tick labels is decoration on a plot whose job is to
-    /// show a shape.
+    /// Three labels and no more: the two extremes and the midpoint. §9.1's restraint applies to a
+    /// chart as much as to a readout — a grid of ten tick labels is decoration on a plot whose job
+    /// is to show a shape. On a zero-anchored axis the midpoint is zero, so this reads exactly as
+    /// it always did.
     /// </remarks>
-    private void DrawAxisLabels(Canvas surface, double width, double height, double maximum)
+    private void DrawAxisLabels(Canvas surface, double width, double height, double minimum, double maximum)
     {
-        Add($"+{maximum:F0} {Unit}", 0);
-        Add($"0 {Unit}", (height / 2) - 8);
-        Add($"−{maximum:F0} {Unit}", height - 16);
+        Add(Format(maximum), 0);
+        Add(Format((minimum + maximum) / 2), (height / 2) - 8);
+        Add(Format(minimum), height - 16);
+
+        // §9.5.3 and P0-20: U+2212, never a hyphen, and a fixed number of decimals per chart.
+        string Format(double value) => value switch
+        {
+            < 0 => $"\u2212{Math.Abs(value).ToString($"F{Decimals}", CultureInfo.InvariantCulture)} {Unit}",
+            > 0 => $"+{value.ToString($"F{Decimals}", CultureInfo.InvariantCulture)} {Unit}",
+            _ => $"{0d.ToString($"F{Decimals}", CultureInfo.InvariantCulture)} {Unit}",
+        };
 
         void Add(string text, double top)
         {

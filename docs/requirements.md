@@ -780,6 +780,8 @@ Its adjacent steps measure low under simulation (4.4 ΔE₀₀ protanopia) and t
 
 The neutral midpoint must map to exactly 0 ns, not to the data midpoint. A TI chart whose colour break drifts with the data is misleading.
 
+**The diverging ramp therefore applies only to an axis that contains zero**, which in practice means the 1 PPS chart alone. §10.7.1's oscillator-control chart is framed on its own data and does not reach zero, so there is nothing for the neutral midpoint to map to; anchoring it on the window mean instead would make the same colour break mean *"the receiver is on time"* on one chart and *"near where the oscillator has lately been"* on the other. That series takes a single stroke from the categorical palette above and carries **no colour-borne value at all** — its diagnostic content is entirely in the shape of the trace, which satisfies A11Y-12 by having nothing to encode.
+
 **Verification.** `build/Test-SeriesSeparation.ps1` gates CI on the categorical palette: all 28 pairs, both themes, three vision models, plus the hue-gap and semantic-clearance rules above. `build/palette/` holds the derivation, and `build/palette/validate.py` checks the colour maths against the figures published on #87 before anything trusts it.
 
 **HighContrast is not checked and cannot be.** Its series alternate between `SystemColorWindowTextColor` and `SystemColorHighlightColor` — the user's own two colours — so **eight traces cannot be separated by colour there at all.** A pass from the gate is not a statement that the chart is accessible. A second channel (dash pattern plus direct labelling) is required for HighContrast regardless of what this ramp contains, and is tracked on #87.
@@ -864,7 +866,7 @@ This is the part that separates a careful instrument app from a sloppy one, and 
 3. **Units are typeset, not concatenated.** The unit is a separate `Run` in `WzCaptionTextStyle` / `WzTextSecondaryBrush`, separated by a hair space (`\u200A`), never bolded, never part of the numeric string. `−33.1` is `WzReadoutMedium`; ` ns` is caption-secondary.
 4. **Minus sign, not hyphen.** Use U+2212 MINUS SIGN in readouts. A hyphen is optically too short and sits too high next to lining figures. Format with a custom `NumberFormatInfo` where `NegativeSign = "\u2212"`. Raw SCPI text in `WzMonoTextStyle` is exempt — it is reproduced verbatim.
 5. **Right-align numeric table columns**, left-align text columns, and align on the decimal separator where fractional digits vary.
-6. **Fixed decimal places per quantity**, never variable: TI 1 dp, EFC 1 dp, holdover uncertainty 1 dp, C/N integer, percentages 1 dp. A column that changes its precision row to row is unreadable.
+6. **Fixed decimal places per quantity**, never variable: TI 1 dp, EFC 1 dp, holdover uncertainty 1 dp, C/N integer, percentages 1 dp, **EFC drift rate, scatter and diurnal amplitude 1 dp in ppm of control range** (§10.7.1). A column that changes its precision row to row is unreadable. Where a figure is too small to survive its quantity's precision, **change the unit, not the number of decimals** — the rule is about a reader comparing two lines, and it does not stop applying because a surface is prose. Chart axis labels take the precision their step requires, fixed per chart and not varying with the selected range (§9.10.2).
 7. **Coordinates in Cascadia Mono**, DMS with fixed field widths, so latitude and longitude align vertically.
 
 **Prose line length** is capped at **72 characters** (`MaxWidth` ≈ 640 px at `WzBodyTextStyle`). Applies to descriptions, confirmation dialog bodies, empty states, and error text.
@@ -1194,7 +1196,7 @@ Construction rules:
 | **`SkyPlotControl`** | Polar plot per §10.5. North up, 0° elevation at rim, 90° at centre. Dashed elevation-mask circle. Marker area scales with signal strength; fill from the sequential ramp (§9.4.4). Keyboard: arrow keys move a focus ring between markers in PRN order, Enter selects. Exposes each marker as an automation peer with name *"PRN 19, elevation 65 degrees, azimuth 52 degrees, carrier to noise 49, tracked."* Provides a `ListView` alternate view toggle for users who cannot use the spatial form. |
 | **`SatelliteStrengthBar`** | Bar + numeric. **Scale-aware**: reads `SignalStrengthKind` and maps C/N (26–55) or SS (0–255) to its own domain. Must never render the two scales against a shared axis. |
 | **`ConnectionStatusPill`** | Title-bar element. Severity shape + state text + port name. Click opens the connection dialog. Does not dim on window deactivation. |
-| **`TrendChart`** | Fallback if OQ-5 rejects LiveCharts. Line series, zero-anchored y-axis for TI, diverging fill (§9.4.4), time x-axis, range selector. Must support 604 800 points via decimation without dropping excursions — decimate by min/max per pixel column, never by sampling, or a 1-second glitch vanishes at the 7-day range. |
+| **`TrendChart`** | Fallback if OQ-5 rejects LiveCharts. Line series, time x-axis, range selector. **Two y-axis modes:** zero-anchored with the §9.4.4 diverging fill for TI, and framed on the window's own data with a minimum span and a single categorical stroke for EFC (§10.7.1). Axis carries three labels — the two bounds and the midpoint — snapped to a round step, at a decimal precision fixed per chart (§9.11 item 6). Must support 604 800 points via decimation without dropping excursions — decimate by min/max per pixel column, never by sampling, or a 1-second glitch vanishes at the 7-day range. |
 
 **`SkyPlotControl` is A11Y-5’s one recorded exception, and the specification names the compliant path (#117).**
 A marker is 8–18 px across and **its position is the data** — it is the satellite’s actual position in the sky and
@@ -1617,16 +1619,56 @@ decimated per §9.10.2 (minimum and maximum per pixel column, never a sample).
   0 ns (§9.4.4). Stretches where the receiver was **not** locked are shaded.
 - **Oscillator control (EFC)** is a **second chart, not a second axis.** 0 ns and 0 % are not the same
   zero, and one axis carrying both would put the colour break of one series at an arbitrary value of
-  the other.
+  the other. Its y-axis is **framed on the window's own data**, not on zero — for EFC, 0 % is one end
+  of a control range whose absolute position is arbitrary, and the diagnostic content is the
+  deviation. A **minimum span** keeps a quiet oscillator from being magnified into noise, the way
+  §9.10.2's medallion ring has a ±50 ns floor for the same reason. Labels are absolute percentages,
+  so the chart agrees with the readout, the drift slope and the §10.7.1 rail alarms about what
+  number the oscillator is sitting at.
+
+> **⚠ Amends this section and §9.4.4** (#183). The EFC chart was built through the same
+> zero-anchored bounds as TI, which the text above did not describe either way. The consequence was
+> measured on the 22–24 Aug 2026 capture: a receiver holding **−16.8557 … −16.8041 %** over 47 hours
+> was drawn against a ±25 % axis, so 0.05 percentage points of real structure occupied about a
+> thousandth of the plot height and the trace read as dead flat. The axis extent was set by the
+> offset from zero and by nothing about the signal, so no choice of floor could fix it.
+>
+> The minimum span is **0.01 %**, which is about 55 EFC codes on the bench receiver — its step
+> measures roughly 0.00018 %, from 280 distinct values across 0.0516 %. Below that the plot would be
+> drawing the converter's least significant bit rather than the oscillator.
+>
+> Axis labels are fixed at **2 decimal places** for this chart. One is not enough to separate −16.86
+> from −16.80, and §9.11 item 6 forbids a precision that varies with the range rather than one that
+> differs between quantities.
 
 **The drift advisory reports what the fit can support and refuses what it cannot.** It states the
-secular slope in %/day, the sample count, the span actually fitted, the residual, and a projection to
-±100 % as both a count of days and a date — and it withholds the projection where the window cannot
-support one. A slope without a sense of scatter is a number pretending to be a measurement.
+secular slope in **ppm of control range per day**, the sample count, the span actually fitted, the
+residual, and a projection to ±100 % as both a count of days and a date — and it withholds the
+projection where the window cannot support one. A slope without a sense of scatter is a number
+pretending to be a measurement.
+
+**The fit's own figures are counted in ppm of control range, the projection in per cent.** One per
+cent of range is 10 000 ppm; EFC is already a percentage *of* that range, so ppm here needs no second
+reference. The rails are at ±100 % and stay there — a projection is about reaching them, and saying
+so in ppm would be arithmetic for its own sake.
 
 - **Diurnal swing is reported separately from secular drift**, and only where the window is long
   enough to tell them apart. Below a day of data the fit drops to a plain line and says so, rather
   than reporting a daily amplitude of zero — which would be a measurement.
+
+> **⚠ Amends this section and §9.11 item 6** (#182). The advisory reported its figures as
+> percentages, and on a good oscillator every one of them rounded away. Measured on the 22–24 Aug
+> 2026 capture: a secular drift of **−0.00086 %/day**, a diurnal amplitude of **0.00034 %** and a
+> residual rms of **0.00324 %** printed as `−0.001 %/day`, `±0.00 %` and `0.00 %`. The arithmetic
+> was right — it agreed with an independent fit over the same basis to five decimal places — so the
+> card was committing precisely the failure the bullet above forbids, and doing it past a day of
+> data rather than below one. A double-oven oscillator holding 0.05 % of range across two days is
+> the *good* case, and the card could not say so.
+>
+> **The unit changed rather than the precision**, because §9.11 item 6's reason — a reader cannot
+> compare two lines whose precision differs — does not stop being true for a card. The same three
+> figures counted in ppm of range are **−8.6 ppm/day**, **±3.4 ppm** and **32.4 ppm**, all readable
+> at the one decimal place item 6 already required.
 - **There is no internal temperature query on this receiver.** The daily component is inferred from
   EFC's own periodicity, and the interface must say so: a user who reads "diurnal" will otherwise
   assume something measured it.

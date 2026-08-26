@@ -427,52 +427,22 @@ public sealed partial class TimingPage : Page, ICsvExportSource
 
         DriftAdvisoryText.Text = EfcDrift.Describe(drift.Pattern);
 
+        // The wording lives in DriftAdvisory rather than here, so it can be held against a series
+        // whose answer is known. #182 was a sentence, not a fit: the arithmetic agreed with an
+        // independent one to five decimal places and the card still printed 0.00 %.
         if (!drift.IsUsable)
         {
             DriftNumbersText.Text = string.Empty;
-            DriftEvidenceText.Text =
-                $"{drift.SampleCount:N0} usable reading(s) in this range; the fit needs at least "
-                + $"{EfcDrift.MinimumSamples}.";
+            DriftEvidenceText.Text = DriftAdvisory.NotEnough(drift);
             return;
         }
 
-        string projection = drift.DaysToRail is double days
-            ? $"reaches ±100 % in about {days:N0} day(s), around "
-              + $"{(_device?.TimeProvider ?? TimeProvider.System).GetLocalNow().AddDays(days):d MMM yyyy}"
-            : drift.DiurnalSeparable
-                ? "no projection: the trend is flat or heading away from both rails"
-                  // "this range" would be wrong: the user may have the 7-day range selected and
-                  // simply not have 7 days of history yet. What is short is the data.
-                : "no projection: under a day of data here, too short to tell drift from the "
-                  + "room warming up";
+        DriftNumbersText.Text = DriftAdvisory.Numbers(
+            drift,
+            (_device?.TimeProvider ?? TimeProvider.System).GetLocalNow());
 
-        DriftNumbersText.Text =
-            $"Drift {drift.SlopePercentPerDay:+0.000;−0.000;0.000} %/day — {projection}.";
-
-        // The residual and the sample count are shown because a slope without a sense of scatter
-        // is a number pretending to be a measurement (#137).
-        DriftEvidenceText.Text =
-            $"From {drift.SampleCount:N0} settled reading(s) spanning {DescribeSpan(drift.WindowSpan)}"
-            + (drift.ExcludedForSettling > 0
-                ? $", {drift.ExcludedForSettling:N0} excluded as post-power-up settling"
-                : string.Empty)
-            + $". Unexplained scatter {drift.ResidualPercent:F2} %. "
-            + (drift.DiurnalSeparable
-                ? $"Daily swing about ±{drift.DiurnalAmplitudePercent:F2} %, inferred from the "
-                  + "reading's own 24-hour periodicity — this receiver reports no temperature, so "
-                  + "nothing here is correlated against one."
-                : "A daily swing cannot be separated from the trend in under a day of data, so "
-                  + "none is reported — the fit here is a plain line.");
+        DriftEvidenceText.Text = DriftAdvisory.Evidence(drift);
     }
-
-    /// <summary>Says how long a fitted window is, in the largest unit that stays readable.</summary>
-    private static string DescribeSpan(TimeSpan span) => span switch
-    {
-        { TotalDays: >= 2 } => $"{span.TotalDays:N1} days",
-        { TotalHours: >= 2 } => $"{span.TotalHours:N1} hours",
-        { TotalMinutes: >= 2 } => $"{span.TotalMinutes:N0} minutes",
-        _ => $"{span.TotalSeconds:N0} seconds",
-    };
 
     /// <summary>
     /// Reads the receiver's own verdict on its EFC range (#137).

@@ -253,4 +253,112 @@ public static class TrendDecimation
 
         return (-extent, extent);
     }
+
+    /// <summary>
+    /// The y-axis bounds for a set of columns, framed on the data rather than on zero.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For a quantity whose zero is not a reference</b> — §10.7.1's oscillator control, where
+    /// 0 % is one end of an arbitrary control range rather than a meaningful value, and the
+    /// diagnostic content is entirely in the deviation. Zero-anchoring such a series makes the axis
+    /// extent a function of the offset from zero and nothing else: a receiver parked at −16.83 %
+    /// with 0.05 % of structure across two days drew as a dead-flat line occupying a thousandth of
+    /// the plot, whatever floor it was given (#183).
+    /// </para>
+    /// <para>
+    /// <b>The minimum span is the same idea as <see cref="ZeroAnchoredBounds"/>'s floor</b>, and it
+    /// is what stops the other failure. Framed tightly, a converter sitting on two adjacent codes
+    /// would be magnified until its least significant bit filled the plot and read as an
+    /// instrument in trouble — the shape of a healthy oscillator and a sick one would be identical.
+    /// </para>
+    /// <para>
+    /// Bounds are snapped outward to a round step of about a quarter of the span, so the three
+    /// labels §9.1 allows land on numbers a reader can subtract.
+    /// </para>
+    /// </remarks>
+    /// <param name="columns">The decimated columns.</param>
+    /// <param name="minimumSpan">
+    /// The smallest total range to show, in the value's own units. Below it the bounds widen about
+    /// the data's own midpoint rather than magnifying it.
+    /// </param>
+    public static (double Minimum, double Maximum) AutoBounds(
+        IReadOnlyList<TrendColumn> columns,
+        double minimumSpan)
+    {
+        ArgumentNullException.ThrowIfNull(columns);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(minimumSpan);
+
+        double lowest = double.PositiveInfinity;
+        double highest = double.NegativeInfinity;
+
+        foreach (TrendColumn column in columns)
+        {
+            lowest = Math.Min(lowest, column.Minimum);
+            highest = Math.Max(highest, column.Maximum);
+        }
+
+        // No data at all. Centred on zero is as good an answer as any, and better than an axis
+        // whose labels are infinities.
+        if (double.IsInfinity(lowest) || double.IsInfinity(highest))
+        {
+            return (-minimumSpan / 2, minimumSpan / 2);
+        }
+
+        double middle = (lowest + highest) / 2;
+        double half = Math.Max(highest - lowest, minimumSpan) / 2;
+
+        return SnapOutward(middle - half, middle + half);
+    }
+
+    /// <summary>Widens a range to the next round step outside it, on both sides.</summary>
+    /// <remarks>
+    /// 1, 2, 2.5 or 5 times a power of ten, chosen so the range holds about four steps. That is the
+    /// usual nice-number rule and it is here for one reason: the axis carries three labels, and
+    /// <c>−16.8557</c> is not a label.
+    /// </remarks>
+    private static (double Minimum, double Maximum) SnapOutward(double lower, double upper)
+    {
+        double span = upper - lower;
+
+        if (span <= 0 || double.IsNaN(span) || double.IsInfinity(span))
+        {
+            return (lower, upper);
+        }
+
+        double rough = span / 4;
+        double magnitude = Math.Pow(10, Math.Floor(Math.Log10(rough)));
+        double step = (rough / magnitude) switch
+        {
+            <= 1 => 1,
+            <= 2 => 2,
+            <= 2.5 => 2.5,
+            <= 5 => 5,
+            _ => 10,
+        } * magnitude;
+
+        return (Math.Floor(lower / step) * step, Math.Ceiling(upper / step) * step);
+    }
+}
+
+/// <summary>What a <c>TrendChart</c>'s y-axis is framed on.</summary>
+/// <remarks>
+/// Not a styling choice. §10.7.1 separates the two charts on exactly this ground — <i>"0 ns and
+/// 0 % are not the same zero"</i> — and §9.4.4's diverging fill is only meaningful when zero is on
+/// the axis, so the fill follows from this rather than being set alongside it.
+/// </remarks>
+public enum TrendAnchoring
+{
+    /// <summary>
+    /// Symmetric about zero, which stays at the centre of the plot. §9.10.2's rule for the 1 PPS
+    /// time interval, where zero is the receiver being on time and the colour break must not drift
+    /// with the data.
+    /// </summary>
+    Zero = 0,
+
+    /// <summary>
+    /// Framed on the window's own data, subject to a minimum span. For a quantity whose zero
+    /// carries no meaning.
+    /// </summary>
+    Data,
 }
