@@ -369,11 +369,45 @@ public class DeviceSessionServiceTests
         Assert.Equal(ConnectionStatus.Reconnecting, session.Status);
 
         // The adapter is back, so the next attempt on the backoff finds a working port.
-        using CancellationTokenSource giveUp = new(TestTimeout);
-        while (session.Status == ConnectionStatus.Reconnecting && !giveUp.IsCancellationRequested)
+        //
+        // Latched from StatusChanged rather than sampled from Status (#192, and #198's lesson).
+        // BeginReconnect starts the retry loop fire-and-forget, so nothing here owns the task that
+        // produces the result being asserted on: polling Status after a wall-clock budget asks
+        // whether that loop happened to have run *yet*, which in a full suite it competes with
+        // every other test to do. Alone this test passed 25 runs out of 25; in the suite it failed
+        // about one run in six. The signal is the answer, the property is a sample of it.
+        TaskCompletionSource reconnected = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        void Latch(object? sender, ConnectionStatusChanged change)
         {
-            clock.Advance(TimeSpan.FromSeconds(4));
-            await Task.Delay(10, CancellationToken.None);
+            if (change.Status == ConnectionStatus.Connected)
+            {
+                reconnected.TrySetResult();
+            }
+        }
+
+        session.StatusChanged += Latch;
+
+        try
+        {
+            // A step larger than MaximumBackoff, so one advance always clears whatever the retry
+            // loop is waiting on. Stepping 4 s against a 30 s cap needed eight advances per attempt
+            // once the backoff saturated, which is eight scheduling round-trips bought for nothing.
+            using CancellationTokenSource giveUp = new(TestTimeout);
+            while (!reconnected.Task.IsCompleted && !giveUp.IsCancellationRequested)
+            {
+                clock.Advance(TimeSpan.FromMinutes(1));
+
+                // Returns the moment the service signals rather than sleeping a fixed slice, so a
+                // loaded machine costs iterations instead of the whole budget.
+                await Task.WhenAny(reconnected.Task, Task.Delay(5, CancellationToken.None));
+            }
+
+            await reconnected.Task.WaitAsync(TestTimeout);
+        }
+        finally
+        {
+            session.StatusChanged -= Latch;
         }
 
         Assert.Equal(ConnectionStatus.Connected, session.Status);
