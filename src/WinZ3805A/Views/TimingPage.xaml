@@ -233,10 +233,28 @@
                     <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}"
                                Text="Oscillator control (EFC)" />
 
+                    <!--
+                        Framed on the data, not on zero (#183). Zero-anchored, a receiver parked at
+                        -16.83 % drew as a flat line in a thousandth of the plot: the axis extent
+                        was set by the offset from zero and by nothing about the signal. §10.7.1
+                        already says these two charts do not share a zero; this is that sentence
+                        applied to the axis as well as to the chart.
+
+                        MinimumSpan 0.01 % is about 55 EFC codes on the bench receiver, whose step
+                        measures ~0.00018 % (280 distinct values across 0.0516 %). Below that the
+                        plot would be drawing the converter's least significant bit rather than the
+                        oscillator, which is the same failure the medallion's +/-50 ns floor exists
+                        to prevent.
+
+                        Decimals 2 because 1 dp cannot separate -16.86 from -16.80. Fixed for this
+                        chart at every range, which is what §9.11 item 6 is about.
+                    -->
                     <controls:TrendChart x:Name="EfcTrend"
                                          Height="140"
                                          Unit="%"
-                                         Floor="25"
+                                         Anchoring="Data"
+                                         MinimumSpan="0.01"
+                                         Decimals="2"
                                          AutomationProperties.Name="Oscillator control trend" />
 
                     <!--
