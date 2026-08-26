@@ -160,20 +160,20 @@ public class DriftAdvisoryTests
     /// Days only past two of them, so the bench receiver's 47.4-hour window is still said in hours
     /// — which is what the card printed on #182 and #184, and worth pinning rather than assuming.
     /// <para>
-    /// The last two rows are <b>#184</b>, asserted as the current behaviour rather than as the
-    /// wanted one: a 24 h window can only ever hold a span slightly under 24 hours, and both it and
-    /// a true 24 hours print "24.0 hours". That is why the evidence line can say 24.0 hours in the
-    /// same sentence as a verdict that there is under a day of data.
+    /// <b>Rounded down, never to nearest</b> (#184). The last two rows are why: 23.98 hours printed
+    /// as "24.0 hours" beside a verdict of "under a day of data", and a figure that rounds up across
+    /// the threshold its own sentence is about reads as a contradiction rather than as a rounding.
+    /// An evidence line may understate what it had; it may not overstate it.
     /// </para>
     /// </remarks>
     [Theory]
-    [InlineData(50, "2.1 days")]
+    [InlineData(50, "2.0 days")]
     [InlineData(48, "2.0 days")]
     [InlineData(47.4, "47.4 hours")]
     [InlineData(6, "6.0 hours")]
     [InlineData(1.5, "90 minutes")]
     [InlineData(24, "24.0 hours")]
-    [InlineData(23.98, "24.0 hours")]
+    [InlineData(23.98, "23.9 hours")]
     public void ASpanIsSaidInTheLargestUnitThatStaysReadable(double hours, string expected) =>
         Assert.Equal(expected, DriftAdvisory.DescribeSpan(TimeSpan.FromHours(hours)));
 

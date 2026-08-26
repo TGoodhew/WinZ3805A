@@ -551,7 +551,27 @@ public sealed partial class TimingPage : Page, ICsvExportSource
         long now = device.TimeProvider.GetUtcNow().UtcTicks;
         long from = now - TimeSpan.FromHours(_rangeHours).Ticks;
 
-        IReadOnlyList<TrendRecord> window = trends.Read(from, now);
+        // One read, reaching EfcDrift.FitMargin further back than the charts draw, and filtered for
+        // them (#184). The fit needs a span of a full day before it can separate a diurnal term,
+        // and a window of exactly 24 hours holds slightly under 24 hours of span - so the range
+        // named for a day could never reach the analysis the card is built around.
+        //
+        // Read once and narrowed rather than read twice: the 7 d range is 200 000-odd rows and the
+        // second query would be almost all of the first.
+        IReadOnlyList<TrendRecord> fitWindow = trends.Read(from - EfcDrift.FitMargin.Ticks, now);
+
+        List<TrendRecord> drawn = new(fitWindow.Count);
+        foreach (TrendRecord record in fitWindow)
+        {
+            if (record.Ticks >= from)
+            {
+                drawn.Add(record);
+            }
+        }
+
+        IReadOnlyList<TrendRecord> window = drawn;
+
+        // The export is what the user is looking at, not what the fit reached into.
         _exportable = window;
 
         IReadOnlyList<TrendSample> series = Project(window, record => record.TimeIntervalNanoseconds);
@@ -576,7 +596,7 @@ public sealed partial class TimingPage : Page, ICsvExportSource
         // Names the shading in words as well as colour (§9.4.3, A11Y-12), and reports the count,
         // because a 7-day range drawn from four hours of history looks exactly like one drawn from
         // seven days.
-        RenderDrift(window);
+        RenderDrift(fitWindow);
         ExportAvailabilityChanged?.Invoke(this, EventArgs.Empty);
 
         TrendSummaryText.Text = series.Count switch

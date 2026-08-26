@@ -117,6 +117,32 @@ public static class EfcDrift
     /// <summary>Below this many usable samples, no fit is attempted.</summary>
     public const int MinimumSamples = 30;
 
+    /// <summary>
+    /// How much older than the drawn range the fit's own window reaches (#184).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A window of exactly <i>n</i> hours can only ever hold a <b>span</b> of slightly under
+    /// <i>n</i> hours, because its oldest sample sits just inside the leading edge rather than on
+    /// it. At §10.7.1's 24 h range that put the span at about 23.98 hours against
+    /// <see cref="Fit"/>'s <c>span &gt;= 1.0</c> days, so **the range named for a day could never
+    /// reach the day-based analysis the card is built around** — and the evidence line said
+    /// "spanning 24.0 hours" in the same sentence as "under a day of data".
+    /// </para>
+    /// <para>
+    /// Five minutes rather than one poll interval: the gap to the oldest sample is bounded by the
+    /// cadence, which is seconds, and a margin measured in minutes stays right if the cadence ever
+    /// changes. It is a fixed span for every range, so nothing special-cases the 24 h button — at
+    /// 1 h the fit uses 65 minutes and says so, which is what the evidence line is for.
+    /// </para>
+    /// <para>
+    /// It widens what the fit may use; it does not manufacture data. A receiver with eighteen hours
+    /// of history still fits eighteen hours and still reports that a daily swing cannot be
+    /// separated, which is the correct answer.
+    /// </para>
+    /// </remarks>
+    public static readonly TimeSpan FitMargin = TimeSpan.FromMinutes(5);
+
     /// <summary>Beyond this much of a rail, EFC counts as "near" one.</summary>
     public const double NearRailPercent = 80;
 

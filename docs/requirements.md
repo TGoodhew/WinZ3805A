@@ -1615,6 +1615,22 @@ Cable presets, delay per metre (from the vendor cable tables in the 58503B manua
 Both charts share one range selector — 1 h, 6 h, 24 h, 7 d — and both draw from the persisted series,
 decimated per §9.10.2 (minimum and maximum per pixel column, never a sample).
 
+**The drift fit reaches slightly further back than the charts draw.** A window of exactly *n* hours
+holds a *span* of slightly under *n* hours, because its oldest sample sits just inside the leading
+edge rather than on it — so the 24 h range could never satisfy the day-long separability rule below,
+and the range named for a day could not reach the day-based analysis this card is built around. The
+fit's window is therefore the drawn range plus a small fixed margin, and the evidence line reports
+the span it actually fitted rather than the range that was selected. The charts, the CSV export and
+the reading count are unaffected: they are what the user is looking at.
+
+> **⚠ Amends this section** (#184). Before this, selecting 24 h produced *"From 67,008 settled
+> reading(s) spanning 24.0 hours … A daily swing cannot be separated from the trend in under a day
+> of data"* — a label and a verdict contradicting each other in one sentence, because the true span
+> was about 23.98 hours and the evidence line rounded it up. The margin fixes the analysis; **spans
+> are now also rounded down rather than to nearest**, since a figure sitting beside a verdict about
+> a threshold must never round across it. An evidence line may understate what it had; it may not
+> overstate it.
+
 - **1 PPS time interval** is zero-anchored with a diverging fill whose neutral midpoint is exactly
   0 ns (§9.4.4). Stretches where the receiver was **not** locked are shaded.
 - **Oscillator control (EFC)** is a **second chart, not a second axis.** 0 ns and 0 % are not the same
