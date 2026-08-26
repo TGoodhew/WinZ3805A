@@ -173,10 +173,24 @@ pwsh build/Test-ContrastFloor.ps1        # A11Y-4 / §9.4.5
 pwsh build/Test-SeriesSeparation.ps1     # A11Y-12 / §9.4.4
 ```
 
-`.github/workflows/ci.yml` runs all seven first, before any restore, so a token,
+One more script runs in CI and is **not** a gate on the source — it checks a tool rather
+than a rule:
+
+```powershell
+pwsh build/Capture-Fixtures.ps1 -SelfTest # #4 / #185 — the harness, not the app
+```
+
+`.github/workflows/ci.yml` runs all eight first, before any restore, so a token,
 accessibility, or safety regression fails in seconds rather than after a full build. It then
 builds both Configuration × Platform combinations — Debug and Release against x64,
 since §6.1 dropped ARM64 on 15 Aug 2026 — and runs the tests.
+
+**Why a build script is in CI at all.** `Capture-Fixtures.ps1` collects §11.1's missing
+fixtures, and the states it exists to catch — power-up, acquiring, holdover, a failing health
+monitor — happen only while the receiver is being moved. It is used perhaps once a season, and
+a parsing bug found afterwards cannot be retried without moving the hardware again. So the
+half that needs no serial port is checked on every push rather than on the day. The serial
+half still cannot be, and the self-test says so when it passes.
 
 The hex gate implements the broader §9.13 wording rather than P0-17's minimum: it
 scans every `*.xaml` under `src/` except `Themes/Colors.xaml`, plus `*.cs` under

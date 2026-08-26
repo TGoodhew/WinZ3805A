@@ -106,6 +106,24 @@ jobs:
         run: ./build/Test-NoBlockedCommands.ps1
 
   # ---------------------------------------------------------------------------
+  # The capture harness is used once per hardware outing, and the states it
+  # exists to catch happen only while the receiver is being moved (#4, #185).
+  # A parsing bug found afterwards cannot be retried without moving it again,
+  # so the half that needs no serial port is checked on every push instead of
+  # on the day. It is a pwsh script over one committed fixture: no build, no
+  # restore, under a second.
+  # ---------------------------------------------------------------------------
+  tooling:
+    name: Tooling self-tests
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: The fixture capture harness still parses a status screen
+        shell: pwsh
+        run: ./build/Capture-Fixtures.ps1 -SelfTest
+
+  # ---------------------------------------------------------------------------
   # §6.1 as amended 15 Aug 2026 requires x64 only, and forbids AnyCPU. ARM64 was
   # dropped because WACK cannot cross-test and there is no ARM64 hardware to
   # certify a submission on; Windows 11 on ARM runs the x64 package under
