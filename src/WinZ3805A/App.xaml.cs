@@ -68,6 +68,7 @@ public partial class App : Application
         // looking, and a notifier that only ran while some page was open would be off exactly when
         // it is wanted. Resolving it subscribes it to the store.
         StartLockNotifications();
+        StartSurveyLog();
 
         ApplyAccent();
         StartTrayIcon();
@@ -222,6 +223,35 @@ public partial class App : Application
     }
 
     /// <summary>
+    /// Begins recording the survey's history (#12).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Resolved here for the reason <see cref="StartLockNotifications"/> is: a container singleton
+    /// is constructed when something asks for it, and nothing else asks for this one. Its whole job
+    /// is to be subscribed before a survey starts — a survey takes about two hours and §10.6 shows
+    /// its progress on one page, so a recorder that only ran while that page was open would be off
+    /// exactly when it is wanted.
+    /// </para>
+    /// <para>
+    /// Guarded whole and silently, on the same grounds: this is a diagnostic convenience and must
+    /// not be able to stop the application launching. The launch path is where this application has
+    /// twice been killed outright.
+    /// </para>
+    /// </remarks>
+    private static void StartSurveyLog()
+    {
+        try
+        {
+            _ = Services?.GetService<SurveyLog>();
+        }
+        catch (Exception)
+        {
+            // Deliberately broad and deliberately silent. See the remarks.
+        }
+    }
+
+    /// <summary>
     /// The composition root §12 asks for.
     /// </summary>
     /// <remarks>
@@ -294,6 +324,13 @@ public partial class App : Application
             provider.GetRequiredKeyedService<DeviceContext>(DeviceKeys.Primary).TimeProvider,
             provider.GetRequiredService<IToastSink>(),
             provider.GetService<ILogger<LockNotifier>>()));
+        // #12's survey trail. A survey runs for about two hours with nobody watching it, and §10.6
+        // put its progress on the Position page and nowhere else - so a run made with that page
+        // closed left no record of whether it advanced steadily or stalled for forty minutes.
+        services.AddSingleton(provider => new SurveyLog(
+            provider.GetRequiredKeyedService<DeviceContext>(DeviceKeys.Primary).Store,
+            provider.GetService<ILogger<SurveyLog>>()));
+
         services.AddSingleton<SerialPortEnumerator>();
 
         // Keyed by window: each keeps its own file, because the two are different sizes on
