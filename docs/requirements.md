@@ -1458,12 +1458,12 @@ Two behavioural principles remain here because they are functional rather than v
 │                  │                                                        │
 │                  │  ┌─ Oscillator Control (EFC) ────────────────────────┐ │
 │                  │  │      ┌──────────────────────────────────────┐     │ │
-│                  │  │  +20%│              ╱‾‾‾╲___╱‾‾              │     │ │
-│                  │  │    0%│─────────────╱────────────────────────│     │ │
-│                  │  │  −20%│                                      │     │ │
+│                  │  │−16.80│              ╱‾‾‾╲___╱‾‾              │     │ │
+│                  │  │−16.83│─────────────╱────────────────────────│     │ │
+│                  │  │−16.86│                                      │     │ │
 │                  │  │      └──────────────────────────────────────┘     │ │
 │                  │  │       −6 h            −3 h             now        │ │
-│                  │  │  Current: +4.2 %          [1 h][6 h][24 h][7 d]   │ │
+│                  │  │  Current: −16.83 %        [1 h][6 h][24 h][7 d]   │ │
 │                  │  └───────────────────────────────────────────────────┘ │
 └──────────────────┴────────────────────────────────────────────────────────┘
 ```
@@ -1579,21 +1579,36 @@ Validation before send: lat degrees 0–90, lon degrees 0–180, minutes 0–59,
 │  │          └──────────────────────────────                           │  │
 │  │                                                                    │  │
 │  │  Oscillator control (EFC)                                          │  │
-│  │   +25 % │                                                          │  │
-│  │      0 %│──────────────────────────────                            │  │
-│  │   −25 % │        ─────────────────────                             │  │
-│  │         └───────────────────────────────                           │  │
+│  │  −16.80 % │      ╱╲     ╱╲                                         │  │
+│  │  −16.83 % │──╲___╱  ╲___╱  ╲____╱╲___                              │  │
+│  │  −16.86 % │                                                        │  │
+│  │           └───────────────────────────────                         │  │
 │  │                                                                    │  │
 │  │  Oscillator drift                                                  │  │
 │  │   ⬤ Nothing remarkable                                             │  │
 │  │   Nothing in this window suggests a fault.                         │  │
-│  │   Drift −0.001 %/day — no projection: under a day of data here.    │  │
-│  │   From 792 settled readings spanning 19.6 hours. Scatter 0.00 %.   │  │
+│  │   Drift −8.6 ppm/day — no projection: the trend is flat            │  │
+│  │   or heading away from both rails.                                 │  │
+│  │   From 71,008 settled readings spanning 47.4 hours.                │  │
+│  │   Unexplained scatter 32.4 ppm of range. Daily swing               │  │
+│  │   about ±3.4 ppm, inferred from the reading’s own                  │  │
+│  │   24-hour periodicity — no temperature is reported.                │  │
 │  │   Hardware bits 6 and 7 are both clear.                            │  │
 │  │                                              [ Export CSV… ]       │  │
 │  └────────────────────────────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
+
+> **⚠ The wireframe above was redrawn on 26 Aug 2026** to match what §10.7.1 now specifies. It had
+> shown the oscillator-control chart with a zero-anchored `+25 % / 0 % / −25 %` axis and the drift
+> advisory in per cent, both of which #183 and #182 replaced. §10.4's Overview wireframe was redrawn
+> in the same pass and for a stronger reason: **the chart it draws is not built yet** (P1-1, blocked
+> on OQ-5), and a wireframe showing a zero-anchored EFC axis is precisely what led the Timing page's
+> implementation to give EFC the 1 PPS treatment in the first place. A picture is a specification
+> whether or not it is labelled as one.
+>
+> Figures in both are the 22–24 Aug 2026 capture, so the two wireframes and §10.7.1's amendments now
+> describe the same receiver.
 
 Cable presets, delay per metre (from the vendor cable tables in the 58503B manual):
 
