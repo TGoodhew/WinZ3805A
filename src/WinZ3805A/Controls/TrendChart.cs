@@ -306,14 +306,14 @@ public sealed class TrendChart : Control
     {
         (int count, double? extreme) = TrendDecimation.Outside(columns, minimum, maximum);
 
-        if (count == 0 || extreme is not double furthest)
+        if (TrendDecimation.DescribeOutside(count, extreme, Unit, Decimals) is not string sentence)
         {
             return;
         }
 
         TextBlock note = new()
         {
-            Text = $"{count} beyond the axis, to {Format(furthest)}",
+            Text = sentence,
             Style = Resource<Style>("WzCaptionTextStyle"),
             Foreground = Resource<Brush>("WzTextTertiaryBrush"),
         };
@@ -392,11 +392,19 @@ public sealed class TrendChart : Control
     /// carries no colour-borne value at all — which is also the first thing in the application to
     /// consume that palette.
     /// </para>
+    /// <para>
+    /// <b>Series 7, the dark blue, rather than series 1.</b> The palette is ordered for telling
+    /// several traces apart, and its first entry is a pink-red — which passes §9.4.4's clearance
+    /// from the severity colours arithmetically and still reads as an alarm to a person, sitting as
+    /// it does directly beneath a green "Nothing remarkable" pill. That is a judgement a gate
+    /// cannot make and a reviewer made. The ordering only starts to matter when a second series
+    /// shares an axis, and when it does this assignment needs revisiting rather than defending.
+    /// </para>
     /// </remarks>
     private Brush BrushFor(TrendColumn column)
     {
         string key = Anchoring == TrendAnchoring.Data
-            ? "WzSeries1Brush"
+            ? "WzSeries7Brush"
             : column switch
             {
                 { Minimum: < 0, Maximum: > 0 } => "WzDivergingZeroBrush",

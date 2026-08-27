@@ -487,6 +487,54 @@ public static class TrendDecimation
         return (count, extreme);
     }
 
+    /// <summary>
+    /// What the chart says about readings the axis ignored, or null when it ignored none.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>"Impossible" is a claim, and the threshold is what earns it.</b> A reading is only left
+    /// off the axis when it sits more than a hundred times the interquartile spread beyond the
+    /// quartiles — two orders of magnitude outside everything else in the window. That is not an
+    /// unusual measurement, it is not a measurement.
+    /// </para>
+    /// <para>
+    /// <b>"Hidden from the chart" rather than "hidden".</b> The reading is still in the trend store
+    /// and still in the CSV export; only the axis declines to be set by it. Saying so is the
+    /// condition on framing this way at all — an excursion is the diagnostic content on a timing
+    /// instrument, and a chart that quietly rescaled around one would be worse than an unreadable
+    /// axis.
+    /// </para>
+    /// <para>
+    /// <b>Scaled through <see cref="ReadoutFormatter.Seconds"/> when the quantity is time.</b>
+    /// "3000000000 ns" is a number a machine writes; "3.0 s" is the same number said to a person,
+    /// and it makes the point on its own — three seconds of 1 PPS error is self-evidently not a
+    /// reading. §9.5.3's ns/µs/ms/s ladder already exists for exactly this and is reused rather
+    /// than reinvented.
+    /// </para>
+    /// </remarks>
+    /// <param name="count">How many readings the axis left out.</param>
+    /// <param name="extreme">The furthest of them, in the chart's own units.</param>
+    /// <param name="unit">The chart's unit. <c>ns</c> is scaled; anything else is shown as it is.</param>
+    /// <param name="decimals">Decimals for a non-time unit, fixed per chart (§9.11 item 6).</param>
+    public static string? DescribeOutside(int count, double? extreme, string unit, int decimals)
+    {
+        if (count <= 0 || extreme is not double furthest)
+        {
+            return null;
+        }
+
+        string value = string.Equals(unit, "ns", StringComparison.Ordinal)
+            ? Say(ReadoutFormatter.Seconds(furthest / 1e9, 1))
+            : $"{ReadoutFormatter.Format(furthest, decimals)} {unit}";
+
+        return count == 1
+            ? $"1 impossible reading hidden from the chart — {value}"
+            : $"{count} impossible readings hidden from the chart — up to {value}";
+
+        static string Say((string Value, string Unit) reading) =>
+            string.IsNullOrEmpty(reading.Unit) ? reading.Value : $"{reading.Value} {reading.Unit}";
+    }
+
     /// <summary>Widens a range to the next round step outside it, on both sides.</summary>
     /// <remarks>
     /// 1, 2, 2.5 or 5 times a power of ten, chosen so the range holds about four steps. That is the
