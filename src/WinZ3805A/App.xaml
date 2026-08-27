@@ -26,6 +26,7 @@
                 <ResourceDictionary Source="ms-appx:///Themes/Spacing.xaml" />
                 <ResourceDictionary Source="ms-appx:///Themes/Typography.xaml" />
                 <ResourceDictionary Source="ms-appx:///Themes/Motion.xaml" />
+                <ResourceDictionary Source="ms-appx:///Themes/Shapes.xaml" />
                 <ResourceDictionary Source="ms-appx:///Themes/Controls.xaml" />
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
