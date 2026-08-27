@@ -66,6 +66,17 @@ jobs:
         shell: pwsh
         run: ./build/Test-NoColourOnlyStates.ps1
 
+      # A11Y-2 / §9.12 as amended by #187. Added 27 Aug 2026 with the A11Y-2 pass. The
+      # surface behind the focus ring is not knowable from source: the accent-filled
+      # button uses stock AccentButtonStyle and this app does not remap
+      # AccentFillColorDefault, so the fill is the END USER'S Windows accent. Every
+      # measured ratio is therefore specific to one machine. What is checkable is the
+      # property that makes the measurement unnecessary - one stroke near black and one
+      # near white cover the whole luminance range, and no surface can defeat both.
+      - name: The two-tone focus visual clears 3:1 against any surface
+        shell: pwsh
+        run: ./build/Test-FocusVisualCoverage.ps1
+
       # §9.13 item 4. Added 15 Aug 2026 after the §15 step 11 anti-pattern audit
       # found nine off-scale values across four pages, every one of which had
       # passed review - an off-by-two margin is invisible one at a time, which is
