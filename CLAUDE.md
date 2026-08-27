@@ -174,6 +174,7 @@ pwsh build/Test-SeriesSeparation.ps1     # A11Y-12 / §9.4.4
 pwsh build/Test-SpacingScale.ps1         # §9.13 item 4 / §9.6
 pwsh build/Test-HighContrastLegibility.ps1 # A11Y-8 / §9.2
 pwsh build/Test-NoColourOnlyStates.ps1   # A11Y-12 / §9.4.3
+pwsh build/Test-FocusVisualCoverage.ps1  # A11Y-2 / §9.12
 ```
 
 One more script runs in CI and is **not** a gate on the source — it checks a tool rather
@@ -183,7 +184,7 @@ than a rule:
 pwsh build/Capture-Fixtures.ps1 -SelfTest # #4 / #185 — the harness, not the app
 ```
 
-`.github/workflows/ci.yml` runs all ten first, before any restore, so a token,
+`.github/workflows/ci.yml` runs all eleven first, before any restore, so a token,
 accessibility, or safety regression fails in seconds rather than after a full build. It then
 builds both Configuration × Platform combinations — Debug and Release against x64,
 since §6.1 dropped ARM64 on 15 Aug 2026 — and runs the tests.
@@ -206,6 +207,17 @@ The theme-parity gate exists because Light and Dark are exercised every time any
 runs the app and HighContrast is not — testing it means switching the whole
 desktop over. A token defined in one theme and not another compiles, passes
 review, and then fails at run time for precisely the user who needs that theme.
+
+The focus-visual coverage gate is the newest, added 27 Aug 2026 alongside the A11Y-2 pass that
+closed #22. **The surface behind a focus ring is not knowable from source**: the accent-filled
+button uses stock `AccentButtonStyle` and this application does not remap `AccentFillColorDefault`,
+so the fill is the **end user's Windows accent colour** — every measured ratio (3.06:1 on 24 Aug,
+3.10:1 on 27 Aug) is specific to the machine it was taken on and says nothing about a user who has
+chosen yellow. So the gate checks the property that makes the measurement unnecessary: one stroke
+near black and one near white **cover the whole luminance range**, because a colour cannot be within
+3:1 of black and within 3:1 of white at once. Worst cases are Light 4.14:1 at L=0.200 and Dark
+4.43:1 at L=0.187. It exists to catch a future "softer" or brand-coloured focus ring, whose failure
+would otherwise appear only for users whose accent happens to land in the gap.
 
 The colour-only-states gate is the newest, added 27 Aug 2026 for #32. §10.3's footer staleness had
 three states whose only difference was `FooterText.Foreground` — the age in words was in the text
