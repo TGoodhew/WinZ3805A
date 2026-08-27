@@ -25,53 +25,71 @@
             §9.11 requires the verb on the button the user clicked to survive into this dialog and
             on into the result sentence.
     -->
-    <StackPanel Width="400" Spacing="{StaticResource WzSpaceMd}">
+    <!--
+        A11Y-6: the content scrolls rather than being clipped, and the width is a floor rather
+        than a fixture (#26).
 
-        <!--
-            The §8.3 consequence, verbatim from the catalog. Capped at the §9.5.3 prose width so a
-            four-line warning does not become a two-line one nobody reads to the end of.
-        -->
-        <TextBlock x:Name="MessageText"
-                   Style="{ThemeResource WzBodyTextStyle}"
-                   TextWrapping="Wrap"
-                   MaxWidth="{ThemeResource WzProseMaxWidth}" />
+        At 200 % text this dialog grew taller than a ContentDialog will show, and the overflow
+        was simply cut off by the button row - "Connect to this device on launch" lost its second
+        line mid-word, with no way to reach it. A ContentDialog does not scroll its content on its
+        own, so nothing recovered it.
 
-        <!--
-            Only for the §8.3 entries that are a bare question. Under a title carrying the same
-            verb, those state no consequence at all, and #8 is explicit that a tier C dialog is not
-            a generic "are you sure". Nothing in §8.3 is dropped to make room - this only adds.
-        -->
-        <TextBlock x:Name="ExplanationText"
-                   Style="{ThemeResource WzBodyTextStyle}"
-                   Foreground="{ThemeResource WzTextSecondaryBrush}"
-                   TextWrapping="Wrap"
-                   MaxWidth="{ThemeResource WzProseMaxWidth}"
-                   Visibility="Collapsed" />
+        The fixed Width was the other half. It cannot grow with the text, so the port combo
+        truncated to "COM3 - Prolific l". MinWidth keeps the designed proportions at 100 % while
+        letting the dialog use the width it has when the text is larger.
+    -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                  VerticalScrollMode="Auto"
+                  HorizontalScrollMode="Disabled"
+                  HorizontalScrollBarVisibility="Disabled">
+        <StackPanel MinWidth="400" Spacing="{StaticResource WzSpaceMd}">
 
-        <!-- The number about to be sent, where §8.3's own sentence has no place for it. -->
-        <TextBlock x:Name="ValueText"
-                   Style="{ThemeResource WzBodyStrongTextStyle}"
-                   TextWrapping="Wrap"
-                   Visibility="Collapsed" />
+            <!--
+                The §8.3 consequence, verbatim from the catalog. Capped at the §9.5.3 prose width so a
+                four-line warning does not become a two-line one nobody reads to the end of.
+            -->
+            <TextBlock x:Name="MessageText"
+                       Style="{ThemeResource WzBodyTextStyle}"
+                       TextWrapping="Wrap"
+                       MaxWidth="{ThemeResource WzProseMaxWidth}" />
 
-        <!--
-            What the page knows and the catalog cannot — §10.8's time since power-up is the case
-            this exists for. Warning rather than Error: the command is still offered.
-        -->
-        <InfoBar x:Name="CautionBar"
-                 IsOpen="False"
-                 IsClosable="False"
-                 Severity="Warning" />
+            <!--
+                Only for the §8.3 entries that are a bare question. Under a title carrying the same
+                verb, those state no consequence at all, and #8 is explicit that a tier C dialog is not
+                a generic "are you sure". Nothing in §8.3 is dropped to make room - this only adds.
+            -->
+            <TextBlock x:Name="ExplanationText"
+                       Style="{ThemeResource WzBodyTextStyle}"
+                       Foreground="{ThemeResource WzTextSecondaryBrush}"
+                       TextWrapping="Wrap"
+                       MaxWidth="{ThemeResource WzProseMaxWidth}"
+                       Visibility="Collapsed" />
 
-        <!--
-            §9.7.4's gate on the four strong variants, and on anything a page asks to be gated.
-            Bound in code-behind to CanConfirm rather than to the CheckBox directly, so the one
-            rule that decides whether a destructive command may run lives in a class that can be
-            tested without a window.
-        -->
-        <CheckBox x:Name="AcknowledgeCheck"
-                  Visibility="Collapsed"
-                  Checked="OnAcknowledgementChanged"
-                  Unchecked="OnAcknowledgementChanged" />
-    </StackPanel>
+            <!-- The number about to be sent, where §8.3's own sentence has no place for it. -->
+            <TextBlock x:Name="ValueText"
+                       Style="{ThemeResource WzBodyStrongTextStyle}"
+                       TextWrapping="Wrap"
+                       Visibility="Collapsed" />
+
+            <!--
+                What the page knows and the catalog cannot — §10.8's time since power-up is the case
+                this exists for. Warning rather than Error: the command is still offered.
+            -->
+            <InfoBar x:Name="CautionBar"
+                     IsOpen="False"
+                     IsClosable="False"
+                     Severity="Warning" />
+
+            <!--
+                §9.7.4's gate on the four strong variants, and on anything a page asks to be gated.
+                Bound in code-behind to CanConfirm rather than to the CheckBox directly, so the one
+                rule that decides whether a destructive command may run lives in a class that can be
+                tested without a window.
+            -->
+            <CheckBox x:Name="AcknowledgeCheck"
+                      Visibility="Collapsed"
+                      Checked="OnAcknowledgementChanged"
+                      Unchecked="OnAcknowledgementChanged" />
+        </StackPanel>
+    </ScrollViewer>
 </ContentDialog>
