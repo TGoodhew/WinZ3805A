@@ -171,6 +171,8 @@ pwsh build/Test-ThemeDictionaryParity.ps1  # §9.4 / A11Y-8
 pwsh build/Test-NoBlockedCommands.ps1    # P0-7 / §8.4
 pwsh build/Test-ContrastFloor.ps1        # A11Y-4 / §9.4.5
 pwsh build/Test-SeriesSeparation.ps1     # A11Y-12 / §9.4.4
+pwsh build/Test-SpacingScale.ps1         # §9.13 item 4 / §9.6
+pwsh build/Test-HighContrastLegibility.ps1 # A11Y-8 / §9.2
 ```
 
 One more script runs in CI and is **not** a gate on the source — it checks a tool rather
@@ -180,7 +182,7 @@ than a rule:
 pwsh build/Capture-Fixtures.ps1 -SelfTest # #4 / #185 — the harness, not the app
 ```
 
-`.github/workflows/ci.yml` runs all eight first, before any restore, so a token,
+`.github/workflows/ci.yml` runs all nine first, before any restore, so a token,
 accessibility, or safety regression fails in seconds rather than after a full build. It then
 builds both Configuration × Platform combinations — Debug and Release against x64,
 since §6.1 dropped ARM64 on 15 Aug 2026 — and runs the tests.
@@ -203,6 +205,19 @@ The theme-parity gate exists because Light and Dark are exercised every time any
 runs the app and HighContrast is not — testing it means switching the whole
 desktop over. A token defined in one theme and not another compiles, passes
 review, and then fails at run time for precisely the user who needs that theme.
+
+The high-contrast legibility gate is the newest, added 27 Aug 2026 for #218 — the first defect
+found by actually switching the desktop into high contrast rather than reasoning about it. The
+parity gate above **passed** it: `WzSequential1Brush` and `WzSequential2Brush` existed, in all
+three themes, with the right type — and were defined as `SystemColorWindowColor`, the surface
+they are painted on. A tracked satellite is filled with a ramp step chosen by signal strength,
+those two steps span C/N 26–34, and §11.1 calls 35 and above good — so **every satellite that was
+not already good was drawn in the page background**, while the legend swatch, hard-wired to step
+5, went on showing a filled dot. **Key parity is not legibility.** The check is structural rather
+than photometric, which is what lets it work at all where `Test-ContrastFloor` cannot: it does not
+need to know what colour the user's window is to know that a foreground must not *be* it. Its
+allowlist holds the four genuine surfaces, each with a reason asserted non-empty — a row there is
+a claim that the token names something drawn *under* other content, not an exemption.
 
 The contrast gate is the newest, added 21 Aug 2026 for #24 — which had carried a `ci-gate`
 label since the backlog was written while nothing in the repository computed a contrast ratio.

@@ -45,6 +45,16 @@ jobs:
         shell: pwsh
         run: ./build/Test-ThemeDictionaryParity.ps1
 
+      # A11Y-8 / §9.2. Added 27 Aug 2026 (#218), the first defect found by actually
+      # switching the desktop into high contrast. The gate above passed it: the two
+      # tokens existed, in every theme, with the right type - and were defined as the
+      # surface they are painted on, so a tracked satellite at C/N 26-34 was drawn in
+      # the page background while its legend still showed a filled dot. Key parity is
+      # not legibility, and this is the half the other gate cannot see.
+      - name: No HighContrast token is defined as the surface it is drawn on
+        shell: pwsh
+        run: ./build/Test-HighContrastLegibility.ps1
+
       # §9.13 item 4. Added 15 Aug 2026 after the §15 step 11 anti-pattern audit
       # found nine off-scale values across four pages, every one of which had
       # passed review - an off-by-two margin is invisible one at a time, which is
