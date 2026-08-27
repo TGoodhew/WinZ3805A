@@ -113,8 +113,8 @@ public class TrendOutlierTests
     /// <summary>A short window excludes nothing, because a fraction of it is not a column.</summary>
     [Theory]
     [InlineData(1)]
-    [InlineData(10)]
-    [InlineData(49)]
+    [InlineData(5)]
+    [InlineData(11)]
     public void AShortWindowKeepsEveryReading(int count)
     {
         TrendColumn[] columns = new TrendColumn[count];
@@ -129,6 +129,56 @@ public class TrendOutlierTests
         (_, double maximum) = TrendDecimation.ZeroAnchoredBounds(columns, floor: 50);
 
         Assert.True(maximum >= 5000, $"nothing should be excluded from {count} column(s); got ±{maximum}");
+    }
+
+    /// <remarks>
+    /// <b>The shape that defeated the first attempt, and the reason this test exists.</b> A seven-day
+    /// window is mostly empty — the application is not running most of the week — so the trend held
+    /// 12,333 readings in only <b>153 of 680 pixel columns</b>. The first rule dropped a fixed
+    /// fraction of columns from each end, and 0.2 % of 153 rounds to zero: it excluded nothing at
+    /// all on real data while passing against 1,200 dense synthetic ones.
+    /// </remarks>
+    [Fact]
+    public void ASparseWeekIsFramedOnItsReadings()
+    {
+        // 153 populated columns, as measured from trend.db, with the sample that started #209.
+        TrendColumn[] sparse = new TrendColumn[153];
+
+        for (int i = 0; i < sparse.Length; i++)
+        {
+            double centre = -30 + (20 * Math.Sin(i / 11.0));
+            sparse[i] = new TrendColumn(i * 4, centre - 8, centre + 8, 80);
+        }
+
+        sparse[97] = new TrendColumn(97 * 4, -30, 3_000_000_000, 80);
+
+        (double minimum, double maximum) = TrendDecimation.ZeroAnchoredBounds(sparse, floor: 50);
+
+        Assert.True(maximum < 1000, $"the axis should ignore three seconds of time interval; got ±{maximum}");
+        Assert.True(maximum >= 50, "and never fall below the floor");
+
+        (int count, double? extreme) = TrendDecimation.Outside(sparse, minimum, maximum);
+        Assert.Equal(1, count);
+        Assert.Equal(3_000_000_000, extreme);
+    }
+
+    /// <summary>The same window without the impossible reading is framed on all of it.</summary>
+    [Fact]
+    public void ASparseWeekWithNothingWrongExcludesNothing()
+    {
+        TrendColumn[] sparse = new TrendColumn[153];
+
+        for (int i = 0; i < sparse.Length; i++)
+        {
+            double centre = -30 + (20 * Math.Sin(i / 11.0));
+            sparse[i] = new TrendColumn(i * 4, centre - 8, centre + 8, 80);
+        }
+
+        (double minimum, double maximum) = TrendDecimation.ZeroAnchoredBounds(sparse, floor: 50);
+        (int count, double? extreme) = TrendDecimation.Outside(sparse, minimum, maximum);
+
+        Assert.Equal(0, count);
+        Assert.Null(extreme);
     }
 
     // -------------------------------------------------------------------------------------

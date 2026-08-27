@@ -306,54 +306,51 @@ public static class TrendDecimation
     }
 
     /// <summary>
-    /// How many columns at each end are allowed to fall outside the axis, as a fraction.
+    /// How far beyond the bulk of the readings a value must sit before the axis ignores it.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// 0.2 % — about two or three columns of a 1,300-pixel plot. Chosen to catch the single
-    /// aberrant column and nothing wider: a real excursion on this instrument lasts minutes to
-    /// hours and covers many columns, while a bad reading covers exactly one.
+    /// <b>A hundred times the interquartile spread, which is deliberately enormous.</b> This is not
+    /// a rule for finding unusual readings — it is a rule for finding <i>impossible</i> ones, and
+    /// the two must not be confused. On this instrument the values that caused #209 were three
+    /// <b>seconds</b> of time interval against a window spanning tens of nanoseconds: out by a
+    /// factor of 10⁸. A genuine excursion, even a bad one, is a few tens of times the ordinary
+    /// spread and stays on the axis.
     /// </para>
     /// <para>
-    /// It only decides <i>which</i> readings count as the bulk. Whether the true extremes are
-    /// actually excluded is a separate and much stricter test — they are kept unless keeping them
-    /// would more than double the axis. <b>An excursion is the diagnostic content on a timing
-    /// instrument</b>, and a framing rule that quietly drops the largest one is worse than an
-    /// unreadable axis, so anything left outside is counted and named beside the chart.
-    /// </para>
-    /// <para>
-    /// <b>A limit worth knowing.</b> A window whose readings are all identical has no spread to
-    /// measure an outlier against, so a single wild value there is not excluded and the axis is
-    /// still stretched by it. That case is now prevented upstream instead: a reading whose sync
-    /// state is not a state the receiver reports is never stored (#209).
+    /// <b>An excursion is the diagnostic content on a timing instrument.</b> A framing rule that
+    /// hides the largest one is worse than an unreadable axis, so the factor is set where only
+    /// arithmetic nonsense falls outside it, and whatever does is counted and named beside the
+    /// chart rather than quietly dropped.
     /// </para>
     /// </remarks>
-    private const double OutlierFraction = 0.002;
+    private const double OutlierFactor = 100;
 
-    /// <summary>Below this many columns the fraction is meaningless and nothing is excluded.</summary>
-    /// <remarks>
-    /// At fifty columns 0.2 % is a tenth of a column, so the arithmetic already excludes nothing —
-    /// this makes that explicit rather than incidental, and stops a short window behaving one way
-    /// today and another after a rounding change.
-    /// </remarks>
-    private const int MinimumColumnsForOutliers = 50;
+    /// <summary>Below this many columns there are no quartiles worth the name.</summary>
+    private const int MinimumColumnsForOutliers = 12;
 
     /// <summary>
-    /// The range the bulk of the window occupies, ignoring a very small number of extremes at each
-    /// end (#209).
+    /// The range the readings occupy, ignoring any that are impossible rather than merely large
+    /// (#209).
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Framing on the absolute extremes means one sample can set the axis for a week. That is not
-    /// hypothetical: three impossible values reached <c>trend.db</c> after a link misalignment, and
-    /// the 1 PPS axis became <b>±3,000,000,000 ns</b> for data spanning −76.5 to +21 ns — the real
-    /// trace occupying about two millionths of the plot height, on a chart whose zero anchoring was
-    /// never in question. Both axis modes need this; neither is safe from it.
+    /// Framing on the absolute extremes lets one reading set the axis for a week. Measured: the
+    /// 1 PPS axis became <b>±3,000,000,000 ns</b> for data spanning −76.5 to +21 ns, the real trace
+    /// occupying about two millionths of the plot height — on a chart whose zero anchoring was never
+    /// in question. Both axis modes need this; neither is safe from it.
     /// </para>
     /// <para>
-    /// Only the <i>bounds</i> ignore those columns. Every column is still drawn, and the draw path
-    /// clamps to the plot edge, so an excluded extreme appears as a trace pinned to the top or
-    /// bottom rather than as nothing at all.
+    /// <b>The bulk is measured with quartiles, not with a fraction of the columns.</b> The first
+    /// version dropped a fixed proportion from each end, and it did nothing at all on real data: a
+    /// seven-day window is mostly empty, so only 153 of 680 pixel columns held readings and 0.2 % of
+    /// 153 rounds to zero. It worked in a test of 1,200 dense columns and nowhere else. Quartiles
+    /// need no such constant and are unmoved by a handful of absurd values by construction.
+    /// </para>
+    /// <para>
+    /// Only the <i>bounds</i> ignore anything. Every column is still drawn and the draw path clamps
+    /// to the plot edge, so an excluded extreme appears as a trace pinned to the top or bottom
+    /// rather than as nothing at all.
     /// </para>
     /// </remarks>
     public static (double Minimum, double Maximum) TypicalRange(IReadOnlyList<TrendColumn> columns)
@@ -367,11 +364,14 @@ public static class TrendDecimation
 
         double[] minima = new double[columns.Count];
         double[] maxima = new double[columns.Count];
+        double[] pooled = new double[columns.Count * 2];
 
         for (int i = 0; i < columns.Count; i++)
         {
             minima[i] = columns[i].Minimum;
             maxima[i] = columns[i].Maximum;
+            pooled[i * 2] = columns[i].Minimum;
+            pooled[(i * 2) + 1] = columns[i].Maximum;
         }
 
         Array.Sort(minima);
@@ -385,25 +385,66 @@ public static class TrendDecimation
             return (lowest, highest);
         }
 
-        int drop = (int)(columns.Count * OutlierFraction);
-        double low = minima[drop];
-        double high = maxima[^(drop + 1)];
-        double bulk = high - low;
+        Array.Sort(pooled);
 
-        // A window with no spread has no bulk to be outside of, and calling its largest reading an
-        // outlier would be arithmetic rather than judgement.
+        double lowerQuartile = pooled[pooled.Length / 4];
+        double upperQuartile = pooled[pooled.Length * 3 / 4];
+        double bulk = upperQuartile - lowerQuartile;
+
+        // A window with no spread has no bulk to be outside of, and calling its largest reading
+        // impossible would be arithmetic rather than judgement.
         if (bulk <= 0)
         {
             return (lowest, highest);
         }
 
-        // **The extremes are kept unless keeping them would more than double the axis.** That is the
-        // difference between an outlier and merely the largest reading, and it is what stops the
-        // caption appearing on every chart: on an ordinary window the percentile bound sits a
-        // hairsbreadth inside the true extreme, nothing is excluded, and the chart says nothing.
-        return (
-            low - lowest > bulk ? low : lowest,
-            highest - high > bulk ? high : highest);
+        double ceiling = upperQuartile + (OutlierFactor * bulk);
+        double basement = lowerQuartile - (OutlierFactor * bulk);
+
+        return (LargestBelow(minima, basement, lowest), SmallestBelow(maxima, ceiling, highest));
+    }
+
+    /// <summary>The most negative value at or above <paramref name="limit"/>, or the true minimum.</summary>
+    /// <remarks>
+    /// Snapped to a reading rather than to the limit, so the axis still describes data the receiver
+    /// produced. An axis bound at a computed threshold would be a number nothing in the window ever
+    /// took.
+    /// </remarks>
+    private static double LargestBelow(double[] ascending, double limit, double fallback)
+    {
+        if (fallback >= limit)
+        {
+            return fallback;
+        }
+
+        foreach (double value in ascending)
+        {
+            if (value >= limit)
+            {
+                return value;
+            }
+        }
+
+        return fallback;
+    }
+
+    /// <inheritdoc cref="LargestBelow" />
+    private static double SmallestBelow(double[] ascending, double limit, double fallback)
+    {
+        if (fallback <= limit)
+        {
+            return fallback;
+        }
+
+        for (int i = ascending.Length - 1; i >= 0; i--)
+        {
+            if (ascending[i] <= limit)
+            {
+                return ascending[i];
+            }
+        }
+
+        return fallback;
     }
 
     /// <summary>
