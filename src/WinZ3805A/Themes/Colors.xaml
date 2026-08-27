@@ -346,12 +346,29 @@
             <SolidColorBrush x:Key="WzSeries7Brush" Color="{ThemeResource SystemColorWindowTextColor}" />
             <SolidColorBrush x:Key="WzSeries8Brush" Color="{ThemeResource SystemColorHighlightColor}" />
 
-            <SolidColorBrush x:Key="WzSequential1Brush" Color="{ThemeResource SystemColorWindowColor}" />
-            <SolidColorBrush x:Key="WzSequential2Brush" Color="{ThemeResource SystemColorWindowColor}" />
-            <SolidColorBrush x:Key="WzSequential3Brush" Color="{ThemeResource SystemColorGrayTextColor}" />
-            <SolidColorBrush x:Key="WzSequential4Brush" Color="{ThemeResource SystemColorGrayTextColor}" />
-            <SolidColorBrush x:Key="WzSequential5Brush" Color="{ThemeResource SystemColorHighlightColor}" />
-            <SolidColorBrush x:Key="WzSequential6Brush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <!--
+                The sequential ramp flattens to one colour, for the same reason the severity
+                colours above do: an ordered ramp is a colour channel, and this theme has no
+                colour channel to put it in. Three system colours cannot carry seven ordered
+                steps, and any assignment that tries is a ramp only in the sense that it has
+                seven entries.
+
+                Two of them used to be SystemColorWindowColor, which is the surface the ramp is
+                drawn on. That made a tracked satellite at C/N 26-34 invisible on the sky plot
+                while its legend swatch still showed a filled dot — #218. §11.1 calls C/N 35 and
+                above good, so the invisible band was exactly the satellites worth looking at.
+
+                Nothing is lost by flattening it. §9.10.2 already carries signal strength as
+                marker AREA, which survives this theme untouched, and the reading itself is in
+                the Tracked table beside the plot. What the fill has to say here is only whether
+                the satellite is tracked, and one visible colour says it.
+            -->
+            <SolidColorBrush x:Key="WzSequential1Brush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="WzSequential2Brush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="WzSequential3Brush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="WzSequential4Brush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="WzSequential5Brush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="WzSequential6Brush" Color="{ThemeResource SystemColorWindowTextColor}" />
             <SolidColorBrush x:Key="WzSequential7Brush" Color="{ThemeResource SystemColorWindowTextColor}" />
 
             <SolidColorBrush x:Key="WzDivergingNegativeStrongBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
