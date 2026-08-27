@@ -173,6 +173,7 @@ pwsh build/Test-ContrastFloor.ps1        # A11Y-4 / §9.4.5
 pwsh build/Test-SeriesSeparation.ps1     # A11Y-12 / §9.4.4
 pwsh build/Test-SpacingScale.ps1         # §9.13 item 4 / §9.6
 pwsh build/Test-HighContrastLegibility.ps1 # A11Y-8 / §9.2
+pwsh build/Test-NoColourOnlyStates.ps1   # A11Y-12 / §9.4.3
 ```
 
 One more script runs in CI and is **not** a gate on the source — it checks a tool rather
@@ -182,7 +183,7 @@ than a rule:
 pwsh build/Capture-Fixtures.ps1 -SelfTest # #4 / #185 — the harness, not the app
 ```
 
-`.github/workflows/ci.yml` runs all nine first, before any restore, so a token,
+`.github/workflows/ci.yml` runs all ten first, before any restore, so a token,
 accessibility, or safety regression fails in seconds rather than after a full build. It then
 builds both Configuration × Platform combinations — Debug and Release against x64,
 since §6.1 dropped ARM64 on 15 Aug 2026 — and runs the tests.
@@ -205,6 +206,17 @@ The theme-parity gate exists because Light and Dark are exercised every time any
 runs the app and HighContrast is not — testing it means switching the whole
 desktop over. A token defined in one theme and not another compiles, passes
 review, and then fails at run time for precisely the user who needs that theme.
+
+The colour-only-states gate is the newest, added 27 Aug 2026 for #32. §10.3's footer staleness had
+three states whose only difference was `FooterText.Foreground` — the age in words was in the text
+either way, but **the judgement about that age was hue and nothing else**. §9.4.3 already says
+caution and critical converge under protanopia and deuteranopia; under high contrast it is not a
+convergence but an **identity**, both being `SystemColorWindowTextColor`, so two of the three states
+rendered the same pixels. The rule is structural: within a `VisualStateGroup`, the properties its
+states set must include at least one that is not a brush. It cannot judge whether a second channel
+is a *good* one — a group setting `Opacity` passes and may still be weak — but it makes the specific
+thing review kept missing impossible. Pointer and focus feedback are exempt with reasons, because
+those groups convey no information to read.
 
 The high-contrast legibility gate is the newest, added 27 Aug 2026 for #218 — the first defect
 found by actually switching the desktop into high contrast rather than reasoning about it. The

@@ -55,6 +55,17 @@ jobs:
         shell: pwsh
         run: ./build/Test-HighContrastLegibility.ps1
 
+      # A11Y-12 / §9.4.3. Added 27 Aug 2026 (#32). §10.3's footer staleness had three
+      # states whose only difference was FooterText.Foreground: the age in words was in
+      # the text either way, but the judgement about that age - fresh, getting old, too
+      # old - was hue and nothing else. §9.4.3 notes caution and critical converge under
+      # protanopia and deuteranopia, and under high contrast it is not convergence but
+      # identity, both being SystemColorWindowTextColor. Two of three states rendered
+      # the same pixels.
+      - name: No visual state group distinguishes its states by colour alone
+        shell: pwsh
+        run: ./build/Test-NoColourOnlyStates.ps1
+
       # §9.13 item 4. Added 15 Aug 2026 after the §15 step 11 anti-pattern audit
       # found nine off-scale values across four pages, every one of which had
       # passed review - an off-by-two margin is invisible one at a time, which is
