@@ -30,11 +30,33 @@ public sealed class ConnectionViewModel : INotifyPropertyChanged
 
     /// <summary>The attempt in flight, or null between attempts.</summary>
     /// <remarks>
-    /// <c>volatile</c> because it is written by the attempt and read by a <c>Progress&lt;T&gt;</c>
-    /// callback delivered on another thread (#198). Reference assignment is already atomic; what
-    /// this buys is that the callback cannot go on seeing a stale non-null after the attempt ended.
+    /// Nulled when the attempt ends because <see cref="Cancel"/> reaches through it, and the source
+    /// is disposed by then — cancelling a disposed one throws. Identity for the progress callback is
+    /// <see cref="_generation"/> instead, which is a different question and needs a different answer.
     /// </remarks>
     private volatile CancellationTokenSource? _attempt;
+
+    /// <summary>Which attempt is the current one. Incremented when a new attempt starts, never reset.</summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The progress callback asks "is this still my attempt", not "is my attempt still running"</b>
+    /// — and the difference is #213. <c>Progress&lt;T&gt;</c> delivery is not ordered against the
+    /// task <see cref="ConnectAsync"/> awaits, so the last candidate's line routinely arrives after
+    /// the walk has finished. Declining it, as the first version of #198's guard did, meant the
+    /// eighth of eight was simply never painted.
+    /// </para>
+    /// <para>
+    /// Painting it late is harmless: <c>ConnectionDialog</c> collapses the whole progress area when
+    /// <see cref="IsBusy"/> goes false, so nothing is on screen to be wrong. What is <i>not</i>
+    /// harmless is a line from a previous attempt landing during the next one, which is what this
+    /// still declines.
+    /// </para>
+    /// <para>
+    /// Not reset to zero, so a generation number is never reused and a callback held up across two
+    /// attempts cannot find its own number again.
+    /// </para>
+    /// </remarks>
+    private volatile int _generation;
 
     private IReadOnlyList<SerialPortInfo> _available = [];
     private SerialPortInfo? _selectedPort;
@@ -273,14 +295,27 @@ public sealed class ConnectionViewModel : INotifyPropertyChanged
         using CancellationTokenSource attempt = new();
         _attempt = attempt;
 
+        // Cleared before the area becomes visible, not after the last attempt ended. That is the
+        // symptom #198 was actually reaching for: a late line can still land after a walk finishes,
+        // and without this it would be sitting there when the progress area next opens (#213).
+        //
+        // Deliberately untested, and worth saying so rather than leaving the next reader to find it
+        // uncovered and delete it. Reaching the state it clears needs a Progress<T> callback that
+        // arrives after its own walk returned, and nothing in the fixture can force that: the
+        // session is real, only the transports are faked, so the delivery timing is the runtime's.
+        // A test written for it passes whether or not this line is here, which is worse than none.
+        ProgressText = null;
+
         IsBusy = true;
         ErrorMessage = null;
         _session.StayConnected = ReconnectAutomatically;
 
+        int generation = ++_generation;
+
         try
         {
             bool connected = IsAutoDetect
-                ? await AutoDetectAsync(port.PortName, attempt, attempt.Token).ConfigureAwait(false)
+                ? await AutoDetectAsync(port.PortName, generation, attempt.Token).ConfigureAwait(false)
                 : await ManualConnectAsync(port.PortName, attempt.Token).ConfigureAwait(false);
 
             if (connected)
@@ -405,22 +440,29 @@ public sealed class ConnectionViewModel : INotifyPropertyChanged
     };
 
     /// <remarks>
-    /// <b>The callback checks that its own attempt is still running before it paints anything</b>
-    /// (#198). <c>Progress&lt;T&gt;</c> posts to the captured synchronization context, or to the
-    /// thread pool when there is none, and either way it is <i>not</i> ordered against the task
-    /// <see cref="ConnectAsync"/> is awaiting. So the last candidate's callback can be delivered
-    /// after the receiver has answered and after the <c>finally</c> has cleared the line, leaving
-    /// §10.12's dialog reading "Trying 9600-8-N-1 — 1 of 8" underneath a connected receiver.
     /// <para>
-    /// Comparing against <see cref="_attempt"/> makes both orderings safe rather than making one of
-    /// them fast enough: delivered during the attempt, the line is painted and the <c>finally</c>
-    /// clears it afterwards; delivered after, the field has already been nulled and the callback
-    /// does nothing.
+    /// <b>The callback checks that the attempt it belongs to is still the current one</b> (#198,
+    /// #213). <c>Progress&lt;T&gt;</c> posts to the captured synchronization context, or to the
+    /// thread pool when there is none, and either way it is <i>not</i> ordered against the task
+    /// <see cref="ConnectAsync"/> is awaiting — so the last candidate's line routinely arrives after
+    /// the walk has already finished.
+    /// </para>
+    /// <para>
+    /// <b>That late line is allowed, and the first version of this guard was wrong to refuse it.</b>
+    /// <c>ConnectionDialog</c> collapses the whole progress area when <see cref="IsBusy"/> goes
+    /// false, so a line painted after the walk is not on screen to be wrong — while refusing it meant
+    /// the eighth of eight was never painted at all, which is a real gap in §10.12's count.
+    /// </para>
+    /// <para>
+    /// What must not paint is a line from a <i>previous</i> attempt landing during the next one, and
+    /// that is what the generation check declines. The stale-text symptom the original guard was
+    /// reaching for is handled where it actually shows: <see cref="ConnectAsync"/> clears the line
+    /// when an attempt starts, before the area becomes visible again.
     /// </para>
     /// </remarks>
     private async Task<bool> AutoDetectAsync(
         string portName,
-        CancellationTokenSource source,
+        int generation,
         CancellationToken cancellationToken)
     {
         int attempt = 0;
@@ -430,7 +472,9 @@ public sealed class ConnectionViewModel : INotifyPropertyChanged
         {
             attempt++;
 
-            if (ReferenceEquals(_attempt, source))
+            // Its own attempt, however late — see _generation. A line from a *previous* attempt is
+            // what must not paint, and that is what this declines.
+            if (_generation == generation)
             {
                 ProgressText = $"Trying {candidate} — {attempt} of {total}";
             }

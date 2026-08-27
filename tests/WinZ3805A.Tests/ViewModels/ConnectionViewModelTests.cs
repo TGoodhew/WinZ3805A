@@ -174,10 +174,126 @@ public sealed class ConnectionViewModelTests
         await fixture.Model.RefreshPortsAsync();
         Assert.False(await fixture.Model.ConnectAsync().WaitAsync(TestTimeout));
 
+        // Waited for, not assumed (#213). Progress<T> posts its callbacks and does not order them
+        // against the task ConnectAsync awaits, so the last candidate's line routinely arrives just
+        // after the walk finishes. Reading the list the instant the walk returns is asking whether
+        // the eighth line happened to have been delivered *yet* — which it had, about 24 times in
+        // 25. This waits for the mechanism instead of racing it, and still asserts all eight.
+        using (CancellationTokenSource settle = new(TestTimeout))
+        {
+            while (progress.Count < 8 && !settle.IsCancellationRequested)
+            {
+                await Task.Delay(5, CancellationToken.None);
+            }
+        }
+
         Assert.Equal(8, progress.Count);
         Assert.Equal("Trying 9600-8-N-1 — 1 of 8", progress[0]);
         Assert.Equal("Trying 19200-7-E-1 — 2 of 8", progress[1]);
         Assert.Equal("Trying 19200-7-O-1 — 8 of 8", progress[7]);
+    }
+
+    /// <summary>
+    /// The last candidate is still reported when its callback is delivered after the walk (#213).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>This is the race, forced rather than waited for.</b> #213 is a flake because
+    /// <c>Progress&lt;T&gt;</c> delivery is not ordered against the task <c>ConnectAsync</c> awaits,
+    /// and on a fast machine the eighth callback happens to land in time — 60 consecutive runs of
+    /// this suite reproduced it zero times either before or after the fix, so a repeat-until-red
+    /// loop is not evidence of anything here.
+    /// </para>
+    /// <para>
+    /// <c>Progress&lt;T&gt;</c> captures <see cref="SynchronizationContext.Current"/> when it is
+    /// constructed and posts every report there, so a context that holds its posts decides the
+    /// question outright: the walk finishes with nothing delivered, and the reports are released
+    /// afterwards. That is the late delivery that only sometimes occurs by itself.
+    /// </para>
+    /// <para>
+    /// Under the guard this replaces — which compared against the live attempt, nulled by the
+    /// <c>finally</c> — every one of the eight is declined and this reports nothing at all.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ACandidateReportedAfterTheWalkEndsIsStillItsOwnAttempt()
+    {
+        SynchronizationContext? original = SynchronizationContext.Current;
+        HoldingContext held = new();
+        SynchronizationContext.SetSynchronizationContext(held);
+
+        try
+        {
+            using Fixture fixture = new(ports: [Port("COM3")]);
+            for (int probe = 0; probe < SerialSettings.AutoDetectSequence.Count; probe++)
+            {
+                fixture.Transports.Enqueue(WrongSettings());
+            }
+
+            List<string?> progress = [];
+            fixture.Model.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(ConnectionViewModel.ProgressText)
+                    && fixture.Model.ProgressText is string line)
+                {
+                    progress.Add(line);
+                }
+            };
+
+            await fixture.Model.RefreshPortsAsync();
+            Assert.False(await fixture.Model.ConnectAsync().WaitAsync(TestTimeout));
+
+            // The walk is over and the finally has run, and not one report has been delivered.
+            Assert.Empty(progress);
+
+            held.Release();
+
+            Assert.Equal(SerialSettings.AutoDetectSequence.Count, progress.Count);
+            Assert.Equal("Trying 9600-8-N-1 — 1 of 8", progress[0]);
+            Assert.EndsWith("8 of 8", progress[^1], StringComparison.Ordinal);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(original);
+        }
+    }
+
+    /// <summary>
+    /// A context that queues everything posted to it until it is told to let go.
+    /// </summary>
+    /// <remarks>
+    /// Only <see cref="Post"/> is held. <c>Send</c> is synchronous by contract and holding it
+    /// would deadlock its caller; nothing in this path uses it. Awaits inside the code under test
+    /// resume through the default scheduler because the production path is
+    /// <c>ConfigureAwait(false)</c> throughout, which is why holding every post does not stall the
+    /// walk itself — only the progress reports, which is the point.
+    /// </remarks>
+    private sealed class HoldingContext : SynchronizationContext
+    {
+        private readonly List<(SendOrPostCallback Callback, object? State)> _held = [];
+
+        public override void Post(SendOrPostCallback d, object? state)
+        {
+            lock (_held)
+            {
+                _held.Add((d, state));
+            }
+        }
+
+        public void Release()
+        {
+            (SendOrPostCallback Callback, object? State)[] pending;
+            lock (_held)
+            {
+                pending = [.. _held];
+                _held.Clear();
+            }
+
+            foreach ((SendOrPostCallback callback, object? state) in pending)
+            {
+                callback(state);
+            }
+        }
     }
 
     [Fact]
