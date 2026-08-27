@@ -215,6 +215,76 @@ public class TrendOutlierTests
         Assert.Null(extreme);
     }
 
+    // -------------------------------------------------------------------------------------
+    // The sentence, which is what a person actually reads
+    // -------------------------------------------------------------------------------------
+
+    /// <remarks>
+    /// "3000000000 ns" is a number a machine writes. Said to a person it is <b>3.0 s</b>, and at
+    /// that point it makes the point on its own — three seconds of 1 PPS error is self-evidently
+    /// not a reading. §9.5.3's ns/µs/ms/s ladder already existed for this and is reused.
+    /// </remarks>
+    [Fact]
+    public void ATimeIsSaidInUnitsAPersonUses()
+    {
+        string? text = TrendDecimation.DescribeOutside(1, 3_000_000_000, "ns", 0);
+
+        Assert.NotNull(text);
+        Assert.Contains("3.0 s", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("3000000000", text, StringComparison.Ordinal);
+    }
+
+    /// <summary>The ladder is the readout's, so smaller excursions read naturally too.</summary>
+    [Theory]
+    [InlineData(2_500, "2.5 µs")]
+    [InlineData(4_000_000, "4.0 ms")]
+    [InlineData(900, "900.0 ns")]
+    public void TheLadderStepsInThousands(double nanoseconds, string expected) =>
+        Assert.Contains(
+            expected,
+            TrendDecimation.DescribeOutside(1, nanoseconds, "ns", 0)!,
+            StringComparison.Ordinal);
+
+    /// <summary>A unit that is not time is shown as it is, at the chart's own precision.</summary>
+    [Fact]
+    public void ANonTimeUnitIsLeftAlone()
+    {
+        string? text = TrendDecimation.DescribeOutside(1, 2, "%", 2);
+
+        Assert.NotNull(text);
+        Assert.Contains("2.00 %", text, StringComparison.Ordinal);
+    }
+
+    /// <remarks>
+    /// <b>"Hidden from the chart", not "hidden".</b> The reading is still in the trend store and
+    /// still in the CSV export; only the axis declines to be set by it. Saying which is the
+    /// condition on framing this way at all.
+    /// </remarks>
+    [Fact]
+    public void ItSaysTheChartIsWhatIsHidingIt()
+    {
+        string? text = TrendDecimation.DescribeOutside(1, 3_000_000_000, "ns", 0);
+
+        Assert.Contains("hidden from the chart", text!, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SeveralAreCountedAndTheFurthestNamed()
+    {
+        string? text = TrendDecimation.DescribeOutside(3, 3_000_000_000, "ns", 0);
+
+        Assert.NotNull(text);
+        Assert.Contains("3 impossible readings", text, StringComparison.Ordinal);
+        Assert.Contains("up to 3.0 s", text, StringComparison.Ordinal);
+    }
+
+    /// <summary>Nothing outside means nothing said — the caption is not a permanent fixture.</summary>
+    [Theory]
+    [InlineData(0, 3_000_000_000d)]
+    [InlineData(2, null)]
+    public void NothingOutsideSaysNothing(int count, double? extreme) =>
+        Assert.Null(TrendDecimation.DescribeOutside(count, extreme, "ns", 0));
+
     [Fact]
     public void TheColumnsAreRequired()
     {
