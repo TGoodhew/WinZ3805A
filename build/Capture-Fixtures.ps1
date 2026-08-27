@@ -500,7 +500,13 @@ try {
                 $note = '{0}  {1}  mode="{2}" sync="{3}" acquisition="{4}" health="{5}" tracking={6}' -f `
                     (Get-Date -Format 'o'), (Split-Path -Leaf $path), $facts.Mode, $facts.Sync, `
                     $facts.Acquisition, $facts.Health, $facts.Tracking
-                Add-Content -LiteralPath (Join-Path $OutputDirectory 'capture-log.txt') -Value $note
+                # .log, not .txt. The default output directory is the fixture corpus, and
+                # FixtureCorpusTests globs *.txt through every subdirectory - so a .txt log is
+                # collected as though it were a captured screen. It does not fail: §11.1 says the
+                # parser never throws and unparseable fields become null, so a log parses to nulls
+                # and satisfies every assertion vacuously. Found by dry-running this against the
+                # receiver on 27 Aug, before the sitting rather than after it.
+                Add-Content -LiteralPath (Join-Path $OutputDirectory 'capture-log.log') -Value $note
             }
         }
         catch {
