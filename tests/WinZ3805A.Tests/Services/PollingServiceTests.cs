@@ -160,6 +160,118 @@ public class PollingServiceTests
         Assert.NotNull(store.LastFastPoll);
     }
 
+    /// <summary>Removes a temporary database and the two files SQLite keeps beside it.</summary>
+    /// <remarks>
+    /// Best effort. A file still held after disposal is a tidiness problem in the temp folder, not
+    /// a failed assertion, and reporting it as one would make an unrelated test look broken.
+    /// </remarks>
+    private static void Discard(string database)
+    {
+        foreach (string path in new[] { database, database + "-wal", database + "-shm" })
+        {
+            try
+            {
+                File.Delete(path);
+            }
+            catch (IOException)
+            {
+                // See the remarks.
+            }
+        }
+    }
+
+    /// <summary>
+    /// A sweep whose sync state is not a state the receiver reports is not written to the trend
+    /// (#209).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The link misaligned on 24 Aug 2026 and three impossible values reached <c>trend.db</c>: time
+    /// intervals of two and three <b>seconds</b>, and an EFC of +2 %. §11.1 nulls an
+    /// <i>unparseable</i> field and none of those were unparseable — they were somebody else's
+    /// reply, parsed correctly.
+    /// </para>
+    /// <para>
+    /// The +2 % is why a range check is not the answer: it is inside the oscillator's control range
+    /// and indistinguishable from a real reading by magnitude. What identifies the sweep is the
+    /// company it keeps, so the whole sweep goes.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ASweepWithAnImpossibleSyncStateIsNotStored()
+    {
+        FakeTimeProvider clock = new();
+        string database = Path.Combine(Path.GetTempPath(), $"trend-{Guid.NewGuid():N}.db");
+
+        try
+        {
+            IReadOnlyList<TrendRecord> stored;
+            using (TrendStore trends = new(database))
+            {
+
+            // What was actually recorded that day, tail and all, with the values that came with it.
+            ControllableTransport transport = Receiver(command => command switch
+            {
+                ":SYNC:STAT?" => " OLDOVER STARTED, NOT TRACKING GPS\r\nLOG 222:20070108.22:40:38:  HOLDOVER",
+                ":SYNC:TINT?" => " 3.0E+000",
+                ":DIAG:ROSC:EFC:REL?" => " +2",
+                _ => null,
+            });
+
+            (DeviceSessionService session, ReceiverStateStore store) = await ConnectedAsync(transport, clock);
+            await using DeviceSessionService _ = session;
+            await using PollingService poller = new(session, store, clock, trends: trends);
+
+            poller.Start();
+            await WaitFor(clock, () => poller.FastSweeps >= 2, () => poller.FastSweeps);
+            await poller.StopAsync();
+
+                long now = clock.GetUtcNow().UtcTicks;
+                stored = trends.Read(now - TimeSpan.FromDays(1).Ticks, now + TimeSpan.TicksPerDay);
+            }
+
+            Assert.Empty(stored);
+        }
+        finally
+        {
+            Discard(database);
+        }
+    }
+
+    /// <summary>And an ordinary sweep still is, which is the half that proves the guard is narrow.</summary>
+    [Fact]
+    public async Task AnOrdinarySweepIsStillStored()
+    {
+        FakeTimeProvider clock = new();
+        string database = Path.Combine(Path.GetTempPath(), $"trend-{Guid.NewGuid():N}.db");
+
+        try
+        {
+            IReadOnlyList<TrendRecord> stored;
+            using (TrendStore trends = new(database))
+            {
+
+            (DeviceSessionService session, ReceiverStateStore store) = await ConnectedAsync(Receiver(), clock);
+            await using DeviceSessionService _ = session;
+            await using PollingService poller = new(session, store, clock, trends: trends);
+
+            poller.Start();
+            await WaitFor(clock, () => poller.FastSweeps >= 1, () => poller.FastSweeps);
+            await poller.StopAsync();
+
+                long now = clock.GetUtcNow().UtcTicks;
+                stored = trends.Read(now - TimeSpan.FromDays(1).Ticks, now + TimeSpan.TicksPerDay);
+            }
+
+            Assert.NotEmpty(stored);
+            Assert.Equal("LOCK", stored[0].SyncState);
+        }
+        finally
+        {
+            Discard(database);
+        }
+    }
+
     /// <summary>
     /// The full tier is the only source of the satellite table — §7.3's whole reason for having two
     /// cadences — so a full sweep must land a parsed screen, not just scalars.

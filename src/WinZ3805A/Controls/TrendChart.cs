@@ -277,6 +277,51 @@ public sealed class TrendChart : Control
         }
 
         DrawAxisLabels(surface, width, height, minimum, maximum);
+        DrawClippedNote(surface, columns, width, minimum, maximum);
+    }
+
+    /// <summary>
+    /// Names anything the axis leaves out, so nothing is dropped silently (#209).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The axis is framed on the range the bulk of the window occupies rather than on its extremes,
+    /// because one aberrant reading otherwise sets the scale for a week. That is only defensible if
+    /// the chart says when it has done it: <b>an excursion is the diagnostic content on a timing
+    /// instrument</b>, and a rule that quietly rescales around the largest one is worse than an
+    /// unreadable axis.
+    /// </para>
+    /// <para>
+    /// So the trace is still drawn for every column — the draw path clamps to the plot edge, so an
+    /// excluded extreme appears pinned to the top or bottom — and this says how many there were and
+    /// how far the furthest went. It appears only when something is outside, which is almost never.
+    /// </para>
+    /// </remarks>
+    private void DrawClippedNote(
+        Canvas surface,
+        IReadOnlyList<TrendColumn> columns,
+        double width,
+        double minimum,
+        double maximum)
+    {
+        (int count, double? extreme) = TrendDecimation.Outside(columns, minimum, maximum);
+
+        if (count == 0 || extreme is not double furthest)
+        {
+            return;
+        }
+
+        TextBlock note = new()
+        {
+            Text = $"{count} beyond the axis, to {Format(furthest)}",
+            Style = Resource<Style>("WzCaptionTextStyle"),
+            Foreground = Resource<Brush>("WzTextTertiaryBrush"),
+        };
+
+        note.Measure(new Size(width, double.PositiveInfinity));
+        Canvas.SetLeft(note, Math.Max(0, width - note.DesiredSize.Width));
+        Canvas.SetTop(note, 0);
+        surface.Children.Add(note);
     }
 
     /// <summary>
@@ -381,6 +426,15 @@ public sealed class TrendChart : Control
         where T : class =>
         Application.Current.Resources.TryGetValue(key, out object? value) ? value as T : null;
 
+    /// <summary>One axis figure: U+2212 for a negative, never a hyphen, at this chart's precision.</summary>
+    /// <remarks>§9.5.3 and P0-20. The decimal count is fixed per chart and never varies with the range.</remarks>
+    private string Format(double value) => value switch
+    {
+        < 0 => $"\u2212{Math.Abs(value).ToString($"F{Decimals}", CultureInfo.InvariantCulture)} {Unit}",
+        > 0 => $"+{value.ToString($"F{Decimals}", CultureInfo.InvariantCulture)} {Unit}",
+        _ => $"{0d.ToString($"F{Decimals}", CultureInfo.InvariantCulture)} {Unit}",
+    };
+
     /// <remarks>
     /// The line under the middle axis label. On a zero-anchored chart that is zero itself; on a
     /// data-framed one it is the midpoint of the window, and it is drawn because three labels down
@@ -408,14 +462,6 @@ public sealed class TrendChart : Control
         Add(Format(maximum), 0);
         Add(Format((minimum + maximum) / 2), (height / 2) - 8);
         Add(Format(minimum), height - 16);
-
-        // §9.5.3 and P0-20: U+2212, never a hyphen, and a fixed number of decimals per chart.
-        string Format(double value) => value switch
-        {
-            < 0 => $"\u2212{Math.Abs(value).ToString($"F{Decimals}", CultureInfo.InvariantCulture)} {Unit}",
-            > 0 => $"+{value.ToString($"F{Decimals}", CultureInfo.InvariantCulture)} {Unit}",
-            _ => $"{0d.ToString($"F{Decimals}", CultureInfo.InvariantCulture)} {Unit}",
-        };
 
         void Add(string text, double top)
         {
