@@ -244,12 +244,13 @@ public static class TrendDecimation
         ArgumentNullException.ThrowIfNull(columns);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(floor);
 
-        double extent = floor;
+        (double low, double high) = TypicalRange(columns);
 
-        foreach (TrendColumn column in columns)
-        {
-            extent = Math.Max(extent, Math.Max(Math.Abs(column.Minimum), Math.Abs(column.Maximum)));
-        }
+        // An empty window answers with an inverted infinite range, which is the honest answer to
+        // "what range does no data occupy" and a terrible axis. The floor is the whole axis then.
+        double extent = double.IsInfinity(low) || double.IsInfinity(high)
+            ? floor
+            : Math.Max(floor, Math.Max(Math.Abs(low), Math.Abs(high)));
 
         return (-extent, extent);
     }
@@ -289,14 +290,7 @@ public static class TrendDecimation
         ArgumentNullException.ThrowIfNull(columns);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(minimumSpan);
 
-        double lowest = double.PositiveInfinity;
-        double highest = double.NegativeInfinity;
-
-        foreach (TrendColumn column in columns)
-        {
-            lowest = Math.Min(lowest, column.Minimum);
-            highest = Math.Max(highest, column.Maximum);
-        }
+        (double lowest, double highest) = TypicalRange(columns);
 
         // No data at all. Centred on zero is as good an answer as any, and better than an axis
         // whose labels are infinities.
@@ -309,6 +303,147 @@ public static class TrendDecimation
         double half = Math.Max(highest - lowest, minimumSpan) / 2;
 
         return SnapOutward(middle - half, middle + half);
+    }
+
+    /// <summary>
+    /// How many columns at each end are allowed to fall outside the axis, as a fraction.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// 0.2 % — about two or three columns of a 1,300-pixel plot. Chosen to catch the single
+    /// aberrant column and nothing wider: a real excursion on this instrument lasts minutes to
+    /// hours and covers many columns, while a bad reading covers exactly one.
+    /// </para>
+    /// <para>
+    /// It only decides <i>which</i> readings count as the bulk. Whether the true extremes are
+    /// actually excluded is a separate and much stricter test — they are kept unless keeping them
+    /// would more than double the axis. <b>An excursion is the diagnostic content on a timing
+    /// instrument</b>, and a framing rule that quietly drops the largest one is worse than an
+    /// unreadable axis, so anything left outside is counted and named beside the chart.
+    /// </para>
+    /// <para>
+    /// <b>A limit worth knowing.</b> A window whose readings are all identical has no spread to
+    /// measure an outlier against, so a single wild value there is not excluded and the axis is
+    /// still stretched by it. That case is now prevented upstream instead: a reading whose sync
+    /// state is not a state the receiver reports is never stored (#209).
+    /// </para>
+    /// </remarks>
+    private const double OutlierFraction = 0.002;
+
+    /// <summary>Below this many columns the fraction is meaningless and nothing is excluded.</summary>
+    /// <remarks>
+    /// At fifty columns 0.2 % is a tenth of a column, so the arithmetic already excludes nothing —
+    /// this makes that explicit rather than incidental, and stops a short window behaving one way
+    /// today and another after a rounding change.
+    /// </remarks>
+    private const int MinimumColumnsForOutliers = 50;
+
+    /// <summary>
+    /// The range the bulk of the window occupies, ignoring a very small number of extremes at each
+    /// end (#209).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Framing on the absolute extremes means one sample can set the axis for a week. That is not
+    /// hypothetical: three impossible values reached <c>trend.db</c> after a link misalignment, and
+    /// the 1 PPS axis became <b>±3,000,000,000 ns</b> for data spanning −76.5 to +21 ns — the real
+    /// trace occupying about two millionths of the plot height, on a chart whose zero anchoring was
+    /// never in question. Both axis modes need this; neither is safe from it.
+    /// </para>
+    /// <para>
+    /// Only the <i>bounds</i> ignore those columns. Every column is still drawn, and the draw path
+    /// clamps to the plot edge, so an excluded extreme appears as a trace pinned to the top or
+    /// bottom rather than as nothing at all.
+    /// </para>
+    /// </remarks>
+    public static (double Minimum, double Maximum) TypicalRange(IReadOnlyList<TrendColumn> columns)
+    {
+        ArgumentNullException.ThrowIfNull(columns);
+
+        if (columns.Count == 0)
+        {
+            return (double.PositiveInfinity, double.NegativeInfinity);
+        }
+
+        double[] minima = new double[columns.Count];
+        double[] maxima = new double[columns.Count];
+
+        for (int i = 0; i < columns.Count; i++)
+        {
+            minima[i] = columns[i].Minimum;
+            maxima[i] = columns[i].Maximum;
+        }
+
+        Array.Sort(minima);
+        Array.Sort(maxima);
+
+        double lowest = minima[0];
+        double highest = maxima[^1];
+
+        if (columns.Count < MinimumColumnsForOutliers)
+        {
+            return (lowest, highest);
+        }
+
+        int drop = (int)(columns.Count * OutlierFraction);
+        double low = minima[drop];
+        double high = maxima[^(drop + 1)];
+        double bulk = high - low;
+
+        // A window with no spread has no bulk to be outside of, and calling its largest reading an
+        // outlier would be arithmetic rather than judgement.
+        if (bulk <= 0)
+        {
+            return (lowest, highest);
+        }
+
+        // **The extremes are kept unless keeping them would more than double the axis.** That is the
+        // difference between an outlier and merely the largest reading, and it is what stops the
+        // caption appearing on every chart: on an ordinary window the percentile bound sits a
+        // hairsbreadth inside the true extreme, nothing is excluded, and the chart says nothing.
+        return (
+            low - lowest > bulk ? low : lowest,
+            highest - high > bulk ? high : highest);
+    }
+
+    /// <summary>
+    /// How many columns fall outside the axis, and the furthest value among them (#209).
+    /// </summary>
+    /// <remarks>
+    /// The other half of <see cref="TypicalRange"/>'s bargain. Leaving a reading off the axis is
+    /// only defensible if the chart says it did — a caption naming the count and the extreme keeps
+    /// the excursion discoverable, where silently rescaling around it would not.
+    /// </remarks>
+    public static (int Count, double? Extreme) Outside(
+        IReadOnlyList<TrendColumn> columns,
+        double minimum,
+        double maximum)
+    {
+        ArgumentNullException.ThrowIfNull(columns);
+
+        int count = 0;
+        double? extreme = null;
+
+        foreach (TrendColumn column in columns)
+        {
+            double? worst =
+                column.Maximum > maximum && (extreme is null || column.Maximum > extreme) ? column.Maximum
+                : column.Minimum < minimum && (extreme is null || column.Minimum < extreme) ? column.Minimum
+                : null;
+
+            if (column.Minimum < minimum || column.Maximum > maximum)
+            {
+                count++;
+            }
+
+            if (worst is double value
+                && (extreme is null || Math.Abs(value) > Math.Abs(extreme.Value)))
+            {
+                extreme = value;
+            }
+        }
+
+        return (count, extreme);
     }
 
     /// <summary>Widens a range to the next round step outside it, on both sides.</summary>

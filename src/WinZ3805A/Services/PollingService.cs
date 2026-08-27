@@ -3,6 +3,7 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using WinZ3805A.Device.Commands;
+using WinZ3805A.Controls;
 using WinZ3805A.Device.Models;
 using WinZ3805A.Device.Parsing;
 using WinZ3805A.Device.Transport;
@@ -323,8 +324,27 @@ public sealed class PollingService : IAsyncDisposable
 
         // P1-2: every fast sweep is a row. Append never throws (see TrendStore), so a locked file
         // or a full disk costs a gap in the trend rather than the polling cadence itself.
-        _trends?.Append(new TrendRecord(
-            _timeProvider.GetUtcNow().UtcTicks, efc, timeInterval, syncState, tracked));
+        //
+        // Unless the reading does not cohere (#209). §11.1 turns an unparseable field into null and
+        // that is right for a field, but a sweep whose sync state is not a state this receiver has
+        // is not a reading with one bad field - it is somebody else's reply. Storing it puts values
+        // in a durable seven-day series that the instrument cannot produce, and the store has no
+        // way to tell later that they were never real.
+        if (IsCoherent(syncState))
+        {
+            _trends?.Append(new TrendRecord(
+                _timeProvider.GetUtcNow().UtcTicks, efc, timeInterval, syncState, tracked));
+        }
+        else
+        {
+            // Information, because the application ships at Information and this is a reading the
+            // user will not find in the trend later. A Debug line would make it invisible exactly
+            // when somebody is asking why the series has a gap (#14 made the same mistake).
+            _logger.LogInformation(
+                "Dropped an incoherent reading: sync state was \"{SyncState}\", which is not a state "
+                + "this receiver reports. The link may have misaligned.",
+                Summarise(syncState));
+        }
 
         MaybeCompact();
 
@@ -356,6 +376,50 @@ public sealed class PollingService : IAsyncDisposable
     /// cannot be reached physically. Information level, so it survives the default configuration.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Whether a sweep is a reading at all, rather than the tail of another command's reply (#209).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The discriminator is the sync state, because it is the one field with a closed set of legal
+    /// values - <c>LOCK</c>, <c>REC</c>, <c>WAIT</c>, <c>HOLD</c>, <c>POW</c>, <c>OFF</c>. Anything
+    /// else did not come from <c>:SYNC:STAT?</c>.
+    /// </para>
+    /// <para>
+    /// <b>The whole sweep is dropped, not the offending field</b>, and that is the point. When the
+    /// link had misaligned on 24 Aug the sync state held a diagnostic log dump, and the same sweep's
+    /// other fields held a time interval of two seconds and an EFC of +2 % - the second of which is
+    /// inside the control range and indistinguishable from a real reading by magnitude. No
+    /// per-field range check catches that one. What identifies it is the company it keeps.
+    /// </para>
+    /// <para>
+    /// <b>The cost is real and is logged.</b> A sync state this application has not been taught
+    /// would drop rows while looking healthy, so every rejection says what it saw. A silent guard
+    /// here would be worse than the defect it prevents.
+    /// </para>
+    /// </remarks>
+    /// <remarks>
+    /// <c>ReceiverModes</c> lives under <c>Controls/</c> and is used from here anyway, deliberately:
+    /// it holds the one definition of the closed set, it speaks no WinUI, and it is already linked
+    /// into the headless test project. Restating the six tokens here would be the second copy of a
+    /// list that has to stay identical, which is a worse problem than a using directive.
+    /// </remarks>
+    private static bool IsCoherent(string? syncState) =>
+        ReceiverModes.FromSyncState(syncState) != ReceiverMode.Disconnected;
+
+    /// <summary>A rejected sync state, short enough to log and long enough to recognise.</summary>
+    private static string Summarise(string? syncState)
+    {
+        if (string.IsNullOrWhiteSpace(syncState))
+        {
+            return "(empty)";
+        }
+
+        string oneLine = syncState.ReplaceLineEndings(" ").Trim();
+
+        return oneLine.Length <= 60 ? oneLine : oneLine[..60] + "…";
+    }
+
     private void LogStateChange(string? syncState, int? tfom, int? tracked)
     {
         if (syncState == _lastSyncState && tfom == _lastTfom && tracked == _lastTracked)
