@@ -74,6 +74,48 @@ public class FixtureCorpusTests
     public void ThereIsACorpusToCheck() =>
         Assert.NotEmpty(FixturePaths());
 
+    /// <summary>Every file the corpus collects is actually a captured screen.</summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The assertions below cannot fail on a file that is not a screen</b>, which makes this the
+    /// one that has to notice. §11.1 requires the parser never to throw and unparseable fields to
+    /// become <see langword="null"/>, so an arbitrary text file parses to nulls and then satisfies
+    /// every PRN, angle, count and health check vacuously — a corpus of junk passes, and reports
+    /// itself as covered.
+    /// </para>
+    /// <para>
+    /// This is not hypothetical. <c>Capture-Fixtures.ps1</c> wrote its <c>capture-log.txt</c> into
+    /// the very directory it fills with fixtures, and the corpus globs <c>*.txt</c> through every
+    /// subdirectory — so the log was collected as a screen and passed. Caught on 27 Aug by
+    /// dry-running the harness against the receiver before the sitting; the harness now writes
+    /// <c>.log</c>, and this makes the next such file fail loudly rather than pad the count.
+    /// </para>
+    /// <para>
+    /// The bar is deliberately low. A screen is at least a few hundred bytes and states the mode
+    /// the receiver is in, and both are true of every state §11.1 describes — including the four
+    /// #185 exists to capture, none of which has been seen yet. Anything narrower would be
+    /// asserting what a screen says, which is <see cref="StatusScreenParserTests"/>'s business
+    /// against a capture someone has read.
+    /// </para>
+    /// </remarks>
+    [Theory]
+    [MemberData(nameof(Corpus))]
+    public void EveryFixtureLooksLikeAStatusScreen(string name)
+    {
+        byte[] bytes = File.ReadAllBytes(Path.Combine(FixtureRoot, name));
+
+        Assert.True(
+            bytes.Length >= 200,
+            $"{name} is {bytes.Length} bytes. A status screen is not that short, so this is not one.");
+
+        string text = Encoding.Latin1.GetString(bytes);
+
+        Assert.True(
+            text.Contains("SmartClock Mode", StringComparison.Ordinal),
+            $"{name} has no 'SmartClock Mode' line, so it is not a captured status screen. "
+                + "If the harness put it here, it belongs outside the corpus.");
+    }
+
     /// <remarks>
     /// <b>The exact bytes are the point.</b> The parser derives satellite columns from the position
     /// of tokens in the header row, so a fixture whose line endings were converted on the way into
