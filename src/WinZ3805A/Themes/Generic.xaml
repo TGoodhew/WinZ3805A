@@ -27,12 +27,9 @@
     <!-- seen from across a room.                                                      -->
     <!-- =========================================================================== -->
 
-    <x:String x:Key="WzShapeCircle">M 0,6 A 6,6 0 1 0 12,6 A 6,6 0 1 0 0,6 Z</x:String>
-    <x:String x:Key="WzShapeTriangle">M 6,0 L 12,11 L 0,11 Z</x:String>
-    <x:String x:Key="WzShapeHexagon">M 6,0 L 11.2,3 L 11.2,9 L 6,12 L 0.8,9 L 0.8,3 Z</x:String>
-    <!-- F0 is the even-odd fill rule, which is what knocks the glyph out of the disc. -->
-    <x:String x:Key="WzShapeInfo">F0 M 0,6 A 6,6 0 1 0 12,6 A 6,6 0 1 0 0,6 Z M 5.1,5.1 L 6.9,5.1 L 6.9,9.4 L 5.1,9.4 Z M 5.1,2.4 L 6.9,2.4 L 6.9,4.1 L 5.1,4.1 Z</x:String>
-    <x:String x:Key="WzShapeRing">F0 M 0,6 A 6,6 0 1 0 12,6 A 6,6 0 1 0 0,6 Z M 2.4,6 A 3.6,3.6 0 1 0 9.6,6 A 3.6,3.6 0 1 0 2.4,6 Z</x:String>
+    <!-- The geometries now live in Themes/Shapes.xaml, which IS merged into                -->
+    <!-- Application.Resources, so pages can use them too (#32). They still resolve from      -->
+    <!-- here: ThemeResource lookup from a control template walks up to the application.      -->
 
     <Style TargetType="controls:SeverityPill">
         <Setter Property="IsTabStop" Value="False" />
