@@ -20,112 +20,130 @@
         without at the top rung — that also makes it the surface the "No permission" row asks for,
         so a refused port is reported here rather than in a second dialog stacked on this one.
     -->
-    <StackPanel Width="360" Spacing="{StaticResource WzSpaceMd}">
+    <!--
+        A11Y-6: the content scrolls rather than being clipped, and the width is a floor rather
+        than a fixture (#26).
 
-        <!-- Port -->
-        <Grid ColumnSpacing="{StaticResource WzSpaceXs}">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
+        At 200 % text this dialog grew taller than a ContentDialog will show, and the overflow
+        was simply cut off by the button row - "Connect to this device on launch" lost its second
+        line mid-word, with no way to reach it. A ContentDialog does not scroll its content on its
+        own, so nothing recovered it.
 
-            <ComboBox x:Name="PortPicker"
-                      Header="Port"
-                      HorizontalAlignment="Stretch"
-                      DisplayMemberPath="DisplayLabel"
-                      SelectionChanged="OnPortSelected" />
+        The fixed Width was the other half. It cannot grow with the text, so the port combo
+        truncated to "COM3 - Prolific l". MinWidth keeps the designed proportions at 100 % while
+        letting the dialog use the width it has when the text is larger.
+    -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                  VerticalScrollMode="Auto"
+                  HorizontalScrollMode="Disabled"
+                  HorizontalScrollBarVisibility="Disabled">
+        <StackPanel MinWidth="360" Spacing="{StaticResource WzSpaceMd}">
 
-            <Button x:Name="RefreshButton"
-                    Grid.Column="1"
-                    Content="Refresh"
-                    VerticalAlignment="Bottom"
-                    ToolTipService.ToolTip="Look for serial ports again"
-                    Click="OnRefreshClicked" />
-        </Grid>
+            <!-- Port -->
+            <Grid ColumnSpacing="{StaticResource WzSpaceXs}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
 
-        <!-- Why the list is empty, when it is (§9.11, §6.1) -->
-        <InfoBar x:Name="PortsMessageBar"
-                 IsOpen="False"
-                 IsClosable="False"
-                 Severity="Informational" />
+                <ComboBox x:Name="PortPicker"
+                          Header="Port"
+                          HorizontalAlignment="Stretch"
+                          DisplayMemberPath="DisplayLabel"
+                          SelectionChanged="OnPortSelected" />
 
-        <!-- Auto-detect or manual -->
-        <RadioButtons x:Name="ModeChoice" SelectionChanged="OnModeChanged">
-            <RadioButton x:Name="AutoDetectChoice" Content="Auto-detect settings" />
-            <RadioButton x:Name="ManualChoice" Content="Manual" />
-        </RadioButtons>
+                <Button x:Name="RefreshButton"
+                        Grid.Column="1"
+                        Content="Refresh"
+                        VerticalAlignment="Bottom"
+                        ToolTipService.ToolTip="Look for serial ports again"
+                        Click="OnRefreshClicked" />
+            </Grid>
 
-        <!--
-            §7.1's four parameters. Handshake is absent on purpose: the specification permits None
-            only, so it is not a choice to offer. Indented under the radio pair the way the
-            wireframe draws it, and disabled rather than hidden while auto-detect is chosen, so the
-            settings a detection will overwrite stay readable.
-        -->
-        <Grid x:Name="ManualSettings"
-              Margin="{StaticResource WzSpaceLgThickness}"
-              ColumnSpacing="{StaticResource WzSpaceXs}"
-              RowSpacing="{StaticResource WzSpaceXs}">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-            </Grid.RowDefinitions>
+            <!-- Why the list is empty, when it is (§9.11, §6.1) -->
+            <InfoBar x:Name="PortsMessageBar"
+                     IsOpen="False"
+                     IsClosable="False"
+                     Severity="Informational" />
 
-            <ComboBox x:Name="BaudPicker"
-                      Header="Baud"
-                      HorizontalAlignment="Stretch"
-                      SelectionChanged="OnSettingChanged" />
-            <ComboBox x:Name="DataBitsPicker"
-                      Grid.Column="1"
-                      Header="Data bits"
-                      HorizontalAlignment="Stretch"
-                      SelectionChanged="OnSettingChanged" />
-            <ComboBox x:Name="ParityPicker"
-                      Grid.Row="1"
-                      Header="Parity"
-                      HorizontalAlignment="Stretch"
-                      SelectionChanged="OnSettingChanged" />
-            <ComboBox x:Name="StopBitsPicker"
-                      Grid.Row="1"
-                      Grid.Column="1"
-                      Header="Stop bits"
-                      HorizontalAlignment="Stretch"
-                      SelectionChanged="OnSettingChanged" />
-        </Grid>
+            <!-- Auto-detect or manual -->
+            <RadioButtons x:Name="ModeChoice" SelectionChanged="OnModeChanged">
+                <RadioButton x:Name="AutoDetectChoice" Content="Auto-detect settings" />
+                <RadioButton x:Name="ManualChoice" Content="Manual" />
+            </RadioButtons>
 
-        <!-- The two the wireframe puts at the bottom -->
-        <CheckBox x:Name="ReconnectCheck"
-                  Content="Reconnect automatically"
-                  Checked="OnPreferenceToggled"
-                  Unchecked="OnPreferenceToggled" />
-        <CheckBox x:Name="ConnectOnLaunchCheck"
-                  Content="Connect to this device on launch"
-                  Checked="OnPreferenceToggled"
-                  Unchecked="OnPreferenceToggled" />
+            <!--
+                §7.1's four parameters. Handshake is absent on purpose: the specification permits None
+                only, so it is not a choice to offer. Indented under the radio pair the way the
+                wireframe draws it, and disabled rather than hidden while auto-detect is chosen, so the
+                settings a detection will overwrite stay readable.
+            -->
+            <Grid x:Name="ManualSettings"
+                  Margin="{StaticResource WzSpaceLgThickness}"
+                  ColumnSpacing="{StaticResource WzSpaceXs}"
+                  RowSpacing="{StaticResource WzSpaceXs}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
 
-        <!--
-            §10.12 requires progress and a cancel for the eight-combination walk. Indeterminate
-            because the walk's length is known but its duration is not — a probe either answers in
-            milliseconds or times out after two seconds, and a bar that jumped in eighths would be
-            claiming a precision the hardware does not give.
-        -->
-        <StackPanel x:Name="ProgressArea"
-                    Spacing="{StaticResource WzSpaceXxs}"
-                    Visibility="Collapsed">
-            <ProgressBar x:Name="AttemptProgress" IsIndeterminate="True" />
-            <TextBlock x:Name="ProgressText"
-                       Style="{StaticResource WzCaptionTextStyle}"
-                       Foreground="{ThemeResource WzTextSecondaryBrush}"
-                       TextWrapping="Wrap" />
+                <ComboBox x:Name="BaudPicker"
+                          Header="Baud"
+                          HorizontalAlignment="Stretch"
+                          SelectionChanged="OnSettingChanged" />
+                <ComboBox x:Name="DataBitsPicker"
+                          Grid.Column="1"
+                          Header="Data bits"
+                          HorizontalAlignment="Stretch"
+                          SelectionChanged="OnSettingChanged" />
+                <ComboBox x:Name="ParityPicker"
+                          Grid.Row="1"
+                          Header="Parity"
+                          HorizontalAlignment="Stretch"
+                          SelectionChanged="OnSettingChanged" />
+                <ComboBox x:Name="StopBitsPicker"
+                          Grid.Row="1"
+                          Grid.Column="1"
+                          Header="Stop bits"
+                          HorizontalAlignment="Stretch"
+                          SelectionChanged="OnSettingChanged" />
+            </Grid>
+
+            <!-- The two the wireframe puts at the bottom -->
+            <CheckBox x:Name="ReconnectCheck"
+                      Content="Reconnect automatically"
+                      Checked="OnPreferenceToggled"
+                      Unchecked="OnPreferenceToggled" />
+            <CheckBox x:Name="ConnectOnLaunchCheck"
+                      Content="Connect to this device on launch"
+                      Checked="OnPreferenceToggled"
+                      Unchecked="OnPreferenceToggled" />
+
+            <!--
+                §10.12 requires progress and a cancel for the eight-combination walk. Indeterminate
+                because the walk's length is known but its duration is not — a probe either answers in
+                milliseconds or times out after two seconds, and a bar that jumped in eighths would be
+                claiming a precision the hardware does not give.
+            -->
+            <StackPanel x:Name="ProgressArea"
+                        Spacing="{StaticResource WzSpaceXxs}"
+                        Visibility="Collapsed">
+                <ProgressBar x:Name="AttemptProgress" IsIndeterminate="True" />
+                <TextBlock x:Name="ProgressText"
+                           Style="{StaticResource WzCaptionTextStyle}"
+                           Foreground="{ThemeResource WzTextSecondaryBrush}"
+                           TextWrapping="Wrap" />
+            </StackPanel>
+
+            <!-- What went wrong, in §9.11's words -->
+            <InfoBar x:Name="ErrorBar"
+                     IsOpen="False"
+                     IsClosable="False"
+                     Severity="Error" />
         </StackPanel>
-
-        <!-- What went wrong, in §9.11's words -->
-        <InfoBar x:Name="ErrorBar"
-                 IsOpen="False"
-                 IsClosable="False"
-                 Severity="Error" />
-    </StackPanel>
+    </ScrollViewer>
 </ContentDialog>
