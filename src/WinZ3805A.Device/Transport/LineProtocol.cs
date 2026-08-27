@@ -70,6 +70,12 @@ public sealed class LineProtocol
 
     private readonly ITransport _transport;
     private readonly TimeProvider _timeProvider;
+
+    /// <summary>
+    /// How long the next command may spend realigning the stream, or null when it is already
+    /// aligned (#209). See <see cref="ResynchroniseAsync"/>.
+    /// </summary>
+    private TimeSpan? _resynchroniseWithin;
     private readonly ILogger _logger;
 
     public LineProtocol(ITransport transport, TimeProvider timeProvider, ILogger<LineProtocol>? logger = null)
@@ -97,6 +103,14 @@ public sealed class LineProtocol
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(timeout, TimeSpan.Zero);
 
         string sent = command.Trim();
+
+        // Realigning happens before this command's clock starts, and that is not a detail: the
+        // budget for clearing somebody else's abandoned reply can be sixty seconds, while a scalar
+        // query's own deadline is three. Charged to this command, one cancelled diagnostic-log read
+        // would time out the next poll and the two after it — and §7.2 reconnects on three
+        // consecutive timeouts, so navigating away from a page would drop the link (#209).
+        await ResynchroniseAsync().ConfigureAwait(false);
+
         long startedAt = _timeProvider.GetTimestamp();
         List<string> lines = [];
         bool echoDiscarded;
@@ -137,6 +151,8 @@ public sealed class LineProtocol
             echoDiscarded = TryDiscardEcho(sent, lines);
             TransportLog.TransactionTimedOut(_logger, sent, timeout.TotalMilliseconds, lines.Count);
 
+            NeedsResynchronising(lines.Count, timeout);
+
             return new Transaction
             {
                 Command = sent,
@@ -145,6 +161,14 @@ public sealed class LineProtocol
                 EchoDiscarded = echoDiscarded,
                 Elapsed = _timeProvider.GetElapsedTime(startedAt),
             };
+        }
+        catch (OperationCanceledException)
+        {
+            // The caller gave up waiting. The receiver did not give up sending — it answers one
+            // command at a time and finishes what it started — so the rest of this reply is still
+            // coming, and would be read as the next command's answer (#209).
+            NeedsResynchronising(lines.Count, timeout);
+            throw;
         }
         catch (Exception ex) when (TransportFaults.IsTransportFault(ex))
         {
@@ -286,6 +310,91 @@ public sealed class LineProtocol
     /// transaction that timed out. Leaving it in place would prepend one dead response to every
     /// subsequent one — a single timeout silently misaligning the session for as long as it stays up.
     /// </remarks>
+    /// <summary>
+    /// Notes that a reply was abandoned part-read, so the next command realigns before it is sent.
+    /// </summary>
+    /// <remarks>
+    /// <b>Only when something had already arrived.</b> A transaction that received nothing at all
+    /// was talking to a device that is silent or gone, and there is no tail to drain — waiting for
+    /// a prompt that was never coming would add a second timeout to every one of §7.2's three
+    /// consecutive failures before it reconnects, which is exactly the wrong place to spend time.
+    /// </remarks>
+    private void NeedsResynchronising(int linesReceived, TimeSpan budget)
+    {
+        if (linesReceived > 0)
+        {
+            _resynchroniseWithin = budget;
+        }
+    }
+
+    /// <summary>
+    /// Reads and discards up to the next prompt, so a half-read reply cannot be mistaken for the
+    /// next answer (#209).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Why <see cref="DiscardStaleInput"/> is not enough.</b> That drains what has already
+    /// arrived. The bytes that cause this are the ones that have <i>not</i> — a 15 kB diagnostic log
+    /// is sixteen seconds of wire at 9600 baud, so a read abandoned three seconds in leaves thirteen
+    /// seconds of reply still to come. Discarding at the moment the next command is written clears
+    /// none of it; it arrives afterwards and is read as that command's answer.
+    /// </para>
+    /// <para>
+    /// That is what #209 was. Navigating away from the Diagnostics page cancels its log read, and
+    /// the next three polls parsed the tail: one stored an EFC reading as a sync state, and two
+    /// wrote time intervals of two and three <i>seconds</i> into <c>trend.db</c>, where three bad
+    /// samples out of 12,488 made every chart over a seven-day window unreadable.
+    /// </para>
+    /// <para>
+    /// <b>The caller's token is deliberately not honoured here.</b> Cancelling meant "stop waiting
+    /// for my answer", not "leave the link misaligned for whoever asks next" — and a resynchronise
+    /// that could itself be cancelled would fix nothing. It is bounded instead by the budget of the
+    /// transaction that was abandoned, which is the longest its remaining reply can take, and a link
+    /// that has actually died surfaces as a transport fault rather than as a wait.
+    /// </para>
+    /// <para>
+    /// The cost lands on the next command rather than on the cancel, which is the right place: the
+    /// wire is busy and nothing can be sent until it is clear. Doing it inline would make cancelling
+    /// a read take as long as not cancelling it.
+    /// </para>
+    /// </remarks>
+    private async Task ResynchroniseAsync()
+    {
+        if (_resynchroniseWithin is not TimeSpan budget)
+        {
+            return;
+        }
+
+        // Cleared first: a resynchronise that faults must not leave the flag set and repeat itself
+        // on every subsequent command.
+        _resynchroniseWithin = null;
+
+        List<string> discarded = [];
+
+        using CancellationTokenSource deadline = new(budget, _timeProvider);
+
+        try
+        {
+            await ReadUntilPromptAsync(discarded, deadline.Token).ConfigureAwait(false);
+            TransportLog.Resynchronised(_logger, discarded.Count);
+        }
+        catch (OperationCanceledException)
+        {
+            // The tail never ended. Nothing more can be done here and the next transaction's own
+            // timeout is the backstop — but say so, because a link that reaches this is one whose
+            // answers are not to be trusted.
+            TransportLog.ResynchroniseTimedOut(_logger, budget.TotalMilliseconds, discarded.Count);
+        }
+        catch (Exception exception) when (TransportFaults.IsTransportFault(exception))
+        {
+            // The link died while realigning. Swallowed on purpose: the command that follows is
+            // about to touch the same port and will report it as a Faulted transaction, which is
+            // the shape every caller already handles. Throwing a raw transport exception from here
+            // would make one path report failure differently from all the others.
+            TransportLog.ResynchroniseTimedOut(_logger, budget.TotalMilliseconds, discarded.Count);
+        }
+    }
+
     private void DiscardStaleInput()
     {
         _transport.DiscardInput();

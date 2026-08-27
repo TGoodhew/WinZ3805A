@@ -41,4 +41,16 @@ internal static partial class TransportLog
     [LoggerMessage(EventId = 1014, Level = LogLevel.Debug,
         Message = "Discarded {ByteCount} unread byte(s) left over from an earlier transaction.")]
     internal static partial void StaleInputDiscarded(ILogger logger, long byteCount);
+
+    // Information, not Debug: the application ships at Information, and this says a reply was
+    // abandoned mid-flight and the link had to be realigned before the next command (#209). That
+    // is the line somebody reading app.log after a suspect reading needs to find.
+    [LoggerMessage(EventId = 1015, Level = LogLevel.Information,
+        Message = "Realigned the link after an abandoned reply, discarding {LineCount} line(s).")]
+    internal static partial void Resynchronised(ILogger logger, int lineCount);
+
+    [LoggerMessage(EventId = 1016, Level = LogLevel.Warning,
+        Message = "The abandoned reply never ended within {Budget} ms; {LineCount} line(s) discarded "
+            + "and the link may still be misaligned.")]
+    internal static partial void ResynchroniseTimedOut(ILogger logger, double budget, int lineCount);
 }
