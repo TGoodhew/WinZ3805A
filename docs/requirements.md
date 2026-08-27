@@ -1610,6 +1610,22 @@ Validation before send: lat degrees 0–90, lon degrees 0–180, minutes 0–59,
 > Figures in both are the 22–24 Aug 2026 capture, so the two wireframes and §10.7.1's amendments now
 > describe the same receiver.
 
+> **⚠ σ is over an hour of stored readings, and says how much of one it found.** §10.7's wireframe
+> asks for `σ (1 h)`. When this page was built nothing kept an hour — the only history was
+> `ReceiverStateStore`'s 60-sample ring — so it showed the deviation of what it had and promised the
+> hour would arrive with P1 persistence. **It arrived and the sentence did not change**: the page was
+> reading twelve thousand rows out of `trend.db` to draw the charts immediately below while printing
+> a deviation over the last thirteen seconds.
+>
+> The read is always an hour whatever range is selected, because §10.7 puts σ beside *Current* as a
+> property of the receiver now rather than of the window being drawn — a σ that changed when the user
+> pressed **7 d** would be a different statistic wearing the same label.
+>
+> **The caption names what was found, not what was asked for.** The application is not always
+> running, so an hour of wall clock routinely holds four minutes of readings, and the count is given
+> beside the span because a deviation over 3,000 readings and one over 12 are not the same figure.
+> It falls back to the 60-sample ring where no trend store exists.
+
 Cable presets, delay per metre (from the vendor cable tables in the 58503B manual):
 
 | Cable | ns/m |

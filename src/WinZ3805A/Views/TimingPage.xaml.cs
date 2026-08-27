@@ -276,12 +276,73 @@ public sealed partial class TimingPage : Page, ICsvExportSource
                 : _length.IsValid && (!model.UseVelocityFactor || _velocityFactor.IsValid));
 
         TimeInterval.Value = model.TimeIntervalNanoseconds;
-        Deviation.Value = model.TimeIntervalDeviation;
-
-        DeviationWindowText.Text = $"σ over the {model.DeviationWindow}. "
-            + "The specification's one-hour window needs the trend history that arrives with P1 persistence.";
+        RenderDeviation();
 
         FooterText.Text = model.AgeDescription;
+    }
+
+    /// <summary>
+    /// §10.7's σ, over the hour the wireframe asks for rather than over whatever is in memory.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This read is separate from the charts' and always an hour, whatever range is selected: §10.7
+    /// puts σ beside <c>Current</c> as a property of the receiver now, not of the window being
+    /// drawn. A σ that changed when the user pressed <c>7 d</c> would be a different statistic
+    /// wearing the same label.
+    /// </para>
+    /// <para>
+    /// It falls back to <c>ReceiverStateStore</c>'s 60-sample ring when there is no trend store —
+    /// which is the case in a session that has not been given one — so the readout is never blank
+    /// for want of persistence that an installation may not have.
+    /// </para>
+    /// </remarks>
+    private void RenderDeviation()
+    {
+        if (_model is not TimingViewModel model)
+        {
+            return;
+        }
+
+        if (_trends is TrendStore trends && _device is DeviceContext device)
+        {
+            long now = device.TimeProvider.GetUtcNow().UtcTicks;
+            IReadOnlyList<TrendRecord> hour = trends.Read(now - TimeSpan.FromHours(1).Ticks, now);
+
+            List<double> values = [];
+            long first = 0;
+            long last = 0;
+
+            foreach (TrendRecord record in hour)
+            {
+                if (record.TimeIntervalNanoseconds is not double value)
+                {
+                    continue;
+                }
+
+                if (values.Count == 0)
+                {
+                    first = record.Ticks;
+                }
+
+                last = record.Ticks;
+                values.Add(value);
+            }
+
+            if (values.Count >= SampleDeviation.MinimumSamples)
+            {
+                Deviation.Value = SampleDeviation.Of(values);
+                // "from", because Describe already says "over" about the span: "σ from 2,492
+                // readings over 59 minutes" rather than "σ over 2,492 readings over 59 minutes".
+                DeviationWindowText.Text =
+                    $"σ from {SampleDeviation.Describe(values.Count, TimeSpan.FromTicks(last - first))}.";
+                return;
+            }
+        }
+
+        // Nothing persisted yet. The ring buffer is what there is, and the caption says so.
+        Deviation.Value = model.TimeIntervalDeviation;
+        DeviationWindowText.Text = $"σ from the {model.DeviationWindow}.";
     }
 
     /// <summary>
