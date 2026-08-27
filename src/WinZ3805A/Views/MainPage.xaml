@@ -198,12 +198,41 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <TextBlock x:Name="FooterText"
-                       Style="{StaticResource WzCaptionTextStyle}"
-                       Foreground="{ThemeResource WzTextTertiaryBrush}"
-                       VerticalAlignment="Center"
-                       TextWrapping="NoWrap"
-                       TextTrimming="CharacterEllipsis" />
+            <StackPanel Orientation="Horizontal"
+                        Spacing="{StaticResource WzSpaceXxs}"
+                        VerticalAlignment="Center">
+                <!--
+                    A11Y-12's second channel for §10.3's staleness (#32).
+
+                    The states below used to change nothing but FooterText.Foreground, so how old a
+                    reading is was carried by hue and nothing else. §9.4.3 says exactly why that
+                    fails: caution and critical converge under protanopia and deuteranopia. Under
+                    high contrast it is not a convergence but an identity - WzCautionBrush and
+                    WzCriticalBrush are both SystemColorWindowTextColor, so the two states render
+                    the same pixels.
+
+                    The age in words is in FooterText either way. What was missing is the judgement
+                    the colour was making about it, and this carries that: §9.4.3's triangle for
+                    caution and hexagon for critical, the same geometry SeverityPill uses, collapsed
+                    when the reading is fresh because a fresh reading has nothing to say.
+                -->
+                <Path x:Name="FooterStalenessShape"
+                      Width="10"
+                      Height="10"
+                      Stretch="Uniform"
+                      VerticalAlignment="Center"
+                      Visibility="Collapsed"
+                      AutomationProperties.AccessibilityView="Raw"
+                      Data="{ThemeResource WzShapeTriangle}"
+                      Fill="{ThemeResource WzCautionBrush}" />
+
+                <TextBlock x:Name="FooterText"
+                           Style="{StaticResource WzCaptionTextStyle}"
+                           Foreground="{ThemeResource WzTextTertiaryBrush}"
+                           VerticalAlignment="Center"
+                           TextWrapping="NoWrap"
+                           TextTrimming="CharacterEllipsis" />
+            </StackPanel>
 
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="{StaticResource WzSpaceXs}">
                 <Button x:Name="DetailsButton"
@@ -248,11 +277,17 @@
                 <VisualState x:Name="AgeCaution">
                     <VisualState.Setters>
                         <Setter Target="FooterText.Foreground" Value="{ThemeResource WzCautionBrush}" />
+                        <Setter Target="FooterStalenessShape.Visibility" Value="Visible" />
+                        <Setter Target="FooterStalenessShape.Data" Value="{ThemeResource WzShapeTriangle}" />
+                        <Setter Target="FooterStalenessShape.Fill" Value="{ThemeResource WzCautionBrush}" />
                     </VisualState.Setters>
                 </VisualState>
                 <VisualState x:Name="AgeCritical">
                     <VisualState.Setters>
                         <Setter Target="FooterText.Foreground" Value="{ThemeResource WzCriticalBrush}" />
+                        <Setter Target="FooterStalenessShape.Visibility" Value="Visible" />
+                        <Setter Target="FooterStalenessShape.Data" Value="{ThemeResource WzShapeHexagon}" />
+                        <Setter Target="FooterStalenessShape.Fill" Value="{ThemeResource WzCriticalBrush}" />
                     </VisualState.Setters>
                 </VisualState>
             </VisualStateGroup>
