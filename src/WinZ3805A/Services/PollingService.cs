@@ -330,12 +330,12 @@ public sealed class PollingService : IAsyncDisposable
         // is not a reading with one bad field - it is somebody else's reply. Storing it puts values
         // in a durable seven-day series that the instrument cannot produce, and the store has no
         // way to tell later that they were never real.
-        if (IsCoherent(syncState))
+        if (IsCoherent(syncState) && ReadingPlausibility.IsPossibleTimeInterval(timeInterval))
         {
             _trends?.Append(new TrendRecord(
                 _timeProvider.GetUtcNow().UtcTicks, efc, timeInterval, syncState, tracked));
         }
-        else
+        else if (!IsCoherent(syncState))
         {
             // Information, because the application ships at Information and this is a reading the
             // user will not find in the trend later. A Debug line would make it invisible exactly
@@ -343,6 +343,21 @@ public sealed class PollingService : IAsyncDisposable
             _logger.LogInformation(
                 "Dropped an incoherent reading: sync state was \"{SyncState}\", which is not a state "
                 + "this receiver reports. The link may have misaligned.",
+                Summarise(syncState));
+        }
+        else
+        {
+            // A separate line from the one above, and worth the duplication. This is the slip that
+            // began after the sync state had already been read correctly, so the two say different
+            // things about where the link came apart - and telling them apart in the log is most of
+            // what diagnosing #237's root cause will need.
+            _logger.LogInformation(
+                "Dropped a reading whose 1 PPS time interval was {Nanoseconds:F0} ns, which is "
+                + "outside the ±{Bound:F0} ns a phase offset against a 1 Hz signal can take. The "
+                + "sync state read \"{SyncState}\", so the link may have misaligned partway through "
+                + "the sweep.",
+                timeInterval,
+                ReadingPlausibility.TimeIntervalBoundNanoseconds,
                 Summarise(syncState));
         }
 

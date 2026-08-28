@@ -136,6 +136,8 @@
          XamlRoot to be wrong in a way that matters. -->
     <Compile Include="..\..\src\WinZ3805A\Services\CommandOutcome.cs"
              Link="Services\CommandOutcome.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Services\ReadingPlausibility.cs"
+             Link="Services\ReadingPlausibility.cs" />
     <Compile Include="..\..\src\WinZ3805A\Services\CommandInvoker.cs"
              Link="Services\CommandInvoker.cs" />
     <Compile Include="..\..\src\WinZ3805A\Services\PowerUpGuard.cs"
