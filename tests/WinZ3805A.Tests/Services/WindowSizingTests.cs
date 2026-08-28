@@ -196,4 +196,48 @@ public sealed class WindowSizingTests
     }
 
     private static WindowRect Screen(int width, int height) => new(0, 0, width, height);
+    // -------------------------------------------------------------------------------------
+    // CompactMinimumHeight (#215)
+    // -------------------------------------------------------------------------------------
+
+    /// <summary>§9.6.2's own number comes back unchanged at 100 % text.</summary>
+    /// <remarks>
+    /// The decomposition is only defensible if it reproduces the specification exactly at the scale
+    /// the specification was written for. 96 fixed + 48 scaling is not an approximation of 144, it
+    /// is 144.
+    /// </remarks>
+    [Fact]
+    public void TheCompactFloorIsExactlySpecifiedAtNormalTextScale() =>
+        Assert.Equal(144, WindowSizing.CompactMinimumHeight(1.0));
+
+    /// <summary>
+    /// The floor grows with text, but only the part of it that holds text.
+    /// </summary>
+    /// <remarks>
+    /// <b>This is what #215 was.</b> A fixed 144 cannot hold constant content across text scales,
+    /// and at 200 % the satellite count — which §9.6.2 requires — was the part pushed out of it.
+    /// Scaling the whole floor would be wrong in the other direction: §10.3's 32 px title bar and
+    /// §9.6.2's 64 px medallion are fixed by construction and do not grow with text.
+    /// </remarks>
+    [Theory]
+    [InlineData(1.25, 156)]
+    [InlineData(1.5, 168)]
+    [InlineData(2.0, 192)]
+    [InlineData(2.25, 204)]
+    public void TheCompactFloorGrowsOnlyByItsTextPortion(double textScale, int expected) =>
+        Assert.Equal(expected, WindowSizing.CompactMinimumHeight(textScale));
+
+    /// <summary>A scale below 1 does not lower §9.6.2's floor.</summary>
+    /// <remarks>
+    /// Windows offers no text smaller than 100 %, so this is guarding against a bad reading rather
+    /// than a real setting — but a floor that can be argued downward is not a floor, and
+    /// <c>UISettings.TextScaleFactor</c> is a value from outside this process.
+    /// </remarks>
+    [Theory]
+    [InlineData(0.5)]
+    [InlineData(0.0)]
+    [InlineData(double.NaN)]
+    public void TheCompactFloorIsNeverLoweredBelowTheSpecification(double textScale) =>
+        Assert.Equal(144, WindowSizing.CompactMinimumHeight(textScale));
+
 }

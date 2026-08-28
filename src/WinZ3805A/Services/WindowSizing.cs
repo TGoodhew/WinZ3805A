@@ -64,6 +64,43 @@ public static class WindowSizing
     }
 
     /// <summary>
+    /// §9.6.2's compact floor, grown for the user's text scale.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>144 is a 100 %-text figure, and a fixed pixel floor cannot hold constant content across
+    /// text scales.</b> That is #215: at 200 % the mode text and satellite count no longer fit in
+    /// 144 effective pixels, and the count — which §9.6.2 requires — was the part pushed out.
+    /// </para>
+    /// <para>
+    /// Only part of the floor is text. §10.3 builds the compact wireframe from a <b>32 px title
+    /// bar</b> and a <b>64 px medallion</b>, both fixed by construction, leaving <b>48 px</b> for
+    /// the mode line, the satellite count and their padding. So the fixed 96 stays fixed and the
+    /// 48 scales, which returns exactly 144 at 100 % — the specification's own number, not an
+    /// approximation of it.
+    /// </para>
+    /// <para>
+    /// Display scaling is <i>not</i> applied here. These are effective pixels;
+    /// <see cref="PhysicalMinimum"/> converts. Text scale and display scale are separate axes and
+    /// multiplying by both would compound them.
+    /// </para>
+    /// </remarks>
+    /// <param name="textScale">
+    /// <c>UISettings.TextScaleFactor</c>: 1.0 at 100 %, 2.0 at 200 %. Values below 1 are clamped —
+    /// Windows does not offer text smaller than 100 %, and a floor below §9.6.2's is not ours to
+    /// invent.
+    /// </param>
+    public static int CompactMinimumHeight(double textScale)
+    {
+        const int Fixed = 96;      // 32 px title bar + 64 px medallion (§10.3)
+        const int Scaling = 48;    // mode line, satellite count and padding (§9.6.2's remainder)
+
+        double scale = double.IsNaN(textScale) || textScale < 1.0 ? 1.0 : textScale;
+
+        return Fixed + (int)Math.Ceiling(Scaling * scale);
+    }
+
+    /// <summary>
     /// Caps a window size at the display it is on, so a floor can never exceed the screen.
     /// </summary>
     /// <remarks>
