@@ -129,6 +129,58 @@ public static class SkyPlotExport
         return $"{Sanitise(displayName)} sky plot {when}";
     }
 
+    /// <summary>
+    /// Composites a captured surface onto an opaque background, in place.
+    /// </summary>
+    /// <param name="premultipliedBgra">Pixels as <c>RenderTargetBitmap</c> hands them over.</param>
+    /// <param name="blue">Background blue channel.</param>
+    /// <param name="green">Background green channel.</param>
+    /// <param name="red">Background red channel.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>Not cosmetic — this is what makes the file readable anywhere.</b> §9.4.1's surface tokens
+    /// map onto stock Fluent colours and <b>almost every one of them is semi-transparent</b>; the
+    /// card the sky plot sits on resolves to <c>CardBackgroundFillColorDefault</c>, which is not
+    /// opaque. A capture of it therefore carries an alpha channel, and an alpha channel is an
+    /// instruction to composite over <i>whatever the viewer happens to be using</i>. The same file
+    /// then looks correct in a white image viewer and washes out in a dark one, or in a document —
+    /// and it looks correct in whichever one the person exporting it tried.
+    /// </para>
+    /// <para>
+    /// The background is the page's own opaque fallback rather than white, so the flattened result
+    /// is the surface the card genuinely sits on in that theme. Under high contrast that is the
+    /// user's window colour, which is the only defensible choice there.
+    /// </para>
+    /// <para>
+    /// The source is <b>premultiplied</b>, which is what <c>RenderTargetBitmap</c> produces, so the
+    /// composite is <c>src + dst × (1 − α)</c> with no division to undo the premultiplication first.
+    /// Getting this wrong does not fail loudly: un-premultiplied maths over the same data produces
+    /// an image that is merely a little washed out, which reads as a rendering quirk.
+    /// </para>
+    /// </remarks>
+    public static void Flatten(byte[] premultipliedBgra, byte blue, byte green, byte red)
+    {
+        ArgumentNullException.ThrowIfNull(premultipliedBgra);
+
+        for (int i = 0; i + 3 < premultipliedBgra.Length; i += 4)
+        {
+            int inverse = 255 - premultipliedBgra[i + 3];
+            if (inverse == 0)
+            {
+                continue;
+            }
+
+            premultipliedBgra[i] = Add(premultipliedBgra[i], blue, inverse);
+            premultipliedBgra[i + 1] = Add(premultipliedBgra[i + 1], green, inverse);
+            premultipliedBgra[i + 2] = Add(premultipliedBgra[i + 2], red, inverse);
+            premultipliedBgra[i + 3] = 255;
+        }
+    }
+
+    /// <summary>One channel of <c>src + dst × (1 − α)</c>, rounded and clamped.</summary>
+    private static byte Add(byte source, byte background, int inverseAlpha) =>
+        (byte)Math.Min(255, source + (((background * inverseAlpha) + 127) / 255));
+
     /// <summary>Replaces anything Windows will not accept in a file name with a space.</summary>
     private static string Sanitise(string name)
     {

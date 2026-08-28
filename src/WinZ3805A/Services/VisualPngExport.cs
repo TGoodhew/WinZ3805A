@@ -1,14 +1,18 @@
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 
 using Windows.Graphics.Imaging;
 using Windows.Storage;
 using Windows.Storage.Pickers;
 using Windows.Storage.Streams;
+using Windows.UI;
 
 using WinRT.Interop;
+
+using WinZ3805A.Controls;
 
 namespace WinZ3805A.Services;
 
@@ -37,6 +41,27 @@ namespace WinZ3805A.Services;
 /// </remarks>
 internal static class VisualPngExport
 {
+    /// <summary>
+    /// The opaque surface a capture is flattened onto.
+    /// </summary>
+    /// <remarks>
+    /// <c>WzPageBackgroundFallbackBrush</c> rather than a literal, because it is the one background
+    /// token defined opaque in all three themes — it exists to sit behind Mica, which is exactly the
+    /// role wanted here. Resolved from the element so it picks up the theme actually in force.
+    /// White is the fallback of last resort and is wrong in Dark; it is reached only if the token has
+    /// been removed, which the theme-parity gate would have failed first.
+    /// </remarks>
+    private static Color OpaqueBackground(FrameworkElement element)
+    {
+        object? resource = element.Resources.TryGetValue("WzPageBackgroundFallbackBrush", out object? local)
+            ? local
+            : Application.Current.Resources.TryGetValue("WzPageBackgroundFallbackBrush", out object? global)
+                ? global
+                : null;
+
+        return resource is SolidColorBrush brush ? brush.Color : Colors.White;
+    }
+
     /// <summary>
     /// Renders an element and saves it, reporting any failure rather than closing silently.
     /// </summary>
@@ -86,6 +111,13 @@ internal static class VisualPngExport
             reader.ReadBytes(pixels);
         }
 
+        // Flattened onto the page's own opaque fallback before encoding. The card fill is a stock
+        // Fluent colour and is NOT opaque, so without this the file carries an alpha channel and
+        // composites over whatever the viewer happens to use - correct in the one the exporter
+        // tried, washed out in the next. See SkyPlotExport.Flatten.
+        Color background = OpaqueBackground(element);
+        SkyPlotExport.Flatten(pixels, background.B, background.G, background.R);
+
         FileSavePicker picker = new()
         {
             SuggestedStartLocation = PickerLocationId.PicturesLibrary,
@@ -125,7 +157,10 @@ internal static class VisualPngExport
 
                 encoder.SetPixelData(
                     BitmapPixelFormat.Bgra8,
-                    BitmapAlphaMode.Premultiplied,
+
+                    // Ignore, not Premultiplied: every pixel is opaque by this point, and declaring
+                    // an alpha channel that no longer varies invites a reader to composite it again.
+                    BitmapAlphaMode.Ignore,
                     (uint)bitmap.PixelWidth,
                     (uint)bitmap.PixelHeight,
                     dpi,

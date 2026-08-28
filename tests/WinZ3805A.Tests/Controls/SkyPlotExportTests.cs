@@ -157,4 +157,77 @@ public class SkyPlotExportTests
     [InlineData(double.PositiveInfinity)]
     public void Scale_survives_a_card_that_has_not_been_measured(double edge) =>
         Assert.Equal(1, SkyPlotExport.ScaleFor(edge, edge));
+    [Fact]
+    public void Flatten_makes_every_pixel_opaque()
+    {
+        // The defect this exists to stop: a card fill that resolves to a stock Fluent colour is
+        // semi-transparent, so the export carried an alpha channel and composited over whatever the
+        // viewer used. It looked right in the one the exporter tried and washed out in the next.
+        byte[] pixels = [0, 0, 0, 0, 40, 40, 40, 128, 10, 20, 30, 255];
+
+        SkyPlotExport.Flatten(pixels, 0xF3, 0xF3, 0xF3);
+
+        Assert.Equal(255, pixels[3]);
+        Assert.Equal(255, pixels[7]);
+        Assert.Equal(255, pixels[11]);
+    }
+
+    [Fact]
+    public void Flatten_leaves_a_fully_transparent_pixel_as_the_background()
+    {
+        byte[] pixels = [0, 0, 0, 0];
+
+        SkyPlotExport.Flatten(pixels, 0x20, 0x21, 0x22);
+
+        Assert.Equal([0x20, 0x21, 0x22, 255], pixels);
+    }
+
+    [Fact]
+    public void Flatten_leaves_an_opaque_pixel_untouched()
+    {
+        // Anything else would tint the plot itself, which is the content of the record.
+        byte[] pixels = [10, 20, 30, 255];
+
+        SkyPlotExport.Flatten(pixels, 0xF3, 0xF3, 0xF3);
+
+        Assert.Equal([10, 20, 30, 255], pixels);
+    }
+
+    [Fact]
+    public void Flatten_treats_the_source_as_premultiplied()
+    {
+        // RenderTargetBitmap produces premultiplied BGRA, so the composite is src + dst * (1 - a)
+        // with no division first. Un-premultiplied maths over the same bytes does not fail loudly -
+        // it yields an image that is merely a little washed out, which reads as a rendering quirk.
+        // Half-alpha black over white must land on mid grey, not on white.
+        byte[] pixels = [0, 0, 0, 128];
+
+        SkyPlotExport.Flatten(pixels, 255, 255, 255);
+
+        Assert.InRange(pixels[0], 126, 128);
+        Assert.InRange(pixels[1], 126, 128);
+        Assert.InRange(pixels[2], 126, 128);
+    }
+
+    [Fact]
+    public void Flatten_never_overflows_a_channel()
+    {
+        // A premultiplied source channel can already be at full scale; adding any background to it
+        // must clamp rather than wrap, and a wrap here would show as bright speckle on light areas.
+        byte[] pixels = [255, 255, 255, 1];
+
+        SkyPlotExport.Flatten(pixels, 255, 255, 255);
+
+        Assert.Equal([255, 255, 255, 255], pixels);
+    }
+
+    [Fact]
+    public void Flatten_ignores_a_trailing_partial_pixel()
+    {
+        byte[] pixels = [0, 0, 0, 0, 9, 9];
+
+        SkyPlotExport.Flatten(pixels, 1, 2, 3);
+
+        Assert.Equal([9, 9], pixels[4..]);
+    }
 }
