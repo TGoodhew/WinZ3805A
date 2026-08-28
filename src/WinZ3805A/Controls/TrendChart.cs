@@ -448,16 +448,34 @@ public sealed class TrendChart : Control
     /// data-framed one it is the midpoint of the window, and it is drawn because three labels down
     /// the left edge are easier to read against a rule than against nothing.
     /// </remarks>
-    private void DrawMidLine(Canvas surface, double width, double zeroY) =>
+    private void DrawMidLine(Canvas surface, double width, double zeroY)
+    {
+        // Snapped to device pixels (#233). Drawn at a fractional Y this rule straddles two pixel
+        // rows and each renders at about half intensity — measured at 2.66:1 under High Contrast
+        // White, against a brush that is 10.43:1 and a §9.4.5 floor of 3:1. Nothing was wrong with
+        // the colour; the line was simply never one pixel.
+        // UIElement.RasterizationScale, which is 0 until the control is in a tree — SnapStrokeCentre
+        // falls back to 1 for anything not positive and finite, so the first draw is unsnapped
+        // rather than snapped to nonsense. Read per draw rather than cached: moving a window to a
+        // display with different scaling raises no event this control listens for, and it redraws
+        // every second anyway (§9.8.2).
+        double centre = TrendDecimation.SnapStrokeCentre(zeroY, MidLineThickness, RasterizationScale);
+
         surface.Children.Add(new Line
         {
             X1 = 0,
             X2 = width,
-            Y1 = zeroY,
-            Y2 = zeroY,
-            StrokeThickness = 1,
+            Y1 = centre,
+            Y2 = centre,
+            StrokeThickness = MidLineThickness,
             Stroke = Resource<Brush>("WzStrokeDefaultBrush") ?? new SolidColorBrush(Microsoft.UI.Colors.Gray),
         });
+    }
+
+    /// <summary>The rule's stroke width, in DIPs.</summary>
+    private const double MidLineThickness = 1;
+
+
 
     /// <remarks>
     /// Three labels and no more: the two extremes and the midpoint. §9.1's restraint applies to a

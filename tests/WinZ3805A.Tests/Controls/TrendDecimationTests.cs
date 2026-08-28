@@ -289,4 +289,56 @@ public sealed class TrendDecimationTests
 
         Assert.True(TrendDecimation.ToStateColumns(states, 0, 100_000L * Second, 500).Count <= 500);
     }
+    // -------------------------------------------------------------------------------------
+    // SnapStrokeCentre (#233)
+    // -------------------------------------------------------------------------------------
+
+    /// <summary>A one-pixel rule lands on one pixel, not across two.</summary>
+    /// <remarks>
+    /// <b>This is what #233 was.</b> Drawn at a fractional Y a 1 px stroke straddles two device
+    /// rows and each renders at about half intensity, so the trend chart's zero rule measured
+    /// 2.66 : 1 under High Contrast White against §9.4.5's 3 : 1 floor — while its brush is
+    /// 10.43 : 1. At 100 % scaling a 1 DIP stroke is one device pixel and its centre belongs on a
+    /// half-pixel boundary.
+    /// </remarks>
+    [Theory]
+    [InlineData(100.0, 100.5)]
+    [InlineData(100.4, 100.5)]
+    [InlineData(100.5, 100.5)]
+    [InlineData(100.9, 100.5)]
+    [InlineData(101.0, 101.5)]
+    public void AHairlineIsCentredOnAHalfPixelAtNormalScaling(double y, double expected) =>
+        Assert.Equal(expected, TrendDecimation.SnapStrokeCentre(y, 1, 1.0), 6);
+
+    /// <summary>An even device thickness wants a whole boundary, not a half one.</summary>
+    /// <remarks>
+    /// At 200 % a 1 DIP stroke is <b>two</b> device pixels, and two pixels centred on a half-pixel
+    /// boundary straddle three rows. Getting this backwards moves the blur rather than removing it,
+    /// which is why thickness and scale are both parameters instead of assumptions.
+    /// </remarks>
+    [Theory]
+    [InlineData(100.1, 100.0)]   // device 200.2 -> 200, which is 100.0 DIPs
+    [InlineData(100.3, 100.5)]   // device 200.6 -> 201, which is 100.5 DIPs
+    public void AnEvenDeviceThicknessIsCentredOnAWholeBoundary(double y, double expected) =>
+        Assert.Equal(expected, TrendDecimation.SnapStrokeCentre(y, 1, 2.0), 6);
+
+    /// <summary>A scale that cannot be believed leaves the line where it was asked for.</summary>
+    /// <remarks>
+    /// <c>UIElement.RasterizationScale</c> is 0 until the control is in a visual tree, and the
+    /// first draw happens then. An unsnapped line is slightly soft; a line snapped by dividing by
+    /// zero is not on the screen at all.
+    /// </remarks>
+    [Theory]
+    [InlineData(0.0)]
+    [InlineData(-1.0)]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    public void AnUnusableScaleFallsBackToUnityRatherThanNonsense(double scale) =>
+        Assert.Equal(100.5, TrendDecimation.SnapStrokeCentre(100.2, 1, scale), 6);
+
+    /// <summary>A y that is not a number is returned untouched.</summary>
+    [Fact]
+    public void ANonFiniteYIsLeftAlone() =>
+        Assert.True(double.IsNaN(TrendDecimation.SnapStrokeCentre(double.NaN, 1, 1.0)));
+
 }
