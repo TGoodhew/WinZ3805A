@@ -500,13 +500,18 @@ try {
                 $note = '{0}  {1}  mode="{2}" sync="{3}" acquisition="{4}" health="{5}" tracking={6}' -f `
                     (Get-Date -Format 'o'), (Split-Path -Leaf $path), $facts.Mode, $facts.Sync, `
                     $facts.Acquisition, $facts.Health, $facts.Tracking
-                # .log, not .txt. The default output directory is the fixture corpus, and
-                # FixtureCorpusTests globs *.txt through every subdirectory - so a .txt log is
-                # collected as though it were a captured screen. It does not fail: §11.1 says the
-                # parser never throws and unparseable fields become null, so a log parses to nulls
-                # and satisfies every assertion vacuously. Found by dry-running this against the
-                # receiver on 27 Aug, before the sitting rather than after it.
-                Add-Content -LiteralPath (Join-Path $OutputDirectory 'capture-log.log') -Value $note
+                # .md, and neither .txt nor .log. The default output directory is the fixture
+                # corpus, and FixtureCorpusTests globs *.txt through every subdirectory - so a
+                # .txt log is collected as though it were a captured screen, and passes
+                # vacuously, because §11.1 says the parser never throws and unparseable fields
+                # become null (found by dry-running this on 27 Aug, before the sitting).
+                #
+                # .log was the first fix and was worse in a quieter way: .gitignore ignores *.log,
+                # so the log was never committed and the fixtures arrived with no record of which
+                # state each one was. That provenance is the whole reason this file exists, and a
+                # captured screen without it is a wall of text nobody can date. .md is ignored by
+                # neither, and sits beside the README already in that folder.
+                Add-Content -LiteralPath (Join-Path $OutputDirectory 'capture-log.md') -Value $note
             }
         }
         catch {
