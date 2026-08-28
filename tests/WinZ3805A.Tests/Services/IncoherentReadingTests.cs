@@ -1,4 +1,5 @@
 using WinZ3805A.Controls;
+using WinZ3805A.Services;
 
 namespace WinZ3805A.Tests.Services;
 
@@ -86,4 +87,68 @@ public class IncoherentReadingTests
     [InlineData("SURV")]
     public void AStateThisApplicationHasNotBeenTaughtIsAlsoDropped(string syncState) =>
         Assert.Equal(ReceiverMode.Disconnected, ReceiverModes.FromSyncState(syncState));
+
+    // -------------------------------------------------------------------------------------
+    // The slip that begins after the sync state has already been read (#237)
+    // -------------------------------------------------------------------------------------
+
+    /// <summary>A 1 PPS time interval larger than half a second is not an offset.</summary>
+    /// <remarks>
+    /// The measurement is a phase offset against a 1 Hz signal, so beyond half a second the nearer
+    /// pulse is the next one. Both values below were stored on 24 Aug in the same four seconds as
+    /// the log dump above — the same slip, one field further along.
+    /// </remarks>
+    [Theory]
+    [InlineData(2e9)]           // the 22:57:38 row
+    [InlineData(3e9)]           // the 22:57:42 row
+    [InlineData(-2e9)]
+    [InlineData(5.0000001e8)]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    public void AnImpossibleTimeIntervalIsNotAReading(double nanoseconds) =>
+        Assert.False(ReadingPlausibility.IsPossibleTimeInterval(nanoseconds));
+
+    /// <summary>Everything the instrument can actually produce still counts.</summary>
+    /// <remarks>
+    /// <b>The bound is the physical one, not the observed one, and this is where that shows.</b> The
+    /// six-day capture holds nothing outside ±1 µs, so a limit drawn around the data would have been
+    /// far tighter and would have looked well-justified. It would also reject a cold start, a bad
+    /// antenna, or a receiver genuinely far out — the readings a diagnostic tool least ought to
+    /// discard quietly. ±0.5 s rejects only what cannot exist.
+    /// </remarks>
+    [Theory]
+    [InlineData(0.0)]
+    [InlineData(10.4)]          // a real sample from the capture
+    [InlineData(-8.7)]          // another
+    [InlineData(-999.9)]
+    [InlineData(1e6)]           // a millisecond out: implausible, but possible, so kept
+    [InlineData(5e8)]           // exactly the bound
+    [InlineData(-5e8)]
+    public void AnythingTheInstrumentCanProduceIsStillAReading(double nanoseconds) =>
+        Assert.True(ReadingPlausibility.IsPossibleTimeInterval(nanoseconds));
+
+    /// <summary>A missing reading is plausible, because the receiver is allowed not to answer.</summary>
+    /// <remarks>
+    /// §11.1 makes an unparseable field null, and the receiver legitimately refuses this query in
+    /// some states — <c>PollingService</c> counts those as skips rather than errors. Treating
+    /// absence as evidence of a slip would drop good sweeps in exactly the states a user is most
+    /// likely to be watching.
+    /// </remarks>
+    [Fact]
+    public void AMissingTimeIntervalIsNotEvidenceOfAnything() =>
+        Assert.True(ReadingPlausibility.IsPossibleTimeInterval(null));
+
+    /// <summary>The two discriminators are independent, which is the whole point of adding one.</summary>
+    /// <remarks>
+    /// #209 asks about the sync state; this asks about the time interval. <c>PollingService</c>
+    /// reads the sync state on its own <i>before</i> the loop that reads everything else, so a slip
+    /// beginning inside that loop leaves the sync state correct and shifts the rest — passing #209's
+    /// check completely. That combination is the one this test names.
+    /// </remarks>
+    [Fact]
+    public void AValidSyncStateDoesNotVouchForTheRestOfTheSweep()
+    {
+        Assert.NotEqual(ReceiverMode.Disconnected, ReceiverModes.FromSyncState("LOCK"));
+        Assert.False(ReadingPlausibility.IsPossibleTimeInterval(2e9));
+    }
 }
