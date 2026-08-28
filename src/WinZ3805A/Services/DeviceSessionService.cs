@@ -431,6 +431,31 @@ public sealed class DeviceSessionService : IAsyncDisposable
 
             BeginReconnect($"The link to {PortName} failed: {exception.Message}");
         }
+        finally
+        {
+            // Nobody may be left awaiting a completion that will never be set (#259).
+            //
+            // A caller waits on pending.Completion bounded only by its OWN token, so a completion
+            // that is never set is not a slow command — it is a caller that never returns. The poll
+            // loop passes a token it does not cancel, so it waits for the life of the process:
+            // alive, holding its sweep, ignoring the refresh flag, and logging nothing.
+            //
+            // The path that used to do it is the OperationCanceledException raised when
+            // TearDownAsync cancels the SESSION token while a command is in flight. That is neither
+            // the caller cancelling — the filter above tests the caller's token, not this one — nor
+            // a transport fault, so it matched no catch, escaped to PumpAsync, and ended the pump
+            // as an ordinary shutdown with this caller still waiting.
+            //
+            // Which is why a power cycle wedged the app and a USB unplug never did: removal throws
+            // IOException, a transport fault, and the caller was failed properly.
+            //
+            // TrySet on an already-completed source is a no-op, so this only catches the paths that
+            // would otherwise set nothing.
+            pending.Completion.TrySetException(
+                new TransportException(
+                    TransportFault.NotOpen,
+                    "The session ended before the command completed."));
+        }
     }
 
     /// <remarks>
@@ -614,6 +639,20 @@ public sealed class DeviceSessionService : IAsyncDisposable
             }
 
             _pump = null;
+        }
+
+        // Everything still queued, now that no pump is left to serve it (#259). PumpAsync has always
+        // said "queued callers are failed by TearDownAsync" and until now that was not true: the
+        // channel was left holding them, and they waited for whichever pump started next — so a poll
+        // queued before an outage could be sent minutes later, against a different connection, and a
+        // tier C command the user confirmed before the link dropped could execute after it came
+        // back without being confirmed again.
+        while (_queue.Reader.TryRead(out PendingCommand? queued))
+        {
+            queued.Completion.TrySetException(
+                new TransportException(
+                    TransportFault.NotOpen,
+                    "The session ended before the command was sent."));
         }
 
         _sessionCts?.Dispose();

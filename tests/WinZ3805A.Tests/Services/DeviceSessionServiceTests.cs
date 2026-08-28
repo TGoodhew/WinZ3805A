@@ -484,4 +484,138 @@ public class DeviceSessionServiceTests
 
         await Assert.ThrowsAsync<ObjectDisposedException>(() => session.ExecuteAsync(Status));
     }
+
+    // -------------------------------------------------------------------------------------
+    // A caller is never left waiting on a completion nobody will set (#259)
+    // -------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Asserts a caller was <i>released</i> rather than left waiting, and only then how it ended.
+    /// </summary>
+    /// <remarks>
+    /// <b>Written this way after the obvious version proved vacuous.</b>
+    /// <c>Assert.ThrowsAnyAsync(() =&gt; task.WaitAsync(timeout))</c> reads like it checks the task
+    /// failed, and it passes when the task never completes at all — because <c>WaitAsync</c> itself
+    /// throws <c>TimeoutException</c>, which is an exception like any other. Two of the three tests
+    /// below passed against the unfixed code until this separated the two questions: first that the
+    /// caller came back, then what it came back with.
+    /// </remarks>
+    private static async Task AssertReleasedAsync(Task task)
+    {
+        await Task.WhenAny(task, Task.Delay(TestTimeout));
+
+        Assert.True(task.IsCompleted, "the caller was left waiting on a completion nobody would set (#259)");
+        await Assert.ThrowsAnyAsync<Exception>(() => task);
+    }
+
+    /// <summary>Tearing the session down while a command is in flight completes that command.</summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The regression this exists for.</b> A caller awaits <c>pending.Completion</c> bounded only
+    /// by its own token, so a completion that is never set is not a slow command — it is a caller
+    /// that never returns. <c>PollingService</c> passes a token it does not cancel, so it waited for
+    /// the life of the process: alive, holding its sweep, ignoring the refresh flag, logging
+    /// nothing, with the session still reporting Connected.
+    /// </para>
+    /// <para>
+    /// The escape was the <c>OperationCanceledException</c> raised when teardown cancels the session
+    /// token under an in-flight command. It is neither the caller cancelling — the filter there
+    /// tests the caller's token — nor a transport fault, so it matched no catch, escaped to the
+    /// pump, and ended it as an ordinary shutdown with this caller still waiting.
+    /// </para>
+    /// <para>
+    /// <see cref="TransportBehaviour.Silent"/> rather than a faulting transport, and the distinction
+    /// is the whole of #259: a pulled adapter throws <c>IOException</c>, which is a transport fault
+    /// and was always handled. A receiver being power-cycled throws nothing at all — the handle
+    /// stays valid and the far end simply stops replying — which is why that case wedged the app and
+    /// the unplug case never did.
+    /// </para>
+    /// <para>
+    /// Without the fix this test does not fail, it <b>hangs</b>, which is why every wait is bounded.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task TearingDownWhileACommandIsInFlightDoesNotStrandTheCaller()
+    {
+        ControllableTransport receiver = Receiver();
+        await using DeviceSessionService session = new((_, _) => receiver, new FakeTimeProvider());
+
+        Assert.True(await session.ConnectAsync("COM3", SerialSettings.Default).WaitAsync(TestTimeout));
+
+        // Answers during connect, then stops — and the clock is pinned, so the LineProtocol timeout
+        // cannot fire on its own and the command stays genuinely in flight.
+        receiver.Behaviour = TransportBehaviour.Silent;
+        Task<Transaction> inFlight = session.ExecuteAsync(Status);
+        await Task.Delay(50);
+        Assert.False(inFlight.IsCompleted, "the command should still be in flight");
+
+        await session.DisconnectAsync().WaitAsync(TestTimeout);
+
+        // The assertion is that this returns at all. What it returns is secondary — a fault and a
+        // cancellation are both honest answers to "the session went away underneath you"; waiting
+        // for ever is not.
+        await AssertReleasedAsync(inFlight);
+    }
+
+    /// <summary>A command still queued when the session ends is failed rather than kept.</summary>
+    /// <remarks>
+    /// <c>PumpAsync</c> has always claimed "queued callers are failed by TearDownAsync" and until
+    /// #259 that was not true — the channel kept them for whichever pump started next. So a poll
+    /// queued before an outage could be sent minutes later against a different connection, and a
+    /// tier C command the user confirmed before the link dropped could execute after it came back
+    /// without being confirmed again.
+    /// </remarks>
+    [Fact]
+    public async Task ACommandStillQueuedWhenTheSessionEndsIsFailed()
+    {
+        ControllableTransport receiver = Receiver();
+        await using DeviceSessionService session = new((_, _) => receiver, new FakeTimeProvider());
+
+        Assert.True(await session.ConnectAsync("COM3", SerialSettings.Default).WaitAsync(TestTimeout));
+
+        receiver.Behaviour = TransportBehaviour.Silent;
+
+        // The first occupies the pump; the second is left in the channel behind it.
+        Task<Transaction> inFlight = session.ExecuteAsync(Status);
+        Task<Transaction> queued = session.ExecuteAsync(Status);
+        await Task.Delay(50);
+
+        await session.DisconnectAsync().WaitAsync(TestTimeout);
+
+        await AssertReleasedAsync(inFlight);
+        await AssertReleasedAsync(queued);
+    }
+
+    /// <summary>The session works again afterwards, which is the state the application is left in.</summary>
+    /// <remarks>
+    /// A reconnect is teardown followed by a fresh open, so this is the shape of the real failure:
+    /// the session came back, said Connected, and the caller stranded by the teardown never
+    /// returned. Asserting that a later command answers is asserting the app is usable again.
+    /// </remarks>
+    [Fact]
+    public async Task ASessionTornDownMidCommandStillWorksAfterwards()
+    {
+        ControllableTransport first = Receiver();
+        ControllableTransport second = Receiver();
+        int opened = 0;
+
+        await using DeviceSessionService session = new(
+            (_, _) => ++opened == 1 ? first : second,
+            new FakeTimeProvider());
+
+        Assert.True(await session.ConnectAsync("COM3", SerialSettings.Default).WaitAsync(TestTimeout));
+
+        first.Behaviour = TransportBehaviour.Silent;
+        Task<Transaction> stranded = session.ExecuteAsync(Status);
+        await Task.Delay(50);
+
+        await session.DisconnectAsync().WaitAsync(TestTimeout);
+        await AssertReleasedAsync(stranded);
+
+        Assert.True(await session.ConnectAsync("COM3", SerialSettings.Default).WaitAsync(TestTimeout));
+
+        Transaction after = await session.ExecuteAsync(Status).WaitAsync(TestTimeout);
+        Assert.True(after.Succeeded);
+    }
+
 }
