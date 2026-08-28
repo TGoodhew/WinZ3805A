@@ -2,6 +2,8 @@ using System.Globalization;
 
 using Microsoft.Extensions.DependencyInjection;
 
+using Windows.ApplicationModel;
+
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
@@ -172,6 +174,11 @@ public sealed partial class SatellitesPage : Page
         // same sentence for the same reason: an empty list is indistinguishable from a broken one.
         ShowEmpty(SkyPlotEmptyText, model.SkyPlotEmptyMessage is not null, model.SkyPlotEmptyMessage ?? string.Empty);
         ApplySkyView(model.SkyPlotEmptyMessage is null);
+
+        // #47. Offered only when there is a sky to record: an empty plot exports to a picture of
+        // three rings, which looks like a working antenna seeing nothing rather than a receiver that
+        // is not connected, and that is the one misreading a calibration record must not invite.
+        ExportImageButton.IsEnabled = model.SkyPlotEmptyMessage is null;
 
         SkyPlotSelectionText.Text = DescribeSelection();
 
@@ -345,6 +352,56 @@ public sealed partial class SatellitesPage : Page
         SkyPlot.Visibility = plot && hasSatellites ? Visibility.Visible : Visibility.Collapsed;
         SkyListHeader.Visibility = !plot && hasSatellites ? Visibility.Visible : Visibility.Collapsed;
         SkyRows.Visibility = !plot && hasSatellites ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>
+    /// §10.5's image export (#47): the sky card, as it stands, as a PNG.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The caption is shown, laid out, captured and hidden again inside one handler. It exists in
+    /// the tree the whole time — <c>RenderTargetBitmap</c> will not render a collapsed element, so
+    /// there is no version of this that captures something the screen never held. The
+    /// <c>UpdateLayout</c> is what makes the card measure its new height before the bitmap is sized
+    /// from <c>ActualHeight</c>; without it the caption is laid out but cropped off the bottom.
+    /// </para>
+    /// <para>
+    /// <c>finally</c>, so a picker the user cancels or a save that throws still leaves the card as
+    /// they found it. A caption stuck permanently under the plot would be a worse defect than a
+    /// failed export, because nothing about it says which one went wrong.
+    /// </para>
+    /// </remarks>
+    private async void OnExportImageClicked(object sender, RoutedEventArgs e)
+    {
+        if (_model is not SatellitesViewModel model || _device is not DeviceContext device)
+        {
+            return;
+        }
+
+        SkyPlotCaptionText.Text = SkyPlotExport.Caption(
+            Package.Current.DisplayName,
+            device.TimeProvider.GetUtcNow(),
+            model.TrackedCount,
+            model.NotTrackedCount,
+            model.ElevationMaskDegrees);
+
+        SkyPlotCaptionText.Visibility = Visibility.Visible;
+        SkyCard.UpdateLayout();
+
+        try
+        {
+            double raster = XamlRoot?.RasterizationScale ?? 1d;
+
+            await VisualPngExport.SaveAsync(
+                SkyCard,
+                XamlRoot,
+                SkyPlotExport.SuggestedFileName(Package.Current.DisplayName, device.TimeProvider.GetUtcNow()),
+                SkyPlotExport.ScaleFor(SkyCard.ActualWidth * raster, SkyCard.ActualHeight * raster));
+        }
+        finally
+        {
+            SkyPlotCaptionText.Visibility = Visibility.Collapsed;
+        }
     }
 
     /// <summary>A11Y-11's toggle.</summary>

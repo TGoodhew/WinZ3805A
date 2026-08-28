@@ -1561,6 +1561,32 @@ Health items map from `:STAT:OPER:HARD:COND?` where bit meanings are known, and 
   > **⚠ Corrected 21 Aug 2026 (#116).** This line previously read "colour green ≥ 40, amber 35–39, red < 35". That is the semantic triple — `WzSuccessBrush` / `WzCautionBrush` / `WzCriticalBrush` — and §9.4.4 forbids reusing semantic tokens for charting in its opening sentence, with the reason: *a trace coloured `WzCriticalBrush` implies an alarm that is not being asserted*. A C/N of 34 is an ordinary satellite low in the sky; painting it the red the medallion uses for a lost lock asserts a fault nobody raised. §9.10.2 already specified the sequential ramp for this control, so two sections agreed against one, and both of those gave a reason. Appendix A records §10 being "reconciled" when §9 was added; this reads as a line missed in that pass.
 - Data comes exclusively from `:SYST:STAT?` parsing (§11) — there is no per-satellite query.
 - **Manage…** opens a dialog listing PRN 1–32 with include/ignore toggles, backed by `:GPS:SAT:TRAC:IGNore` / `:INCLude`. All writes are tier C.
+- **Save image** writes the sky card — plot, heading, and the selection line — to a PNG the user names.
+
+  > **⚠ Added 28 Aug 2026 (#47, OQ-D6 resolved).** OQ-D6 assumed no image export in v1, on the basis
+  > that "export is CSV only". **That assumption is overturned**: it answered a different question
+  > than the one asked. A CSV of azimuth, elevation and signal strength is a table; a calibration
+  > record wants evidence of *what the sky looked like from this antenna*, and the argument #185
+  > settled — a rack mean of 1.94 satellites against a backyard mean of 6.59 — is not one anybody
+  > makes with a spreadsheet.
+  >
+  > Three properties are normative rather than incidental:
+  >
+  > 1. **The capture is the live card**, rendered through `RenderTargetBitmap` over the element
+  >    already on screen. Not a second renderer — a separate drawing path for export is free to
+  >    disagree with the one the user reviewed, and a record that differs from the screen it claims
+  >    to record is worse than no record.
+  > 2. **The image carries a caption the screen does not**: product name, capture time **in UTC**,
+  >    tracked and predicted counts, and the elevation mask in force. The mask is not decoration —
+  >    the same sky under a 10° mask and a 25° mask produces two legitimate plots with different
+  >    satellites missing, so a record omitting it cannot be compared with anything.
+  > 3. **No theme substitution.** The export is whatever theme the user is in, high contrast
+  >    included, where the colours are the user's own choices and this application has no standing to
+  >    replace them. §9.4.3's colour + shape + text encoding is what keeps a greyscale printout
+  >    readable, so nothing is lost by declining to force a light theme.
+  >
+  > Offered only while the plot has satellites on it: an empty export is a picture of three rings,
+  > which reads as a working antenna seeing nothing rather than as a receiver that is not connected.
 
 ### 10.6 Position page
 

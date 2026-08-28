@@ -140,10 +140,33 @@ Each needs a survey actually running, which needs a power cycle.
 - Both take **about ten seconds** to answer. That is normal — the receiver tears down the
   accumulation before replying — and is why they have their own 30 s timeout class (#256).
 
+## 7. Sky-plot image export (#47, §10.5)
+
+Needs satellites on the plot, so it goes with section 5 rather than standing alone. Everything here
+is a property of the *file*, which is why none of it is in CI — the rendering path leaves no trace in
+source that a script could check.
+
+- **Save image, in all three themes.** Light, Dark, and high contrast. The export is deliberately
+  not theme-substituted, so each one produces a different and correct file; what is being checked is
+  that none of them produces an **illegible** one. Under high contrast in particular, confirm the
+  markers are not the window colour — that was #218's whole failure mode, and an exported PNG is
+  where it would be least visible.
+- **Open the file outside the app.** A transparent background composites over whatever the viewer
+  happens to use, so it can look right in one and vanish in another. Check it in Photos and in a
+  document.
+- **Read the caption.** Time in UTC, and the elevation mask present and matching the box on the page.
+  A caption that disagreed with the plot above it would be the one defect that makes the record
+  actively misleading rather than merely absent.
+- **Confirm the caption is gone from the screen afterwards**, including after cancelling the save
+  dialog. It is shown only for the duration of the render.
+- **At 225 % scaling**, check the file is not cropped. `RenderTargetBitmap` truncates rather than
+  throwing when it is asked for more pixels than the hardware will give, so an over-budget capture
+  produces an image that opens cleanly and is missing its bottom.
+
 ---
 
 ## Before a release
 
-Sections 1–4 in full. Section 5 only if the hardware is being moved; section 6 if survey behaviour
-has been touched. Record the result on the relevant issue, and if something fails, file it rather
+Sections 1–4 in full. Section 5 only if the hardware is being moved, and section 7 alongside it
+since it needs the same sky; section 6 if survey behaviour has been touched. Record the result on the relevant issue, and if something fails, file it rather
 than fixing it silently — the log of what was checked is worth as much as the checking.
