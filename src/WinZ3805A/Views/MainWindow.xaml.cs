@@ -262,8 +262,42 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    /// <remarks>
+    /// The compact floor grows with the user's text scale (#215). §9.6.2's 144 is a 100 %-text
+    /// figure: at 200 % the mode line and the satellite count no longer fit inside it, and the
+    /// count — which §9.6.2 requires and the detail line it does not — was the part pushed out.
+    /// <see cref="WindowSizing.CompactMinimumHeight"/> holds the derivation and returns exactly 144
+    /// at 100 %.
+    ///
+    /// The standard floor is left alone. 240 has room for the same growth, and #26's sweep found
+    /// nothing clipped there at 200 %.
+    /// </remarks>
     private int MinimumContentHeight =>
-        _page?.IsCompact == true ? MinimumCompactContentHeight : MinimumStandardContentHeight;
+        _page?.IsCompact == true
+            ? WindowSizing.CompactMinimumHeight(TextScale)
+            : MinimumStandardContentHeight;
+
+    /// <summary>The user's text scale, or 1.0 if the shell cannot be asked.</summary>
+    /// <remarks>
+    /// Constructed per read rather than held. <see cref="Windows.UI.ViewManagement.UISettings"/>
+    /// reaches out to the shell and can throw while a WinAppSDK process is starting — the same
+    /// hazard <c>AccentPalette</c> documents — and this is read rarely enough that caching it would
+    /// trade a real failure mode for no measurable gain.
+    /// </remarks>
+    private static double TextScale
+    {
+        get
+        {
+            try
+            {
+                return new Windows.UI.ViewManagement.UISettings().TextScaleFactor;
+            }
+            catch (Exception)
+            {
+                return 1.0;
+            }
+        }
+    }
 
     /// <summary>
     /// Puts the window back where it was left, if that is still somewhere the user can see it.

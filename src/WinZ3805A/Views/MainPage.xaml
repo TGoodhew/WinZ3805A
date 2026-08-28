@@ -334,6 +334,18 @@
                     <VisualState.Setters>
                         <Setter Target="RootGrid.RowSpacing" Value="0" />
                         <Setter Target="Medallion.Size" Value="Compact" />
+                        <!--
+                            The detail line is not in §9.6.2's list either, and was drawn anyway.
+                            That is #215: at 200 % text the column ran past the 144 px minimum and
+                            the satellite count — which §9.6.2 DOES require — was pushed offscreen,
+                            while the detail line, which it does not, kept its place and was itself
+                            clipped to four pixels tall. Collapsing it returns the budget to the two
+                            things the specification actually asks for.
+
+                            The mode text still says which state the receiver is in. The detail line
+                            qualifies that, and qualifying is what a reduced CONTENT mode gives up.
+                        -->
+                        <Setter Target="ModeDetailText.Visibility" Value="Collapsed" />
                         <Setter Target="ReadoutRow.Visibility" Value="Collapsed" />
                         <Setter Target="MeritRow.Visibility" Value="Collapsed" />
                         <Setter Target="ClockRow.Visibility" Value="Collapsed" />
