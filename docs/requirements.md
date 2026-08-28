@@ -205,7 +205,7 @@ The device is plain RS-232 with no vendor driver SDK, no COM interop, and no P/I
 1. Never subscribe to `DataReceived`, `ErrorReceived`, or `PinChanged`. Read `BaseStream` asynchronously via `PipeReader`.
 2. Wrap every read and write in `try/catch` for `IOException`, `UnauthorizedAccessException`, `InvalidOperationException`, and `ObjectDisposedException` — all four are reachable on surprise removal.
 3. Dispose the `SerialPort` on a dedicated path that tolerates already-faulted state; do not assume `Close()` succeeds.
-4. Add an integration test to the manual QA checklist: unplug the adapter mid-transaction and confirm the app reports Disconnected without crashing.
+4. Add an integration test to the manual QA checklist: unplug the adapter mid-transaction and confirm the app reports Disconnected without crashing. The checklist is [`docs/manual-qa.md`](manual-qa.md); this is section 1, and section 2 is the receiver power cycle, which fails differently (#259).
 
 ---
 
@@ -1286,7 +1286,7 @@ Testable statements. Each is verified by the stated method, not by inspection al
 | A11Y-12 | No information is conveyed by colour alone anywhere in the app | Greyscale screenshot review of every page and state. For the §9.4.4 chart series specifically, **`build/Test-SeriesSeparation.ps1` gates CI** — added 22 Aug 2026 (#87, #177) — checking all 28 pairs in both themes under deuteranopia and protanopia as well as normal vision. It does **not** discharge this requirement: under HighContrast the series alternate between two `SystemColor*` values, so eight traces cannot be separated by colour there at all, and a second channel (dash pattern plus direct labelling) is required regardless. The greyscale review stays the check for everything that is not a chart series. |
 | A11Y-13 | With animations disabled system-wide, no animation runs and no layout differs from the animated path | Manual pass with the system setting off |
 
-A11Y-3 and A11Y-4 run in CI. The rest are a release checklist item.
+A11Y-3 and A11Y-4 run in CI. The rest are a release checklist item, in [`docs/manual-qa.md`](manual-qa.md) section 4.
 
 ### 9.13 Anti-patterns
 

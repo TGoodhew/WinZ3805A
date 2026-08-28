@@ -49,16 +49,23 @@ public sealed partial class PositionPage : Page
 
         // §10.6's ranges, which match the 58503B manual's own table exactly. Assigned in code
         // rather than XAML: the parser reads a NumberBox.Value literal as a float and widens it.
+        // The ranges come from PositionFieldBounds rather than being written here, so §10.6's
+        // numbers are assertable (#12). They were seven literals in this constructor, which no test
+        // could reach - RangeValidation was well covered, but that is the mechanism, and a latitude
+        // quietly accepting 0-80 would have failed nothing.
         _fields =
         [
-            new NumberFieldValidator(LatitudeDegrees, LatitudeDegreesError, 0, 90, "°"),
-            new NumberFieldValidator(LatitudeMinutes, LatitudeMinutesError, 0, 59, "′"),
-            new NumberFieldValidator(LatitudeSeconds, LatitudeSecondsError, 0, 59.999, "″"),
-            new NumberFieldValidator(LongitudeDegrees, LongitudeDegreesError, 0, 180, "°"),
-            new NumberFieldValidator(LongitudeMinutes, LongitudeMinutesError, 0, 59, "′"),
-            new NumberFieldValidator(LongitudeSeconds, LongitudeSecondsError, 0, 59.999, "″"),
-            new NumberFieldValidator(HeightBox, HeightError, -1000, 18000, "m"),
+            Validator(LatitudeDegrees, LatitudeDegreesError, PositionFieldBounds.LatitudeDegrees),
+            Validator(LatitudeMinutes, LatitudeMinutesError, PositionFieldBounds.LatitudeMinutes),
+            Validator(LatitudeSeconds, LatitudeSecondsError, PositionFieldBounds.LatitudeSeconds),
+            Validator(LongitudeDegrees, LongitudeDegreesError, PositionFieldBounds.LongitudeDegrees),
+            Validator(LongitudeMinutes, LongitudeMinutesError, PositionFieldBounds.LongitudeMinutes),
+            Validator(LongitudeSeconds, LongitudeSecondsError, PositionFieldBounds.LongitudeSeconds),
+            Validator(HeightBox, HeightError, PositionFieldBounds.Height),
         ];
+
+        static NumberFieldValidator Validator(NumberBox field, FieldErrorText error, PositionFieldBound bound) =>
+            new(field, error, bound.Minimum, bound.Maximum, bound.Unit);
 
         foreach (NumberFieldValidator field in _fields)
         {
