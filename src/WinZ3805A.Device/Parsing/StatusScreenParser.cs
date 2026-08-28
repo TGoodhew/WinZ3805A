@@ -545,6 +545,27 @@ public sealed partial class StatusScreenParser(TimeProvider timeProvider)
             return (new DateTimeOffset(parsed, TimeSpan.Zero), scale);
         }
 
+        // A clock row that is present but unreadable is a different report from an absent one, and
+        // the difference is the whole value of the warning. §11.1 puts ParseWarnings in Diagnostics
+        // so a field report about an odd firmware revision is actionable; "no clock row was found"
+        // sends the reader looking for a line that is sitting right there in the capture.
+        //
+        // The case that prompted this is a power-up screen (#245): the receiver prints
+        //     GPS      05:10:04 (?) 12 Jan 2007
+        // where (?) marks a provisional power-up time, and the marker between the time and the date
+        // defeats the full pattern. Whether that time should be read at all is a model question and
+        // is open on #245 - this only stops the parser denying the line exists.
+        foreach (string line in lines)
+        {
+            if (ClockRowShapePattern().IsMatch(line))
+            {
+                warnings.Add(
+                    $"A clock row was found but did not parse: '{line.Trim()}'. " +
+                    "The time was not read.");
+                return (null, TimeScale.Unknown);
+            }
+        }
+
         warnings.Add("No clock row was found on the status screen.");
         return (null, TimeScale.Unknown);
     }
@@ -1178,6 +1199,20 @@ public sealed partial class StatusScreenParser(TimeProvider timeProvider)
         @"(?<day>\d{1,2})\s+(?<month>[A-Za-z]{3})\s+(?<year>\d{4})",
         RegexOptions.IgnoreCase)]
     private static partial Regex DeviceTimePattern();
+
+    /// <summary>
+    /// The shape of a clock row, without requiring the date to follow the time.
+    /// </summary>
+    /// <remarks>
+    /// Used only to tell "the row is missing" from "the row is there and I could not read it", so it
+    /// is deliberately looser than <see cref="DeviceTimePattern"/> and is never used to extract a
+    /// value. A time of day after a scale name is enough to identify the line — <c>GPS 1PPS
+    /// Synchronized to UTC</c> starts with a scale name too and carries no clock.
+    /// </remarks>
+    [GeneratedRegex(
+        @"\b(?:UTC|GPS|LOCAL(?:\s+GPS)?|LCL(?:\s+GPS)?)\b\s+\d{1,2}:\d{2}:\d{2}",
+        RegexOptions.IgnoreCase)]
+    private static partial Regex ClockRowShapePattern();
 
     [GeneratedRegex(@"(?:GPS\s+1PPS|1PPS\s+CLK)\s+(?<advisory>\S.*?)\s*$", RegexOptions.IgnoreCase)]
     private static partial Regex ClockAdvisoryPattern();
