@@ -1,9 +1,12 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using System.Runtime.InteropServices;
+
 using Microsoft.UI.Xaml;
 // Aliased: Windows.ApplicationModel also declares AppInstance, and the two are unrelated. The
 // AppLifecycle one is the Windows App SDK redirection API; the other is the old UWP multi-instance
 // type, which does not redirect.
+using AppActivationArguments = Microsoft.Windows.AppLifecycle.AppActivationArguments;
 using AppInstance = Microsoft.Windows.AppLifecycle.AppInstance;
 
 using Windows.ApplicationModel;
@@ -19,6 +22,19 @@ namespace WinZ3805A;
 /// </summary>
 public partial class App : Application
 {
+    /// <summary>Lets any process take the foreground from this one - <c>ASFW_ANY</c> (#46).</summary>
+    private const uint AsfwAny = unchecked((uint)-1);
+
+    /// <summary>Releases this process's claim on the foreground so the running instance can take it.</summary>
+    /// <remarks>
+    /// <c>DllImport</c> rather than <c>LibraryImport</c>, for the same reason <c>TrayIcon</c> gives:
+    /// the generated form requires <c>AllowUnsafeBlocks</c> across the whole project, which is a
+    /// large thing to switch on for one call taking a single integer.
+    /// </remarks>
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool AllowSetForegroundWindow(uint processId);
+
     /// <summary>Identifies this application to <c>AppInstance</c>, so two launches meet (#46).</summary>
     private const string SingleInstanceKey = "WinZ3805A.MainInstance";
 
@@ -89,6 +105,12 @@ public partial class App : Application
         _window.Closed += OnMainWindowClosed;
         _window.Activate();
 
+        // The other half of #46. Redirecting an activation delivers it here and does nothing else -
+        // without this the second launch exits silently and the user, who just double-clicked the
+        // icon, sees nothing happen at all. That is a worse experience than the second window it
+        // replaced, because at least a useless window was evidence the click registered.
+        AppInstance.GetCurrent().Activated += OnRedirectedActivation;
+
         // Started here rather than by a page: P1-9's whole point is telling a user who is not
         // looking, and a notifier that only ran while some page was open would be off exactly when
         // it is wanted. Resolving it subscribes it to the store.
@@ -98,6 +120,23 @@ public partial class App : Application
         ApplyAccent();
         StartTrayIcon();
     }
+
+    /// <summary>
+    /// Answers a launch that was redirected here by a second process (#46).
+    /// </summary>
+    /// <remarks>
+    /// Marshalled onto the UI thread: the event arrives on a thread pool thread, and touching a
+    /// <c>Window</c> from one is the kind of fault that appears as an occasional crash on someone
+    /// else's machine rather than as a failure here.
+    /// </remarks>
+    private void OnRedirectedActivation(object? sender, AppActivationArguments args) =>
+        _window?.DispatcherQueue.TryEnqueue(() =>
+        {
+            if (_window is MainWindow main)
+            {
+                main.BringToFront();
+            }
+        });
 
     /// <summary>
     /// Hands this activation to an already-running instance, if there is one.
@@ -124,6 +163,13 @@ public partial class App : Application
             {
                 return false;
             }
+
+            // Foreground rights belong to this process, which the shell just launched, and not to
+            // the one that will actually show a window. Handing them over is the difference between
+            // the running instance coming forward and its taskbar button flashing orange behind
+            // whatever the user was looking at. ASFW_ANY because the owner's process id is not
+            // knowable from here - AppInstance exposes no handle - and the alternative is to guess.
+            _ = AllowSetForegroundWindow(AsfwAny);
 
             current.RedirectActivationToAsync(AppInstance.GetCurrent().GetActivatedEventArgs())
                 .AsTask()

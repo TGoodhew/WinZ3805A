@@ -159,6 +159,32 @@ public sealed partial class MainWindow : Window
 
     private OverlappedPresenter? Presenter => AppWindow.Presenter as OverlappedPresenter;
 
+    /// <summary>
+    /// Brings this window to the user, from wherever it was (#46).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>Activate</c> alone is not enough for the case this exists to serve. A user who launches
+    /// the application a second time is very often a user who minimised the first one and forgot,
+    /// and <c>Activate</c> on a minimised window raises it without restoring it — the taskbar button
+    /// flashes and nothing appears, which looks exactly like the launch having failed.
+    /// </para>
+    /// <para>
+    /// <c>Restore</c> is asked for only when the window is actually minimised, so a second launch
+    /// while the window is maximised does not quietly un-maximise it.
+    /// </para>
+    /// </remarks>
+    public void BringToFront()
+    {
+        if (Presenter is OverlappedPresenter presenter &&
+            presenter.State == OverlappedPresenterState.Minimized)
+        {
+            presenter.Restore();
+        }
+
+        Activate();
+    }
+
     /// <summary>Opens the §10.4 Details window, or brings the open one forward.</summary>
     public void ShowDetails()
     {
