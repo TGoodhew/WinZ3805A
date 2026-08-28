@@ -560,7 +560,15 @@ public class StatusScreenParserTests
 
         // And the reason is surfaced rather than swallowed - §11.1 puts ParseWarnings in Diagnostics
         // precisely so an odd firmware revision is actionable instead of merely quiet.
-        Assert.Contains(status.ParseWarnings, w => w.Contains("clock row", StringComparison.OrdinalIgnoreCase));
+        //
+        // Specifically: the row is THERE and unreadable, not missing (#245). This screen prints
+        // "UTC 05:10:26 (?) 12 Jan 2007", where (?) marks a provisional power-up time; the marker
+        // between time and date defeats the pattern. Asserting only that some warning mentions a
+        // clock row would pass for either message, which is what it used to do.
+        string warning = Assert.Single(status.ParseWarnings);
+        Assert.Contains("did not parse", warning, StringComparison.Ordinal);
+        Assert.Contains("05:10:26 (?) 12 Jan 2007", warning, StringComparison.Ordinal);
+        Assert.DoesNotContain("No clock row was found", warning, StringComparison.Ordinal);
 
         // The survey the power cycle started, three tenths of a per cent in (#229).
         Assert.Equal(PositionMode.Survey, status.PositionMode);
@@ -632,6 +640,63 @@ public class StatusScreenParserTests
     [InlineData("locked-stabilizing.txt", PositionQualifier.Unknown)]
     public void AnAveragedPositionIsDistinguishedFromAHeldOne(string fixtureName, PositionQualifier expected) =>
         Assert.Equal(expected, ParseSittingFixture(fixtureName).PositionQualifier);
+
+    /// <summary>A clock row that is present but unreadable is not reported as a missing one.</summary>
+    /// <remarks>
+    /// <para>
+    /// The distinction is the whole value of the warning (#245). §11.1 puts <c>ParseWarnings</c> in
+    /// Diagnostics so a field report about an odd firmware revision is actionable, and telling
+    /// somebody no clock row was found sends them looking for a line that is sitting in the capture
+    /// they are holding.
+    /// </para>
+    /// <para>
+    /// Both power-up screens print the provisional marker the Z3801A guide documents — <c>(?)</c>,
+    /// which it renders as <c>[?]</c> — between the time and the date, and it defeats the pattern.
+    /// Whether that time should be read at all is a model question, still open on #245; the value
+    /// stays null either way, so this asserts only what the parser says about it.
+    /// </para>
+    /// </remarks>
+    [Theory]
+    [InlineData("captured/power-up-gps-acquisition.txt", "05:10:04 (?) 12 Jan 2007")]
+    [InlineData("captured/power-up-fine-freq-adj.txt", "05:10:26 (?) 12 Jan 2007")]
+    public void AnUnreadableClockRowIsNotReportedAsAMissingOne(string fixtureName, string expectedQuoted)
+    {
+        ReceiverStatus status = ParseSittingFixture(fixtureName);
+
+        Assert.Null(status.DeviceDateTime);
+        Assert.Equal(TimeScale.Unknown, status.TimeScale);
+
+        string warning = Assert.Single(status.ParseWarnings);
+        Assert.Contains(expectedQuoted, warning, StringComparison.Ordinal);
+        Assert.DoesNotContain("No clock row was found", warning, StringComparison.Ordinal);
+    }
+
+    /// <summary>A screen with no clock row at all still says so.</summary>
+    /// <remarks>
+    /// The other half, and the one that keeps the change honest: loosening the detection until
+    /// nothing is ever called missing would be its own defect. <c>GPS 1PPS Synchronized to UTC</c>
+    /// begins with a scale name and must not be mistaken for a clock row, which is why the shape
+    /// test requires a time of day after it.
+    /// </remarks>
+    [Fact]
+    public void AScreenWithNoClockRowStillSaysSo()
+    {
+        string[] lines =
+        [
+            "------------------------------- Receiver Status -------------------------------",
+            "SYNCHRONIZATION ........................................... [ Outputs Invalid ]",
+            ">> Power-up: GPS acquisition                  TFOM     9             FFOM     3",
+            "ACQUISITION .............................................. [ GPS 1PPS Invalid ]",
+            "Tracking: 0 ____   Not Tracking: 0 ________",
+            "                                              GPS 1PPS Synchronized to UTC",
+            "HEALTH MONITOR ......................................................... [ OK ]",
+        ];
+
+        ReceiverStatus status = ParserAt(s_sittingInstant).Parse(string.Join("\r\n", lines));
+
+        Assert.Null(status.DeviceDateTime);
+        Assert.Contains(status.ParseWarnings, w => w.Contains("No clock row was found", StringComparison.Ordinal));
+    }
 
     /// <summary>
     /// Reads a fixture as the device wrote it. Latin-1 because it never substitutes, and an explicit
