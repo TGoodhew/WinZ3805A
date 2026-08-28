@@ -1553,6 +1553,32 @@ Health items map from `:STAT:OPER:HARD:COND?` where bit meanings are known, and 
 > already prints `(MSL)` or `(WGS-84 ellipsoid)` from `ReceiverStatus.HeightDatum` — only the entry field
 > had been asserting a datum on the user’s behalf.
 
+> **⚠ Amended 27 Aug 2026 (#229).** This section described **Start survey** as though it always
+> starts one. On the bench Z3805A it does not: a receiver that is **already holding a position**
+> refuses `:GPS:POSition:SURVey:STATe ONCE` with **−300, Device-specific error**, and no command in
+> §8.2 or in any of the three family manuals releases the hold. `:GPS:POSition LAST` restores the
+> last position rather than clearing it.
+>
+> The refusal is not about readiness, and not about spelling. It was reproduced at partial lock, and
+> again at full lock with nine satellites and outputs valid; the Z3801A manual’s
+> `:PTIMe:GPSYStem:POSition:SURVey ONCE` is refused identically; and a query in the same `:GPS:`
+> subtree answers normally throughout, so the command is parsed and declined rather than
+> unrecognised — an unknown header would be −113.
+>
+> **The route is survey-on-power-up**, the checkbox already in this card. Confirmed rather than
+> inferred: the receiver was power-cycled at ≈22:10 on 27 Aug with nothing connected to it, and had
+> a survey 3.8 % along by the time the application reached it four minutes later. That survey ran to
+> completion.
+>
+> **So the amendment is to the copy, not to §8.2.** The command stays as specified — it is correct
+> for the 58503A models the catalog also serves, and changing it would be a model-conditional change
+> belonging to §6.5’s auto-profiles. What changes is that a −300 on this button must be reported
+> with the reason and the route attached, rather than as a bare device error the user can do nothing
+> with. The advice is attached to **−300 only**: a timeout or any other code gets the receiver’s own
+> words and nothing added, because −300 is device-specific by definition and the receiver has not
+> said why — offering the explanation for the wrong failure would send someone to power-cycle an
+> instrument over a loose cable.
+
 Validation before send: lat degrees 0–90, lon degrees 0–180, minutes 0–59, seconds 0–59.999 (0.001 resolution), height −1000.00 to +18000.00 m (0.01 resolution). Reject client-side rather than letting the device error.
 
 ### 10.7 Timing & Antenna page

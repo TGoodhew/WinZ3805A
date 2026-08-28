@@ -227,7 +227,7 @@ public sealed partial class PositionPage : Page
     // ---- §8.3's survey commands ------------------------------------------------------------
 
     private async void OnStartSurveyClicked(object sender, RoutedEventArgs e) =>
-        await RunAsync(StartSurvey, SurveyOutcome);
+        await RunAsync(StartSurvey, SurveyOutcome, hint: SurveyRefusalAdvice.ForFailedStart);
 
     private async void OnAdoptSurveyClicked(object sender, RoutedEventArgs e) =>
         await RunAsync(AdoptSurvey, SurveyOutcome);
@@ -370,7 +370,8 @@ public sealed partial class PositionPage : Page
         ScpiCommand command,
         CommandOutcomeBar bar,
         string? argument = null,
-        string? displayValue = null)
+        string? displayValue = null,
+        Func<CommandOutcome?, string?>? hint = null)
     {
         if (_invoker is not CommandInvoker invoker)
         {
@@ -386,7 +387,7 @@ public sealed partial class PositionPage : Page
             CommandOutcome? outcome = await CommandConfirmation.RunAsync(
                 XamlRoot, invoker, command, argument, displayValue);
 
-            bar.Show(outcome);
+            bar.Show(outcome, failureHint: hint?.Invoke(outcome));
             return outcome;
         }
         finally
