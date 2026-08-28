@@ -387,7 +387,15 @@ public sealed partial class PositionPage : Page
             CommandOutcome? outcome = await CommandConfirmation.RunAsync(
                 XamlRoot, invoker, command, argument, displayValue);
 
-            bar.Show(outcome, failureHint: hint?.Invoke(outcome));
+            // §9.11's Try again (#251). The retry goes back through this method, so it re-runs §8.3's
+            // confirmation as well — a tier C command is confirmed every time it is sent, and an
+            // action button is not an exception to that. CommandOutcomeBar decides whether to show
+            // the button at all; passing the callback is not the same as offering it.
+            bar.Show(
+                outcome,
+                failureHint: hint?.Invoke(outcome),
+                retry: () => _ = RunAsync(command, bar, argument, displayValue, hint));
+
             return outcome;
         }
         finally
