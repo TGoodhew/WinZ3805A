@@ -1057,8 +1057,11 @@ Pane is **user-collapsible**, state persisted. Selection is rendered with the Wi
 
 Rules:
 
-- **Caption button clearance is read, never hardcoded.** Use `AppWindowTitleBar.RightInset` and `LeftInset`, which are DPI- and RTL-correct. A hardcoded 138 px breaks in RTL and at non-100% scaling.
-- Interactive elements inside the bar must be excluded from the drag region via `InputNonClientPointerSource.SetRegionRects(NonClientRegionKind.Passthrough, …)`.
+- **Caption button clearance is read, never hardcoded.** A hardcoded 138 px breaks in RTL and at non-100% scaling.
+- **Interactive elements inside the bar must be excluded from the drag region.**
+- **The compliant path is the WinUI `TitleBar` control**, which satisfies both of the above itself: it reads `AppWindowTitleBar.RightInset`/`LeftInset` internally, and content placed in its `Content`, `LeftHeader` and `RightHeader` slots is interactive without the caller managing passthrough regions. Use it, and set no caption clearance of your own.
+  > **⚠ Amended 27 Aug 2026 (#226).** This rule previously *instructed* the reader to call `AppWindowTitleBar.RightInset`/`LeftInset` and `InputNonClientPointerSource.SetRegionRects(NonClientRegionKind.Passthrough, …)`. Neither is called anywhere in `src/`, deliberately, because the `TitleBar` control subsumes them — and a reviewer following the old wording literally would have "fixed" the title bar by adding the hardcoded inset arithmetic the same paragraph forbids. The requirement is unchanged; only the named technique moved.
+- **Where a window ever needs a custom bar the `TitleBar` control cannot express**, the manual route is `AppWindowTitleBar.RightInset`/`LeftInset` for clearance and `InputNonClientPointerSource.SetRegionRects(NonClientRegionKind.Passthrough, …)` for interactive regions. No window needs it today.
 - **Inactive state:** title bar *text and icons* drop to `WzTextTertiaryBrush`; caption buttons follow the system. The `ConnectionStatusPill` **does not dim** — its whole job is to be true at a glance, and a deactivated window is exactly when someone is glancing at it from across the room.
 - Nothing else is permitted in the bar. No search, no tabs, no breadcrumbs.
 
@@ -1796,7 +1799,13 @@ The "time since power-up" guard is computed from app-observed uptime plus `:DIAG
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
-Log entries are colour-coded by severity: power/mode transitions neutral, holdover amber, hardware failure / self-test failure red.
+Log entries carry severity as **shape and colour together**, never colour alone: power/mode transitions neutral, holdover amber with §9.4.3's triangle, hardware failure / self-test failure red with its hexagon. The shape leads the line, in a fixed-width cell so the monospace column stays aligned.
+
+> **⚠ Amended 27 Aug 2026 (#225).** This read *"Log entries are colour-coded by severity"* and named three colours and nothing else, which **A11Y-12 forbids** — neutral, amber and red is information by colour alone. It is also the pair §9.4.3 singles out: amber and red converge under protanopia and deuteranopia, and under high contrast `WzCautionBrush` and `WzCriticalBrush` are *both* `SystemColorWindowTextColor`, so two of the three states would render identically. The same defect was fixed in §10.3's footer staleness on the same day (#223).
+>
+> The colour-coding is **not implemented** — `DiagnosticsPage` renders each entry as plain `RawText` — so nothing regressed. What was wrong was that the specification instructed a reader to build the thing A11Y-12 exists to prevent, and `Test-NoColourOnlyStates.ps1` would not have caught it: that gate reads `VisualStateGroup`s, and a per-item brush binding in a `DataTemplate` passes it.
+>
+> The `WzShape*` geometries moved into a merged dictionary with #223, so they resolve from any page.
 
 ### 10.10 Status Registers page
 
