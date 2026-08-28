@@ -319,7 +319,15 @@ public sealed partial class StatusScreenParser(TimeProvider timeProvider)
         {
             foreach (ColumnGroup group in groups)
             {
-                int? prn = ParseIntOrNull(group.Prn.Slice(lines[i]));
+                string? prnText = group.Prn.Slice(lines[i]);
+
+                // The receiver marks a satellite it is trying to acquire with a leading asterisk,
+                // and says so in the screen's own legend: "*attempting to track". Parsed as a plain
+                // integer that row yields null and the satellite is dropped — so a power-up screen
+                // reporting "Not Tracking: 10" produced five, because five of the ten were starred
+                // (#4). The marker is a fact about the satellite, not noise: it is kept.
+                bool attempting = prnText is not null && prnText.TrimStart().StartsWith('*');
+                int? prn = ParseIntOrNull(attempting ? prnText!.TrimStart().TrimStart('*') : prnText);
                 if (prn is null)
                 {
                     continue;
@@ -335,6 +343,7 @@ public sealed partial class StatusScreenParser(TimeProvider timeProvider)
                         Prn = prn.Value,
                         ElevationDegrees = elevation,
                         AzimuthDegrees = azimuth,
+                        AttemptingToTrack = attempting,
                     });
                 }
                 else

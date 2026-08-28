@@ -420,6 +420,43 @@ public class StatusScreenParserTests
     private static ReceiverStatus ParseFixture(string name) =>
         ParserAt(s_captureInstant).Parse(string.Join("\r\n", ReadFixtureLines(name)));
 
+    // -------------------------------------------------------------------------------------
+    // Satellites the receiver is attempting to track (#4)
+    // -------------------------------------------------------------------------------------
+
+    /// <summary>A starred PRN is a satellite, not a parse failure.</summary>
+    /// <remarks>
+    /// <para>
+    /// While acquiring, the receiver marks satellites it is trying to lock onto with a leading
+    /// asterisk, and explains it in the screen's own legend: <c>*attempting to track</c>. Read as a
+    /// plain integer that row yields null and the whole satellite is dropped.
+    /// </para>
+    /// <para>
+    /// <b>The screen contradicted itself and nothing noticed.</b> The captured power-up screen says
+    /// <c>Not Tracking: 10</c> and the parser produced five — because five of the ten were starred.
+    /// It took a receiver being power-cycled under a clear sky to produce the state at all, which is
+    /// exactly what #4 exists for.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void SatellitesTheReceiverIsAttemptingToTrackAreNotDropped()
+    {
+        ReceiverStatus status = ParseFixture("captured/power-up-gps-acquisition.txt");
+
+        Assert.Equal(10, status.NotTracked.Count);
+        Assert.Equal(5, status.NotTracked.Count(s => s.AttemptingToTrack));
+
+        // The starred five, by PRN, so a regression that keeps the count but loses the marker fails.
+        Assert.Equal(
+            [15, 19, 20, 22, 24],
+            status.NotTracked.Where(s => s.AttemptingToTrack).Select(s => s.Prn).Order());
+
+        // And a starred row keeps its other columns rather than being half-parsed.
+        PredictedSatellite fifteen = status.NotTracked.Single(s => s.Prn == 15);
+        Assert.Equal(29, fifteen.ElevationDegrees);
+        Assert.Equal(271, fifteen.AzimuthDegrees);
+    }
+
     /// <summary>
     /// Reads a fixture as the device wrote it. Latin-1 because it never substitutes, and an explicit
     /// CRLF split because the file is committed with <c>-text</c> and must not depend on the

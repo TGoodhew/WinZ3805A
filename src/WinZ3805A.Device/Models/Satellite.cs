@@ -53,4 +53,12 @@ public sealed record PredictedSatellite
 
     /// <summary>Predicted azimuth in degrees clockwise from true north, or <see langword="null"/> if the column did not parse.</summary>
     public int? AzimuthDegrees { get; init; }
+
+    /// <summary>Whether the receiver marked this satellite as one it is attempting to track.</summary>
+    /// <remarks>
+    /// The screen prints an asterisk before the PRN and explains it in its own legend —
+    /// <c>*attempting to track</c>. It is only seen while acquiring, which is why nothing had met it
+    /// until a receiver was power-cycled with a clear sky (#4).
+    /// </remarks>
+    public bool AttemptingToTrack { get; init; }
 }

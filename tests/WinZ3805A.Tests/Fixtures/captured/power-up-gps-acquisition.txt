@@ -1,0 +1,28 @@
+------------------------------- Receiver Status -------------------------------
+SYNCHRONIZATION ........................................... [ Outputs Invalid ]
+SmartClock Mode ___________________________   Reference Outputs _______________
+   Locked                                     TFOM     9             FFOM     3
+   Recovery                                   1PPS TI  --
+   Holdover                                   HOLD THR 1.000 us
+>> Power-up: GPS acquisition                  Holdover Uncertainty ____________
+                                              Predict  --
+                                                
+ACQUISITION .............................................. [ GPS 1PPS Invalid ]
+Tracking: 0 ____   Not Tracking: 10 _______   Time ____________________________
+                   PRN  El  Az                GPS      05:10:04 (?) 12 Jan 2007
+                     1  21  59                GPS 1PPS Invalid: not tracking
+                     2  13  36                ANT DLY  0 ns
+                    14  57  70                Position ________________________
+                   *15  29 271                MODE     Hold
+                    17  73 123                
+                   *19  47 194                LAT      N  47:31:18.822
+                   *20  34 235                LON      W 122:12:22.152
+                   *22  75  40                HGT               +38.00 m  (MSL)
+                   *24  27 307                
+                    30  34 139                
+                                              
+                                              
+ELEV MASK  0 deg   *attempting to track       
+HEALTH MONITOR ......................................................... [ OK ]
+Self Test: OK    Int Pwr: OK   Oven Pwr: OK   OCXO: OK   EFC: OK   GPS Rcv: OK 
+scpi > SYMMETRICOM,Z3805A,3625A02931,1.01.03-A
