@@ -176,6 +176,29 @@ public sealed partial class MainPage : Page
     public event EventHandler? DetailsRequested;
 
     /// <summary>Opens the connection dialog, which §10.12 puts on this window.</summary>
+    /// <summary>Shows or hides §9.11's first-run surface (#253).</summary>
+    /// <remarks>
+    /// The copy comes from <see cref="FirstRun"/> rather than the markup so it is asserted rather
+    /// than eyeballed, and the rule for <i>when</i> lives there too — see that type for why first run
+    /// ends when a port is chosen rather than when one connects.
+    /// </remarks>
+    private void RenderFirstRun()
+    {
+        bool show = FirstRun.ShouldShow(_preferences.Load().PortName, _model.Connection);
+
+        if (show)
+        {
+            FirstRunHeadline.Text = FirstRun.Headline;
+            FirstRunBody.Text = FirstRun.Body;
+            FirstRunAction.Content = FirstRun.ActionLabel;
+        }
+
+        FirstRunPanel.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private async void OnFirstRunActionClicked(object sender, RoutedEventArgs e) =>
+        await ShowConnectionDialogAsync();
+
     public async Task ShowConnectionDialogAsync()
     {
         ConnectionDialog dialog = new(NewConnectionViewModel()) { XamlRoot = XamlRoot };
@@ -347,6 +370,8 @@ public sealed partial class MainPage : Page
     /// <summary>Pushes the view model onto the surface.</summary>
     private void Render()
     {
+        RenderFirstRun();
+
         Medallion.Mode = _model.Mode;
         Medallion.Samples = _model.TimeIntervalSamples;
         Medallion.SatelliteCount = _model.SatelliteCount;

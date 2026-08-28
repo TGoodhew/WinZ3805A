@@ -266,6 +266,51 @@
             </StackPanel>
         </Grid>
 
+        <!--
+            §9.11's first-run surface (#253). Spans every row and paints the page background, so it
+            covers the medallion rather than sitting beside it - the row says "full-page centred",
+            and a medallion reading "Disconnected" beside an invitation to choose a port would be
+            answering the same question twice in two voices.
+
+            Collapsed by default and shown only by FirstRun.ShouldShow, which is where the rule
+            lives: see there for why first run ends when a port is CHOSEN rather than when one
+            connects.
+
+            "No tour, no carousel, no dismissible tips" - §9.11 says so, and this is one screen with
+            one action. There is deliberately no close button: it is not a message to acknowledge,
+            it is the state of a machine with no receiver configured, and it goes when that changes.
+        -->
+        <Grid x:Name="FirstRunPanel"
+              Grid.Row="0"
+              Grid.RowSpan="5"
+              Visibility="Collapsed"
+              Background="{ThemeResource WzPageBackgroundFallbackBrush}">
+            <StackPanel HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        MaxWidth="420"
+                        Spacing="{StaticResource WzSpaceMd}">
+                <FontIcon Glyph="&#xE8CD;"
+                          FontSize="32"
+                          HorizontalAlignment="Center"
+                          Foreground="{ThemeResource WzTextSecondaryBrush}" />
+                <TextBlock x:Name="FirstRunHeadline"
+                           Style="{ThemeResource WzTitleLargeTextStyle}"
+                           HorizontalAlignment="Center"
+                           TextAlignment="Center"
+                           TextWrapping="Wrap" />
+                <TextBlock x:Name="FirstRunBody"
+                           Style="{ThemeResource WzBodyTextStyle}"
+                           Foreground="{ThemeResource WzTextSecondaryBrush}"
+                           HorizontalAlignment="Center"
+                           TextAlignment="Center"
+                           TextWrapping="Wrap" />
+                <Button x:Name="FirstRunAction"
+                        Style="{ThemeResource AccentButtonStyle}"
+                        HorizontalAlignment="Center"
+                        Click="OnFirstRunActionClicked" />
+            </StackPanel>
+        </Grid>
+
         <VisualStateManager.VisualStateGroups>
             <!--
                 §10.3's footer staleness. Driven from the view model rather than from a converter so
