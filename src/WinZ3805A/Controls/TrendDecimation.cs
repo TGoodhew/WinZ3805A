@@ -563,6 +563,59 @@ public static class TrendDecimation
 
         return (Math.Floor(lower / step) * step, Math.Ceiling(upper / step) * step);
     }
+
+    /// <summary>
+    /// Where to put a horizontal stroke's centre so it lands on whole device pixels (#233).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>A 1 px rule drawn at a fractional Y is not a 1 px rule.</b> It straddles two device pixel
+    /// rows and the compositor renders each at roughly half intensity — so the line is twice as
+    /// tall and half as dark as it was asked to be. Measured under High Contrast White, the trend
+    /// chart's zero rule came out at <b>2.66 : 1</b> against §9.4.5's 3:1 floor for chart lines,
+    /// while its brush, <c>WzStrokeDefaultBrush</c>, is <c>#3D3D3D</c> — 10.43 : 1. The token was
+    /// never wrong; the rendering was.
+    /// </para>
+    /// <para>
+    /// <b>No gate can see that</b>, which is why it survived: <c>Test-ContrastFloor.ps1</c> computes
+    /// token pairs and would report 10.43, correct about the colour and silent about the line.
+    /// </para>
+    /// <para>
+    /// The rule is the ordinary one for hairlines. A stroke covers whole pixels when its centre sits
+    /// on a half-pixel boundary for an <b>odd</b> device thickness, and on a whole-pixel boundary for
+    /// an <b>even</b> one. At 100 % scaling a 1 DIP stroke is one device pixel and wants y.5; at
+    /// 200 % it is two and wants a whole number. Getting that backwards moves the blur rather than
+    /// removing it, which is why the thickness is a parameter and not an assumption.
+    /// </para>
+    /// </remarks>
+    /// <param name="y">The intended centre, in DIPs.</param>
+    /// <param name="thickness">Stroke thickness in DIPs.</param>
+    /// <param name="scale">
+    /// <c>XamlRoot.RasterizationScale</c>: 1.0 at 100 % display scaling, 1.5 at 150 %. Values that
+    /// are not positive and finite fall back to 1, because a snapped-to-nonsense line is worse than
+    /// an unsnapped one.
+    /// </param>
+    public static double SnapStrokeCentre(double y, double thickness, double scale)
+    {
+        if (double.IsNaN(y) || double.IsInfinity(y))
+        {
+            return y;
+        }
+
+        double s = double.IsFinite(scale) && scale > 0 ? scale : 1.0;
+
+        double deviceY = y * s;
+        double deviceThickness = thickness * s;
+
+        // Odd device thickness straddles a pixel centre; even lands on a boundary.
+        bool odd = (int)Math.Round(deviceThickness) % 2 != 0;
+
+        double snappedDevice = odd
+            ? Math.Floor(deviceY) + 0.5
+            : Math.Round(deviceY);
+
+        return snappedDevice / s;
+    }
 }
 
 /// <summary>What a <c>TrendChart</c>'s y-axis is framed on.</summary>
@@ -585,4 +638,5 @@ public enum TrendAnchoring
     /// carries no meaning.
     /// </summary>
     Data,
+
 }
