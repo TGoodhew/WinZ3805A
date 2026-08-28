@@ -28,6 +28,7 @@
     <Grid Background="{ThemeResource WzPageBackgroundFallbackBrush}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
@@ -93,12 +94,32 @@
         </TitleBar>
 
         <!--
+            §9.11's connection banner, pinned below the title bar (#252). Its own row rather than an
+            overlay, so it pushes the content down instead of covering the top of a page — the pages
+            below carry readings, and hiding one behind a bar is the §9.11 failure of blanking data
+            rather than marking it.
+
+            Not closable: this reports a state rather than an event, so there is nothing for closing
+            it to mean. It disappears when the state does.
+
+            What it says is ConnectionBanner's decision, not this file's. §9.11 gives this slot two
+            different rows - informational for a disconnect the user asked for, error with a retry
+            countdown and two actions for a link that dropped (#248) - and choosing between them in
+            markup would make a defect look like a styling choice.
+        -->
+        <InfoBar x:Name="ConnectionBar"
+                 Grid.Row="1"
+                 IsOpen="False"
+                 IsClosable="False"
+                 Margin="{ThemeResource WzSpaceSmThickness}" />
+
+        <!--
             §9.6.1's breakpoints are configured, never hand-rolled: the control already implements
             Auto mode against these two thresholds, and reimplementing it would forfeit the free
             behaviour along with its accessibility.
         -->
         <NavigationView x:Name="Nav"
-                        Grid.Row="1"
+                        Grid.Row="2"
                         PaneDisplayMode="Auto"
                         CompactModeThresholdWidth="{ThemeResource WzCompactModeThresholdWidth}"
                         ExpandedModeThresholdWidth="{ThemeResource WzExpandedModeThresholdWidth}"
