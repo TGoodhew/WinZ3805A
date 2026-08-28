@@ -322,51 +322,54 @@ public sealed class PollingService : IAsyncDisposable
         double? timeInterval = ScalarParsers.ParseSecondsAsNanoseconds(answers[3]);
         double? efc = ScalarParsers.ParseDecimal(answers[4]);
 
-        // P1-2: every fast sweep is a row. Append never throws (see TrendStore), so a locked file
-        // or a full disk costs a gap in the trend rather than the polling cadence itself.
+        int? ffom = ScalarParsers.ParseInteger(answers[2]);
+
+        // Whether this sweep is a reading at all, decided once and applied to everything (#237).
         //
-        // Unless the reading does not cohere (#209). §11.1 turns an unparseable field into null and
-        // that is right for a field, but a sweep whose sync state is not a state this receiver has
-        // is not a reading with one bad field - it is somebody else's reply. Storing it puts values
-        // in a durable seven-day series that the instrument cannot produce, and the store has no
-        // way to tell later that they were never real.
-        if (IsCoherent(syncState) && ReadingPlausibility.IsPossibleTimeInterval(timeInterval))
-        {
-            _trends?.Append(new TrendRecord(
-                _timeProvider.GetUtcNow().UtcTicks, efc, timeInterval, syncState, tracked));
-        }
-        else if (!IsCoherent(syncState))
+        // #209 asks whether the sync state is a state this receiver has. That catches a slip which
+        // began before the sync state was read - but §7.3's order has it read on its own, ahead of
+        // the loop that reads the rest, so a slip beginning INSIDE that loop leaves it correct and
+        // shifts every later answer. #237's remaining risk in one sentence: a slip that leaves a
+        // plausible sync state while corrupting the others is stored in full, and nothing shows it.
+        //
+        // So the numeric fields are checked against bounds they cannot cross, all documented or
+        // physical rather than fitted to observed data - see ReadingPlausibility.
+        string? slipped = IsCoherent(syncState)
+            ? ReadingPlausibility.Implausible(timeInterval, tfom, ffom, efc, tracked)
+            : $"the sync state read \"{Summarise(syncState)}\", which is not a state this receiver reports";
+
+        if (slipped is not null)
         {
             // Information, because the application ships at Information and this is a reading the
             // user will not find in the trend later. A Debug line would make it invisible exactly
-            // when somebody is asking why the series has a gap (#14 made the same mistake).
+            // when somebody is asking why the series has a gap (#14 made the same mistake). The
+            // reason names the field, so a field report says WHICH one slipped.
             _logger.LogInformation(
-                "Dropped an incoherent reading: sync state was \"{SyncState}\", which is not a state "
-                + "this receiver reports. The link may have misaligned.",
-                Summarise(syncState));
+                "Dropped a reading that cannot have come from the receiver: {Reason}. "
+                + "The link may have misaligned.",
+                slipped);
+
+            // Deliberately not applied to the store either (#237). It used to be: the sweep was
+            // kept out of the durable series and then handed to the UI anyway, so a slip showed as
+            // the medallion flickering through a state the receiver was never in. §9.11 would
+            // rather the last good reading stayed on screen with its staleness climbing - "an old
+            // reading with an honest timestamp beats an empty field", and it beats a wrong one by
+            // further still.
+            FastSweeps++;
+            return;
         }
-        else
-        {
-            // A separate line from the one above, and worth the duplication. This is the slip that
-            // began after the sync state had already been read correctly, so the two say different
-            // things about where the link came apart - and telling them apart in the log is most of
-            // what diagnosing #237's root cause will need.
-            _logger.LogInformation(
-                "Dropped a reading whose 1 PPS time interval was {Nanoseconds:F0} ns, which is "
-                + "outside the ±{Bound:F0} ns a phase offset against a 1 Hz signal can take. The "
-                + "sync state read \"{SyncState}\", so the link may have misaligned partway through "
-                + "the sweep.",
-                timeInterval,
-                ReadingPlausibility.TimeIntervalBoundNanoseconds,
-                Summarise(syncState));
-        }
+
+        // P1-2: every fast sweep is a row. Append never throws (see TrendStore), so a locked file
+        // or a full disk costs a gap in the trend rather than the polling cadence itself.
+        _trends?.Append(new TrendRecord(
+            _timeProvider.GetUtcNow().UtcTicks, efc, timeInterval, syncState, tracked));
 
         MaybeCompact();
 
         _store.UpdateFast(
             syncState,
             tfom,
-            ScalarParsers.ParseInteger(answers[2]),
+            ffom,
             timeInterval,
             efc,
             tracked);
