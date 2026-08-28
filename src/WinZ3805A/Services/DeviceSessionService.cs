@@ -506,9 +506,16 @@ public sealed class DeviceSessionService : IAsyncDisposable
     /// <para>
     /// <b>Every attempt is logged at Information, and that is deliberate</b> (#14). P0-14's only
     /// verification is a person unplugging the adapter once and watching what happens, and its
-    /// acceptance is a pair of durations — Disconnected within 10 s, reconnected within 30 s of
+    /// acceptance is a pair of durations — Disconnected within 10 s, reconnected within 45 s of
     /// replug. Those are measurable from the log, which timestamps to the millisecond, but only if
     /// the log says what happened between the two status lines.
+    /// </para>
+    /// <para>
+    /// The second figure was 30 s until 28 Aug 2026, when the QA run this logging exists for showed
+    /// it could not be met: <see cref="MaximumBackoff"/> is itself 30 s, so an adapter returning
+    /// just after a failed attempt waits the whole interval and then needs a further ~2.2 s to open
+    /// the port and finish auto-detect. The log is what made that measurable rather than arguable —
+    /// which is the case for logging every attempt, made by the thing it was written for.
     /// </para>
     /// <para>
     /// It used to say nothing. The failure path that <i>throws</i> was logged at Debug, below the
