@@ -56,6 +56,52 @@ specification gives the full parameter ranges.
 > application does not help. If no ports enumerate on an ARM64 machine, the
 > adapter's driver is the likely cause rather than the application.
 
+## Supported platforms
+
+The application is a Windows App SDK (WinUI 3) desktop app, so what it runs on is
+what the Windows App SDK runs on.
+
+| | |
+|---|---|
+| **Minimum** | Windows 10, version 1809 (build 10.0.17763) |
+| **Also supported** | Windows 10 21H2 / 22H2 / 23H2, Windows 11 21H2 through 25H2 |
+| **Windows Server** | Server 2019 (17763) and Server 2022 (20348) |
+| **Architecture** | **x64 only.** ARM64 runs under emulation — see the note under *Supported hardware* |
+| **Runtime** | .NET 10 (LTS) and the Windows App SDK runtime, both resolved at install time |
+
+The floor is set in [`WinZ3805A.csproj`](src/WinZ3805A/WinZ3805A.csproj) as
+`TargetPlatformMinVersion` `10.0.17763.0`, while the project *builds* against the
+10.0.26100 SDK (`TargetFramework` `net10.0-windows10.0.26100.0`). Those two are
+different jobs: the first is the oldest Windows the app will install and run on,
+the second is the API surface it compiles against.
+
+> **Windows 10 1809 is supported by the SDK but is no longer a healthy target.**
+> Mainstream servicing for 1809 has ended on both Home/Pro and Enterprise. Only
+> the LTSC Extended channel is still serviced, until 9 January 2029. Treating
+> 1809 as the floor is a compatibility statement, not a recommendation — anyone
+> choosing a machine for this application should be on Windows 11.
+
+**A caveat specific to Windows App SDK 2.x.** From 2.0 the minimum is no longer
+one number for the whole SDK; it varies by component. The refactored
+`Microsoft.Windows.AI.MachineLearning` package supports Windows 10 v1903 and
+later, and Microsoft's guidance is to keep using `Microsoft.WindowsAppSDK.ML` if
+1809 support is needed. **This project references
+`Microsoft.WindowsAppSDK.ML`**, which is the path that retains the 1809 floor —
+see the comment in the csproj, which explains that the reference is there because
+a framework-dependent build refuses to restore without it.
+
+Microsoft's published support matrix currently documents releases up to 1.8 and
+does not yet list 2.x, so the 1809 floor for **2.3.1 specifically** rests on the
+component guidance above plus the SDK packages themselves: nothing in the
+restored 2.3.1 package tree enforces a `TargetPlatformMinVersion` above 17763,
+and `Microsoft.WindowsAppSDK.Base` still special-cases `10.0.17763.0` in its
+self-contained targets. §6.1 asks for exactly this check and it has now been
+made to that depth. **It has not been confirmed by running the application on
+Windows 10** — there is no such machine on this project.
+
+Sources: [Windows App SDK and supported Windows releases](https://learn.microsoft.com/en-us/windows/apps/windows-app-sdk/support),
+[Windows App SDK 2.0 release notes](https://learn.microsoft.com/en-us/windows/apps/windows-app-sdk/release-notes/windows-app-sdk-2-0).
+
 ## Installing
 
 There is no release yet. When there is, the application will be distributed
@@ -73,8 +119,8 @@ self-contained, so the framework package dependency is resolved at install time
 - **Visual Studio 2026** with the *.NET desktop development* workload and the
   Windows App SDK extension. Windows App SDK 2.3.1 itself is restored from NuGet
   rather than installed separately.
-- Windows 10 1809 (10.0.17763) or later to run; the app project builds against
-  the 10.0.26100 SDK.
+- A machine meeting the floors in [Supported platforms](#supported-platforms) above.
+  For building specifically, the app project needs the **10.0.26100** Windows SDK.
 
 ### Build
 
