@@ -58,9 +58,19 @@ public sealed partial class CommandOutcomeBar : InfoBar
     /// the two apply to opposite outcomes: a query's answer is meaningless on a command that failed,
     /// and advice is noise on one that worked.
     /// </param>
-    public void Show(CommandOutcome? outcome, string? detail = null, string? failureHint = null)
+    /// <param name="retry">
+    /// Re-runs the command, for §9.11's <b>Try again</b> action. Offered only when
+    /// <see cref="CommandRetryPolicy"/> says the outcome is worth repeating — a retry certain to
+    /// fail is worse than no action at all, so supplying this does not by itself produce a button.
+    /// </param>
+    public void Show(
+        CommandOutcome? outcome,
+        string? detail = null,
+        string? failureHint = null,
+        Action? retry = null)
     {
         _dismiss.Stop();
+        ActionButton = null;
 
         if (outcome is null)
         {
@@ -73,6 +83,17 @@ public sealed partial class CommandOutcomeBar : InfoBar
             : (string.IsNullOrWhiteSpace(failureHint) ? outcome.Message : $"{outcome.Message} {failureHint}");
         Severity = outcome.Succeeded ? InfoBarSeverity.Success : InfoBarSeverity.Error;
         Title = outcome.Succeeded ? string.Empty : outcome.Command.DisplayName;
+
+        if (retry is not null && CommandRetryPolicy.ShouldOffer(outcome))
+        {
+            // Built here rather than in a template because the bar is reused across outcomes and
+            // the button must not survive one that should not offer it. Show() clears ActionButton
+            // on every call for the same reason.
+            Button button = new() { Content = CommandRetryPolicy.ActionLabel };
+            button.Click += (_, _) => retry();
+            ActionButton = button;
+        }
+
         IsOpen = true;
 
         Announce(outcome);
@@ -115,6 +136,7 @@ public sealed partial class CommandOutcomeBar : InfoBar
     public void Clear()
     {
         _dismiss.Stop();
+        ActionButton = null;
         IsOpen = false;
     }
 
