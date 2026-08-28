@@ -99,6 +99,13 @@ public sealed class SurveyLog : IDisposable
                 _logger.LogInformation("Position survey started at {Percent:F1} %.", percent);
                 break;
 
+            case SurveyNote.AlreadyRunning:
+                // Deliberately not "started". The percentage is real but this session did not watch
+                // it accumulate, and a reader deciding whether the run restarted needs to know which
+                // of the two they are looking at.
+                _logger.LogInformation("Position survey already in progress at {Percent:F1} %.", percent);
+                break;
+
             case SurveyNote.Progressed:
                 _logger.LogInformation("Position survey at {Percent:F1} %.", percent);
                 break;

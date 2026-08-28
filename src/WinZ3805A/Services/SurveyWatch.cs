@@ -11,6 +11,12 @@ public enum SurveyNote
     /// <summary>A survey has begun.</summary>
     Started,
 
+    /// <summary>
+    /// A survey was already under way when this watch first looked, so its progress so far is not
+    /// something this session witnessed.
+    /// </summary>
+    AlreadyRunning,
+
     /// <summary>It has passed another tenth of the way.</summary>
     Progressed,
 
@@ -68,6 +74,7 @@ public sealed class SurveyWatch
     private SurveySuspendedReason _reason = SurveySuspendedReason.None;
     private double _lastReported = double.NegativeInfinity;
     private bool _running;
+    private bool _observed;
 
     /// <summary>The reason last reported, so a caller can name it without re-reading the status.</summary>
     public SurveySuspendedReason Reason => _reason;
@@ -82,6 +89,7 @@ public sealed class SurveyWatch
         _reason = SurveySuspendedReason.None;
         _lastReported = double.NegativeInfinity;
         _running = false;
+        _observed = false;
     }
 
     /// <summary>Folds one reading in and says what it changed.</summary>
@@ -96,6 +104,7 @@ public sealed class SurveyWatch
 
         _percent = percent;
         _reason = reason;
+        _observed = true;
 
         return note;
     }
@@ -114,9 +123,21 @@ public sealed class SurveyWatch
 
         if (!_running)
         {
+            // "Started" is a claim about a transition, so it is only honest when this watch saw one:
+            // either it has a previous reading to compare against, or it caught the survey at zero.
+            // A first-ever reading partway through means the survey was already running, and the
+            // progress it shows belongs to some earlier session.
+            //
+            // Not hypothetical. This class is a singleton created at startup, so every restart makes
+            // a fresh one, and a restart during the 27 Aug survey wrote "Position survey started at
+            // 15.5 %" - a sentence that reads as a survey restarting and losing its first quarter.
+            // Whether a two-hour run restarted is exactly the question someone opens this log to
+            // answer, and it was the one thing the log got wrong.
+            bool witnessed = _observed || now <= 0;
+
             _running = true;
             _lastReported = now;
-            return SurveyNote.Started;
+            return witnessed ? SurveyNote.Started : SurveyNote.AlreadyRunning;
         }
 
         // A stall and its reason outrank a progress step: the survey has stopped, so how far it got

@@ -217,4 +217,99 @@ public class SurveyWatchTests
         // Ten milestones at most, and the whole run fits on a screen.
         Assert.InRange(notes.Count, 10, 20);
     }
+
+    // -------------------------------------------------------------------------------------
+    // Joining a survey that was already running
+    // -------------------------------------------------------------------------------------
+
+    /// <summary>A survey first seen partway through was not seen to start.</summary>
+    /// <remarks>
+    /// Taken from the log of the 27 Aug survey, which recorded "Position survey started at 15.5 %".
+    /// It had not started; the application had been restarted while it ran. A reader scanning that
+    /// log for whether a two-hour run had to begin again would have concluded it did.
+    /// </remarks>
+    [Theory]
+    [InlineData(0.1)]
+    [InlineData(15.5)]
+    [InlineData(99.9)]
+    public void ASurveyFirstSeenPartwayThroughIsNotAStart(double percent) =>
+        Assert.Equal(
+            SurveyNote.AlreadyRunning,
+            new SurveyWatch().Observe(percent, SurveySuspendedReason.None));
+
+    /// <summary>Catching it at zero still counts as catching it start.</summary>
+    /// <remarks>
+    /// The receiver reports zero when a survey begins, so a first reading of zero loses nothing by
+    /// being called a start - and this is the ordinary case of a survey commanded from the app.
+    /// </remarks>
+    [Fact]
+    public void ASurveyFirstSeenAtZeroIsAStart() =>
+        Assert.Equal(SurveyNote.Started, new SurveyWatch().Observe(0, SurveySuspendedReason.None));
+
+    /// <summary>Having watched the receiver not surveying is what earns the word "started".</summary>
+    [Fact]
+    public void WatchingItBeginIsAStartWhereverItIsFirstReported()
+    {
+        SurveyWatch watch = new();
+
+        Assert.Equal(SurveyNote.None, watch.Observe(null, SurveySuspendedReason.None));
+        Assert.Equal(SurveyNote.Started, watch.Observe(4.2, SurveySuspendedReason.None));
+    }
+
+    /// <summary>A second survey in the same session is a start, because the first one ending was seen.</summary>
+    [Fact]
+    public void ASecondSurveyInTheSameSessionIsAStart()
+    {
+        SurveyWatch watch = new();
+
+        watch.Observe(0, SurveySuspendedReason.None);
+        Assert.Equal(SurveyNote.Finished, watch.Observe(null, SurveySuspendedReason.None));
+        Assert.Equal(SurveyNote.Started, watch.Observe(2.0, SurveySuspendedReason.None));
+    }
+
+    /// <summary>Reset makes the watch new again, so what follows is a survey it did not see start.</summary>
+    /// <remarks>
+    /// Reset means "forget everything", and forgetting includes forgetting that you were watching.
+    /// A watch that kept <c>_observed</c> across a reset would go on claiming to have witnessed
+    /// transitions it no longer has any record of.
+    /// </remarks>
+    [Fact]
+    public void ResetForgetsThatItWasEverWatching()
+    {
+        SurveyWatch watch = new();
+
+        watch.Observe(null, SurveySuspendedReason.None);
+        watch.Reset();
+
+        Assert.Equal(
+            SurveyNote.AlreadyRunning, watch.Observe(15.5, SurveySuspendedReason.None));
+    }
+
+    /// <summary>Joining late still logs the milestones from there on.</summary>
+    /// <remarks>
+    /// The point of the distinction is the first line only. Everything after it - progress, stalls,
+    /// the finish - is unaffected, and a survey joined at 15.5 % must still report 20, 30, 40 and so
+    /// on rather than falling silent because its opening line was worded differently.
+    /// </remarks>
+    [Fact]
+    public void ASurveyJoinedLateStillReportsItsRemainingMilestones()
+    {
+        SurveyWatch watch = new();
+        List<SurveyNote> notes = [];
+
+        for (int i = 155; i <= 1000; i++)
+        {
+            SurveyNote note = watch.Observe(i / 10.0, SurveySuspendedReason.None);
+            if (note != SurveyNote.None)
+            {
+                notes.Add(note);
+            }
+        }
+
+        Assert.Equal(SurveyNote.AlreadyRunning, notes[0]);
+        // Nine, not eight. Joining at 15.5 % sets the mark there, so the first milestone fires at
+        // 25.5 % and is snapped back to 20 - which leaves 30 still ahead of it. After that the run
+        // is back on the tens: 30, 40, 50, 60, 70, 80, 90, 100.
+        Assert.Equal(9, notes.Count(n => n == SurveyNote.Progressed));
+    }
 }
