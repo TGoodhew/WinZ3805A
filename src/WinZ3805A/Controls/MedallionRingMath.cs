@@ -109,4 +109,24 @@ public static class MedallionRingMath
 
         return Math.Clamp(value / halfRange, -1d, 1d);
     }
+    /// <summary>The medallion glyph's font size for a given diameter (§10.3, #48).</summary>
+    /// <remarks>
+    /// <para>
+    /// <b>§10.3's wireframe draws "glyph 56 px" inside a 160 px medallion.</b> The glyph carried no
+    /// <c>FontSize</c> at all, so it inherited the body size and rendered about 12 px — a detail on
+    /// the medallion rather than the medallion's own statement.
+    /// </para>
+    /// <para>
+    /// In Light that was easy to miss, because the dotted ring carries the state and the glyph only
+    /// confirms it. Under high contrast §9.2 collapses the ring to a plain stroke carrying no state,
+    /// which leaves the glyph as the <b>only</b> non-textual carrier of severity — measured at 31
+    /// ink pixels inside a 186 px circle, 2.3 % of what the same medallion draws in Light (#48).
+    /// </para>
+    /// <para>
+    /// A ratio rather than the literal 56, so the 64 and 96 px sizes §9.10.2 lists scale with it and
+    /// a size added later cannot arrive without a glyph size.
+    /// </para>
+    /// </remarks>
+    public static double GlyphSize(double diameter) => diameter * (56.0 / 160.0);
+
 }
