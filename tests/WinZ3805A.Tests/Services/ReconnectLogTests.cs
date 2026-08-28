@@ -13,10 +13,16 @@ namespace WinZ3805A.Tests.Services;
 /// <remarks>
 /// <para>
 /// P0-14's only verification is a person unplugging the adapter once and watching, and its
-/// acceptance is two durations: Disconnected within 10 s, reconnected within 30 s of replug. The
+/// acceptance is two durations: Disconnected within 10 s, reconnected within 45 s of replug. The
 /// log timestamps to the millisecond, so both are measurable from it — but only if it says what
 /// happened between the two status lines, and a one-shot physical test is the worst moment to
 /// discover it did not.
+/// </para>
+/// <para>
+/// The run happened on 28 Aug 2026 and this held up: the whole timeline came off the log, including
+/// the backoff stepping 2 → 4 → 8 → 16 → 30 and then holding. It also showed the second figure was
+/// unreachable at 30 s — the cap is 30 s, so a worst-case return costs that plus ~2.2 s to open and
+/// auto-detect — and the criterion was amended rather than the code.
 /// </para>
 /// <para>
 /// So the log is treated here as an output with a contract rather than as decoration. These
