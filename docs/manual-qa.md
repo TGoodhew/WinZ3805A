@@ -146,11 +146,12 @@ Needs satellites on the plot, so it goes with section 5 rather than standing alo
 is a property of the *file*, which is why none of it is in CI — the rendering path leaves no trace in
 source that a script could check.
 
-- **Save image, in all three themes.** Light and Dark are app-mode settings and safe to drive.
-  **High contrast needs a human**, and specifically needs a scheme configured first: this machine's
-  `High Contrast Scheme` reads empty, which is the one state the standing rule says not to enter —
-  a mode you cannot prove you can leave. Set a scheme in Settings → Accessibility → Contrast themes
-  before running this leg, and turn it back off from the same page. The export is deliberately
+- **Save image, in all three themes.** Light and Dark are app-mode settings and safe to drive from a
+  script. High contrast is a whole-desktop change and takes several minutes to apply and undo, so it
+  wants a person who is not using the machine — but it is **not unsafe**, and an empty
+  `High Contrast Scheme` is **not** a reason to skip it. That was asserted once, on 28 Aug, and was
+  wrong: the reversibility round trip was performed from exactly that baseline. Turning high contrast
+  off restores the personal theme by itself. The export is deliberately
   not theme-substituted, so each one produces a different and correct file; what is being checked is
   that none of them produces an **illegible** one. Under high contrast in particular, confirm the
   markers are not the window colour — that was #218's whole failure mode, and an exported PNG is
