@@ -61,6 +61,14 @@ public sealed partial class DetailsWindow : Window
     private readonly IMotionService _motion;
     private readonly DispatcherTimer _saveAfterIdle = new() { Interval = TimeSpan.FromSeconds(1) };
 
+    /// <summary>Repaints §9.11's retry countdown once a second while it is counting (#248).</summary>
+    /// <remarks>
+    /// A repaint rather than a counter: RenderConnectionBanner recomputes the remaining time from
+    /// the instant the session publishes, so a missed tick shows the right number rather than one
+    /// that has drifted. Started and stopped by that method, so it only runs while Reconnecting.
+    /// </remarks>
+    private readonly DispatcherTimer _bannerCountdown = new() { Interval = TimeSpan.FromSeconds(1) };
+
     private WindowRect? _restoredBounds;
     private readonly bool _ready;
     private SizeInt32 _minimum;
@@ -132,6 +140,8 @@ public sealed partial class DetailsWindow : Window
             root.Loaded += (_, _) => _scaling.Watch(root.XamlRoot);
         }
 
+        _bannerCountdown.Tick += (_, _) => RenderConnectionBanner();
+
         _device.Session.StatusChanged += OnSessionStatusChanged;
         RenderConnection();
 
@@ -145,6 +155,7 @@ public sealed partial class DetailsWindow : Window
 
         Closed += (_, _) =>
         {
+            _bannerCountdown.Stop();
             _device.Session.StatusChanged -= OnSessionStatusChanged;
             _saveAfterIdle.Stop();
             SavePlacement();
@@ -504,15 +515,26 @@ public sealed partial class DetailsWindow : Window
     /// </remarks>
     private void RenderConnectionBanner()
     {
-        ConnectionBannerState banner = ConnectionBanner.For(_device.Session.Status);
+        ConnectionStatus status = _device.Session.Status;
 
-        // Rebuilt rather than mutated, for the reason CommandOutcomeBar clears its own action on
-        // every show: the bar is reused across states, and an action left behind from one belongs to
-        // a sentence that is no longer on screen.
+        // Recomputed from the published instant on every render rather than counted down locally,
+        // so the ticker below can be a plain repaint and the number always agrees with the schedule
+        // even if a tick is missed or the window was not visible for one (#248).
+        TimeSpan? retryIn = _device.Session.NextRetryAt is DateTimeOffset due
+            ? due - DateTimeOffset.UtcNow
+            : null;
+
+        ConnectionBannerState banner = ConnectionBanner.For(status, _device.Session.PortName, retryIn);
+
+        // Rebuilt rather than mutated, for the reason CommandOutcomeBar clears its action on every
+        // show: the bar is reused across states, and an action left behind from one belongs to a
+        // sentence that is no longer on screen.
         ConnectionBar.ActionButton = null;
+        ConnectionBar.Content = null;
 
         if (!banner.IsOpen)
         {
+            _bannerCountdown.Stop();
             ConnectionBar.IsOpen = false;
             return;
         }
@@ -520,14 +542,56 @@ public sealed partial class DetailsWindow : Window
         ConnectionBar.Severity = banner.IsError ? InfoBarSeverity.Error : InfoBarSeverity.Informational;
         ConnectionBar.Message = banner.Message;
 
-        if (banner.ActionLabel is string label)
+        if (banner.ActionLabel is string primary)
         {
-            Button action = new() { Content = label };
-            action.Click += OnStatusPillClicked;
-            ConnectionBar.ActionButton = action;
+            ConnectionBar.ActionButton = ActionFor(primary);
+        }
+
+        // InfoBar has one action slot, and §9.11's connection-lost row wants two. The second goes in
+        // the content area rather than being dropped or crammed into the first - "Stop retrying" is
+        // the only way out of a retry loop that caps at thirty seconds, so it is not the one to lose.
+        if (banner.SecondaryActionLabel is string secondary)
+        {
+            ConnectionBar.Content = ActionFor(secondary);
         }
 
         ConnectionBar.IsOpen = true;
+
+        // Only Reconnecting has a number that changes on its own.
+        if (status == ConnectionStatus.Reconnecting)
+        {
+            _bannerCountdown.Start();
+        }
+        else
+        {
+            _bannerCountdown.Stop();
+        }
+    }
+
+    /// <summary>Builds one banner action, wired by what it says rather than by where it sits.</summary>
+    /// <remarks>
+    /// The label decides the handler because <see cref="ConnectionBanner"/> decides the label, and
+    /// keeping both in one place is what stops the two drifting into a button that says one thing
+    /// and does another.
+    /// </remarks>
+    private Button ActionFor(string label)
+    {
+        Button action = new() { Content = label };
+
+        if (label == ConnectionBanner.RetryNowLabel)
+        {
+            action.Click += (_, _) => _device.Session.RetryNow();
+        }
+        else if (label == ConnectionBanner.StopRetryingLabel)
+        {
+            action.Click += (_, _) => _device.Session.StopRetrying();
+        }
+        else
+        {
+            action.Click += OnStatusPillClicked;
+        }
+
+        return action;
     }
 
     /// <remarks>

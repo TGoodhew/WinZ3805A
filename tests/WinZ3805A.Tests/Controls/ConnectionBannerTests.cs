@@ -37,32 +37,124 @@ public class ConnectionBannerTests
     public void ConnectingShowsNoBanner() =>
         Assert.False(ConnectionBanner.For(ConnectionStatus.Connecting).IsOpen);
 
-    /// <summary>A dropped link does not borrow the informational treatment.</summary>
+    /// <summary>A dropped link is an error, and does not borrow the informational row.</summary>
     /// <remarks>
     /// <para>
     /// <b>The distinction this whole type exists for.</b> §9.11 puts Disconnected and Connection
-    /// lost in adjacent rows and says an intentional disconnect is not a fault; <c>ConnectionStatus</c>
-    /// says the same in its own remarks — "collapsing the two into one 'not connected' is the
-    /// shortcut that makes an app cry wolf".
+    /// lost in adjacent rows and says an intentional disconnect is not a fault;
+    /// <c>ConnectionStatus</c> says the same in its own remarks — "collapsing the two into one 'not
+    /// connected' is the shortcut that makes an app cry wolf".
     /// </para>
     /// <para>
-    /// So until #248 builds the error row properly — with the §7.2 countdown and both <b>Retry
-    /// now</b> and <b>Stop retrying</b> — these states show nothing rather than showing the wrong
-    /// thing. An absent bar is a gap somebody will notice; a bar reading "Not connected. Choose a
-    /// serial port" while the app is mid-reconnect is a lie that looks finished.
+    /// This assertion used to say these states showed <i>nothing</i>, which was right while #248 was
+    /// unbuilt: an absent bar is a gap somebody notices, where a bar reading "Not connected. Choose
+    /// a serial port" mid-reconnect is a lie that looks finished. Now that the row exists, the
+    /// enduring property is that it is a different row — different severity, different copy,
+    /// different actions — rather than that it is missing.
     /// </para>
     /// </remarks>
     [Theory]
     [InlineData(ConnectionStatus.Reconnecting)]
     [InlineData(ConnectionStatus.Faulted)]
-    public void ADroppedLinkDoesNotBorrowTheInformationalRow(ConnectionStatus status)
+    public void ADroppedLinkIsAnErrorAndNotTheInformationalRow(ConnectionStatus status)
     {
-        ConnectionBannerState banner = ConnectionBanner.For(status);
+        ConnectionBannerState banner = ConnectionBanner.For(status, "COM3", TimeSpan.FromSeconds(4));
 
-        Assert.False(banner.IsOpen);
+        Assert.True(banner.IsOpen);
+        Assert.True(banner.IsError);
         Assert.NotEqual(ConnectionBanner.DisconnectedMessage, banner.Message);
-        Assert.Null(banner.ActionLabel);
+        Assert.NotEqual(ConnectionBanner.ChoosePortLabel, banner.ActionLabel);
+        Assert.Contains("Lost the connection", banner.Message, StringComparison.Ordinal);
     }
+
+    /// <summary>Reconnecting counts down and offers both of §9.11's actions.</summary>
+    /// <remarks>
+    /// §9.11's copy pattern verbatim: "Lost the connection to COM3. Retrying in 4 seconds." /
+    /// <b>Retry now</b> · <b>Stop retrying</b>. The countdown is the reason the session had to start
+    /// publishing its schedule — the fact of retrying was already visible, and it is the *when* that
+    /// the user staring at a 30 s cap has no other way to learn.
+    /// </remarks>
+    [Fact]
+    public void ReconnectingCountsDownAndOffersBothActions()
+    {
+        ConnectionBannerState banner =
+            ConnectionBanner.For(ConnectionStatus.Reconnecting, "COM3", TimeSpan.FromSeconds(4));
+
+        Assert.Equal("Lost the connection to COM3. Retrying in 4 seconds.", banner.Message);
+        Assert.Equal("Retry now", banner.ActionLabel);
+        Assert.Equal("Stop retrying", banner.SecondaryActionLabel);
+    }
+
+    /// <summary>The countdown reads like a person wrote it.</summary>
+    /// <remarks>
+    /// Rounded <i>up</i>, so "1 second" is never followed by a second of silence at zero, and so the
+    /// first tick of a 4 s backoff reads "4 seconds" rather than "3". Singular at one, because
+    /// "Retrying in 1 seconds" is the kind of detail that makes an interface look unfinished.
+    /// </remarks>
+    [Theory]
+    [InlineData(4.0, "Retrying in 4 seconds.")]
+    [InlineData(3.2, "Retrying in 4 seconds.")]
+    [InlineData(1.0, "Retrying in 1 second.")]
+    [InlineData(0.4, "Retrying in 1 second.")]
+    [InlineData(30.0, "Retrying in 30 seconds.")]
+    public void TheCountdownRoundsUpAndAgreesWithItself(double seconds, string expected) =>
+        Assert.EndsWith(
+            expected,
+            ConnectionBanner.For(
+                ConnectionStatus.Reconnecting, "COM3", TimeSpan.FromSeconds(seconds)).Message,
+            StringComparison.Ordinal);
+
+    /// <summary>With no schedule, the sentence says so rather than inventing a number.</summary>
+    /// <remarks>
+    /// Null is the attempt itself: the session clears <c>NextRetryAt</c> while it is trying, because
+    /// there is no next time until this one has failed. "Retrying in 0 seconds" would be a countdown
+    /// that had stopped counting.
+    /// </remarks>
+    [Theory]
+    [InlineData(null)]
+    [InlineData(0.0)]
+    [InlineData(-2.0)]
+    public void WithNoScheduleTheSentenceSaysARetryIsUnderWay(double? seconds)
+    {
+        TimeSpan? retryIn = seconds is double s ? TimeSpan.FromSeconds(s) : null;
+
+        Assert.Equal(
+            "Lost the connection to COM3. Retrying now.",
+            ConnectionBanner.For(ConnectionStatus.Reconnecting, "COM3", retryIn).Message);
+    }
+
+    /// <summary>Faulted offers a way back but does not pretend to be counting.</summary>
+    /// <remarks>
+    /// Nothing is coming, so there is no countdown and no <b>Stop retrying</b> — it is already
+    /// stopped. <b>Retry now</b> stays, because it is the way back for somebody who stopped and
+    /// changed their mind, or whose receiver has since been switched on.
+    /// </remarks>
+    [Fact]
+    public void FaultedOffersAWayBackWithoutACountdown()
+    {
+        ConnectionBannerState banner =
+            ConnectionBanner.For(ConnectionStatus.Faulted, "COM3", TimeSpan.FromSeconds(4));
+
+        Assert.True(banner.IsError);
+        Assert.Equal("Lost the connection to COM3. Not retrying.", banner.Message);
+        Assert.Equal("Retry now", banner.ActionLabel);
+        Assert.Null(banner.SecondaryActionLabel);
+    }
+
+    /// <summary>Without a port name the copy still reads as a sentence.</summary>
+    /// <remarks>
+    /// Reachable: the session can drop before <c>PortName</c> is set. "Lost the connection to ."
+    /// is worse than a slightly vaguer sentence.
+    /// </remarks>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void WithoutAPortNameTheCopyStillReads(string? portName) =>
+        Assert.StartsWith(
+            "Lost the connection to the receiver.",
+            ConnectionBanner.For(ConnectionStatus.Reconnecting, portName, TimeSpan.FromSeconds(4)).Message,
+            StringComparison.Ordinal);
 
     /// <summary>Every state is decided, so a new one cannot fall through to a wrong row.</summary>
     /// <remarks>

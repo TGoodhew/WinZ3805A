@@ -618,4 +618,152 @@ public class DeviceSessionServiceTests
         Assert.True(after.Succeeded);
     }
 
+    // -------------------------------------------------------------------------------------
+    // The retry schedule §9.11's countdown needs, and its two actions (#248)
+    // -------------------------------------------------------------------------------------
+
+    /// <summary>Drops a connected session into Reconnecting and returns it.</summary>
+    private static async Task<DeviceSessionService> ReconnectingSessionAsync(
+        ControllableTransport transport,
+        FakeTimeProvider clock)
+    {
+        DeviceSessionService session = new((_, _) => transport, clock) { StayConnected = true };
+
+        await session.ConnectAsync("COM3", SerialSettings.Default).WaitAsync(TestTimeout);
+        transport.Behaviour = TransportBehaviour.Faulting;
+        await RunAndTolerateFailureAsync(session);
+
+        Assert.Equal(ConnectionStatus.Reconnecting, session.Status);
+        return session;
+    }
+
+    /// <summary>While it is waiting to retry, the session says when the next attempt is due.</summary>
+    /// <remarks>
+    /// §9.11's row wants "Retrying in 4 seconds", which needs the schedule and not merely the fact
+    /// of retrying. Published as an instant rather than a remaining count so a caller can tick it
+    /// against its own clock instead of this class raising an event per second.
+    /// </remarks>
+    [Fact]
+    public async Task WhileWaitingToRetryTheNextAttemptIsPublished()
+    {
+        FakeTimeProvider clock = new();
+        await using DeviceSessionService session = await ReconnectingSessionAsync(Receiver(), clock);
+
+        // The loop is fire-and-forget, so give it a moment to reach the wait and publish.
+        DateTimeOffset? due = null;
+        for (int i = 0; i < 50 && due is null; i++)
+        {
+            await Task.Delay(10);
+            due = session.NextRetryAt;
+        }
+
+        Assert.NotNull(due);
+
+        // The first backoff is 2 s (§7.2), so the first attempt is due about then and never behind.
+        Assert.InRange(due!.Value - clock.GetUtcNow(), TimeSpan.Zero, TimeSpan.FromSeconds(2));
+    }
+
+    /// <summary>Stop retrying leaves the link faulted rather than disconnected.</summary>
+    /// <remarks>
+    /// <para>
+    /// The distinction is §9.11's. <c>Disconnected</c> is a state the user chose for the <i>link</i>
+    /// and offers "Choose a port". This is the user declining to keep <i>retrying</i> a link that
+    /// dropped underneath them, which is still a fault — the receiver is not there, and telling them
+    /// to choose a port would suggest the port was the problem.
+    /// </para>
+    /// <para>
+    /// It also stops the loop, which is the point: without it the only way out of a retry that caps
+    /// at thirty seconds was to close the application.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task StopRetryingFaultsTheSessionAndEndsTheLoop()
+    {
+        FakeTimeProvider clock = new();
+        await using DeviceSessionService session = await ReconnectingSessionAsync(Receiver(), clock);
+
+        session.StopRetrying();
+
+        Assert.Equal(ConnectionStatus.Faulted, session.Status);
+        Assert.Null(session.NextRetryAt);
+
+        // The loop is gone: winding well past the cap produces no further attempts and no change.
+        clock.Advance(TimeSpan.FromMinutes(2));
+        await Task.Delay(50);
+
+        Assert.Equal(ConnectionStatus.Faulted, session.Status);
+    }
+
+    /// <summary>Stop retrying does not rewrite the "Reconnect automatically" preference.</summary>
+    /// <remarks>
+    /// <c>StayConnected</c> is §10.12's setting and governs every future outage. One press of a
+    /// button during one of them must not silently turn it off — the user said "stop this retry",
+    /// not "never retry again", and the difference would only be discovered the next time something
+    /// failed to come back on its own.
+    /// </remarks>
+    [Fact]
+    public async Task StopRetryingLeavesTheReconnectPreferenceAlone()
+    {
+        FakeTimeProvider clock = new();
+        await using DeviceSessionService session = await ReconnectingSessionAsync(Receiver(), clock);
+
+        session.StopRetrying();
+
+        Assert.True(session.StayConnected);
+    }
+
+    /// <summary>Retry now does not wait out the backoff.</summary>
+    /// <remarks>
+    /// Asserted as "the schedule was abandoned without the clock reaching it", which is the property
+    /// that matters and the one a fake clock can state plainly: the pinned clock never advances, so
+    /// a wait that ends can only have been woken.
+    /// </remarks>
+    [Fact]
+    public async Task RetryNowDoesNotWaitOutTheBackoff()
+    {
+        FakeTimeProvider clock = new();
+        await using DeviceSessionService session = await ReconnectingSessionAsync(Receiver(), clock);
+
+        DateTimeOffset? due = null;
+        for (int i = 0; i < 50 && due is null; i++)
+        {
+            await Task.Delay(10);
+            due = session.NextRetryAt;
+        }
+
+        Assert.NotNull(due);
+        Assert.True(due!.Value > clock.GetUtcNow(), "the wait should still be ahead of the clock");
+
+        session.RetryNow();
+
+        // The clock is pinned, so nothing here can have reached the scheduled instant. The wait
+        // ending at all is the assertion.
+        bool woke = false;
+        for (int i = 0; i < 100 && !woke; i++)
+        {
+            await Task.Delay(10);
+            woke = session.NextRetryAt != due;
+        }
+
+        Assert.True(woke, "Retry now should have woken the backoff wait");
+    }
+
+    /// <summary>Retry now on a session that is not retrying does nothing.</summary>
+    /// <remarks>
+    /// Pressing it during the attempt itself must not queue a second one — the receiver serves one
+    /// transaction at a time and the schedule keeps one attempt in flight, which is the whole reason
+    /// this wakes a wait rather than starting anything.
+    /// </remarks>
+    [Fact]
+    public async Task RetryNowOnAHealthySessionDoesNothing()
+    {
+        await using DeviceSessionService session = new((_, _) => Receiver(), new FakeTimeProvider());
+        await session.ConnectAsync("COM3", SerialSettings.Default).WaitAsync(TestTimeout);
+
+        session.RetryNow();
+        session.StopRetrying();
+
+        Assert.Equal(ConnectionStatus.Connected, session.Status);
+    }
+
 }
