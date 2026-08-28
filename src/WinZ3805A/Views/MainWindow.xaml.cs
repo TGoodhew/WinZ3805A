@@ -29,7 +29,8 @@ public sealed partial class MainWindow : Window
     /// wireframe out of a 32 px title bar and a 64 px medallion, which are effective pixels by
     /// construction, while <c>OverlappedPresenter.PreferredMinimum*</c> is physical. Written
     /// straight into the presenter the floor shrank with every step of display scaling — 380
-    /// physical is 109 effective at the 350% A11Y-7 requires — and no chrome was added, so even at
+    /// physical is 109 effective at 350% — beyond the 225% A11Y-7 now requires (#27), and still handled —
+    /// and no chrome was added, so even at
     /// 100% the client area was about 364 px against the 380 the wireframe needs (#27).
     /// </remarks>
     private const int MinimumContentWidth = 380;
