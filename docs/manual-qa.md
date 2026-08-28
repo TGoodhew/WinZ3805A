@@ -67,10 +67,23 @@ state behind. It needs a person at **Settings → Display → Scale**.
 
 | | |
 |---|---|
-| **Do** | Set 100 %, 150 %, 200 %, 250 %, 350 % in turn. Restart the app at each. |
+| **Do** | Set 100 %, 150 %, 200 %, 225 % in turn. Restart the app at each. |
 | **Pass** | No clipping, no overlap, no text cut off. The title-bar drag region still works — grab the bar and move the window. Caption buttons stay reachable. |
 
 Restore the original scaling afterwards and **read it back to confirm**.
+
+> **225 %, not 350 %** (amended 28 Aug 2026, #27). Windows derives its scaling list from the panel's
+> size and resolution, and on the 5120 × 1440 reference display it stops at 225 %. Higher figures need
+> *Custom scaling*, which is system-wide and needs a sign-out. If you are ever running this on a
+> high-DPI laptop that offers 250 % or 350 % in the ordinary dropdown, check them there — the clamping
+> code still handles that case, it is simply not claimed to be verified.
+>
+> **What to look for, rather than just "does it look right".** The caption-button clearance must come
+> from the system, not a formula: it scaled 138 → 207 → 276 px across 100 / 150 / 200 %, and then
+> **stopped** at 225 %, where Windows holds its caption buttons at 92 px each. An application computing
+> `138 × scale` would be reserving 310 px for buttons occupying 276. The check is that the app's own
+> title-bar buttons never reach the caption buttons — at 225 % they end at 3841 against a caption area
+> starting at 3985.
 
 ---
 

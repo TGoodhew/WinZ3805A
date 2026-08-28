@@ -909,8 +909,10 @@ Page margin `WzSpaceXl` (24) at Medium and Wide, `WzSpaceMd` (16) at Compact.
 > described and — read as a window size — the narrowest reachable. Reading the minimum as *content*
 > (below) and capping it at the display work area both changed that: at 200 % scaling on a
 > 1920-wide display the Details window has 1920 physical pixels to spend and about 960 effective
-> pixels of content, and at 350 % about 548. A11Y-7 requires the application to be usable at 350 %,
-> so a state below 640 is not an edge case to be excluded — it is the state A11Y-7 is about. The
+> pixels of content, and at 225 % about 853. A11Y-7 requires the application to be usable at 225 %
+> (amended 28 Aug 2026, #27 — it was 350 %, and the arithmetic below is left at that figure because
+> the clamping it justifies is unchanged), so a state below 640 is not an edge case to be excluded —
+> it is the state A11Y-7 is about. The
 > alternative considered and rejected was to floor the clamp at 640 effective pixels, which on a
 > 1920-wide display puts the enforced minimum back above the screen at the scaling this is for.
 
@@ -1278,7 +1280,34 @@ Testable statements. Each is verified by the stated method, not by inspection al
 | A11Y-4 | All text meets §9.4.5 contrast floors in Light, Dark, and HighContrast | **Light and Dark: `build/Test-ContrastFloor.ps1`, which gates CI** — added 21 Aug 2026 (#24). It composites each token over what sits beneath it, because almost every stock Fluent colour is semi-transparent and reading one as opaque gives a confident wrong answer. **HighContrast stays a manual Accessibility Insights pass** and cannot be otherwise: its tokens resolve to `SystemColor*`, which are the user’s own choices. The manual pass also remains the only way to measure the Mica case, where the true backdrop is a live blur of the wallpaper. |
 | A11Y-5 | Pointer targets ≥ 32 × 32 px **at all times**; touch targets ≥ 40 × 40 px **in touch-optimised modes, of which the application currently has none** (#186). **`SkyPlotControl`’s markers are an exception, recorded in §9.10.2** | Accessibility Insights target-size check, which will flag the sky plot markers — §9.10.2 is the answer to that flag |
 | A11Y-6 | At 200% text scaling, no text clips and no control overlaps, at every breakpoint | Manual pass at 100 / 150 / 200% text scale × three breakpoints |
-| A11Y-7 | At 100–350% display scaling, layout remains usable and the title bar drag region stays correct | Manual pass at 100 / 150 / 200 / 250 / 350% |
+| A11Y-7 | At 100–225% display scaling, layout remains usable and the title bar drag region stays correct | Manual pass at 100 / 150 / 200 / 225% |
+
+> **⚠ Amended 28 Aug 2026 (#27).** The ceiling was 350 %, with the pass at 100 / 150 / 200 / 250 / 350 %.
+> **Windows does not offer those percentages on the reference display.** Its scaling list is derived
+> from the panel's size and resolution, and on the 5120 × 1440 monitor this is developed and tested on
+> it stops at 225 %. Reaching 250 % or 350 % needs *Custom scaling*, which applies system-wide,
+> requires a sign-out, and is not a configuration users arrive at by accident — so a criterion written
+> around it was being verified nowhere.
+>
+> **What the pass to 225 % actually established** is the mechanism rather than four data points. §9.7.3
+> requires caption-button clearance to be *read* from `AppWindowTitleBar` rather than computed, and the
+> reserved clearance tracked the system through 138 → 207 → 276 px as scaling went 100 → 150 → 200 %.
+> Then at 225 % **Windows stopped scaling its caption buttons**, holding them at 92 px each — verified
+> on a freshly created window, so not an artefact of changing scaling live. An application computing
+> `138 × scale` would by then have been reserving 310 px for buttons occupying 276. Reading the real
+> inset is precisely why there is no collision at any scale, and that property does not begin to fail
+> at 250 %.
+>
+> **The clamp is exercised too.** §9.6.2's converted floor is capped at the display work area, and on a
+> 1440-tall panel that cap does real work from 200 % upward: the Details window's 720 effective pixels
+> of minimum height become 1440 physical against 1392 available. Both windows were observed clamped at
+> 200 % and 225 %, with nothing reported offscreen.
+>
+> **What is given up** is the layout half above 225 % — whether anything clips when the clamp is
+> discarding most of the requested size rather than trimming it. The clamping code is unchanged and
+> still protects that case; it is simply no longer claimed to be verified. If the application is ever
+> run on a high-DPI laptop that offers 250 % or 350 % in the ordinary dropdown, that is the machine to
+> check it on.
 | A11Y-8 | High contrast is a first-class theme: no hard-coded brush survives, the medallion remains legible, severity is distinguishable | Manual pass in all four Windows HC themes |
 | A11Y-9 | Mode changes, connection changes, and command results are announced as live regions | Narrator pass: force each transition, confirm announcement |
 | A11Y-10 | `StatusMedallion` and `SkyPlotControl` expose complete automation peers per §9.10.2 | Accessibility Insights tree inspection |

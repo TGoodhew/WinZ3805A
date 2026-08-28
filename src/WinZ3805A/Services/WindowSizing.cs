@@ -23,7 +23,9 @@ namespace WinZ3805A.Services;
 /// <description>
 /// <b>Display scaling.</b> At 150% a 1024 <i>physical</i> window is 683 effective pixels of
 /// content, so the window could never reach the Expanded breakpoint at all — and A11Y-7 requires
-/// the app to be usable at 350%, where it is 293.
+/// the app to be usable at 225% (amended 28 Aug 2026, #27 — it was 350%, where this is 293; the
+/// figure is kept here because the arithmetic is what justifies the clamp, and the clamp still
+/// protects the larger case even though it is no longer claimed to be verified there).
 /// </description>
 /// </item>
 /// </list>
@@ -107,7 +109,8 @@ public static class WindowSizing
     /// <para>
     /// <see cref="PhysicalMinimum"/> multiplies a content requirement by the scaling factor, and
     /// nothing in that arithmetic knows how big the display is. §9.6.2's 1024 x 720 needs 3600 x
-    /// 2528 physical pixels at 350%, and A11Y-7 requires the app to be usable there. Written
+    /// 2528 physical pixels at 350%. A11Y-7 now stops at 225% (#27), but the clamp is written for the
+/// larger case regardless, because a display can report any work area. Written
     /// straight into <c>PreferredMinimumWidth</c> that floor is larger than any display it would
     /// be read on, so the window opens bigger than the screen, the title bar is off the top or the
     /// resize edges are off the sides, and there is no gesture that brings it back.
