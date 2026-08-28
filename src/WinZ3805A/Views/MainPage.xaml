@@ -142,6 +142,23 @@
                        Text="&#xE946;" />
 
             <!--
+                #245. A separate badge from the rollover one, because both can be in force at once -
+                a power-up screen is provisional AND two decades behind - and one glyph doing double
+                duty could only say the more alarming of the two.
+
+                WzCautionBrush rather than info: a rollover correction is a known quantity the
+                application has already applied, while this reading may be wrong by any amount and
+                nothing on the screen says by how much.
+            -->
+            <TextBlock x:Name="ProvisionalBadge"
+                       FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                       FontSize="12"
+                       VerticalAlignment="Center"
+                       Foreground="{ThemeResource WzCautionBrush}"
+                       Visibility="Collapsed"
+                       Text="&#xE9CE;" />
+
+            <!--
                 The zone picker. Its long-term home is Settings -> Time, a page in the Details
                 window (§10.2), which is #5 in M4; until that exists it lives here so the setting is
                 reachable at all. Icon-only, so §9.9 requires both an automation name and a tooltip.

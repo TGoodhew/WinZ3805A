@@ -448,6 +448,7 @@ public sealed partial class MainPage : Page
         {
             ClockText.Text = "—";
             RolloverBadge.Visibility = Visibility.Collapsed;
+            ProvisionalBadge.Visibility = Visibility.Collapsed;
             return;
         }
 
@@ -465,5 +466,17 @@ public sealed partial class MainPage : Page
         // icon-only control to have both and a screen-reader user has no other route to it.
         ToolTipService.SetToolTip(RolloverBadge, _model.RolloverExplanation);
         AutomationProperties.SetName(RolloverBadge, _model.RolloverExplanation ?? string.Empty);
+
+        // #245. The receiver's own marker for "this is the power-up default, not yet corrected from
+        // GPS". It belongs on the primary window rather than only in Details, because §10.3's whole
+        // premise is a window somebody leaves running and glances at - and this is the one reading
+        // on that surface that can be arbitrarily wrong while looking entirely ordinary.
+        const string provisional =
+            "Power-up time. The receiver has not yet corrected this from GPS, so it may be wrong by "
+            + "any amount until the first satellite is tracked.";
+
+        ProvisionalBadge.Visibility = _model.IsTimeProvisional ? Visibility.Visible : Visibility.Collapsed;
+        ToolTipService.SetToolTip(ProvisionalBadge, provisional);
+        AutomationProperties.SetName(ProvisionalBadge, provisional);
     }
 }

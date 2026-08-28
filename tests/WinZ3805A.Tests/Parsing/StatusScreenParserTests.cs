@@ -534,15 +534,24 @@ public class StatusScreenParserTests
         Assert.Equal(ClockAdvisory.SynchronizedToUtc, status.OnePpsClockAdvisory);
     }
 
-    /// <summary>Power-up, which has no clock yet and must say so rather than inventing one.</summary>
+    /// <summary>Power-up, whose readings are absent, provisional, or real — and must be told apart.</summary>
     /// <remarks>
-    /// <b>The fixture that exercises §11.1 hardest.</b> A receiver seconds from cold has no time row
-    /// on the screen at all, so the date, the time scale and the 1 PPS reading are all genuinely
-    /// absent. The requirement is that they come back null and the reason is recorded — not that the
-    /// parse fails, and not that a plausible value is manufactured.
+    /// <para>
+    /// <b>The fixture that exercises §11.1 hardest.</b> A receiver seconds from cold prints a screen
+    /// with three different kinds of nothing on it, and the requirement is that each is reported as
+    /// what it is rather than as a plausible value.
+    /// </para>
+    /// <para>
+    /// The 1 PPS offset is genuinely <b>absent</b> and comes back null — never zero, which would read
+    /// as a perfect lock. The clock row is <b>present but provisional</b>: it says
+    /// <c>UTC 05:10:26 (?) 12 Jan 2007</c>, and until #245 the marker defeated the pattern, so the
+    /// time was dropped and then reported as no clock row at all. It is now read, with
+    /// <c>DeviceTimeIsProvisional</c> carrying the caveat. The satellite table and the survey
+    /// percentage are <b>real</b> and must not be caveated by association.
+    /// </para>
     /// </remarks>
     [Fact]
-    public void ThePowerUpScreenParsesWithoutAClock()
+    public void ThePowerUpScreenSeparatesAbsentFromProvisionalReadings()
     {
         ReceiverStatus status = ParseSittingFixture("captured/power-up-fine-freq-adj.txt");
 
@@ -554,21 +563,26 @@ public class StatusScreenParserTests
 
         // Absent, and null rather than zero - a 1 PPS offset of 0 ns would read as a perfect lock.
         Assert.Null(status.OnePpsTiNanoseconds);
-        Assert.Null(status.DeviceDateTime);
-        Assert.Null(status.CorrectedDateTime);
-        Assert.Equal(TimeScale.Unknown, status.TimeScale);
 
-        // And the reason is surfaced rather than swallowed - §11.1 puts ParseWarnings in Diagnostics
-        // precisely so an odd firmware revision is actionable instead of merely quiet.
-        //
-        // Specifically: the row is THERE and unreadable, not missing (#245). This screen prints
-        // "UTC 05:10:26 (?) 12 Jan 2007", where (?) marks a provisional power-up time; the marker
-        // between time and date defeats the pattern. Asserting only that some warning mentions a
-        // clock row would pass for either message, which is what it used to do.
-        string warning = Assert.Single(status.ParseWarnings);
-        Assert.Contains("did not parse", warning, StringComparison.Ordinal);
-        Assert.Contains("05:10:26 (?) 12 Jan 2007", warning, StringComparison.Ordinal);
-        Assert.DoesNotContain("No clock row was found", warning, StringComparison.Ordinal);
+        // Present and provisional (#245). The value is read, and the caveat travels with it rather
+        // than being left in a warning nobody looking at a clock will see.
+        Assert.Equal(new DateTime(2007, 1, 12, 5, 10, 26), status.DeviceDateTime!.Value.DateTime);
+        Assert.Equal(TimeScale.Utc, status.TimeScale);
+        Assert.True(status.DeviceTimeIsProvisional);
+
+        // §7.4 still applies on top: this unit is 19 years and change behind, and the corrected
+        // instant lands within a minute of the sitting. That the arithmetic works on a provisional
+        // time is the point - the two caveats are independent, and the UI has to show both.
+        Assert.Equal(1, status.WeekRolloverEpochs);
+        Assert.NotNull(status.CorrectedDateTime);
+        Assert.True(
+            (status.CorrectedDateTime!.Value - s_sittingInstant).Duration() < TimeSpan.FromMinutes(5),
+            $"corrected {status.CorrectedDateTime} should be near the sitting instant {s_sittingInstant}");
+
+        // The row parses now, so the clock produces no warning at all.
+        Assert.DoesNotContain(
+            status.ParseWarnings,
+            w => w.Contains("clock row", StringComparison.OrdinalIgnoreCase));
 
         // The survey the power cycle started, three tenths of a per cent in (#229).
         Assert.Equal(PositionMode.Survey, status.PositionMode);
@@ -641,34 +655,96 @@ public class StatusScreenParserTests
     public void AnAveragedPositionIsDistinguishedFromAHeldOne(string fixtureName, PositionQualifier expected) =>
         Assert.Equal(expected, ParseSittingFixture(fixtureName).PositionQualifier);
 
-    /// <summary>A clock row that is present but unreadable is not reported as a missing one.</summary>
+    /// <summary>The provisional power-up marker is read, and recorded rather than discarded.</summary>
     /// <remarks>
     /// <para>
-    /// The distinction is the whole value of the warning (#245). §11.1 puts <c>ParseWarnings</c> in
-    /// Diagnostics so a field report about an odd firmware revision is actionable, and telling
-    /// somebody no clock row was found sends them looking for a line that is sitting in the capture
-    /// they are holding.
+    /// Both power-up screens print the marker the Z3801A guide documents — <c>(?)</c>, which it
+    /// renders as <c>[?]</c> — between the time and the date, and it used to defeat the pattern
+    /// entirely: the row was dropped and the parser then reported that no clock row existed (#245).
     /// </para>
     /// <para>
-    /// Both power-up screens print the provisional marker the Z3801A guide documents — <c>(?)</c>,
-    /// which it renders as <c>[?]</c> — between the time and the date, and it defeats the pattern.
-    /// Whether that time should be read at all is a model question, still open on #245; the value
-    /// stays null either way, so this asserts only what the parser says about it.
+    /// <b>The flag is the point, not the time.</b> The guide calls this "the default power-up
+    /// setting … corrected when the first satellite is tracked". These two captures happen to be
+    /// accurate to the minute because the oscillator held time across the power cycle; the guide's
+    /// own example, <c>12:00:00[?] 01 JAN 1996</c>, is a placeholder that is arbitrarily wrong. The
+    /// marker is the only thing separating those cases, so reading the value while dropping it would
+    /// turn a knowable caveat into a silent inaccuracy.
     /// </para>
     /// </remarks>
     [Theory]
-    [InlineData("captured/power-up-gps-acquisition.txt", "05:10:04 (?) 12 Jan 2007")]
-    [InlineData("captured/power-up-fine-freq-adj.txt", "05:10:26 (?) 12 Jan 2007")]
-    public void AnUnreadableClockRowIsNotReportedAsAMissingOne(string fixtureName, string expectedQuoted)
+    [InlineData("captured/power-up-gps-acquisition.txt", 5, 10, 4, TimeScale.Gps)]
+    [InlineData("captured/power-up-fine-freq-adj.txt", 5, 10, 26, TimeScale.Utc)]
+    public void AProvisionalPowerUpTimeIsReadAndFlagged(
+        string fixtureName, int hour, int minute, int second, TimeScale expectedScale)
     {
         ReceiverStatus status = ParseSittingFixture(fixtureName);
 
-        Assert.Null(status.DeviceDateTime);
-        Assert.Equal(TimeScale.Unknown, status.TimeScale);
+        Assert.NotNull(status.DeviceDateTime);
+        Assert.Equal(new DateTime(2007, 1, 12, hour, minute, second), status.DeviceDateTime!.Value.DateTime);
+        Assert.Equal(expectedScale, status.TimeScale);
+        Assert.True(status.DeviceTimeIsProvisional);
+    }
 
-        string warning = Assert.Single(status.ParseWarnings);
-        Assert.Contains(expectedQuoted, warning, StringComparison.Ordinal);
-        Assert.DoesNotContain("No clock row was found", warning, StringComparison.Ordinal);
+    /// <summary>An ordinary clock row is not flagged as provisional.</summary>
+    /// <remarks>
+    /// The half that keeps the flag meaningful. A marker detector that fired on every row would be
+    /// indistinguishable from one that never fired, since the UI would caveat everything.
+    /// </remarks>
+    [Theory]
+    [InlineData("locked-stabilizing.txt")]
+    [InlineData("captured/power-up-fine-freq-adj.txt")]
+    public void OnlyAMarkedRowIsProvisional(string fixtureName)
+    {
+        ReceiverStatus status = ParseSittingFixture(fixtureName);
+
+        bool marked = string.Join("\r\n", ReadFixtureLines(fixtureName))
+            .Contains("(?)", StringComparison.Ordinal);
+
+        Assert.Equal(marked, status.DeviceTimeIsProvisional);
+    }
+
+    /// <summary>Both bracket styles of the marker are understood.</summary>
+    /// <remarks>
+    /// This unit prints <c>(?)</c>; the Z3801A and 58503A guides print <c>[?]</c> for the same
+    /// field. Neither is more correct, and a parser that knew only the one in front of it would fail
+    /// on the sibling model §11.1 exists to survive.
+    /// </remarks>
+    [Theory]
+    [InlineData("UTC      12:00:00(?) 01 Jan 1996")]
+    [InlineData("UTC      12:00:00[?] 01 Jan 1996")]
+    [InlineData("UTC      12:00:00 (?) 01 Jan 1996")]
+    [InlineData("UTC      12:00:00 [ ? ] 01 Jan 1996")]
+    public void EitherBracketStyleMarksAProvisionalTime(string clockRow)
+    {
+        ReceiverStatus status = ParseScreen(clockRow);
+
+        Assert.True(status.DeviceTimeIsProvisional);
+        Assert.Equal(new DateTime(1996, 1, 1, 12, 0, 0), status.DeviceDateTime!.Value.DateTime);
+    }
+
+    /// <summary>The year-first date order the sibling manuals print is read too.</summary>
+    /// <remarks>
+    /// <para>
+    /// <c>58503A-1.txt</c> and <c>z3801.txt</c> both print <c>GPS  03:56:44 1994 DEC 01</c> — year
+    /// first, day last — against the <c>d MMM yyyy</c> every screen captured from this unit uses.
+    /// Latent here, and exactly the cross-model difference §11.1's header-relative parsing exists to
+    /// survive (#245).
+    /// </para>
+    /// <para>
+    /// The day and year are both digits, so the two orders are told apart by width alone. That is
+    /// why the alternation anchors on four digits for the year rather than trying to be clever: a
+    /// two-digit year would make <c>94 DEC 01</c> genuinely ambiguous, and no manual prints one.
+    /// </para>
+    /// </remarks>
+    [Theory]
+    [InlineData("GPS      03:56:44 1994 DEC 01", 1994, 12, 1)]
+    [InlineData("GPS      03:56:44 01 DEC 1994", 1994, 12, 1)]
+    public void EitherDateOrderIsRead(string clockRow, int year, int month, int day)
+    {
+        ReceiverStatus status = ParseScreen(clockRow);
+
+        Assert.Equal(new DateTime(year, month, day, 3, 56, 44), status.DeviceDateTime!.Value.DateTime);
+        Assert.False(status.DeviceTimeIsProvisional);
     }
 
     /// <summary>A screen with no clock row at all still says so.</summary>
@@ -982,6 +1058,20 @@ public class StatusScreenParserTests
     /// CRLF split because the file is committed with <c>-text</c> and must not depend on the
     /// platform's idea of a line.
     /// </summary>
+    /// <summary>
+    /// Parses a synthetic screen built around one clock row.
+    /// </summary>
+    /// <remarks>
+    /// The date shapes under test come from the 58503A and Z3801A manuals rather than from anything
+    /// this unit emits, so there is no fixture to read them from — a captured screen is evidence of
+    /// what a receiver printed, and inventing one would make it evidence of nothing. The clock row
+    /// is the only line these assertions touch.
+    /// </remarks>
+    private static ReceiverStatus ParseScreen(string clockRow) =>
+        ParserAt(s_sittingInstant).Parse(
+            "------------------------------- Receiver Status -------------------------------\r\n" +
+            clockRow);
+
     private static string[] ReadFixtureLines(string name)
     {
         string path = Path.Combine(AppContext.BaseDirectory, "Fixtures", name);

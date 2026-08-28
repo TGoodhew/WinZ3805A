@@ -87,6 +87,30 @@
                 </StackPanel>
             </Border>
 
+            <!-- ============================ Provisional time =========================== -->
+
+            <!--
+                Its own card rather than a line inside the rollover one, because the two caveats are
+                independent and can both be in force - which is exactly the power-up state (#245).
+                Folding them together would read as one explanation with two halves, when they are
+                two different reasons the clock may not be what it appears.
+
+                Collapsed entirely when the marker is absent: a card saying "not provisional" on
+                every ordinary screen is noise that teaches the reader to stop looking at this
+                corner of the page.
+            -->
+            <Border x:Name="ProvisionalCard" Style="{ThemeResource WzCardStyle}" Visibility="Collapsed">
+                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Power-up time" />
+                    <controls:SeverityPill x:Name="ProvisionalPill" />
+                    <TextBlock x:Name="ProvisionalText"
+                               Style="{ThemeResource WzBodyTextStyle}"
+                               Foreground="{ThemeResource WzTextSecondaryBrush}"
+                               TextWrapping="Wrap"
+                               MaxWidth="{ThemeResource WzProseMaxWidth}" />
+                </StackPanel>
+            </Border>
+
             <!-- ================================ Leap second ============================ -->
             <Border Style="{ThemeResource WzCardStyle}">
                 <StackPanel Spacing="{ThemeResource WzSpaceSm}">

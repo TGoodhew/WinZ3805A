@@ -284,6 +284,14 @@ public sealed partial class TimePage : Page
         RolloverPill.Text = model.IsDateCorrected ? "Date corrected" : "No correction";
         RolloverText.Text = model.RolloverText;
 
+        // #245. Shown only when the receiver actually marked the reading, and carrying the caveat
+        // as words rather than as a colour - §9.4.3 requires severity to be colour plus shape plus
+        // text, and a pill alone would not say what is provisional about it.
+        ProvisionalCard.Visibility = model.IsTimeProvisional ? Visibility.Visible : Visibility.Collapsed;
+        ProvisionalPill.Severity = Severity.Caution;
+        ProvisionalPill.Text = "Not yet corrected from GPS";
+        ProvisionalText.Text = model.ProvisionalText ?? string.Empty;
+
         // The pill follows the direct query where there is one, and the status screen otherwise.
         // They agree in every case seen so far; where they could not both be read, the screen is
         // the one that arrives without asking.

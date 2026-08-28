@@ -24,7 +24,8 @@ public sealed class TimeViewModelTests
         int rolloverEpochs = 0,
         LeapSecondPending leap = LeapSecondPending.None,
         DateTimeOffset? device = null,
-        DateTimeOffset? corrected = null)
+        DateTimeOffset? corrected = null,
+        bool provisional = false)
     {
         FakeTimeProvider clock = new(Captured);
         ReceiverStateStore store = new(clock);
@@ -35,6 +36,7 @@ public sealed class TimeViewModelTests
             WeekRolloverEpochs = rolloverEpochs,
             LeapPending = leap,
             DeviceDateTime = device,
+            DeviceTimeIsProvisional = provisional,
             CorrectedDateTime = corrected,
             CapturedAt = Captured,
         });
@@ -216,5 +218,55 @@ public sealed class TimeViewModelTests
         Assert.True(model.IsDateCorrected);
         Assert.Contains("1 PPS", model.RolloverText, StringComparison.Ordinal);
         Assert.Contains("unaffected", model.RolloverText, StringComparison.Ordinal);
+    }
+    // ---- The power-up marker (#245) ----------------------------------------------------------
+
+    /// <remarks>
+    /// The caveat has to reach the page, because the value now does. Before #245 the parser refused
+    /// the row and the reading was simply absent, which was safe by accident; reading it without
+    /// saying it is unverified would be strictly worse than that.
+    /// </remarks>
+    [Fact]
+    public void AProvisionalTimeIsFlaggedAndExplained()
+    {
+        TimeViewModel model = Connected(device: Captured, provisional: true);
+
+        Assert.True(model.IsTimeProvisional);
+        Assert.NotNull(model.ProvisionalText);
+        Assert.Contains("power-up default", model.ProvisionalText!, StringComparison.Ordinal);
+        Assert.Contains("first satellite", model.ProvisionalText!, StringComparison.Ordinal);
+    }
+
+    /// <remarks>
+    /// The half that keeps it meaningful. An explanation present on every ordinary screen is one the
+    /// reader learns to skip, and then it is not there on the screen that needed it.
+    /// </remarks>
+    [Fact]
+    public void AnOrdinaryTimeCarriesNoProvisionalExplanation()
+    {
+        TimeViewModel model = Connected(device: Captured);
+
+        Assert.False(model.IsTimeProvisional);
+        Assert.Null(model.ProvisionalText);
+    }
+
+    /// <remarks>
+    /// The two caveats are independent and the power-up screen has both: a provisional reading that
+    /// is also two decades behind. Neither may suppress the other, which is why they are separate
+    /// properties rather than one combined state.
+    /// </remarks>
+    [Fact]
+    public void ProvisionalAndRolloverAreIndependent()
+    {
+        TimeViewModel model = Connected(
+            rolloverEpochs: 1,
+            device: new DateTimeOffset(2007, 1, 12, 5, 10, 26, TimeSpan.Zero),
+            corrected: Captured,
+            provisional: true);
+
+        Assert.True(model.IsTimeProvisional);
+        Assert.True(model.IsDateCorrected);
+        Assert.NotNull(model.ProvisionalText);
+        Assert.NotNull(model.RolloverText);
     }
 }

@@ -126,6 +126,32 @@ public sealed class TimeViewModel : INotifyPropertyChanged
         ? raw.ToString("HH:mm:ss · dd MMM yyyy", CultureInfo.CurrentCulture)
         : ReadoutFormatter.NoValue;
 
+    /// <summary>Whether the receiver marked its time as the provisional power-up value (#245).</summary>
+    public bool IsTimeProvisional => Status?.DeviceTimeIsProvisional ?? false;
+
+    /// <summary>
+    /// What the power-up marker means, in the terms the manual uses.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Written out rather than reduced to a pill, because the marker is a statement about how far
+    /// the reading may be from the truth and that range is enormous. The screen captured from this
+    /// unit was accurate to the minute — the oscillator held time across the power cycle — while the
+    /// Z3801A guide's own example is <c>12:00:00[?] 01 JAN 1996</c>, a default that is arbitrarily
+    /// wrong. Nothing on the screen distinguishes those two cases, so the honest thing to say is
+    /// that it is unverified, not to guess which one this is.
+    /// </para>
+    /// <para>
+    /// Independent of <see cref="IsDateCorrected"/>. A provisional time still gets §7.4's rollover
+    /// arithmetic applied on top, and both caveats can be in force at once — which is exactly the
+    /// power-up state, and why they are separate sentences rather than one combined message.
+    /// </para>
+    /// </remarks>
+    public string? ProvisionalText => IsTimeProvisional
+        ? "The receiver marked this time as its power-up default, not yet corrected from GPS. It is "
+          + "corrected once the first satellite is tracked, and may be wrong by any amount until then."
+        : null;
+
     /// <summary>Whether §7.4's week-rollover correction is being applied.</summary>
     public bool IsDateCorrected => (Status?.WeekRolloverEpochs ?? 0) != 0;
 

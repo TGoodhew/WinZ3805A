@@ -2217,6 +2217,7 @@ public sealed record ReceiverStatus
     // TIME
     public TimeScale TimeScale { get; init; }             // Gps|Utc|LocalGps|Local
     public DateTimeOffset? DeviceDateTime { get; init; }
+    public bool DeviceTimeIsProvisional { get; init; }    // added 28 Aug 2026, #245
     public int WeekRolloverEpochs { get; init; }
     public DateTimeOffset? CorrectedDateTime { get; init; }
     public ClockAdvisory OnePpsClockAdvisory { get; init; }    // §11.3
@@ -2239,6 +2240,40 @@ public sealed record ReceiverStatus
     public IReadOnlyList<string> ParseWarnings { get; init; }
 }
 ```
+
+> **⚠ Amended 28 Aug 2026 (#245): `DeviceTimeIsProvisional` added.** The clock row may carry a
+> power-up marker — `(?)` on this unit, `[?]` in the Z3801A user guide's Figure 3-1 — between the
+> time and the date:
+>
+> ```
+>                    PRN  El  Az                GPS      05:10:04 (?) 12 Jan 2007
+> ```
+>
+> The guide defines it as *"the default power-up setting … corrected when the first satellite is
+> tracked"*. The parser previously could not match the row at all, dropped the time, and then
+> reported that **no clock row existed** — sending a reader of §11.1's `ParseWarnings` to look for a
+> line sitting in front of them.
+>
+> **The flag is why the marker is not merely tolerated.** The two known examples show how far apart a
+> marked time can be from the truth:
+>
+> | source | printed | truth |
+> |---|---|---|
+> | captured from this unit | `05:10:04 (?) 12 Jan 2007` | right to the minute — the oscillator held time across the power cycle |
+> | Z3801A guide, Figure 3-1 | `12:00:00[?] 01 JAN 1996` | a default, arbitrarily wrong |
+>
+> Nothing on the screen distinguishes them, so parsing the value while discarding the marker would
+> convert a knowable caveat into a silent inaccuracy — **worse than refusing the row**, which is what
+> the code did before. It is distinct from `OnePpsClockAdvisory`, which describes the 1 PPS *signal*
+> and is read from the `GPS 1PPS …` line two rows below; this is a property of the time-of-day
+> reading. It is also independent of `WeekRolloverEpochs`: a provisional time still gets §7.4's
+> correction applied on top, and a power-up screen has **both** caveats in force at once, which is
+> why §10.3 and §10.2 show them as two badges rather than one.
+>
+> The same pass taught the pattern the **year-first date order** the 58503A and Z3801A manuals print
+> — `GPS 03:56:44 1994 DEC 01` — against the `d MMM yyyy` every screen captured from this unit uses.
+> Latent on this hardware, and exactly the cross-model difference §11.1's header-relative parsing
+> exists to survive.
 
 `ParseWarnings` is surfaced in Diagnostics so field reports about odd firmware revisions are actionable.
 
