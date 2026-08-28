@@ -59,6 +59,9 @@ public sealed class DeviceSessionService : IAsyncDisposable
     private LineProtocol? _protocol;
     private CancellationTokenSource? _sessionCts;
     private Task? _pump;
+
+    /// <summary>Wakes the backoff wait when Retry now or Stop retrying is pressed (#248).</summary>
+    private volatile CancellationTokenSource? _retryNow;
     private int _consecutiveTimeouts;
     private bool _disposed;
 
@@ -134,6 +137,57 @@ public sealed class DeviceSessionService : IAsyncDisposable
     /// Whether a dropped link is retried. Corresponds to "Reconnect automatically" in §10.12.
     /// </summary>
     public bool StayConnected { get; set; } = true;
+
+    /// <summary>
+    /// When the next reconnect attempt is due, or <see langword="null"/> when none is scheduled.
+    /// </summary>
+    /// <remarks>
+    /// §9.11's Connection-lost row asks for a countdown — "Lost the connection to COM3. Retrying in
+    /// 4 seconds." — which needs the schedule, not just the fact of retrying. Exposed as the instant
+    /// rather than the remaining seconds so the caller can tick it against its own clock without
+    /// this class raising an event per second (#248).
+    /// </remarks>
+    public DateTimeOffset? NextRetryAt { get; private set; }
+
+    /// <summary>Tries again now instead of waiting out the backoff (§9.11's <b>Retry now</b>).</summary>
+    /// <remarks>
+    /// Wakes the wait rather than starting a second attempt, so the schedule keeps one attempt in
+    /// flight at a time. Does nothing unless a reconnect is actually waiting — pressing it during
+    /// the attempt itself should not queue another.
+    /// </remarks>
+    public void RetryNow() => _retryNow?.Cancel();
+
+    /// <summary>
+    /// Stops retrying and leaves the link faulted (§9.11's <b>Stop retrying</b>).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Faulted rather than Disconnected, and the distinction is §9.11's: <c>Disconnected</c> is a
+    /// state the user chose for the <i>link</i>, and offers "Choose a port". This is the user
+    /// declining to keep <i>retrying</i> a link that dropped underneath them, which is still a
+    /// fault — the receiver is not there, and saying "not connected, choose a port" would suggest
+    /// the port was the problem.
+    /// </para>
+    /// <para>
+    /// <see cref="StayConnected"/> is deliberately left alone. It is the §10.12 preference
+    /// "Reconnect automatically", and one press of a button in one outage must not silently rewrite
+    /// a setting that governs every future one.
+    /// </para>
+    /// </remarks>
+    public void StopRetrying()
+    {
+        if (Status != ConnectionStatus.Reconnecting)
+        {
+            return;
+        }
+
+        NextRetryAt = null;
+        SetStatus(ConnectionStatus.Faulted, "Stopped retrying.");
+
+        // Wakes the backoff wait so the loop sees the status change now rather than up to thirty
+        // seconds later, still calling itself Reconnecting to anything that asks.
+        _retryNow?.Cancel();
+    }
 
     /// <summary>Opens the port with the given settings and synchronises the protocol.</summary>
     /// <returns>True when the receiver answered.</returns>
@@ -573,7 +627,28 @@ public sealed class DeviceSessionService : IAsyncDisposable
 
             try
             {
-                await Task.Delay(backoff, _timeProvider, CancellationToken.None).ConfigureAwait(false);
+                // Published before the wait so the banner can count down against it, and waited
+                // through a source Retry now can cancel (#248). Cancelling it is not a failure —
+                // it means somebody pressed the button, and the attempt simply happens now.
+                using (CancellationTokenSource wake = new())
+                {
+                    _retryNow = wake;
+                    NextRetryAt = _timeProvider.GetUtcNow() + backoff;
+
+                    try
+                    {
+                        await Task.Delay(backoff, _timeProvider, wake.Token).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        // Retry now, or Stop retrying. The loop condition below settles which.
+                    }
+                    finally
+                    {
+                        _retryNow = null;
+                        NextRetryAt = null;
+                    }
+                }
 
                 await _lifecycle.WaitAsync().ConfigureAwait(false);
                 try
