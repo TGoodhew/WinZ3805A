@@ -146,11 +146,35 @@ Needs satellites on the plot, so it goes with section 5 rather than standing alo
 is a property of the *file*, which is why none of it is in CI — the rendering path leaves no trace in
 source that a script could check.
 
-- **Save image, in all three themes.** Light and Dark are app-mode settings and safe to drive.
-  **High contrast needs a human**, and specifically needs a scheme configured first: this machine's
-  `High Contrast Scheme` reads empty, which is the one state the standing rule says not to enter —
-  a mode you cannot prove you can leave. Set a scheme in Settings → Accessibility → Contrast themes
-  before running this leg, and turn it back off from the same page. The export is deliberately
+- **Save image, in all three themes.** Light and Dark are app-mode settings and safe to drive from a
+  script. High contrast is a whole-desktop change and takes minutes to apply and undo, so it wants a
+  person who is not using the machine — but it is **not unsafe**, and an empty `High Contrast Scheme`
+  is **not** a reason to skip it. That was asserted once, on 28 Aug, and was wrong: the reversibility
+  round trip was performed from exactly that baseline.
+
+  **All three legs passed on 28 Aug 2026**, measured rather than eyeballed:
+
+  | Theme | Corner colour | Matches | Non-opaque samples |
+  |---|---|---|---|
+  | Light | `#F3F3F3` | `WzPageBackgroundFallbackBrush` | 0 |
+  | Dark | `#202020` | same token, Dark | 0 |
+  | High contrast (Desert) | `#FFFAEF` | live `GetSysColor(COLOR_WINDOW)` | 0 |
+
+  Pick **Desert** for this leg specifically. Its cream `#FFFAEF` is distinct from both the Light and
+  Dark page backgrounds, so a matching corner proves the flatten resolved the *high-contrast* token
+  rather than coincidentally agreeing with one of the others. Night sky would not: its window colour
+  is `#202020`, which is also the Dark fallback, and the check would pass either way.
+
+  Also confirm the plot is not painted in the surface colour — the #218 failure. Count
+  `SystemColorWindowTextColor` pixels inside the plot region; 3,303 were present against 862,623 of
+  window colour on 28 Aug. All seven `WzSequential*` steps resolve to window text under high
+  contrast, so signal strength is carried by **marker area alone** there. That is intended, and it is
+  why §10.5 scales area with C/N rather than relying on the ramp.
+
+  Two traps when driving it from a script: `Start-Process -ArgumentList` **splits an unquoted scheme
+  name into three arguments** and the script fails without changing anything, and the `-Off` path
+  **substitutes and persists** `High Contrast White` into a scheme that was empty — clear it back by
+  hand and read it back, or the baseline is quietly wrong afterwards. The export is deliberately
   not theme-substituted, so each one produces a different and correct file; what is being checked is
   that none of them produces an **illegible** one. Under high contrast in particular, confirm the
   markers are not the window colour — that was #218's whole failure mode, and an exported PNG is
