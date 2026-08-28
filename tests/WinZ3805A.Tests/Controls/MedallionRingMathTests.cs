@@ -177,4 +177,31 @@ public class MedallionRingMathTests
 
         Assert.Equal(glyphs.Length, glyphs.Distinct(StringComparer.Ordinal).Count());
     }
+    // -------------------------------------------------------------------------------------
+    // Glyph size (#48)
+    // -------------------------------------------------------------------------------------
+
+    /// <summary>§10.3's wireframe figure comes back exactly at the size it was drawn for.</summary>
+    /// <remarks>
+    /// §10.3 states one number — "glyph 56 px" inside a 160 px medallion — and a ratio is only
+    /// defensible if it reproduces it. The glyph previously had no FontSize at all and inherited
+    /// the body size, rendering about 12 px.
+    /// </remarks>
+    [Fact]
+    public void TheGlyphIsTheSizeTheWireframeDraws() =>
+        Assert.Equal(56.0, MedallionRingMath.GlyphSize(160), 3);
+
+    /// <summary>The other §9.10.2 diameters follow the same proportion.</summary>
+    /// <remarks>
+    /// Kept as a ratio so a medallion size added later cannot arrive without a glyph size. Under
+    /// high contrast the glyph is the only non-textual carrier of severity, so "it scales with the
+    /// medallion" is the property that matters rather than any one pair (#48).
+    /// </remarks>
+    [Theory]
+    [InlineData(64, 22.4)]
+    [InlineData(96, 33.6)]
+    [InlineData(160, 56.0)]
+    public void TheGlyphScalesWithTheMedallion(double diameter, double expected) =>
+        Assert.Equal(expected, MedallionRingMath.GlyphSize(diameter), 3);
+
 }

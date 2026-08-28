@@ -51,6 +51,8 @@ public sealed class StatusMedallion : Control
 {
     private const string RingPart = "PART_Ring";
     private const string PlainRingPart = "PART_PlainRing";
+    private const string GlyphPart = "Glyph";
+
 
     /// <summary>What fraction of the radius the sparkline band occupies.</summary>
     private const double BandFraction = 0.16;
@@ -203,7 +205,13 @@ public sealed class StatusMedallion : Control
         double diameter = (double)(int)Size;
         Width = diameter;
         Height = diameter;
+
+        if (GetTemplateChild(GlyphPart) is TextBlock glyph)
+        {
+            glyph.FontSize = MedallionRingMath.GlyphSize(diameter);
+        }
     }
+
 
     /// <remarks>
     /// Always without transitions. §9.8.2 gives severity changes <c>WzDurationInstant</c>, and a
