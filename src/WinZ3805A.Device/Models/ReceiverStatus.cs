@@ -198,7 +198,14 @@ public sealed record ReceiverStatus
     /// <summary>Present holdover uncertainty, in seconds.</summary>
     public double? HoldoverPresentSeconds { get; init; }
 
-    /// <summary>How long the receiver has been in holdover.</summary>
+    /// <summary>How long the receiver has been in holdover <i>and recovery</i>, together.</summary>
+    /// <remarks>
+    /// Not "how long since the signal was lost", though it is easy to read it that way. The Z3801A
+    /// guide states twice that this is "the cumulative duration of holdover and recovery
+    /// operations", so the counter keeps running after the antenna is reconnected and only stops
+    /// when lock is regained. What it measures is how long the outputs have been degraded, which is
+    /// the question a user actually has.
+    /// </remarks>
     public TimeSpan? HoldoverDuration { get; init; }
 
     // ---- ACQUISITION --------------------------------------------------------------------------

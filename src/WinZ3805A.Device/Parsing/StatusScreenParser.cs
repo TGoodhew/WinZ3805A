@@ -121,12 +121,12 @@ public sealed partial class StatusScreenParser(TimeProvider timeProvider)
             HoldoverPredictedSeconds = FindScaledValue(lines, HoldoverPredictPattern(), UnitScale.Seconds),
             HoldoverPresentSeconds = FindScaledValue(lines, HoldoverPresentPattern(), UnitScale.Seconds),
 
-            // HoldoverDuration is deliberately left unset. No captured screen shows a receiver in
-            // holdover, so the label it prints the elapsed time under is unknown, and guessing a
-            // format here would produce a field that silently never populates. The scalar
-            // :SYNC:HOLD:DUR? answers the same question and DeviceSessionService already polls it;
-            // fill this in from the screen once a holdover fixture exists (§11.1's eight states).
-            HoldoverDuration = null,
+            // Read from the screen since 28 Aug 2026, when pulling the antenna produced the
+            // holdover fixture this was waiting for. The label is "Holdover Duration:" and it
+            // shares a line with the present uncertainty:
+            //
+            //     Holdover Duration:  0m 03s   Present  1.0 us
+            HoldoverDuration = FindHoldoverDuration(lines),
 
             GpsOnePpsValid = gpsOnePpsValid,
             Tracked = tracked,
@@ -637,6 +637,19 @@ public sealed partial class StatusScreenParser(TimeProvider timeProvider)
                 continue;
             }
 
+            // The mode row is excluded for the same reason and was found the same way. In holdover
+            // it reads ">> Holdover: GPS 1PPS invalid", which this pattern matches and then runs to
+            // the end of the line, taking the reference-outputs panel with it — the 28 Aug fixture
+            // produced the advisory 'invalid HOLD THR 1.000 us', warned that it was unrecognised,
+            // and never reached the real advisory two panels below.
+            //
+            // Only holdover puts that phrase on the mode row, which is why five earlier fixtures
+            // and §11.3's own tests all passed.
+            if (line.TrimStart().StartsWith(">>", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
             Match match = ClockAdvisoryPattern().Match(line);
             if (!match.Success)
             {
@@ -899,6 +912,48 @@ public sealed partial class StatusScreenParser(TimeProvider timeProvider)
     /// which is how it went unnoticed until there were screens that were not.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Reads how long the receiver has been degraded, or null if the screen does not say.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>This counts holdover and recovery together.</b> The Z3801A guide says so twice — "the
+    /// duration that the Receiver has been operating in holdover (and recovery)", and "the
+    /// cumulative duration of holdover and recovery operations". So it keeps running after the
+    /// antenna is reconnected, until lock is regained, and a caller must not present it as "time
+    /// since the signal was lost" once the receiver has moved on to recovery.
+    /// </para>
+    /// <para>
+    /// Null when absent rather than <see cref="TimeSpan.Zero"/>, which is the same distinction
+    /// <c>HoldoverViewModel</c> already draws: a dash says the screen did not report it, and a zero
+    /// would claim no time has passed.
+    /// </para>
+    /// </remarks>
+    private static TimeSpan? FindHoldoverDuration(string[] lines)
+    {
+        foreach (string line in lines)
+        {
+            Match match = HoldoverDurationPattern().Match(line);
+            if (!match.Success)
+            {
+                continue;
+            }
+
+            // Every group is digits the pattern matched, so none of these can fail; the unmatched
+            // optional groups yield zero rather than throwing.
+            static int Part(Group group) =>
+                group.Success ? int.Parse(group.Value, CultureInfo.InvariantCulture) : 0;
+
+            return new TimeSpan(
+                Part(match.Groups["days"]),
+                Part(match.Groups["hours"]),
+                Part(match.Groups["minutes"]),
+                Part(match.Groups["seconds"]));
+        }
+
+        return null;
+    }
+
     private static PositionQualifier ParsePositionQualifier(string[] lines)
     {
         foreach (string line in lines)
@@ -1190,6 +1245,29 @@ public sealed partial class StatusScreenParser(TimeProvider timeProvider)
 
     [GeneratedRegex(@"\bPresent\s+(?<value>[-+]?[\d.]+)\s*(?<unit>ps|ns|us|µs|μs|ms|s)\b", RegexOptions.IgnoreCase)]
     private static partial Regex HoldoverPresentPattern();
+
+    /// <summary>
+    /// The elapsed-holdover row, as <c>Holdover Duration:  0m 03s</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Minutes and seconds are required because both the captured screen and the Z3801A guide's
+    /// Figure 3-4 print them, and neither pads the minutes. Hours and days are accepted ahead of
+    /// them but <b>not</b> confirmed: no capture has run long enough to show what this prints past
+    /// an hour, so the leading groups are a tolerance rather than a claim. If a long holdover ever
+    /// turns out to print something else, this returns null and the field reads as a dash, which is
+    /// the §11.1 behaviour and not a regression.
+    /// </para>
+    /// <para>
+    /// The row shares its line with <c>Present  1.0 us</c>, whose unit ends in <c>s</c>. Matching
+    /// left to right from the label consumes the duration and stops before reaching it.
+    /// </para>
+    /// </remarks>
+    [GeneratedRegex(
+        @"\bHoldover\s+Duration:\s*(?:(?<days>\d+)\s*d\s+)?(?:(?<hours>\d+)\s*h\s+)?" +
+        @"(?<minutes>\d+)\s*m\s+(?<seconds>\d+)\s*s\b",
+        RegexOptions.IgnoreCase)]
+    private static partial Regex HoldoverDurationPattern();
 
     [GeneratedRegex(@"\bANT\s+DLY\s+(?<value>[-+]?[\d.]+)\s*(?<unit>ps|ns|us|µs|μs|ms|s)\b", RegexOptions.IgnoreCase)]
     private static partial Regex AntennaDelayPattern();

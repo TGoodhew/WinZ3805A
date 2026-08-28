@@ -698,6 +698,139 @@ public class StatusScreenParserTests
         Assert.Contains(status.ParseWarnings, w => w.Contains("No clock row was found", StringComparison.Ordinal));
     }
 
+    // -------------------------------------------------------------------------------------
+    // Holdover, captured 28 Aug 2026 by disconnecting the antenna (#4, #185)
+    // -------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// When the holdover screen was taken, from its own clock row corrected by the §7.4 rollover.
+    /// </summary>
+    private static readonly DateTimeOffset s_holdoverInstant = new(2026, 8, 28, 15, 52, 54, TimeSpan.Zero);
+
+    private static ReceiverStatus ParseHoldoverFixture() =>
+        ParserAt(s_holdoverInstant).Parse(
+            string.Join("\r\n", ReadFixtureLines("captured/holdover-gps-1pps-invalid.txt")));
+
+    /// <summary>The fourth SmartClock mode, and the last one the corpus was missing a screen for.</summary>
+    /// <remarks>
+    /// The receiver reports the reason in the mode line itself — <c>Holdover: GPS 1PPS invalid</c> —
+    /// which is the same shape as <c>Locked to GPS: stabilizing frequency</c>, so the detail is the
+    /// text after the colon and must not swallow the reference-outputs panel beside it.
+    /// </remarks>
+    [Fact]
+    public void TheHoldoverScreenParses()
+    {
+        ReceiverStatus status = ParseHoldoverFixture();
+
+        Assert.Equal(SmartClockMode.Holdover, status.Mode);
+        Assert.Equal("GPS 1PPS invalid", status.ModeDetail);
+        Assert.DoesNotContain("HOLD THR", status.ModeDetail);
+
+        // Outputs are still valid-but-reduced: holdover degrades them, it does not invalidate them
+        // until the phase error passes HOLD THR.
+        Assert.Equal(OutputValidity.ValidReduced, status.Outputs);
+        Assert.Equal(3, status.Tfom);
+        Assert.Equal(2, status.Ffom);
+
+        Assert.False(status.GpsOnePpsValid);
+        Assert.Empty(status.Tracked);
+        Assert.Equal(9, status.NotTracked.Count);
+
+        // Nothing is being attempted, because there is no antenna to attempt it with. Distinct from
+        // the power-up screens, where five of ten carry the asterisk.
+        Assert.DoesNotContain(status.NotTracked, s => s.AttemptingToTrack);
+
+        // No tracked satellites means no signal-strength column and so no scale to name.
+        Assert.Equal(SignalStrengthKind.Unknown, status.SignalStrengthKind);
+
+        Assert.True(status.HealthOk);
+        Assert.Empty(status.ParseWarnings);
+    }
+
+    /// <summary>The two holdover-uncertainty figures, neither of which had ever been read.</summary>
+    /// <remarks>
+    /// <para>
+    /// <c>HoldoverPresentSeconds</c> existed on the model and in the view models and had never once
+    /// been populated from a real screen, because no captured screen showed a receiver in holdover.
+    /// The row is <c>Holdover Duration:  0m 03s   Present  1.0 us</c> — both values on one line,
+    /// sharing it with each other.
+    /// </para>
+    /// <para>
+    /// <c>Predict</c> is 6.8 µs here against 432 µs on the screens taken the evening before. It is a
+    /// prediction over the next 24 hours and the receiver revises it as it characterises the
+    /// oscillator, so the two are not in conflict and neither is wrong.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void TheHoldoverScreenReportsBothUncertainties()
+    {
+        ReceiverStatus status = ParseHoldoverFixture();
+
+        Assert.Equal(1e-6, status.HoldThresholdSeconds!.Value, 12);
+        Assert.Equal(6.8e-6, status.HoldoverPredictedSeconds!.Value, 12);
+        Assert.Equal(1e-6, status.HoldoverPresentSeconds!.Value, 12);
+
+        // "1PPS TI --" with no antenna: absent, and null rather than zero.
+        Assert.Null(status.OnePpsTiNanoseconds);
+    }
+
+    /// <summary>The elapsed time the parser used to leave unset for want of a screen showing one.</summary>
+    /// <remarks>
+    /// <para>
+    /// <c>HoldoverDuration</c> was deliberately hard-coded to null with a comment saying the label
+    /// was unknown and guessing the format would produce a field that silently never populates. The
+    /// label is <c>Holdover Duration:</c> and the format is <c>0m 03s</c> — minutes unpadded,
+    /// seconds padded to two digits.
+    /// </para>
+    /// <para>
+    /// Three seconds because the harness polls every three and caught the transition almost at once.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void TheHoldoverScreenReportsHowLongItHasBeenDegraded() =>
+        Assert.Equal(TimeSpan.FromSeconds(3), ParseHoldoverFixture().HoldoverDuration);
+
+    /// <summary>The mode row is not mistaken for the 1 PPS advisory.</summary>
+    /// <remarks>
+    /// <b>Only holdover can trigger this</b>, which is why five earlier fixtures and §11.3's own
+    /// tests all passed. In holdover the mode row reads <c>&gt;&gt; Holdover: GPS 1PPS invalid</c>,
+    /// which the advisory pattern matches and then runs to the end of the line — taking the
+    /// reference-outputs panel beside it. Before the fix this fixture produced the advisory
+    /// <c>'invalid HOLD THR 1.000 us'</c>, warned that it was unrecognised, and never reached the
+    /// real advisory two panels below. §11.3 has the UI branching on this value, so <c>Other</c>
+    /// here is not a cosmetic loss.
+    /// </remarks>
+    [Fact]
+    public void TheModeRowIsNotMistakenForTheAdvisory()
+    {
+        ReceiverStatus status = ParseHoldoverFixture();
+
+        // From "GPS 1PPS Invalid: not tracking", the real advisory line.
+        Assert.Equal(ClockAdvisory.InaccurateNotTracking, status.OnePpsClockAdvisory);
+        Assert.DoesNotContain(status.ParseWarnings, w => w.Contains("advisory", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>Holdover still holds a position, and it is the one the overnight survey produced.</summary>
+    /// <remarks>
+    /// Worth asserting because it is the evidence that the survey took: these coordinates are the
+    /// backyard position the receiver adopted at 00:10, not the rack position every fixture taken
+    /// before the survey carries.
+    /// </remarks>
+    [Fact]
+    public void TheHoldoverScreenHoldsTheSurveyedPosition()
+    {
+        ReceiverStatus status = ParseHoldoverFixture();
+
+        Assert.Equal(PositionMode.Hold, status.PositionMode);
+        Assert.Equal(PositionQualifier.Unknown, status.PositionQualifier);
+        Assert.Equal(HeightDatum.Msl, status.HeightDatum);
+        Assert.Equal(25.20, status.Position!.HeightMetres!.Value, 6);
+
+        // N 47:31:18.582 — the surveyed position, against 47:31:18.822 on every pre-survey screen.
+        Assert.Equal(47.521828, status.Position.LatitudeDegrees!.Value, 6);
+        Assert.Equal(-122.206137, status.Position.LongitudeDegrees!.Value, 6);
+    }
+
     /// <summary>
     /// Reads a fixture as the device wrote it. Latin-1 because it never substitutes, and an explicit
     /// CRLF split because the file is committed with <c>-text</c> and must not depend on the
