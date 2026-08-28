@@ -1,6 +1,10 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
+// Aliased: Windows.ApplicationModel also declares AppInstance, and the two are unrelated. The
+// AppLifecycle one is the Windows App SDK redirection API; the other is the old UWP multi-instance
+// type, which does not redirect.
+using AppInstance = Microsoft.Windows.AppLifecycle.AppInstance;
 
 using Windows.ApplicationModel;
 
@@ -15,6 +19,9 @@ namespace WinZ3805A;
 /// </summary>
 public partial class App : Application
 {
+    /// <summary>Identifies this application to <c>AppInstance</c>, so two launches meet (#46).</summary>
+    private const string SingleInstanceKey = "WinZ3805A.MainInstance";
+
     private ServiceProvider? _services;
     private Window? _window;
 
@@ -58,6 +65,24 @@ public partial class App : Application
     /// <param name="args">Details about the launch request and process.</param>
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
+        // §9.14's OQ-D5, resolved 28 Aug 2026: one instance in v1 (#46).
+        //
+        // Enforced rather than assumed, because the two were not the same thing. A second launch
+        // used to open a second window that could never get the serial port - one process holds it,
+        // and the other would show a receiver that is present, connected to nothing, with no
+        // explanation. Redirecting hands the activation to the running instance and brings it
+        // forward, which is what the user asking for the app a second time actually wanted.
+        //
+        // §12 is untouched by this: it requires DeviceSessionService to be instantiable per device
+        // and resolvable from a keyed registration with no static state, and it still is. This is a
+        // decision about windows, not about architecture, and P2-1's multi-receiver work does not
+        // have to undo it.
+        if (RedirectToRunningInstance())
+        {
+            Exit();
+            return;
+        }
+
         _services = Compose();
 
         _window = new MainWindow(_services);
@@ -72,6 +97,46 @@ public partial class App : Application
 
         ApplyAccent();
         StartTrayIcon();
+    }
+
+    /// <summary>
+    /// Hands this activation to an already-running instance, if there is one.
+    /// </summary>
+    /// <returns>True when another instance took it and this one should exit.</returns>
+    /// <remarks>
+    /// <para>
+    /// The key is a fixed string rather than anything derived from the port or the user, so two
+    /// launches always meet at the same instance. <c>FindOrRegisterForKey</c> is atomic — whichever
+    /// process gets there first becomes the owner and every later one is told so.
+    /// </para>
+    /// <para>
+    /// Failures are swallowed deliberately. If the API is unavailable the worst case is the old
+    /// behaviour, a second window that cannot open the port, and that is a great deal better than
+    /// refusing to start at all because a single-instance check threw.
+    /// </para>
+    /// </remarks>
+    private static bool RedirectToRunningInstance()
+    {
+        try
+        {
+            AppInstance current = AppInstance.FindOrRegisterForKey(SingleInstanceKey);
+            if (current.IsCurrent)
+            {
+                return false;
+            }
+
+            current.RedirectActivationToAsync(AppInstance.GetCurrent().GetActivatedEventArgs())
+                .AsTask()
+                .GetAwaiter()
+                .GetResult();
+
+            return true;
+        }
+        catch (Exception)
+        {
+            // See the remarks: starting is more important than being the only one.
+            return false;
+        }
     }
 
     /// <summary>
