@@ -148,6 +148,8 @@
              Link="Services\PowerUpGuard.cs" />
     <Compile Include="..\..\src\WinZ3805A\ViewModels\CommandConfirmationViewModel.cs"
              Link="ViewModels\CommandConfirmationViewModel.cs" />
+    <Compile Include="..\..\src\WinZ3805A\ViewModels\PositionFieldBounds.cs"
+             Link="ViewModels\PositionFieldBounds.cs" />
     <Compile Include="..\..\src\WinZ3805A\ViewModels\RangeValidation.cs"
              Link="ViewModels\RangeValidation.cs" />
     <Compile Include="..\..\src\WinZ3805A\ViewModels\RegisterMaskEdit.cs"
