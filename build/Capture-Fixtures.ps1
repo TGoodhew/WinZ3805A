@@ -251,6 +251,57 @@ function Get-ScreenFacts {
     }
 }
 
+<#
+.SYNOPSIS
+    What makes one captured screen a different STATE from another.
+.DESCRIPTION
+    Mode, synchronization, acquisition and health. Deliberately not the satellite count or any
+    reading: those change every poll and would make every screen a new state, which is the failure
+    this whole harness is built to avoid.
+#>
+function Get-Signature {
+    param([object] $Facts)
+    return '{0}|{1}|{2}|{3}' -f $Facts.Mode, $Facts.Sync, $Facts.Acquisition, $Facts.Health
+}
+
+<#
+.SYNOPSIS
+    Seeds the seen-set from screens already on disk.
+.DESCRIPTION
+    The seen-set is in memory, so before this the harness re-captured every state it had already
+    written the moment it was restarted — and it gets restarted, because a sitting is long and the
+    port has to be handed to the application and back. On 27 Aug that produced three duplicate
+    files, each removed by hand, each one a chance to delete the wrong one.
+
+    Reads each screen back and asks the same question of it that the capture loop asks of a live
+    one, so a file written by an older run is recognised by what it CONTAINS rather than by what it
+    was named. That matters: the slug comes from the mode alone, so two genuinely different states
+    can want the same name and be told apart only by their signature.
+#>
+function Initialize-Seen {
+    param([string] $Directory)
+
+    if (-not (Test-Path $Directory)) { return }
+
+    foreach ($file in @(Get-ChildItem -LiteralPath $Directory -Filter '*.txt' -File -ErrorAction SilentlyContinue)) {
+        try {
+            $bytes = [System.IO.File]::ReadAllBytes($file.FullName)
+            if ($bytes.Length -lt 200) { continue }
+
+            $facts = Get-ScreenFacts -Screen $bytes
+            $signature = Get-Signature -Facts $facts
+            if (-not $script:seen.ContainsKey($signature)) {
+                $script:seen[$signature] = $true
+            }
+        }
+        catch {
+            # A file that will not parse is not a reason to refuse to start. The worst case is one
+            # duplicate capture, which is what this function exists to reduce rather than to promise.
+            continue
+        }
+    }
+}
+
 function Get-Slug {
     param([object] $Facts)
 
@@ -371,9 +422,11 @@ if ($SelfTest) {
 
     Write-Host 'Discrimination' -ForegroundColor White
 
+    # Delegates to the real one: a self-test that reimplements what it is testing proves only that
+    # the copy agrees with itself.
     function Signature {
         param([object] $F)
-        return '{0}|{1}|{2}|{3}' -f $F.Mode, $F.Sync, $F.Acquisition, $F.Health
+        return Get-Signature -Facts $F
     }
 
     function Mutate {
@@ -423,6 +476,38 @@ if ($SelfTest) {
     $blank = Get-ScreenFacts -Screen ($ascii.GetBytes("nothing useful here`r`n"))
     Assert-True 'a screen with no >> marker still yields a usable name' ((Get-Slug -Facts $blank) -eq 'unknown-mode') (Get-Slug -Facts $blank)
 
+    # -----------------------------------------------------------------------
+    # 5. A restart does not re-capture what is already on disk.
+    # -----------------------------------------------------------------------
+
+    Write-Host 'Restart safety' -ForegroundColor White
+
+    $scratch = Join-Path ([System.IO.Path]::GetTempPath()) ("wz-seen-" + [System.Guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $scratch -Force | Out-Null
+    try {
+        [System.IO.File]::WriteAllBytes((Join-Path $scratch 'one.txt'), $screen)
+        [System.IO.File]::WriteAllBytes((Join-Path $scratch 'two.txt'), (Mutate '>> Locked to GPS' '>> Holdover      '))
+
+        # A log, a readme and a short file all sit in that folder in real use and none is a screen.
+        Set-Content -LiteralPath (Join-Path $scratch 'capture-log.md') -Value 'not a screen'
+        Set-Content -LiteralPath (Join-Path $scratch 'tiny.txt') -Value 'too short to be a screen'
+
+        $script:seen = @{}
+        Initialize-Seen -Directory $scratch
+
+        Assert-True 'two screens on disk seed two states' ($script:seen.Count -eq 2) $script:seen.Count
+        Assert-True 'a state already on disk is recognised' ($script:seen.ContainsKey((Get-Signature -Facts $facts)))
+        Assert-True 'a state NOT on disk is not' (-not $script:seen.ContainsKey((Get-Signature -Facts $sick)))
+
+        $script:seen = @{}
+        Initialize-Seen -Directory (Join-Path $scratch 'does-not-exist')
+        Assert-True 'a missing output directory is not an error' ($script:seen.Count -eq 0) $script:seen.Count
+    }
+    finally {
+        $script:seen = @{}
+        Remove-Item -LiteralPath $scratch -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
     Write-Host ''
     if ($failures -gt 0) {
         Write-Host ("{0} check(s) failed. Do not rely on this harness until they pass." -f $failures) -ForegroundColor Red
@@ -437,10 +522,15 @@ if ($SelfTest) {
 # Watch.
 # ---------------------------------------------------------------------------
 
+Initialize-Seen -Directory $OutputDirectory
+
 Write-Host ''
 Write-Host 'Capturing status-screen fixtures for #4. Reads only - nothing is sent that writes.' -ForegroundColor Cyan
 Write-Host ("  port      {0} at {1}-8-N-1" -f $script:port, $BaudRate)
 Write-Host ("  output    {0}" -f $OutputDirectory)
+if ($script:seen.Count -gt 0) {
+    Write-Host ("  already   {0} state(s) recognised on disk - these will not be captured again" -f $script:seen.Count)
+}
 Write-Host '  stop      Ctrl+C, once the receiver has settled again'
 Write-Host ''
 Write-Host 'Losing the receiver is expected here. Pull the antenna, cut the power, move it,' -ForegroundColor DarkGray
@@ -473,7 +563,7 @@ try {
             if ($screen.Length -lt 200) { throw 'short read' }
 
             $facts = Get-ScreenFacts -Screen $screen
-            $signature = '{0}|{1}|{2}|{3}' -f $facts.Mode, $facts.Sync, $facts.Acquisition, $facts.Health
+            $signature = Get-Signature -Facts $facts
 
             if ($script:seen.ContainsKey($signature)) {
                 Write-Host ("{0}  {1,-34} tracking {2}   (seen)" -f `
