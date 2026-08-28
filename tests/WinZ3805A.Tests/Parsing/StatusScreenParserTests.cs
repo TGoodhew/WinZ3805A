@@ -707,9 +707,9 @@ public class StatusScreenParserTests
     /// </summary>
     private static readonly DateTimeOffset s_holdoverInstant = new(2026, 8, 28, 15, 52, 54, TimeSpan.Zero);
 
-    private static ReceiverStatus ParseHoldoverFixture() =>
-        ParserAt(s_holdoverInstant).Parse(
-            string.Join("\r\n", ReadFixtureLines("captured/holdover-gps-1pps-invalid.txt")));
+    private static ReceiverStatus ParseHoldoverFixture(
+        string name = "captured/holdover-gps-1pps-invalid.txt") =>
+        ParserAt(s_holdoverInstant).Parse(string.Join("\r\n", ReadFixtureLines(name)));
 
     /// <summary>The fourth SmartClock mode, and the last one the corpus was missing a screen for.</summary>
     /// <remarks>
@@ -786,9 +786,35 @@ public class StatusScreenParserTests
     /// Three seconds because the harness polls every three and caught the transition almost at once.
     /// </para>
     /// </remarks>
-    [Fact]
-    public void TheHoldoverScreenReportsHowLongItHasBeenDegraded() =>
-        Assert.Equal(TimeSpan.FromSeconds(3), ParseHoldoverFixture().HoldoverDuration);
+    /// <remarks>
+    /// <b>Two screens, and the second is why there are two.</b> The field is right-aligned in a
+    /// fixed width, so a short holdover prints <c>&#32;0m 03s</c> and a longer one <c>11m 34s</c> —
+    /// minutes unpadded and able to be two digits, seconds always padded to two. A parser written
+    /// against the first alone could have sliced fixed columns and passed. The second was captured
+    /// by hand 11m34s into the same holdover, because it has the same state signature and the
+    /// harness would never have taken it.
+    /// </remarks>
+    [Theory]
+    [InlineData("captured/holdover-gps-1pps-invalid.txt", 0, 3)]
+    [InlineData("captured/holdover-gps-1pps-invalid-deep.txt", 11, 34)]
+    public void TheHoldoverScreenReportsHowLongItHasBeenDegraded(string name, int minutes, int seconds) =>
+        Assert.Equal(
+            new TimeSpan(0, minutes, seconds),
+            ParseHoldoverFixture(name).HoldoverDuration);
+
+    /// <summary>The present uncertainty does not move between the two, which is worth pinning.</summary>
+    /// <remarks>
+    /// Both screens report <c>Present  1.0 us</c> — at three seconds and at eleven and a half
+    /// minutes — sitting exactly on the 1.000 µs hold threshold. So at the resolution the receiver
+    /// prints, this figure does not distinguish a fresh holdover from a long one, and a UI that
+    /// showed it as a live measure of degradation would be reading more into it than it carries.
+    /// Recorded as an observation about the instrument, not as a parser requirement.
+    /// </remarks>
+    [Theory]
+    [InlineData("captured/holdover-gps-1pps-invalid.txt")]
+    [InlineData("captured/holdover-gps-1pps-invalid-deep.txt")]
+    public void ThePresentUncertaintyIsTheSameOnBothHoldoverScreens(string name) =>
+        Assert.Equal(1e-6, ParseHoldoverFixture(name).HoldoverPresentSeconds!.Value, 12);
 
     /// <summary>The mode row is not mistaken for the 1 PPS advisory.</summary>
     /// <remarks>
@@ -829,6 +855,126 @@ public class StatusScreenParserTests
         // N 47:31:18.582 — the surveyed position, against 47:31:18.822 on every pre-survey screen.
         Assert.Equal(47.521828, status.Position.LatitudeDegrees!.Value, 6);
         Assert.Equal(-122.206137, status.Position.LongitudeDegrees!.Value, 6);
+    }
+
+    // -------------------------------------------------------------------------------------
+    // Recovery, and the state between it and holdover (#4, #185)
+    // -------------------------------------------------------------------------------------
+
+    /// <summary>When the reconnect screens were taken, from their own clock rows.</summary>
+    private static readonly DateTimeOffset s_recoveryInstant = new(2026, 8, 28, 16, 9, 57, TimeSpan.Zero);
+
+    private static ReceiverStatus ParseRecoveryFixture(string name) =>
+        ParserAt(s_recoveryInstant).Parse(string.Join("\r\n", ReadFixtureLines(name)));
+
+    /// <summary>Recovery — the fourth SmartClock mode, and the last one the corpus lacked.</summary>
+    /// <remarks>
+    /// Captured by reconnecting the antenna after twelve minutes of holdover. The receiver passes
+    /// through recovery on its way back to lock, so it exists only in this window and cannot be
+    /// reached by waiting.
+    /// </remarks>
+    [Fact]
+    public void TheRecoveryScreenParses()
+    {
+        ReceiverStatus status = ParseRecoveryFixture("captured/recovery-fine-freq-adj.txt");
+
+        Assert.Equal(SmartClockMode.Recovery, status.Mode);
+        Assert.Equal("fine freq adj", status.ModeDetail);
+        Assert.Equal(OutputValidity.ValidReduced, status.Outputs);
+        Assert.Equal(3, status.Tfom);
+        Assert.Equal(2, status.Ffom);
+
+        Assert.True(status.GpsOnePpsValid);
+        Assert.Equal(7, status.Tracked.Count);
+        Assert.Equal(2, status.NotTracked.Count);
+        Assert.Equal(ClockAdvisory.SynchronizedToUtc, status.OnePpsClockAdvisory);
+        Assert.Equal(-17.9, status.OnePpsTiNanoseconds!.Value, 10);
+
+        Assert.True(status.HealthOk);
+        Assert.Empty(status.ParseWarnings);
+    }
+
+    /// <summary>A mode row may annotate itself with a bracketed figure, which is not part of the detail.</summary>
+    /// <remarks>
+    /// <para>
+    /// Both screens that report <c>fine freq adj</c> carry one, in different modes and with
+    /// different signs:
+    /// </para>
+    /// <code>
+    /// &gt;&gt; Recovery: fine freq adj   [TI  -17.0 ns]   1PPS TI -17.9 ns relative to GPS
+    /// &gt;&gt; Power-up: fine freq adj   [TI +108.5 ns]   Holdover Uncertainty ____________
+    /// </code>
+    /// <para>
+    /// So the detail has a bracketed value to its right as well as the panel beyond it, and a detail
+    /// of "fine freq adj [TI -17.0 ns]" is the failure this guards against. On the recovery screen
+    /// the two figures differ — the bracket is the receiver's own adjustment reading, the panel is
+    /// the 1 PPS time interval — so they are not interchangeable, and only the panel one is parsed
+    /// into <c>OnePpsTiNanoseconds</c>.
+    /// </para>
+    /// </remarks>
+    [Theory]
+    [InlineData("captured/recovery-fine-freq-adj.txt")]
+    [InlineData("captured/power-up-fine-freq-adj.txt")]
+    public void AModeDetailStopsBeforeItsBracketedFigure(string name)
+    {
+        ReceiverStatus status = ParseRecoveryFixture(name);
+
+        Assert.Equal("fine freq adj", status.ModeDetail);
+        Assert.DoesNotContain("TI", status.ModeDetail);
+        Assert.DoesNotContain("[", status.ModeDetail);
+    }
+
+    /// <summary>Holdover with the satellites already back: the mode and the signal are independent.</summary>
+    /// <remarks>
+    /// Captured fourteen seconds before the recovery screen. The antenna is reconnected, seven
+    /// satellites are tracked and the acquisition banner reads <c>GPS 1PPS Valid</c> — but the
+    /// receiver is still in holdover, because regaining the signal and leaving holdover are separate
+    /// events. Anything deriving "is the 1 PPS usable" from the SmartClock mode alone gets this
+    /// state wrong, and it is the only screen in the corpus that shows the two disagreeing.
+    /// </remarks>
+    [Fact]
+    public void HoldoverWithTheSignalBackIsStillHoldover()
+    {
+        ReceiverStatus status = ParseRecoveryFixture("captured/holdover-gps-1pps-invalid-3.txt");
+
+        Assert.Equal(SmartClockMode.Holdover, status.Mode);
+        Assert.True(status.GpsOnePpsValid);
+        Assert.Equal(6, status.Tracked.Count);
+        Assert.Equal(ClockAdvisory.SynchronizedToUtc, status.OnePpsClockAdvisory);
+
+        // Still no 1 PPS time interval: the receiver is not yet steering to GPS.
+        Assert.Null(status.OnePpsTiNanoseconds);
+        Assert.Empty(status.ParseWarnings);
+    }
+
+    /// <summary>The duration counts holdover and recovery together, as the guide says it does.</summary>
+    /// <remarks>
+    /// <para>
+    /// The Z3801A guide states twice that this is "the cumulative duration of holdover and recovery
+    /// operations". These three screens show it, on the hardware, across the transition:
+    /// </para>
+    /// <code>
+    /// 09:09:45  Holdover  16m 52s   signal back, 6 tracked
+    /// 09:09:59  Recovery  17m 06s   7 tracked
+    /// </code>
+    /// <para>
+    /// The counter does not reset when the antenna is reconnected and does not stop when the mode
+    /// changes. So a caller must not label it "time since signal loss" — by the recovery screen the
+    /// signal had been back for over a minute. What it measures is how long the outputs have been
+    /// degraded.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void TheDurationKeepsCountingFromHoldoverIntoRecovery()
+    {
+        TimeSpan inHoldover =
+            ParseRecoveryFixture("captured/holdover-gps-1pps-invalid-3.txt").HoldoverDuration!.Value;
+        TimeSpan inRecovery =
+            ParseRecoveryFixture("captured/recovery-fine-freq-adj.txt").HoldoverDuration!.Value;
+
+        Assert.Equal(new TimeSpan(0, 16, 52), inHoldover);
+        Assert.Equal(new TimeSpan(0, 17, 6), inRecovery);
+        Assert.True(inRecovery > inHoldover, "the counter must not reset on leaving holdover");
     }
 
     /// <summary>
