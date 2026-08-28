@@ -52,7 +52,13 @@ public sealed partial class CommandOutcomeBar : InfoBar
     /// sentence comes from the catalog and says the command ran; only the caller knows how to read
     /// the number that came back, so it appends rather than replaces.
     /// </param>
-    public void Show(CommandOutcome? outcome, string? detail = null)
+    /// <param name="failureHint">
+    /// What the user can <i>do</i>, for the failures where that is known and is not obvious from the
+    /// receiver's own words. Separate from <paramref name="detail"/> rather than sharing it, because
+    /// the two apply to opposite outcomes: a query's answer is meaningless on a command that failed,
+    /// and advice is noise on one that worked.
+    /// </param>
+    public void Show(CommandOutcome? outcome, string? detail = null, string? failureHint = null)
     {
         _dismiss.Stop();
 
@@ -62,9 +68,9 @@ public sealed partial class CommandOutcomeBar : InfoBar
             return;
         }
 
-        Message = string.IsNullOrWhiteSpace(detail) || !outcome.Succeeded
-            ? outcome.Message
-            : $"{outcome.Message} {detail}";
+        Message = outcome.Succeeded
+            ? (string.IsNullOrWhiteSpace(detail) ? outcome.Message : $"{outcome.Message} {detail}")
+            : (string.IsNullOrWhiteSpace(failureHint) ? outcome.Message : $"{outcome.Message} {failureHint}");
         Severity = outcome.Succeeded ? InfoBarSeverity.Success : InfoBarSeverity.Error;
         Title = outcome.Succeeded ? string.Empty : outcome.Command.DisplayName;
         IsOpen = true;
