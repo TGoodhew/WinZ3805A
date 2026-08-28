@@ -491,6 +491,43 @@ public sealed partial class DetailsWindow : Window
         StatusPill.PortName = _device.Session.Status == ConnectionStatus.Disconnected
             ? null
             : _device.Session.PortName;
+
+        RenderConnectionBanner();
+    }
+
+    /// <summary>Shows §9.11's banner below the title bar when there is no link (#252).</summary>
+    /// <remarks>
+    /// The pill above says <i>which</i> state this is; the banner says what to do about it, which
+    /// §9.11 asks for only when the window would otherwise be a page of dashes with no explanation.
+    /// What it says is <see cref="ConnectionBanner"/>'s decision — see there for why that is not
+    /// made in this method or in the markup.
+    /// </remarks>
+    private void RenderConnectionBanner()
+    {
+        ConnectionBannerState banner = ConnectionBanner.For(_device.Session.Status);
+
+        // Rebuilt rather than mutated, for the reason CommandOutcomeBar clears its own action on
+        // every show: the bar is reused across states, and an action left behind from one belongs to
+        // a sentence that is no longer on screen.
+        ConnectionBar.ActionButton = null;
+
+        if (!banner.IsOpen)
+        {
+            ConnectionBar.IsOpen = false;
+            return;
+        }
+
+        ConnectionBar.Severity = banner.IsError ? InfoBarSeverity.Error : InfoBarSeverity.Informational;
+        ConnectionBar.Message = banner.Message;
+
+        if (banner.ActionLabel is string label)
+        {
+            Button action = new() { Content = label };
+            action.Click += OnStatusPillClicked;
+            ConnectionBar.ActionButton = action;
+        }
+
+        ConnectionBar.IsOpen = true;
     }
 
     /// <remarks>
