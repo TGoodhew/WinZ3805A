@@ -46,7 +46,14 @@
             </Grid>
 
             <!-- ================================ Sky plot =============================== -->
-            <Border Style="{ThemeResource WzCardStyle}">
+
+            <!--
+                Named because it is the unit #47 exports. The capture is this Border and everything
+                inside it, which is why the card carries an opaque Background from WzCardStyle - a
+                PNG of a transparent subtree is legible in whichever viewer happens to composite it
+                over the right colour, and unreadable in the rest.
+            -->
+            <Border x:Name="SkyCard" Style="{ThemeResource WzCardStyle}">
                 <StackPanel Spacing="{ThemeResource WzSpaceSm}">
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -79,6 +86,16 @@
                                          GroupName="SkyView"
                                          Content="List"
                                          Checked="OnSkyViewChanged" />
+
+                            <!--
+                                Text rather than an icon. §9.9's icon-only rule would be satisfied by
+                                a name and a tooltip, but "export" has no glyph a user reads without
+                                hovering, and this sits beside two labelled radio buttons where a
+                                lone symbol would look like a third view rather than an action.
+                            -->
+                            <Button x:Name="ExportImageButton"
+                                    Content="Save image"
+                                    Click="OnExportImageClicked" />
                         </StackPanel>
                     </Grid>
 
@@ -162,6 +179,24 @@
                                Foreground="{ThemeResource WzTextTertiaryBrush}"
                                TextWrapping="Wrap"
                                MaxWidth="{ThemeResource WzProseMaxWidth}" />
+
+                    <!--
+                        Present in the export and nowhere else. It is made visible for the duration
+                        of the render and collapsed again immediately, because a picture filed as a
+                        calibration record has to say when it was taken and under what mask, and the
+                        screen does not - the page footer already carries the age, and repeating it
+                        permanently inside the card would be a second staleness readout disagreeing
+                        with the first one.
+
+                        WzTextSecondaryBrush rather than tertiary: tertiary measured 3.28:1 in Light
+                        (#176) and this line is the part of the image a reader is most likely to be
+                        squinting at in a printout.
+                    -->
+                    <TextBlock x:Name="SkyPlotCaptionText"
+                               Style="{ThemeResource WzCaptionTextStyle}"
+                               Foreground="{ThemeResource WzTextSecondaryBrush}"
+                               TextWrapping="Wrap"
+                               Visibility="Collapsed" />
                 </StackPanel>
             </Border>
 

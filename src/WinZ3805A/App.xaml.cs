@@ -1,6 +1,13 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using System.Runtime.InteropServices;
+
 using Microsoft.UI.Xaml;
+// Aliased: Windows.ApplicationModel also declares AppInstance, and the two are unrelated. The
+// AppLifecycle one is the Windows App SDK redirection API; the other is the old UWP multi-instance
+// type, which does not redirect.
+using AppActivationArguments = Microsoft.Windows.AppLifecycle.AppActivationArguments;
+using AppInstance = Microsoft.Windows.AppLifecycle.AppInstance;
 
 using Windows.ApplicationModel;
 
@@ -15,6 +22,22 @@ namespace WinZ3805A;
 /// </summary>
 public partial class App : Application
 {
+    /// <summary>Lets any process take the foreground from this one - <c>ASFW_ANY</c> (#46).</summary>
+    private const uint AsfwAny = unchecked((uint)-1);
+
+    /// <summary>Releases this process's claim on the foreground so the running instance can take it.</summary>
+    /// <remarks>
+    /// <c>DllImport</c> rather than <c>LibraryImport</c>, for the same reason <c>TrayIcon</c> gives:
+    /// the generated form requires <c>AllowUnsafeBlocks</c> across the whole project, which is a
+    /// large thing to switch on for one call taking a single integer.
+    /// </remarks>
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool AllowSetForegroundWindow(uint processId);
+
+    /// <summary>Identifies this application to <c>AppInstance</c>, so two launches meet (#46).</summary>
+    private const string SingleInstanceKey = "WinZ3805A.MainInstance";
+
     private ServiceProvider? _services;
     private Window? _window;
 
@@ -58,11 +81,35 @@ public partial class App : Application
     /// <param name="args">Details about the launch request and process.</param>
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
+        // §9.14's OQ-D5, resolved 28 Aug 2026: one instance in v1 (#46).
+        //
+        // Enforced rather than assumed, because the two were not the same thing. A second launch
+        // used to open a second window that could never get the serial port - one process holds it,
+        // and the other would show a receiver that is present, connected to nothing, with no
+        // explanation. Redirecting hands the activation to the running instance and brings it
+        // forward, which is what the user asking for the app a second time actually wanted.
+        //
+        // §12 is untouched by this: it requires DeviceSessionService to be instantiable per device
+        // and resolvable from a keyed registration with no static state, and it still is. This is a
+        // decision about windows, not about architecture, and P2-1's multi-receiver work does not
+        // have to undo it.
+        if (RedirectToRunningInstance())
+        {
+            Exit();
+            return;
+        }
+
         _services = Compose();
 
         _window = new MainWindow(_services);
         _window.Closed += OnMainWindowClosed;
         _window.Activate();
+
+        // The other half of #46. Redirecting an activation delivers it here and does nothing else -
+        // without this the second launch exits silently and the user, who just double-clicked the
+        // icon, sees nothing happen at all. That is a worse experience than the second window it
+        // replaced, because at least a useless window was evidence the click registered.
+        AppInstance.GetCurrent().Activated += OnRedirectedActivation;
 
         // Started here rather than by a page: P1-9's whole point is telling a user who is not
         // looking, and a notifier that only ran while some page was open would be off exactly when
@@ -72,6 +119,70 @@ public partial class App : Application
 
         ApplyAccent();
         StartTrayIcon();
+    }
+
+    /// <summary>
+    /// Answers a launch that was redirected here by a second process (#46).
+    /// </summary>
+    /// <remarks>
+    /// Marshalled onto the UI thread: the event arrives on a thread pool thread, and touching a
+    /// <c>Window</c> from one is the kind of fault that appears as an occasional crash on someone
+    /// else's machine rather than as a failure here.
+    /// </remarks>
+    private void OnRedirectedActivation(object? sender, AppActivationArguments args) =>
+        _window?.DispatcherQueue.TryEnqueue(() =>
+        {
+            if (_window is MainWindow main)
+            {
+                main.BringToFront();
+            }
+        });
+
+    /// <summary>
+    /// Hands this activation to an already-running instance, if there is one.
+    /// </summary>
+    /// <returns>True when another instance took it and this one should exit.</returns>
+    /// <remarks>
+    /// <para>
+    /// The key is a fixed string rather than anything derived from the port or the user, so two
+    /// launches always meet at the same instance. <c>FindOrRegisterForKey</c> is atomic — whichever
+    /// process gets there first becomes the owner and every later one is told so.
+    /// </para>
+    /// <para>
+    /// Failures are swallowed deliberately. If the API is unavailable the worst case is the old
+    /// behaviour, a second window that cannot open the port, and that is a great deal better than
+    /// refusing to start at all because a single-instance check threw.
+    /// </para>
+    /// </remarks>
+    private static bool RedirectToRunningInstance()
+    {
+        try
+        {
+            AppInstance current = AppInstance.FindOrRegisterForKey(SingleInstanceKey);
+            if (current.IsCurrent)
+            {
+                return false;
+            }
+
+            // Foreground rights belong to this process, which the shell just launched, and not to
+            // the one that will actually show a window. Handing them over is the difference between
+            // the running instance coming forward and its taskbar button flashing orange behind
+            // whatever the user was looking at. ASFW_ANY because the owner's process id is not
+            // knowable from here - AppInstance exposes no handle - and the alternative is to guess.
+            _ = AllowSetForegroundWindow(AsfwAny);
+
+            current.RedirectActivationToAsync(AppInstance.GetCurrent().GetActivatedEventArgs())
+                .AsTask()
+                .GetAwaiter()
+                .GetResult();
+
+            return true;
+        }
+        catch (Exception)
+        {
+            // See the remarks: starting is more important than being the only one.
+            return false;
+        }
     }
 
     /// <summary>

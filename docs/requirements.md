@@ -692,6 +692,32 @@ Mapping to stock WinUI resources rather than redefining them is deliberate: it m
 
 **Strategy: brand accent by default, system accent as an explicit opt-in** (Settings → Appearance → "Use my Windows accent colour", default off).
 
+> **⚠ Amended 28 Aug 2026 (#45, OQ-D4 resolved).** The accent is **kept**: `#0E7C86`. OQ-D4 recorded the
+> constraint to preserve as "≥ 60° hue separation from Windows blue and from every semantic colour"
+> **without naming a colour space**, and the answer depends entirely on which one is meant:
+>
+> | Accent vs | HSV | **CIE LCH** |
+> |---|---|---|
+> | Windows blue `#0078D4` | 21° | **68°** |
+> | `WzSuccess` light `#0F7B3C` | 40° | **61°** |
+> | `WzSuccess` dark `#4CC38A` | 34° | **51°** |
+> | `WzCaution`, `WzCritical` | 149–175° | 134–178° |
+>
+> **The separation is measured in CIE LCH**, which is the perceptual space and the one consistent with
+> §9.4.4's use of ΔE₀₀ elsewhere in this document. Under HSV the constraint reads as failed against
+> three colours; under LCH it holds against everything except `WzSuccess` in the dark theme, at 51°.
+>
+> **That one shortfall is accepted rather than overlooked.** The accent and the semantic palette never
+> carry the same meaning — accent marks the safe thing to do next (§9.7.4), severity marks instrument
+> state — and §9.4.3 requires severity to render as colour **plus shape plus text** everywhere it
+> appears, so nothing depends on hue alone to separate them. §9.4.4's series-separation gate already
+> enforces clearance between the *chart* palette and the severity colours, which is where a hue
+> collision would actually mislead.
+>
+> Recorded because the figure was unmeasurable as written: a constraint stated in degrees with no
+> space named cannot be checked, and the next person choosing a colour would have had this argument
+> again from the start.
+
 Rationale, and this is a hard constraint rather than a preference: the semantic palette (§9.4.3) must remain unambiguous. A user whose Windows accent is red would otherwise get an app where "selected navigation item" and "critical alarm" are the same colour. When the opt-in is enabled, the app substitutes `SystemAccentColor*` into the ramp **and** shows a one-time `TeachingTip` if the resolved accent falls within ΔE₀₀ < 20 of `WzCritical` or `WzCaution`, offering to revert. Semantic brushes are never derived from accent under any setting.
 
 | Token key | Light theme | Dark theme | Use |
@@ -1339,9 +1365,9 @@ The implementation must avoid these. Each is reviewable.
 | **OQ-D1** | Does WinUI 3 expose `Microsoft.UI.Xaml.Documents.Typography.NumeralAlignment` as an attached property on `TextBlock`? UWP does; WinUI 3 parity needs confirming. | Assumed available. Fallback if not: Segoe UI Variable's lining figures are near-tabular, so combine fixed-width containers (§9.5.3 rule 2) with right alignment — visually equivalent for readouts, slightly worse mid-sentence. **Verify in a spike before building `ReadoutTile`.** | Engineering | Blocks `ReadoutTile` |
 | **OQ-D2** | Is embedding Cascadia Mono in the MSIX acceptable to the product owner given the ~700 KB package increase? | Assumed yes; OFL 1.1 permits it and Windows 10 cannot be relied on to have it. Alternative is Consolas-only, which is less refined but zero cost. | Product | No |
 | **OQ-D3** | Should the medallion ring show 1 PPS TI, or EFC? TI is the more diagnostic signal for loop behaviour; EFC is the better long-term ageing indicator but barely moves minute to minute. | Assumed **TI**, since the medallion serves the two-second glance and EFC is well served by the Overview trend chart. Worth a user check. | Product | No |
-| **OQ-D4** | Does the brand teal read as "medical device" to any reviewer? It was chosen for distance from Windows blue and from all four semantic hues. | Assumed acceptable. If rejected, the constraint to preserve is: **≥ 60° hue separation from Windows blue and from every semantic colour**, not the specific value. | Product | No |
-| **OQ-D5** | Should the main window support Windows 11 Snap layouts and multi-instance for users with several receivers? | Assumed single instance, standard snap only, in v1. §12 requires the architecture stay multi-device-ready (P2-1). | Product | No |
-| **OQ-D6** | Does `SkyPlotControl` need a printable/exportable form for calibration records? | Assumed not in v1. Export is CSV only (§10.5, §10.7). | Product | No |
+| **OQ-D4** | Does the brand teal read as "medical device" to any reviewer? It was chosen for distance from Windows blue and from all four semantic hues. | **Resolved 28 Aug 2026: keep `#0E7C86`.** The ≥ 60° separation is measured in **CIE LCH**, which §9.4.2 now states — it was unmeasurable as written. | Product | No |
+| **OQ-D5** | Should the main window support Windows 11 Snap layouts and multi-instance for users with several receivers? | **Resolved 28 Aug 2026: single instance, and now *enforced* (#46).** A second launch redirects to the running one instead of opening a window that can never hold the port. §12 is untouched — this is about windows, not architecture. | Product | No |
+| **OQ-D6** | Does `SkyPlotControl` need a printable/exportable form for calibration records? | **Resolved 28 Aug 2026: yes — image export ships in v1 (#47).** This *overturns* the recorded assumption. A CSV of azimuth and elevation is not a record of what the sky looked like, and an obstruction argument is made with a picture. See §10.4. | Product | No |
 | **OQ-D7** | High-contrast rendering of the medallion ring loses the severity colour channel, leaving glyph and label to carry state. Is that sufficient, or should the ring change stroke *pattern* (solid / dashed / dotted) by severity in HC? | Assumed glyph plus label is sufficient, matching how the rest of the app behaves in HC. Pattern-coding is the fallback if user testing disagrees. | Design | No |
 
 ---
@@ -1535,6 +1561,32 @@ Health items map from `:STAT:OPER:HARD:COND?` where bit meanings are known, and 
   > **⚠ Corrected 21 Aug 2026 (#116).** This line previously read "colour green ≥ 40, amber 35–39, red < 35". That is the semantic triple — `WzSuccessBrush` / `WzCautionBrush` / `WzCriticalBrush` — and §9.4.4 forbids reusing semantic tokens for charting in its opening sentence, with the reason: *a trace coloured `WzCriticalBrush` implies an alarm that is not being asserted*. A C/N of 34 is an ordinary satellite low in the sky; painting it the red the medallion uses for a lost lock asserts a fault nobody raised. §9.10.2 already specified the sequential ramp for this control, so two sections agreed against one, and both of those gave a reason. Appendix A records §10 being "reconciled" when §9 was added; this reads as a line missed in that pass.
 - Data comes exclusively from `:SYST:STAT?` parsing (§11) — there is no per-satellite query.
 - **Manage…** opens a dialog listing PRN 1–32 with include/ignore toggles, backed by `:GPS:SAT:TRAC:IGNore` / `:INCLude`. All writes are tier C.
+- **Save image** writes the sky card — plot, heading, and the selection line — to a PNG the user names.
+
+  > **⚠ Added 28 Aug 2026 (#47, OQ-D6 resolved).** OQ-D6 assumed no image export in v1, on the basis
+  > that "export is CSV only". **That assumption is overturned**: it answered a different question
+  > than the one asked. A CSV of azimuth, elevation and signal strength is a table; a calibration
+  > record wants evidence of *what the sky looked like from this antenna*, and the argument #185
+  > settled — a rack mean of 1.94 satellites against a backyard mean of 6.59 — is not one anybody
+  > makes with a spreadsheet.
+  >
+  > Three properties are normative rather than incidental:
+  >
+  > 1. **The capture is the live card**, rendered through `RenderTargetBitmap` over the element
+  >    already on screen. Not a second renderer — a separate drawing path for export is free to
+  >    disagree with the one the user reviewed, and a record that differs from the screen it claims
+  >    to record is worse than no record.
+  > 2. **The image carries a caption the screen does not**: product name, capture time **in UTC**,
+  >    tracked and predicted counts, and the elevation mask in force. The mask is not decoration —
+  >    the same sky under a 10° mask and a 25° mask produces two legitimate plots with different
+  >    satellites missing, so a record omitting it cannot be compared with anything.
+  > 3. **No theme substitution.** The export is whatever theme the user is in, high contrast
+  >    included, where the colours are the user's own choices and this application has no standing to
+  >    replace them. §9.4.3's colour + shape + text encoding is what keeps a greyscale printout
+  >    readable, so nothing is lost by declining to force a light theme.
+  >
+  > Offered only while the plot has satellites on it: an empty export is a picture of three rings,
+  > which reads as a working antenna seeing nothing rather than as a receiver that is not connected.
 
 ### 10.6 Position page
 
