@@ -457,6 +457,182 @@ public class StatusScreenParserTests
         Assert.Equal(271, fifteen.AzimuthDegrees);
     }
 
+    // -------------------------------------------------------------------------------------
+    // The four states captured on the 27 Aug 2026 backyard sitting (#4, #185)
+    // -------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// When the sitting captured its screens. Distinct from <see cref="s_captureInstant"/> because
+    /// the §7.4 rollover correction is a function of "now", and asserting a corrected date against
+    /// the wrong instant would assert the constant rather than the arithmetic.
+    /// </summary>
+    private static readonly DateTimeOffset s_sittingInstant = new(2026, 8, 28, 5, 15, 0, TimeSpan.Zero);
+
+    private static ReceiverStatus ParseSittingFixture(string name) =>
+        ParserAt(s_sittingInstant).Parse(string.Join("\r\n", ReadFixtureLines(name)));
+
+    /// <summary>A survey in progress — the state #4 lists and the corpus had no assertions for.</summary>
+    /// <remarks>
+    /// Taken at 1.9 % of the two-hour survey that ran overnight on 27 Aug. It is the only screen in
+    /// the corpus that is not a held position, which makes it the only one exercising the survey
+    /// half of §11.2 at all.
+    /// </remarks>
+    [Fact]
+    public void TheSurveyingScreenParses()
+    {
+        ReceiverStatus status = ParseSittingFixture("captured/surveying-locked-to-gps-stabilizing-frequency.txt");
+
+        Assert.Equal(SmartClockMode.Locked, status.Mode);
+        Assert.Equal("stabilizing frequency", status.ModeDetail);
+        Assert.Equal(OutputValidity.ValidReduced, status.Outputs);
+        Assert.Equal(4, status.Tfom);
+        Assert.Equal(1, status.Ffom);
+
+        Assert.Equal(-22.9, status.OnePpsTiNanoseconds!.Value, 10);
+        Assert.Equal(1e-6, status.HoldThresholdSeconds!.Value, 12);
+        Assert.Equal(432e-6, status.HoldoverPredictedSeconds!.Value, 12);
+
+        Assert.True(status.GpsOnePpsValid);
+        Assert.Equal(8, status.Tracked.Count);
+        Assert.Equal(2, status.NotTracked.Count);
+        Assert.Equal(10, status.ElevationMaskDegrees);
+        Assert.Equal(SignalStrengthKind.CarrierToNoise, status.SignalStrengthKind);
+        Assert.Equal(77, status.AntennaDelayNanoseconds);
+
+        // The survey, which is the point of this fixture.
+        Assert.Equal(PositionMode.Survey, status.PositionMode);
+        Assert.Equal(1.9, status.SurveyPercentComplete);
+        Assert.Equal(SurveySuspendedReason.None, status.SurveySuspendedReason);
+
+        // AVG LAT / AVG LON / AVG HGT: a running average, not a held position.
+        Assert.Equal(PositionQualifier.Average, status.PositionQualifier);
+        Assert.Equal(HeightDatum.Msl, status.HeightDatum);
+        Assert.Equal(30.47, status.Position!.HeightMetres);
+
+        Assert.True(status.HealthOk);
+        Assert.Equal(6, status.HealthItems.Count);
+        Assert.All(status.HealthItems, item => Assert.True(item.Value));
+        Assert.Empty(status.ParseWarnings);
+    }
+
+    /// <summary>The week rollover, checked against a screen whose real capture time is known.</summary>
+    /// <remarks>
+    /// The receiver printed <c>12 Jan 2007</c>; the screen was taken at about 22:12 on 27 Aug 2026
+    /// Pacific, which is 05:12 UTC on the 28th. One 1024-week epoch is the whole correction, and the
+    /// minutes and seconds have to survive it — the strongest rollover evidence in the corpus,
+    /// because the truth is independently known from the application log.
+    /// </remarks>
+    [Fact]
+    public void TheSurveyingScreensRolledOverDateIsCorrected()
+    {
+        ReceiverStatus status = ParseSittingFixture("captured/surveying-locked-to-gps-stabilizing-frequency.txt");
+
+        Assert.Equal(TimeScale.Utc, status.TimeScale);
+        Assert.Equal(new DateTimeOffset(2007, 1, 12, 5, 12, 20, TimeSpan.Zero), status.DeviceDateTime);
+        Assert.Equal(1, status.WeekRolloverEpochs);
+        Assert.Equal(new DateTimeOffset(2026, 8, 28, 5, 12, 20, TimeSpan.Zero), status.CorrectedDateTime);
+        Assert.Equal(ClockAdvisory.SynchronizedToUtc, status.OnePpsClockAdvisory);
+    }
+
+    /// <summary>Power-up, which has no clock yet and must say so rather than inventing one.</summary>
+    /// <remarks>
+    /// <b>The fixture that exercises §11.1 hardest.</b> A receiver seconds from cold has no time row
+    /// on the screen at all, so the date, the time scale and the 1 PPS reading are all genuinely
+    /// absent. The requirement is that they come back null and the reason is recorded — not that the
+    /// parse fails, and not that a plausible value is manufactured.
+    /// </remarks>
+    [Fact]
+    public void ThePowerUpScreenParsesWithoutAClock()
+    {
+        ReceiverStatus status = ParseSittingFixture("captured/power-up-fine-freq-adj.txt");
+
+        Assert.Equal(SmartClockMode.PowerUp, status.Mode);
+        Assert.Equal("fine freq adj", status.ModeDetail);
+        Assert.Equal(OutputValidity.Invalid, status.Outputs);
+        Assert.Equal(9, status.Tfom);
+        Assert.Equal(3, status.Ffom);
+
+        // Absent, and null rather than zero - a 1 PPS offset of 0 ns would read as a perfect lock.
+        Assert.Null(status.OnePpsTiNanoseconds);
+        Assert.Null(status.DeviceDateTime);
+        Assert.Null(status.CorrectedDateTime);
+        Assert.Equal(TimeScale.Unknown, status.TimeScale);
+
+        // And the reason is surfaced rather than swallowed - §11.1 puts ParseWarnings in Diagnostics
+        // precisely so an odd firmware revision is actionable instead of merely quiet.
+        Assert.Contains(status.ParseWarnings, w => w.Contains("clock row", StringComparison.OrdinalIgnoreCase));
+
+        // The survey the power cycle started, three tenths of a per cent in (#229).
+        Assert.Equal(PositionMode.Survey, status.PositionMode);
+        Assert.Equal(0.3, status.SurveyPercentComplete);
+        Assert.Equal(PositionQualifier.Average, status.PositionQualifier);
+
+        Assert.Equal(8, status.Tracked.Count);
+        Assert.Equal(2, status.NotTracked.Count);
+        Assert.True(status.HealthOk);
+    }
+
+    /// <summary>Full lock with nine satellites, the best state the sitting reached.</summary>
+    [Fact]
+    public void TheFullyLockedScreenParses()
+    {
+        ReceiverStatus status = ParseSittingFixture("captured/locked-to-gps.txt");
+
+        Assert.Equal(SmartClockMode.Locked, status.Mode);
+        Assert.True(string.IsNullOrEmpty(status.ModeDetail));
+        Assert.Equal(OutputValidity.Valid, status.Outputs);
+        Assert.Equal(3, status.Tfom);
+        Assert.Equal(0, status.Ffom);
+        Assert.Equal(49.8, status.OnePpsTiNanoseconds!.Value, 10);
+
+        Assert.Equal(9, status.Tracked.Count);
+        Assert.Equal(2, status.NotTracked.Count);
+
+        // Still the rack position: taken before the survey ran, so the receiver was holding a
+        // position surveyed indoors while its antenna was already outside.
+        Assert.Equal(PositionMode.Hold, status.PositionMode);
+        Assert.Null(status.SurveyPercentComplete);
+        Assert.Equal(PositionQualifier.Unknown, status.PositionQualifier);
+        Assert.Equal(38.0, status.Position!.HeightMetres);
+    }
+
+    /// <summary>Locked but still stabilizing, the state the sitting spent longest in.</summary>
+    [Fact]
+    public void TheStabilizingScreenParses()
+    {
+        ReceiverStatus status = ParseSittingFixture("captured/locked-to-gps-stabilizing-frequency.txt");
+
+        Assert.Equal(SmartClockMode.Locked, status.Mode);
+        Assert.Equal("stabilizing frequency", status.ModeDetail);
+
+        // The distinction the medallion turns on: locked, but not yet at full accuracy.
+        Assert.Equal(OutputValidity.ValidReduced, status.Outputs);
+        Assert.Equal(3, status.Tfom);
+        Assert.Equal(1, status.Ffom);
+        Assert.Equal(-20.9, status.OnePpsTiNanoseconds!.Value, 10);
+
+        Assert.Equal(8, status.Tracked.Count);
+        Assert.Equal(PositionMode.Hold, status.PositionMode);
+        Assert.Equal(PositionQualifier.Unknown, status.PositionQualifier);
+    }
+
+    /// <summary>A held position and a surveyed average are told apart on every captured screen.</summary>
+    /// <remarks>
+    /// The regression this pins is specific. The qualifier was matched by a parenthesised word —
+    /// <c>(Average)</c> — which the documented form uses and this receiver never prints; it prefixes
+    /// the label instead, as <c>AVG LAT</c>. Both surveying fixtures therefore read as having no
+    /// qualifier, losing the one distinction the field exists to draw, on the only two screens in
+    /// the corpus that draw it.
+    /// </remarks>
+    [Theory]
+    [InlineData("captured/surveying-locked-to-gps-stabilizing-frequency.txt", PositionQualifier.Average)]
+    [InlineData("captured/power-up-fine-freq-adj.txt", PositionQualifier.Average)]
+    [InlineData("captured/locked-to-gps.txt", PositionQualifier.Unknown)]
+    [InlineData("captured/locked-to-gps-stabilizing-frequency.txt", PositionQualifier.Unknown)]
+    [InlineData("locked-stabilizing.txt", PositionQualifier.Unknown)]
+    public void AnAveragedPositionIsDistinguishedFromAHeldOne(string fixtureName, PositionQualifier expected) =>
+        Assert.Equal(expected, ParseSittingFixture(fixtureName).PositionQualifier);
+
     /// <summary>
     /// Reads a fixture as the device wrote it. Latin-1 because it never substitutes, and an explicit
     /// CRLF split because the file is committed with <c>-text</c> and must not depend on the

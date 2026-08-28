@@ -854,11 +854,29 @@ public sealed partial class StatusScreenParser(TimeProvider timeProvider)
     }
 
     /// <summary>
-    /// Reads the position qualifier if the screen states one.
+    /// Reads the position qualifier if the screen states one, in either form the family uses.
     /// </summary>
     /// <remarks>
-    /// A held position — the state every captured screen is in — prints no qualifier at all, so
-    /// <see cref="PositionQualifier.Unknown"/> is the ordinary result rather than a failure.
+    /// <para>
+    /// A held position prints no qualifier on this receiver, so
+    /// <see cref="PositionQualifier.Unknown"/> stays the ordinary result rather than a failure.
+    /// </para>
+    /// <para>
+    /// <b>Two forms, because the parenthesised one is not what the Z3805A prints.</b> The
+    /// documented form qualifies the value — <c>(Average)</c>, <c>(Init)</c>, <c>(Held)</c> — and is
+    /// kept for the models that use it. The SmartClock screens captured on 27 Aug 2026 qualify the
+    /// <i>label</i> instead, and only while a survey is running:
+    /// </para>
+    /// <code>
+    /// holding:    LAT      N  47:31:18.822
+    /// surveying:  AVG LAT  N  47:31:18.640
+    /// </code>
+    /// <para>
+    /// <c>AVG</c> does not match <c>Aver\w*</c>, so both surveying fixtures in the corpus read as
+    /// having no qualifier at all — the one distinction this method exists to draw, lost on the only
+    /// screens that draw it. The remark above used to say every captured screen was a held one,
+    /// which is how it went unnoticed until there were screens that were not.
+    /// </para>
     /// </remarks>
     private static PositionQualifier ParsePositionQualifier(string[] lines)
     {
@@ -872,6 +890,11 @@ public sealed partial class StatusScreenParser(TimeProvider timeProvider)
                     word.StartsWith("Init", StringComparison.OrdinalIgnoreCase) ? PositionQualifier.Init :
                     word.StartsWith("Aver", StringComparison.OrdinalIgnoreCase) ? PositionQualifier.Average :
                     PositionQualifier.Held;
+            }
+
+            if (AveragedPositionLabelPattern().IsMatch(line))
+            {
+                return PositionQualifier.Average;
             }
         }
 
@@ -1181,6 +1204,17 @@ public sealed partial class StatusScreenParser(TimeProvider timeProvider)
 
     [GeneratedRegex(@"\((?<qualifier>Init\w*|Aver\w*|Held)\)", RegexOptions.IgnoreCase)]
     private static partial Regex PositionQualifierPattern();
+
+    /// <summary>
+    /// The SmartClock family's own way of saying the position is a survey average.
+    /// </summary>
+    /// <remarks>
+    /// Anchored on the label rather than the line, because the position block shares its lines with
+    /// the satellite table — <c>AVG LAT</c> appears after eight columns of PRN, elevation and
+    /// azimuth on a screen tracking eight satellites.
+    /// </remarks>
+    [GeneratedRegex(@"\bAVG\s+(?:LAT|LON|HGT)\b", RegexOptions.IgnoreCase)]
+    private static partial Regex AveragedPositionLabelPattern();
 
     [GeneratedRegex(@"\s{2,}")]
     private static partial Regex PairSeparatorPattern();
