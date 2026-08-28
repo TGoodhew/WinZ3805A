@@ -242,11 +242,25 @@ function Get-ScreenFacts {
     $tracking = '?'
     if ($text -match 'Tracking:\s*(?<n>\d+)') { $tracking = $Matches['n'] }
 
+    # The Position MODE field, which is a state in its own right and was invisible here until
+    # 27 Aug 2026. A screen taken during a site survey differs from one taken while holding only
+    # on this line - everything the signature looked at is identical - so the harness reported
+    # "(seen)" and would never capture a survey, which is one of the states the outside sitting
+    # exists to collect. The surveying fixture in the corpus had to be taken by hand.
+    #
+    # NORMALISED, and that is the whole trick. The line reads "Survey:    1.9% complete", so
+    # carrying it verbatim would make every poll a new signature and fill the corpus with a
+    # screen a second. What is a distinct state is *that* a survey is running, not how far along.
+    $position = ''
+    if ($text -match 'MODE\s+Survey') { $position = 'Survey' }
+    elseif ($text -match 'MODE\s+Hold') { $position = 'Hold' }
+
     return [pscustomobject]@{
         Mode        = $mode
         Sync        = Get-Bracket -Lines $lines -Prefix 'SYNCHRONIZATION'
         Acquisition = Get-Bracket -Lines $lines -Prefix 'ACQUISITION'
         Health      = Get-Bracket -Lines $lines -Prefix 'HEALTH MONITOR'
+        Position    = $position
         Tracking    = $tracking
     }
 }
@@ -261,7 +275,8 @@ function Get-ScreenFacts {
 #>
 function Get-Signature {
     param([object] $Facts)
-    return '{0}|{1}|{2}|{3}' -f $Facts.Mode, $Facts.Sync, $Facts.Acquisition, $Facts.Health
+    return '{0}|{1}|{2}|{3}|{4}' -f `
+        $Facts.Mode, $Facts.Sync, $Facts.Acquisition, $Facts.Health, $Facts.Position
 }
 
 <#
@@ -313,6 +328,10 @@ function Get-Slug {
     # A failing health monitor is a state in its own right (#4) and can coincide with any
     # mode, so it qualifies the name rather than replacing it.
     if ($Facts.Health -and $Facts.Health -ne 'OK') { $slug = $slug + '-health-fail' }
+
+    # A survey qualifies the name from the front, matching the one fixture that had to be captured
+    # by hand before the harness could see this state at all.
+    if ($Facts.Position -eq 'Survey') { $slug = 'surveying-' + $slug }
 
     return $slug
 }
@@ -457,6 +476,24 @@ if ($SelfTest) {
     $moreSats = Get-ScreenFacts -Screen (Mutate 'Tracking: 1 ____' 'Tracking: 6 ____')
     Assert-True 'a changed satellite count is NOT a new state' ((Signature $moreSats) -eq $base)
     Assert-True 'though it is still read, for the log' ($moreSats.Tracking -eq '6') $moreSats.Tracking
+
+    # The Position MODE field (#242). A survey and a hold differ on this line and on nothing else
+    # the signature reads, so before it was included the harness reported "(seen)" for a surveying
+    # screen and the corpus's one surveying fixture had to be captured by hand.
+    Assert-True 'the sample screen is a receiver holding a position' ($facts.Position -eq 'Hold') $facts.Position
+
+    $surveying = Get-ScreenFacts -Screen (Mutate 'MODE     Hold' 'MODE     Survey:    1.9% complete')
+    Assert-True 'a survey is read as a survey' ($surveying.Position -eq 'Survey') $surveying.Position
+    Assert-True 'and IS a new state' ((Signature $surveying) -ne $base)
+    Assert-True 'and says so from the front of the slug' `
+        ((Get-Slug -Facts $surveying) -eq 'surveying-locked-to-gps-stabilizing-frequency') (Get-Slug -Facts $surveying)
+
+    # The percentage is deliberately normalised away. Carrying it would make every poll a new
+    # signature and write a screen a second for two hours - the same trap tracking count is kept
+    # out of the signature for, and a worse one, because a survey is exactly when it would fire.
+    $laterInTheSurvey = Get-ScreenFacts -Screen (Mutate 'MODE     Hold' 'MODE     Survey:   62.7% complete')
+    Assert-True 'a survey further along is the SAME state' `
+        ((Signature $laterInTheSurvey) -eq (Signature $surveying))
 
     # -----------------------------------------------------------------------
     # 4. Every slug is a legal file name, whatever the receiver prints.
