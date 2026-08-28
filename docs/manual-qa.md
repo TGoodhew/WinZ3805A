@@ -146,14 +146,22 @@ Needs satellites on the plot, so it goes with section 5 rather than standing alo
 is a property of the *file*, which is why none of it is in CI — the rendering path leaves no trace in
 source that a script could check.
 
-- **Save image, in all three themes.** Light, Dark, and high contrast. The export is deliberately
+- **Save image, in all three themes.** Light and Dark are app-mode settings and safe to drive.
+  **High contrast needs a human**, and specifically needs a scheme configured first: this machine's
+  `High Contrast Scheme` reads empty, which is the one state the standing rule says not to enter —
+  a mode you cannot prove you can leave. Set a scheme in Settings → Accessibility → Contrast themes
+  before running this leg, and turn it back off from the same page. The export is deliberately
   not theme-substituted, so each one produces a different and correct file; what is being checked is
   that none of them produces an **illegible** one. Under high contrast in particular, confirm the
   markers are not the window colour — that was #218's whole failure mode, and an exported PNG is
   where it would be least visible.
-- **Open the file outside the app.** A transparent background composites over whatever the viewer
-  happens to use, so it can look right in one and vanish in another. Check it in Photos and in a
-  document.
+- **Open the file outside the app.** This is the check that found the export shipping
+  semi-transparent (28 Aug): every corner measured `A=0` and the caption row `A=179`, because the
+  card fill resolves to a stock Fluent colour and stock tokens are mostly **not opaque**. It looked
+  perfect in a viewer compositing over white. The capture is now flattened onto
+  `WzPageBackgroundFallbackBrush`, so the corners should measure the page background of the theme
+  you exported in — `#F3F3F3` Light, `#202020` Dark — and nothing should be under `A=255`.
+  **Measure it; do not eyeball it.** The whole failure mode is that it looks right.
 - **Read the caption.** Time in UTC, and the elevation mask present and matching the box on the page.
   A caption that disagreed with the plot above it would be the one defect that makes the record
   actively misleading rather than merely absent.
