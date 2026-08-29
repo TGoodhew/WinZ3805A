@@ -4,6 +4,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:WinZ3805A.Controls"
+    xmlns:viewmodels="using:WinZ3805A.ViewModels"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
@@ -307,6 +308,84 @@
                                Foreground="{ThemeResource WzTextTertiaryBrush}"
                                TextWrapping="Wrap"
                                MaxWidth="{ThemeResource WzProseMaxWidth}" />
+                </StackPanel>
+            </Border>
+
+            <!-- ============================= Stability (P2-3) =========================== -->
+
+            <!--
+                #63. Allan deviation over the persisted time-interval series. The estimator is the
+                GAP-AWARE one, because trend.db follows the poll schedule rather than a clock and a
+                run either side of a gap is not adjacent - joining them invents a second difference
+                across the hole and reports a worse figure with nothing to say it did.
+
+                Rows a series cannot support are absent rather than dashed: unlike a field the
+                receiver declined to answer, a tau this data cannot speak to is not a hole in the
+                reading, and a row of dashes would imply the receiver was asked.
+            -->
+            <Border Style="{ThemeResource WzCardStyle}">
+                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}"
+                               Text="Stability (Allan deviation)" />
+
+                    <TextBlock x:Name="StabilitySummary"
+                               Style="{ThemeResource WzBodyTextStyle}"
+                               Foreground="{ThemeResource WzTextSecondaryBrush}"
+                               TextWrapping="Wrap"
+                               MaxWidth="{ThemeResource WzProseMaxWidth}" />
+
+                    <Grid x:Name="StabilityHeader" ColumnSpacing="{ThemeResource WzSpaceMd}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="120" />
+                            <ColumnDefinition Width="140" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Column="0"
+                                   Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   Text="Averaging time τ" />
+                        <TextBlock Grid.Column="1"
+                                   Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   Text="σy(τ)" />
+                        <TextBlock Grid.Column="2"
+                                   Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   Text="Differences averaged" />
+                    </Grid>
+
+                    <ItemsControl x:Name="StabilityRows">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="viewmodels:StabilityRow">
+                                <Grid ColumnSpacing="{ThemeResource WzSpaceMd}"
+                                      Padding="{ThemeResource WzSpaceXxsThickness}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="120" />
+                                        <ColumnDefinition Width="140" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock Grid.Column="0"
+                                               Style="{ThemeResource WzMonoTextStyle}"
+                                               Text="{x:Bind TauText}" />
+                                    <TextBlock Grid.Column="1"
+                                               Style="{ThemeResource WzMonoTextStyle}"
+                                               Text="{x:Bind DeviationText}" />
+
+                                    <!--
+                                        The count travels with the figure because confidence goes as
+                                        1/sqrt(N): sigma from four differences and sigma from four
+                                        thousand are different claims wearing the same digits.
+                                    -->
+                                    <TextBlock Grid.Column="2"
+                                               Style="{ThemeResource WzMonoTextStyle}"
+                                               Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                               Text="{x:Bind PairsText}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
                 </StackPanel>
             </Border>
 

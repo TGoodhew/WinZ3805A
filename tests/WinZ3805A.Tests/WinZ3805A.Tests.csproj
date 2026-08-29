@@ -118,6 +118,8 @@
              Link="Controls\SkyPlotExport.cs" />
     <Compile Include="..\..\src\WinZ3805A\ViewModels\SelfTestViewModel.cs"
              Link="ViewModels\SelfTestViewModel.cs" />
+    <Compile Include="..\..\src\WinZ3805A\ViewModels\StabilityViewModel.cs"
+             Link="ViewModels\StabilityViewModel.cs" />
 
     <!-- P1-2's durable trend history. #50's own verification is "an integration test writing and
          reloading a multi-day series", which is only possible because the store speaks SQLite and

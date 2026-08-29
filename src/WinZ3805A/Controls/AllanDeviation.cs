@@ -29,6 +29,17 @@ namespace WinZ3805A.Controls;
 /// below is what converts one to the other, so nothing here should be handed a frequency series.
 /// </para>
 /// </remarks>
+/// <summary>
+/// One point on a stability curve: the averaging time, the deviation, and how well founded it is.
+/// </summary>
+/// <param name="Tau">The averaging time τ, in seconds.</param>
+/// <param name="Deviation">σ<sub>y</sub>(τ), dimensionless.</param>
+/// <param name="Pairs">
+/// How many second differences the estimate averaged. Confidence goes roughly as 1/√N, so this is
+/// part of the reading rather than a footnote to it.
+/// </param>
+public readonly record struct AllanPoint(double Tau, double Deviation, int Pairs);
+
 public static class AllanDeviation
 {
     /// <summary>
@@ -164,6 +175,55 @@ public static class AllanDeviation
 
         double tau = averagingFactor * tau0;
         return Math.Sqrt(sum / (2.0 * used * tau * tau));
+    }
+
+    /// <summary>
+    /// The same estimate, with the number of second differences that produced it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The count is not a diagnostic, it is part of the reading.</b> The confidence of an
+    /// overlapping estimate goes roughly as 1/√N, so σ(τ) from four differences and σ(τ) from four
+    /// thousand are different claims wearing the same number of digits. A stability figure quoted
+    /// without it invites a reader to compare two values that are not comparable — which is exactly
+    /// what the longest τ on a short series looks like.
+    /// </para>
+    /// <para>
+    /// Shares its arithmetic with <see cref="Overlapping(IReadOnlyList{double}, IReadOnlyList{double}, double, int, double)"/>
+    /// rather than restating it, so the two cannot drift into disagreeing about the same series.
+    /// </para>
+    /// </remarks>
+    public static AllanPoint? Estimate(
+        IReadOnlyList<double> phase,
+        IReadOnlyList<double> seconds,
+        double tau0,
+        int averagingFactor,
+        double tolerance = 0.25)
+    {
+        if (Overlapping(phase, seconds, tau0, averagingFactor, tolerance) is not double deviation)
+        {
+            return null;
+        }
+
+        // Recounted rather than threaded out of the estimator, because the estimator's shape is
+        // what the fourteen tests around it pin. This walk is the same one and is O(n).
+        double slack = tau0 * tolerance;
+        double ignored = 0;
+        int used = 0;
+        int runStart = 0;
+
+        for (int i = 1; i <= phase.Count; i++)
+        {
+            if (i < phase.Count && StepFits(seconds, i, tau0, slack))
+            {
+                continue;
+            }
+
+            Accumulate(phase, runStart, i, averagingFactor, ref ignored, ref used);
+            runStart = i;
+        }
+
+        return new AllanPoint(averagingFactor * tau0, deviation, used);
     }
 
     /// <summary>
