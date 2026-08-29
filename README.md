@@ -201,10 +201,11 @@ dotnet test tests\WinZ3805A.Tests\WinZ3805A.Tests.csproj
 
 Fixtures are status screens captured from real hardware.
 [tests/WinZ3805A.Tests/Fixtures/README.md](tests/WinZ3805A.Tests/Fixtures/README.md)
-records their provenance and which receiver states are still missing; new
-captures from [`build/Capture-Fixtures.ps1`](build/Capture-Fixtures.ps1) land in
-[Fixtures/captured/](tests/WinZ3805A.Tests/Fixtures/captured/README.md) until
-they are promoted.
+records their provenance, which tests assert against each, and which receiver
+state is still missing; captures from
+[`build/Capture-Fixtures.ps1`](build/Capture-Fixtures.ps1) land in
+[Fixtures/captured/](tests/WinZ3805A.Tests/Fixtures/captured/README.md), where
+the tests read them in place.
 
 What neither the tests nor the gates can reach — anything that needs a person, a
 receiver, or a machine setting — is in [docs/manual-qa.md](docs/manual-qa.md),
