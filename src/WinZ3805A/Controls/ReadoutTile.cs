@@ -193,6 +193,14 @@ public sealed class ReadoutTile : Control
     /// </remarks>
     private const double PlaceholderFontSize = 24;
 
+    /// <summary>How many characters the reserved template string holds.</summary>
+    /// <remarks>
+    /// Read from the run rather than recomputed from the properties, so it cannot disagree with the
+    /// string actually being measured.
+    /// </remarks>
+    private int ReserveLength() =>
+        GetTemplateChild(ReserveValueRunPart) is Run run ? run.Text?.Length ?? 0 : 0;
+
     /// <summary>Resolves a theme brush, or null when the key is absent.</summary>
     /// <remarks>
     /// The indexer on <c>ResourceDictionary</c> throws on a missing key, and this is called during
@@ -213,9 +221,6 @@ public sealed class ReadoutTile : Control
     /// cannot overlap its neighbours.
     /// </para>
     /// </remarks>
-    /// <summary>Guards the one re-arrange that setting the caption's margin costs.</summary>
-    private bool _aligning;
-
     /// <summary>
     /// Places the caption on the decimal axis, once every child has its final size.
     /// </summary>
@@ -229,27 +234,15 @@ public sealed class ReadoutTile : Control
     /// wrong moment is not a slightly-wrong measurement, it is a coin toss.
     /// </para>
     /// <para>
-    /// Setting a margin here invalidates layout, so the guard lets exactly one further pass through
-    /// and the margin has settled by then. Assigning only on a real change keeps that from becoming
-    /// a loop.
+    /// The offset is applied as a render transform, which runs after arrange and changes no desired
+    /// size — so this cannot invalidate the layout that produced its inputs, and needs no guard.
     /// </para>
     /// </remarks>
     protected override Size ArrangeOverride(Size finalSize)
     {
         Size arranged = base.ArrangeOverride(finalSize);
 
-        if (!_aligning)
-        {
-            _aligning = true;
-            try
-            {
-                AlignLabelToAxis();
-            }
-            finally
-            {
-                _aligning = false;
-            }
-        }
+        AlignLabelToAxis();
 
         return arranged;
     }
@@ -270,31 +263,56 @@ public sealed class ReadoutTile : Control
 
         // With a fractional part the axis is the MIDDLE of the decimal point, not the boundary
         // beside it — at 56 px that glyph is wide enough for the difference to read as an error.
-        //
-        // Without one there is no point to centre on, and the axis would fall after the last digit,
-        // pushing the caption off the number entirely. A count like "satellites" therefore centres
-        // on its digits, which is what the reserved column already describes.
         double point = GetTemplateChild(PointTextPart) is FrameworkElement separator
             ? separator.ActualWidth
             : 0;
 
-        double axis = point > 0
-            ? reserve.ActualWidth + (point / 2)
-            : reserve.ActualWidth / 2;
+        double axis;
+        if (point > 0)
+        {
+            axis = reserve.ActualWidth + (point / 2);
+        }
+        else
+        {
+            // WITHOUT A DECIMAL POINT THE ANCHOR IS THE ONES DIGIT, which is the same rule: the
+            // column the eye returns to, and the one right-alignment holds still.
+            //
+            // Centring on the middle of the reserved column instead put the caption half a digit
+            // left of the number on every count, because the reserve is as wide as the largest
+            // value — two digits for "satellites" — while the usual reading is one, right-aligned
+            // into its right half. Reported as "satellites isn't centered", and it was.
+            //
+            // Tabular figures are what make this arithmetic exact rather than approximate: every
+            // digit shares one advance (§9.5.3 rule 1), so a character's width is the reserve's
+            // width over its length. The sign, when reserved, is assumed to share that advance —
+            // true in Segoe UI Variable's tabular set, and a fraction of a pixel out if it ever
+            // is not.
+            int characters = ReserveLength();
+            double character = characters > 0 ? reserve.ActualWidth / characters : 0;
+
+            axis = reserve.ActualWidth - (character / 2);
+        }
 
         double offset = axis - (grid.ActualWidth / 2);
 
-        Thickness wanted = offset >= 0
-            ? new Thickness(offset * 2, 0, 0, 0)
-            : new Thickness(0, 0, offset * -2, 0);
-
-        // Only on a real change. Assigning an equal margin still invalidates layout, which would
-        // arrange, align, invalidate, arrange - forever.
-        if (Math.Abs(label.Margin.Left - wanted.Left) > 0.5 ||
-            Math.Abs(label.Margin.Right - wanted.Right) > 0.5)
+        // A RENDER TRANSFORM, NOT A MARGIN, and this is the whole correctness story.
+        //
+        // A margin participates in layout: it widened the caption's slot, which widened the tile,
+        // which moved the axis, which changed the margin. The decimal case happened to converge;
+        // the integer one oscillated and WinUI killed the process with a layout cycle
+        // (0xc000027b out of Microsoft.UI.Xaml.dll, which names nothing). Feeding a measurement
+        // back into the layout that produced it was fragile even while it appeared to work.
+        //
+        // A transform is applied after arrange and changes no desired size, so there is no loop to
+        // converge. The caption may now overhang its tile, which is harmless: §9.6's XXL spacing
+        // between readouts is far wider than half a digit.
+        if (label.RenderTransform is not TranslateTransform shift)
         {
-            label.Margin = wanted;
+            shift = new TranslateTransform();
+            label.RenderTransform = shift;
         }
+
+        shift.X = offset;
     }
 
     private static Brush? Lookup(string key) =>
