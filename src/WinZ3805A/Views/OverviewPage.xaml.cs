@@ -1,5 +1,7 @@
 using System.Globalization;
 
+using Microsoft.Extensions.DependencyInjection;
+
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -29,6 +31,22 @@ public sealed partial class OverviewPage : Page
     private DeviceContext? _device;
     private CommandInvoker? _invoker;
     private readonly DispatcherTimer _stalenessTicker = new() { Interval = TimeSpan.FromSeconds(1) };
+
+    /// <summary>#285's trend store, or null when it could not be resolved.</summary>
+    /// <remarks>
+    /// Optional on purpose. The card's readout is useful without a history behind it, so a store
+    /// that will not resolve costs the plot and nothing else - the same judgement the Timing page
+    /// makes about the same dependency.
+    /// </remarks>
+    private TrendStore? _trends;
+
+    /// <summary>The selected span in hours. Six by default, which is §10.4's.</summary>
+    /// <remarks>
+    /// Deliberately not shared with the Timing page's selection. §10.4 names six hours here and
+    /// Timing defaults to one, so a single shared setting would have to discard one of the two
+    /// specified defaults every time a user moved between the pages.
+    /// </remarks>
+    private int _rangeHours = 6;
 
     /// <summary>True while the self-test is running, so a second click cannot queue a second one.</summary>
     private bool _testRunning;
@@ -63,11 +81,23 @@ public sealed partial class OverviewPage : Page
         _device = device;
         _invoker = new CommandInvoker(device.Session);
         _model = new OverviewViewModel(device.Store) { Connection = device.Session.Status };
-        _model.PropertyChanged += (_, _) => DispatcherQueue.TryEnqueue(Render);
+        _model.PropertyChanged += (_, _) => DispatcherQueue.TryEnqueue(() =>
+        {
+            Render();
+            RenderTrend();
+        });
         device.Session.StatusChanged += OnStatusChanged;
+
+        _trends = App.Services?.GetService<TrendStore>();
+
+        // Checked here rather than bound in XAML: setting IsChecked in markup would raise Checked
+        // during InitializeComponent, before _device exists, and RenderTrend would return having
+        // done nothing - leaving the default range selected but never drawn.
+        OverviewRange6h.IsChecked = true;
 
         _stalenessTicker.Start();
         Render();
+        RenderTrend();
     }
 
     private void OnStatusChanged(object? sender, ConnectionStatusChanged e) =>
@@ -196,4 +226,65 @@ public sealed partial class OverviewPage : Page
         reading.Unit.Length == 0
             ? reading.Value
             : $"{reading.Value}{ReadoutFormatter.HairSpace}{reading.Unit}";
+
+    private void OnRangeChanged(object sender, RoutedEventArgs e)
+    {
+        if (sender is RadioButton button && int.TryParse((string?)button.Tag, out int hours))
+        {
+            _rangeHours = hours;
+            RenderTrend();
+        }
+    }
+
+    /// <summary>
+    /// Reads the selected window out of the store and hands it to the EFC chart (#285).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The chart decimates by min/max per pixel column rather than by sampling, so a 7-day range
+    /// keeps a one-second excursion and the cost of this is the query rather than the drawing.
+    /// </para>
+    /// <para>
+    /// Narrower than the Timing page's equivalent by design: no drift fit, so no reading further
+    /// back than the chart draws, and one series rather than two.
+    /// </para>
+    /// </remarks>
+    private void RenderTrend()
+    {
+        if (_trends is not TrendStore trends || _device is not DeviceContext device)
+        {
+            return;
+        }
+
+        long now = device.TimeProvider.GetUtcNow().UtcTicks;
+        long from = now - TimeSpan.FromHours(_rangeHours).Ticks;
+
+        IReadOnlyList<TrendRecord> window = trends.Read(from, now);
+
+        List<TrendSample> efc = new(window.Count);
+        List<TrendSample> states = new(window.Count);
+        foreach (TrendRecord record in window)
+        {
+            if (record.Efc is double value)
+            {
+                efc.Add(new TrendSample(record.Ticks, value));
+            }
+
+            states.Add(new TrendSample(
+                record.Ticks,
+                (double)ReceiverModes.FromSyncState(record.SyncState)));
+        }
+
+        EfcTrend.FromTicks = from;
+        EfcTrend.ToTicks = now;
+        EfcTrend.States = states;
+        EfcTrend.Samples = efc;
+
+        TrendSummaryText.Text = efc.Count switch
+        {
+            0 => "No readings stored for this range yet. The trend fills as the receiver is polled.",
+            1 => "1 reading stored for this range. Shaded stretches are where the receiver was not locked.",
+            _ => $"{efc.Count:N0} readings stored for this range. Shaded stretches are where the receiver was not locked.",
+        };
+    }
 }
