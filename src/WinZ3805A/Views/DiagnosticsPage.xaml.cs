@@ -11,6 +11,8 @@ using Windows.System;
 using WinZ3805A.Device.Commands;
 using WinZ3805A.Device.Transport;
 using WinZ3805A.Services;
+using WinZ3805A.Device.Parsing;
+using WinZ3805A.Device.Models;
 using WinZ3805A.ViewModels;
 
 namespace WinZ3805A.Views;
@@ -23,6 +25,9 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
     /// <summary>§8.3's log clear — the one tier C command on this page.</summary>
     private static readonly ScpiCommand ClearLog = CommandConfirmation.Require(":DIAG:LOG:CLEar");
 
+    /// <summary>§8.3's subsystem diagnostic, which costs the receiver its lock (#53).</summary>
+    private static readonly ScpiCommand RunDiagnostic = CommandConfirmation.Require(":DIAG:TEST?");
+
     private DiagnosticsViewModel? _model;
     private DeviceContext? _device;
     private FileLoggerProvider? _logProvider;
@@ -30,6 +35,7 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
     /// <summary>Where the log really is, once MSIX's redirection has been resolved.</summary>
     private string? _logFolder;
     private CommandInvoker? _invoker;
+    private SelfTestViewModel? _selfTest;
     private CancellationTokenSource? _reading;
     private bool _ready;
 
@@ -68,6 +74,11 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
 
         _device = device;
         _invoker = new CommandInvoker(device.Session);
+
+        _selfTest = new SelfTestViewModel(device.TimeProvider);
+        SubsystemPicker.ItemsSource = _selfTest.Subsystems;
+        SubsystemPicker.SelectedIndex = 0;
+        SelfTestRows.ItemsSource = _selfTest.Rows;
 
         // Application-scoped, so it comes from the composition root rather than the device context.
         // Null when logging failed to start, which the card handles by disabling its button rather
@@ -231,7 +242,18 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
             return;
         }
 
-        SelfTestText.Text = model.SelfTestResultText;
+        // What the receiver holds from whenever it last ran a test - possibly before this
+        // application started, possibly at the factory. Kept separate from the rows below, which
+        // are only what this session measured, because the two make different claims.
+        LastReadText.Text = $"The receiver reports its last stored result as {model.SelfTestResultText}.";
+
+        if (_selfTest is SelfTestViewModel selfTest)
+        {
+            RunTestButton.Content = selfTest.RunLabel;
+            RunTestButton.IsEnabled = model.CanRead && !selfTest.IsRunning;
+            SubsystemPicker.IsEnabled = !selfTest.IsRunning;
+            SelfTestSummary.Text = selfTest.Summary;
+        }
         LogHeaderText.Text = model.LogHeaderText;
 
         LogRows.ItemsSource = model.Filtered;
@@ -374,6 +396,72 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
         {
             return asked;
+        }
+    }
+
+    /// <summary>Keeps the run label naming whichever subsystem is selected.</summary>
+    private void OnSubsystemChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_selfTest is SelfTestViewModel selfTest &&
+            SubsystemPicker.SelectedItem is SelfTestSubsystem chosen)
+        {
+            selfTest.Selected = chosen;
+            RunTestButton.Content = selfTest.RunLabel;
+        }
+    }
+
+    /// <summary>
+    /// Runs one subsystem's diagnostic, or the receiver's own sweep (#53).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Tier C, and the confirmation says the receiver will <b>drop out of lock and re-acquire</b>.
+    /// That wording was measured rather than assumed: running the twelve tests took the receiver
+    /// from LOCK/TFOM 3 to POW/TFOM 9, re-acquiring over several minutes. §8.3 previously said
+    /// "may briefly interrupt normal operation", which reads as a second or two.
+    /// </para>
+    /// <para>
+    /// The result is read back from <c>:DIAG:TEST:RES?</c> rather than from the run's own reply.
+    /// Both carry the same code, but the read-back also names the subsystem the receiver believes
+    /// it tested — so a mismatch between what was asked for and what ran is visible rather than
+    /// assumed away.
+    /// </para>
+    /// </remarks>
+    private async void OnRunTestClicked(object sender, RoutedEventArgs e)
+    {
+        if (_invoker is not CommandInvoker invoker ||
+            _model is not DiagnosticsViewModel model ||
+            _selfTest is not SelfTestViewModel selfTest ||
+            !model.CanRead)
+        {
+            return;
+        }
+
+        selfTest.SetRunning(true);
+        SelfTestOutcome.Clear();
+        Render();
+
+        try
+        {
+            CommandOutcome? outcome = await CommandConfirmation.RunAsync(
+                XamlRoot,
+                invoker,
+                RunDiagnostic,
+                selfTest.Selected.Keyword,
+                selfTest.Selected.DisplayName);
+
+            SelfTestOutcome.Show(outcome);
+
+            if (outcome is { Succeeded: true })
+            {
+                string? read = await model.ReadSelfTestResultAsync();
+                selfTest.Record(SelfTestResult.Parse(read));
+            }
+        }
+        finally
+        {
+            selfTest.SetRunning(false);
+            Render();
         }
     }
 

@@ -379,15 +379,21 @@ public static class CommandCatalog
                 "Set the service request enable mask to {0}.",
                 parameters: [Mask()]),
 
+            // The confirmation text says the receiver leaves lock, because it does. Measured
+            // 28 Aug 2026 (#53): LOCK/TFOM 3 before the tests, POW/TFOM 9 after, re-acquiring for
+            // several minutes. §8.3 previously said "may briefly interrupt normal operation", which
+            // reads as a second or two - and tier C exists so the user learns this beforehand.
             NeedsConfirmation("*TST?", "Run self-test",
                 "Runs the receiver's built-in self-test.",
-                "Run receiver self-test? This takes up to 30 seconds and may briefly interrupt normal operation.",
+                "Run the receiver's full self-test? The receiver will drop out of lock and re-acquire, "
+                + "so the 1 PPS output is degraded for several minutes. The test itself takes up to 30 seconds.",
                 "Ran the receiver self-test.",
                 isQuery: true, format: ResponseFormat.Integer),
 
             NeedsConfirmation(":DIAG:TEST?", "Run subsystem diagnostic",
                 "Runs the diagnostic for one subsystem.",
-                "Run {0} diagnostic? This may briefly interrupt normal operation.",
+                "Run the {0} diagnostic? The receiver will drop out of lock and re-acquire, so the "
+                + "1 PPS output is degraded for several minutes. The test itself takes up to 30 seconds.",
                 "Ran the {0} diagnostic.",
                 parameters: [new ParameterSpec("Subsystem", ParameterKind.Keyword)],
                 isQuery: true, format: ResponseFormat.ValueList),

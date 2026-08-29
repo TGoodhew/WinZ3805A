@@ -20,6 +20,12 @@ public static class TransactionTimeouts
     public static TimeSpan StatusScreen { get; } = TimeSpan.FromMilliseconds(15000);
 
     /// <summary>30000 ms — self-test and the diagnostic test, which exercise hardware before answering.</summary>
+    /// <remarks>
+    /// Confirmed against the live Z3805A on 28 Aug 2026 (#53), and it is tighter than it looks.
+    /// Individual subsystems returned in 2.4–5.4 s and <c>ALL</c> in 12.4 s, but <c>GPS</c> reached
+    /// <b>24.0 s</b> — six seconds of headroom. A 15 s class, which would look generous beside every
+    /// other figure here, would fail a healthy receiver on the one subsystem most worth testing.
+    /// </remarks>
     public static TimeSpan SelfTest { get; } = TimeSpan.FromMilliseconds(30000);
 
     /// <summary>

@@ -2,6 +2,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Documents;
+using Microsoft.UI.Xaml.Media;
 
 namespace WinZ3805A.Controls;
 
@@ -175,6 +176,24 @@ public sealed class ReadoutTile : Control
     private void UpdateSizeState(bool useTransitions) =>
         VisualStateManager.GoToState(this, Size.ToString(), useTransitions);
 
+    /// <summary>
+    /// How large the "no value" dash is drawn, whatever size the readout itself is.
+    /// </summary>
+    /// <remarks>
+    /// A fixed size rather than a fraction of the readout, because the dash is not a number and
+    /// gains nothing from being scaled like one. It has to read as "nothing here" at a glance from
+    /// across a bench, which is the opposite of what §9.5.3's sizes are for.
+    /// </remarks>
+    private const double PlaceholderFontSize = 24;
+
+    /// <summary>Resolves a theme brush, or null when the key is absent.</summary>
+    /// <remarks>
+    /// The indexer on <c>ResourceDictionary</c> throws on a missing key, and this is called during
+    /// the first layout pass, so a typo would be a startup crash rather than a visible defect.
+    /// </remarks>
+    private static Brush? Lookup(string key) =>
+        Application.Current.Resources.TryGetValue(key, out object? found) ? found as Brush : null;
+
     private void Refresh()
     {
         string formatted = ReadoutFormatter.Format(Value, DecimalPlaces);
@@ -182,6 +201,33 @@ public sealed class ReadoutTile : Control
         if (GetTemplateChild(ValueRunPart) is Run valueRun)
         {
             valueRun.Text = formatted;
+
+            // §11.1's "—" is right, and at readout size it stops reading as one. An em dash set in
+            // Segoe UI Variable Display Semibold at 56 px is a 40 x 5 px bar: on the primary window
+            // it looks like a rule someone drew under the caption rather than like an absent
+            // reading, which is how it was reported ("why is there just a line under 1 PPS TI").
+            //
+            // So the placeholder keeps the glyph the specification names and drops the emphasis the
+            // digits earn. Half size and secondary foreground, restored the moment a value returns -
+            // this is a property of what is being shown, not a state the control remembers.
+            // ClearValue rather than assigning a sentinel. FontSize is a double with no "unset"
+            // value - NaN is legal for Width and is NOT legal here - so the way back to the size
+            // the style provides is to remove the local value, not to overwrite it with one.
+            //
+            // The brush is resolved through TryLookup rather than the indexer for the same reason
+            // VisualPngExport does it: these keys live in a merged ThemeDictionary, the indexer
+            // throws when it cannot find one, and this runs during the first layout pass - so a
+            // miss takes the whole application down at startup rather than showing a wrong colour.
+            if (Value is null)
+            {
+                valueRun.FontSize = PlaceholderFontSize;
+                valueRun.Foreground = Lookup("WzTextSecondaryBrush") ?? valueRun.Foreground;
+            }
+            else
+            {
+                valueRun.ClearValue(TextElement.FontSizeProperty);
+                valueRun.ClearValue(TextElement.ForegroundProperty);
+            }
         }
 
         // The hair space is dropped along with the unit, so a unitless readout does not carry a
