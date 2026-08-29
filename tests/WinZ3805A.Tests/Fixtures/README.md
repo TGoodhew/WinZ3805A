@@ -11,26 +11,42 @@ at the front, no prompt at the back, everything in between untouched, CRLF endin
 
 ## Provenance
 
-Every capture so far is from one unit:
+Every capture is from one unit — `SYMMETRICOM,Z3805A,3625A02931,1.01.03-A`, at 9600-8-N-1 —
+in two sittings:
 
-| | |
-|---|---|
-| Identity | `SYMMETRICOM,Z3805A,3625A02931,1.01.03-A` |
-| Line settings | 9600-8-N-1 |
-| Captured | 12 August 2026 |
+| Sitting | When | How | Files |
+|---|---|---|---|
+| The first capture | 12 August 2026 | By hand, from a terminal session, with the scalar queries below taken alongside it | `locked-stabilizing.txt` |
+| The backyard sitting | 27–28 August 2026 | `build/Capture-Fixtures.ps1` left watching the screen through a hardware move, a power cycle and an antenna pull, writing one file per state it had not seen — plus two screens taken by hand where the harness could not (#242, #247) | everything under `captured/` |
 
 ## What is here
 
-| File | State | Also covers |
-|---|---|---|
-| `locked-stabilizing.txt` | `>> Locked to GPS: stabilizing frequency`, TFOM 3, FFOM 1, 1 satellite tracked and 9 not tracked, health monitor all OK | **Position hold** (`MODE Hold` with LAT/LON/HGT) and the **week rollover** — this unit reports 27 Dec 2006, which is the exact case P0-10 names |
+One corpus in two folders. `captured/` was meant, on 21 August, as a staging area — a capture
+would be promoted by moving it up a level and renaming it. What happened instead is that the
+tests were pointed at the captures where they lie, so the harness's own names and
+`captured/capture-log.md` stay attached to the bytes they describe. **Promoting a capture now
+means adding a row to the table below and pointing a test at it; the file does not move.**
 
-Useful properties of that one file, beyond the state it captures: the header row is
-`PRN  El  Az  C/N`, the 58503B-class spelling of the signal-strength column (§11.1), and the
-satellite table uses **two side-by-side column groups**, so the two-group detection has
-something real to run against.
+| File | State | Also covers | Asserted by (`StatusScreenParserTests`) |
+|---|---|---|---|
+| `locked-stabilizing.txt` | `Locked to GPS: stabilizing frequency`, TFOM 3, FFOM 1, 1 satellite tracked and 9 not, health all OK | **Position hold** (`MODE Hold` with LAT/LON/HGT); the **week rollover** — this unit reports 27 Dec 2006, the exact case P0-10 names; the `PRN  El  Az  C/N` header (the 58503B-class spelling, §11.1); the satellite table in **two side-by-side column groups** | the fourteen `TheCapturedScreen…` tests, and the truncation, clock-injection and panel-edge tests |
+| `captured/power-up-gps-acquisition.txt` | `Power-up: GPS acquisition`, outputs invalid, 1 PPS invalid, **0 tracked** — §11.1's *power-up (0 tracked)* | satellites the receiver is *attempting* to track, kept rather than dropped; an averaged position as distinct from a held one | `SatellitesTheReceiverIsAttemptingToTrackAreNotDropped`, `AnAveragedPositionIsDistinguishedFromAHeldOne` |
+| `captured/power-up-fine-freq-adj.txt` | `Power-up: fine freq adj`, outputs invalid, 1 PPS valid, 8 tracked — §11.1's *acquiring* | the provisional power-up time and its `?` marker (#245); absent readings as distinct from provisional ones | `AProvisionalPowerUpTimeIsReadAndFlagged`, `ThePowerUpScreenSeparatesAbsentFromProvisionalReadings`, `AnAveragedPositionIsDistinguishedFromAHeldOne`, `TheRecoveryScreenParses`, `TheStabilizingScreenParses` |
+| `captured/locked-to-gps-stabilizing-frequency.txt` | `Locked to GPS: stabilizing frequency`, outputs valid / reduced accuracy, 8 tracked | | `TheStabilizingScreenParses` |
+| `captured/locked-to-gps.txt` | `Locked to GPS`, outputs valid, 9 tracked — the fully locked state, §11.1's *locked* | | `TheFullyLockedScreenParses`, `TheStabilizingScreenParses` |
+| `captured/surveying-locked-to-gps-stabilizing-frequency.txt` | a **survey in progress** while locked and stabilizing — §11.1's *survey in progress*. Taken by hand: until #242 the harness could not see a survey and reported the screen as one already seen, so its log entry is reconstructed | the rolled-over date corrected on a surveying screen | `TheSurveyingScreenParses`, `TheSurveyingScreensRolledOverDateIsCorrected`, `TheStabilizingScreenParses` |
+| `captured/holdover-gps-1pps-invalid.txt` | `Holdover: GPS 1PPS invalid`, 0 tracked, three seconds in — the antenna pulled. §11.1's *holdover* | a screen with **no clock row**, reported as such rather than as a missing clock; both holdover uncertainties; how long the receiver has been degraded | `AScreenWithNoClockRowStillSaysSo`, `TheHoldoverScreenReportsBothUncertainties`, `TheHoldoverScreenReportsHowLongItHasBeenDegraded` |
+| `captured/holdover-gps-1pps-invalid-deep.txt` | the same holdover **11 m 34 s in** — taken by hand into a scratch directory with an empty seen-set, because the harness never takes a second sample of a signature it has seen | the only evidence that the minutes field is unpadded rather than fixed-width | `TheHoldoverScreenReportsBothUncertainties`, `TheHoldoverScreenReportsHowLongItHasBeenDegraded` |
+| `captured/holdover-gps-1pps-invalid-3.txt` | `Holdover: GPS 1PPS invalid` with the 1 PPS **valid again** and 6 tracked — the antenna back, the mode not yet changed | holdover is still holdover with the signal back; the duration keeps counting into recovery | `HoldoverWithTheSignalBackIsStillHoldover`, `TheDurationKeepsCountingFromHoldoverIntoRecovery` |
+| `captured/recovery-fine-freq-adj.txt` | `Recovery: fine freq adj`, outputs valid / reduced accuracy, 7 tracked | the duration carried from holdover into recovery | `TheRecoveryScreenParses`, `TheDurationKeepsCountingFromHoldoverIntoRecovery` |
 
-Scalar queries taken in the same session, for cross-checking parsed values:
+`FixtureCorpusTests` also runs its invariants over **every** `*.txt` in both folders — it looks
+like a status screen, it keeps its carriage returns, the parser never throws on it or on any
+prefix of it, every PRN is a GPS slot, every angle is on the sky, no satellite is both tracked and
+not or listed twice, the tables match the counts the screen states, and the health items agree
+with the health line. A new capture is in the corpus the moment it lands.
+
+Scalar queries taken in the first sitting, for cross-checking parsed values:
 
 ```
 :SYNC:STAT?           LOCK
@@ -51,22 +67,13 @@ parsing rather than treating the space as part of the field.
 
 ## What is still missing
 
-§11.1 asks for eight states. These five need the receiver put into them, which is a person
-at the bench rather than a query:
-
-> **Four of these five happen on their own during a hardware move**, which is the only time
-> they are all reachable without deliberately disturbing a working receiver. Run
-> `pwsh build/Capture-Fixtures.ps1` before touching anything and leave it running: it watches
-> the screen, writes one file per state it has not seen, and reconnects by itself when the
-> power goes and the adapter re-enumerates. Captures land in `captured/`; promoting one is a
-> move up a level plus a row in the table above.
+§11.1 asks for eight states. Seven are captured — power-up with 0 tracked, acquiring, locked,
+holdover, survey in progress, position hold and the week-rollover date. One is not:
 
 | State | How to reach it |
 |---|---|
-| Power-up (0 tracked) | Capture immediately after power is applied |
-| Acquiring | The first minute or two after power-up, before lock |
-| Holdover | Disconnect the antenna and wait for the mode to change |
-| Survey in progress | Requires starting a survey — tier C (§8.3), so it is a deliberate act, not something a capture tool should do on its own |
-| Health-monitor failure | Opportunistic: capture whenever the health line is not `[ OK ]` |
+| Health-monitor failure | Opportunistic: capture whenever the health line is not `[ OK ]`. Leave `pwsh build/Capture-Fixtures.ps1` running during any hardware move; it writes one file per state it has not seen and reconnects by itself when the power goes and the adapter re-enumerates. |
 
-Add each as its own file named after the state, and add a row to the table above.
+Two modes the application distinguishes have no capture either, because neither happened during
+the sitting and §11.1 does not ask for them: *Waiting to recover* — a holdover screen carrying a
+wait reason — and *Diagnostic / off*. The harness will take either the first time it sees one.
