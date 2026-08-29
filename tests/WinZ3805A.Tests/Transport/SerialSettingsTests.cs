@@ -37,8 +37,8 @@ public class SerialSettingsTests
         Assert.Equal(
             new[]
             {
-                "9600-8-N-1", "19200-7-E-1", "9600-7-E-1", "19200-8-N-1",
-                "2400-8-N-1", "1200-8-N-1", "9600-7-O-1", "19200-7-O-1",
+                "9600-8-N-1", "19200-7-O-1", "19200-7-E-1", "9600-7-E-1",
+                "19200-8-N-1", "2400-8-N-1", "1200-8-N-1", "9600-7-O-1",
             },
             sequence.Select(setting => setting.ToString()));
     }
@@ -47,11 +47,32 @@ public class SerialSettingsTests
     /// Most-likely-first is the point of the order: a Z3805A answers on attempt one and a Z3801A on
     /// attempt two, so the common cases never wait out the slow baud rates at the tail.
     /// </summary>
+    /// <remarks>
+    /// Second place was <c>19200-7-E-1</c> until 28 Aug 2026, and the Z3801A guide gives the factory
+    /// default as <b>odd</b> parity — twice. Odd had been sitting eighth, so the model this ordering
+    /// exists to serve was found on the last attempt of eight rather than the second.
+    /// </remarks>
     [Fact]
     public void TheAutoDetectSequenceLeadsWithTheTwoCommonConfigurations()
     {
         Assert.Equal(SerialSettings.Default, SerialSettings.AutoDetectSequence[0]);
-        Assert.Equal("19200-7-E-1", SerialSettings.AutoDetectSequence[1].ToString());
+        Assert.Equal("19200-7-O-1", SerialSettings.AutoDetectSequence[1].ToString());
+    }
+
+    /// <summary>
+    /// The even-parity spelling is kept, one place lower, rather than removed.
+    /// </summary>
+    /// <remarks>
+    /// The specification called the Z3801A "commonly" <c>19200-7-E-1</c>, which is a claim about
+    /// units in the field rather than about the factory — and §4's audience is second-hand
+    /// receivers, which arrive configured however their last owner left them. Documented default
+    /// first, folklore immediately after: that costs one probe if the folklore is right and saves
+    /// six if it is not.
+    /// </remarks>
+    [Fact]
+    public void TheFieldConfigurationIsStillTriedEarly()
+    {
+        Assert.Equal("19200-7-E-1", SerialSettings.AutoDetectSequence[2].ToString());
     }
 
     [Fact]

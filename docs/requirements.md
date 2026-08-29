@@ -222,7 +222,13 @@ The device is plain RS-232 with no vendor driver SDK, no COM interop, and no P/I
 | Handshake | None | None only |
 | DTR / RTS | Assert both on open | — |
 
-Z3805A ships 9600-8-N-1. Sibling units differ — the Z3801A is commonly 19200-7-E-1 — so all parameters must be user-settable, and the connection dialog must offer an **Auto-detect** that walks the eight most likely combinations sending `*IDN?` until a valid identity string returns.
+Z3805A ships 9600-8-N-1. Sibling units differ — **the Z3801A leaves the factory at 19200-7-O-1** — so all parameters must be user-settable, and the connection dialog must offer an **Auto-detect** that walks the eight most likely combinations sending `*IDN?` until a valid identity string returns.
+
+> **⚠ Corrected 28 Aug 2026 (#64).** This said the Z3801A is "commonly 19200-7-**E**-1", and so did §10.12's auto-detect order and Appendix B. The Z3801A user guide gives the factory default as **odd** parity, twice: *"Baud Rate: 19200 / Parity: Odd / Data Bits: 7/char / Stop Bits: 1"*, and again as *"19200 — 7 data bits, 1 start bit, 1 stop bit, odd parity"*. The even-parity spelling had no source.
+>
+> **It was not cosmetic.** `19200-7-O-1` sat **eighth** in the auto-detect order while the unsourced `19200-7-E-1` sat second, so the model the ordering exists to serve was found on the last attempt of eight — about fourteen extra seconds at the probe timeout, and not at all if the walk were ever shortened.
+>
+> Even parity is **kept, one place lower**, rather than removed: "commonly" is a claim about units in the field rather than the factory, and §4's audience buys second-hand receivers that arrive configured however the last owner left them. Documented default first, folklore immediately after.
 
 ### 7.2 Line protocol
 
@@ -2050,7 +2056,7 @@ If a future version adds free-text entry, it must run every submission through `
 └──────────────────────────────────────────────┘
 ```
 
-Auto-detect tries, in order: 9600-8-N-1, 19200-7-E-1, 9600-7-E-1, 19200-8-N-1, 2400-8-N-1, 1200-8-N-1, 9600-7-O-1, 19200-7-O-1. Each attempt sends `*IDN?` with a 2 s timeout. Show progress and allow cancel.
+Auto-detect tries, in order: 9600-8-N-1, **19200-7-O-1**, 19200-7-E-1, 9600-7-E-1, 19200-8-N-1, 2400-8-N-1, 1200-8-N-1, 9600-7-O-1. Each attempt sends `*IDN?` with a 2 s timeout. Show progress and allow cancel. (Order corrected 28 Aug 2026 — see §7.1.)
 
 ### 10.13 Settings page
 
@@ -2482,7 +2488,7 @@ something might later branch on.
 
 **`:PTIM:TCOD:FORMat` is catalogued as a query only; its setter is deliberately absent.** Changing the format changes what every consumer of the time code output sees, which makes it tier C by the same reasoning §8.3 applies to `:PTIM:TZONe`. It is not catalogued because nothing in the application reads the time code, so the setter would be a tier C write existing solely to break other equipment's decoding. It goes in when something needs it, with a §8.3 consequence line of its own.
 
-**Note on the Z3805A specifically:** no Z3805A-specific programming manual was published. The command set is inherited from the 58503A/B SmartClock firmware family, which is why the 58503B guide is the reference. Where behaviour diverges — Port 2 being TOD-only, dual 10 MHz and dual 1 PPS outputs, 9600-8-N-1 default rather than the Z3801A's 19200-7-E-1 — this document calls it out explicitly. Any command whose Z3805A behaviour is unverified should be probed at connect and disabled if it errors, rather than assumed present.
+**Note on the Z3805A specifically:** no Z3805A-specific programming manual was published. The command set is inherited from the 58503A/B SmartClock firmware family, which is why the 58503B guide is the reference. Where behaviour diverges — dual 10 MHz and dual 1 PPS outputs, 9600-8-N-1 default rather than the Z3801A's 19200-7-O-1 — this document calls it out explicitly. (**"Port 2 being TOD-only" was removed from this list on 28 Aug 2026**: the Z3805A has one serial port, `:SYST:COMM:SER2:BAUD?` answers `-113,"Undefined header"`, and the claim is corrected in §8.6 under #62.) Any command whose Z3805A behaviour is unverified should be probed at connect and disabled if it errors, rather than assumed present.
 
 ---
 
