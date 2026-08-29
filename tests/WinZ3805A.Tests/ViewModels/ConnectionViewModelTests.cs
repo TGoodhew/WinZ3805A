@@ -1,4 +1,4 @@
-using System.IO.Ports;
+﻿using System.IO.Ports;
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.Time.Testing;
 using WinZ3805A.Device.Transport;
@@ -377,7 +377,7 @@ public sealed class ConnectionViewModelTests
     [InlineData(TransportFault.AccessDenied, "Another program may have it open")]
     [InlineData(TransportFault.PortNotFound, "Reconnect the adapter")]
     [InlineData(TransportFault.DeviceRemoved, "disappeared")]
-    [InlineData(TransportFault.None, "eight standard settings")]
+    [InlineData(TransportFault.None, "any supported setting")]
     public void EachFailureGetsItsOwnRowOfTheStateMatrix(TransportFault fault, string expected)
     {
         string message = ConnectionViewModel.FailureMessage(

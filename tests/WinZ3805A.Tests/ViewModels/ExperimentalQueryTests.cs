@@ -1,4 +1,7 @@
+﻿using Microsoft.Extensions.Time.Testing;
+
 using WinZ3805A.Device.Commands;
+using WinZ3805A.Device.Drivers;
 using WinZ3805A.Services;
 using WinZ3805A.ViewModels;
 
@@ -17,6 +20,10 @@ public sealed class ExperimentalQueryTests : IDisposable
 {
     private readonly string _folder = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
 
+    /// <summary>The driver the rows are built over, since #287 made the list per-driver.</summary>
+    private static SmartClockDriver Driver { get; } =
+        new(new FakeTimeProvider(new DateTimeOffset(2026, 8, 29, 4, 0, 0, TimeSpan.Zero)));
+
     public void Dispose()
     {
         if (Directory.Exists(_folder))
@@ -27,11 +34,16 @@ public sealed class ExperimentalQueryTests : IDisposable
 
     // ------------------------------------------------------------------------- the list is fixed
 
+    /// <remarks>
+    /// Six is a SmartClock fact, asserted here against the SmartClock driver — the old app-side
+    /// <c>Count</c> constant compiled it into a view model where a second family would inherit it,
+    /// which is why #287 removed it.
+    /// </remarks>
     [Fact]
     public void ThereAreExactlySixOfThem()
     {
-        Assert.Equal(ExperimentalQueries.Count, CommandCatalog.Experimental.Count);
-        Assert.Equal(ExperimentalQueries.Count, ExperimentalQueries.Create().Count);
+        Assert.Equal(6, CommandCatalog.Experimental.Count);
+        Assert.Equal(6, ExperimentalQueries.Create(Driver).Count);
     }
 
     /// <summary>
@@ -49,12 +61,12 @@ public sealed class ExperimentalQueryTests : IDisposable
                 ":DIAG:PROCess?",
                 ":DIAG:MEMory?",
             ],
-            ExperimentalQueries.Create().Select(row => row.Mnemonic));
+            ExperimentalQueries.Create(Driver).Select(row => row.Mnemonic));
 
     [Fact]
     public void TheListCannotBeAddedTo()
     {
-        IReadOnlyList<ExperimentalQueryRow> rows = ExperimentalQueries.Create();
+        IReadOnlyList<ExperimentalQueryRow> rows = ExperimentalQueries.Create(Driver);
 
         Assert.IsNotType<List<ExperimentalQueryRow>>(rows);
         Assert.Throws<NotSupportedException>(() =>
@@ -65,8 +77,8 @@ public sealed class ExperimentalQueryTests : IDisposable
     [Fact]
     public void EachCallGetsItsOwnRows()
     {
-        IReadOnlyList<ExperimentalQueryRow> first = ExperimentalQueries.Create();
-        IReadOnlyList<ExperimentalQueryRow> second = ExperimentalQueries.Create();
+        IReadOnlyList<ExperimentalQueryRow> first = ExperimentalQueries.Create(Driver);
+        IReadOnlyList<ExperimentalQueryRow> second = ExperimentalQueries.Create(Driver);
 
         first[0].Result = "something";
 
@@ -78,15 +90,15 @@ public sealed class ExperimentalQueryTests : IDisposable
 
     [Fact]
     public void EveryOneIsAQuery() =>
-        Assert.All(ExperimentalQueries.Create(), row => Assert.True(row.Command.IsQuery));
+        Assert.All(ExperimentalQueries.Create(Driver), row => Assert.True(row.Command.IsQuery));
 
     [Fact]
     public void EveryOneIsTierSafe() =>
-        Assert.All(ExperimentalQueries.Create(), row => Assert.Equal(SafetyTier.Safe, row.Command.Tier));
+        Assert.All(ExperimentalQueries.Create(Driver), row => Assert.Equal(SafetyTier.Safe, row.Command.Tier));
 
     [Fact]
     public void EveryOneTakesNoParameter() =>
-        Assert.All(ExperimentalQueries.Create(), row => Assert.Empty(row.Command.Parameters));
+        Assert.All(ExperimentalQueries.Create(Driver), row => Assert.Empty(row.Command.Parameters));
 
     /// <summary>
     /// A row cannot be built over anything else, which is what keeps the card's list and §8.5's the
@@ -126,7 +138,7 @@ public sealed class ExperimentalQueryTests : IDisposable
     [Fact]
     public void ARowStartsWithNothingToShow()
     {
-        ExperimentalQueryRow row = ExperimentalQueries.Create()[0];
+        ExperimentalQueryRow row = ExperimentalQueries.Create(Driver)[0];
 
         Assert.False(row.HasResult);
         Assert.False(row.IsError);
@@ -136,7 +148,7 @@ public sealed class ExperimentalQueryTests : IDisposable
     [Fact]
     public void ARunningRowCannotBeRunAgain()
     {
-        ExperimentalQueryRow row = ExperimentalQueries.Create()[0];
+        ExperimentalQueryRow row = ExperimentalQueries.Create(Driver)[0];
 
         row.IsBusy = true;
 
@@ -146,7 +158,7 @@ public sealed class ExperimentalQueryTests : IDisposable
     [Fact]
     public void SettingAResultAnnouncesBothItAndWhetherThereIsOne()
     {
-        ExperimentalQueryRow row = ExperimentalQueries.Create()[0];
+        ExperimentalQueryRow row = ExperimentalQueries.Create(Driver)[0];
         List<string?> changed = [];
         row.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
 
@@ -165,7 +177,7 @@ public sealed class ExperimentalQueryTests : IDisposable
     [Fact]
     public void AnErrorIsRecordedAsWellAsShown()
     {
-        ExperimentalQueryRow row = ExperimentalQueries.Create()[0];
+        ExperimentalQueryRow row = ExperimentalQueries.Create(Driver)[0];
 
         row.IsError = true;
         row.Result = "The receiver answered E-113.";

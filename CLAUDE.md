@@ -1,4 +1,4 @@
-# WinZ3805A — agent conventions
+﻿# WinZ3805A — agent conventions
 
 WinZ3805A is a WinUI 3 desktop application for monitoring and controlling
 HP/Symmetricom SmartClock GPS-disciplined oscillators — the Z3805A and its
@@ -306,8 +306,7 @@ The blocked-command gate reads its tokens out of
 that file stays the single place in the repository where those names occur. It
 applies §8.4's two rules separately: the named exclusions may not appear at all,
 while an undocumented parser node may appear only in query form, because §8.5
-enables exactly that as an opt-in. `docs/` is not scanned — the specification is
-where §8.4 is written down.
+enables exactly that as an opt-in. Only `docs/requirements.md` is exempt — the specification is where §8.4 is written down; the rest of `docs/` and the root-level documents are scanned, because `docs/adding-a-receiver.md` instructs driver authors about the exclusions and a leak written there would otherwise pass CI forever (#287 narrowed the old whole-directory exemption).
 
 Note CI builds with `dotnet build` while the guidance above prefers MSBuild
 locally. That is deliberate: the hosted runner's Visual Studio MSBuild is too old

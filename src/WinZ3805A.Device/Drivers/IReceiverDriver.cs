@@ -1,4 +1,4 @@
-using WinZ3805A.Device.Commands;
+﻿using WinZ3805A.Device.Commands;
 using WinZ3805A.Device.Models;
 using WinZ3805A.Device.Transport;
 
@@ -17,6 +17,73 @@ namespace WinZ3805A.Device.Drivers;
 public readonly record struct PollCadence(TimeSpan Fast, TimeSpan Full);
 
 /// <summary>
+/// What each poll sweep sends, which is a property of the device rather than of the app (#287).
+/// </summary>
+/// <param name="FastTier">
+/// The scalar queries of the fast sweep, in the order their answers are handed to
+/// <see cref="IReceiverDriver.InterpretSweep"/>. <b>The first entry must be the query whose answer
+/// discriminates a sweep from line noise</b> — the sync state, for the SmartClock family — because
+/// the poller reads it on its own, ahead of the rest, and keys its refusal suppression on it.
+/// Every entry must be in <see cref="IReceiverDriver.Commands"/>.
+/// </param>
+/// <param name="RefusableIndex">
+/// The index of the one query the receiver may legitimately <i>refuse</i> in some of its states, or
+/// <see langword="null"/> when there is none. §7.3.1's lesson: a refused query re-asked every second
+/// overflows the error queue and buries real faults, so the poller stops asking it until the
+/// discriminator's answer changes. One index rather than a set, deliberately — no known receiver
+/// needs more, and a wider contract would be a guess with nothing to check it against.
+/// </param>
+/// <param name="FullStatus">
+/// The query whose answer <see cref="IReceiverDriver.Parse"/> reads — the full status screen, for
+/// receivers that have one. Must be in <see cref="IReceiverDriver.Commands"/>.
+/// </param>
+public sealed record PollPlan(
+    IReadOnlyList<string> FastTier,
+    int? RefusableIndex,
+    string FullStatus);
+
+/// <summary>
+/// One fast sweep's answers, read into the common currency's fields (#287).
+/// </summary>
+/// <remarks>
+/// The fields mirror what <c>ReceiverStateStore.UpdateFast</c> takes, and they are HP's concepts —
+/// TFOM, FFOM — because the common currency is SmartClock-shaped and acknowledged as such (see
+/// #287's item 4). A driver whose receiver has no equivalent of a field leaves it
+/// <see langword="null"/>, exactly as <see cref="ReceiverStatus"/> requires of the full parse; it
+/// never invents a value to fill a shape.
+/// </remarks>
+/// <param name="SyncState">The discriminator's answer as a bare token, or null.</param>
+/// <param name="Tfom">Time Figure of Merit, 0 best to 9 worst.</param>
+/// <param name="Ffom">Frequency Figure of Merit, 0 best to 3 worst.</param>
+/// <param name="TimeIntervalNanoseconds">The 1 PPS offset against GPS, in nanoseconds.</param>
+/// <param name="EfcPercent">Oscillator control, as a percentage of full scale.</param>
+/// <param name="SatellitesTracked">How many satellites are being tracked.</param>
+public sealed record FastReadings(
+    string? SyncState,
+    int? Tfom,
+    int? Ffom,
+    double? TimeIntervalNanoseconds,
+    double? EfcPercent,
+    int? SatellitesTracked);
+
+/// <summary>
+/// What one fast sweep's answers turned out to be (#287).
+/// </summary>
+/// <remarks>
+/// <see cref="Readings"/> is always present — a rejected sweep still carries what was read, because
+/// the poller's state-change log records what it saw whether or not it stores it. A non-null
+/// <see cref="Rejection"/> means the sweep must not reach the store or the trend: the answers are
+/// somebody else's reply, not a reading.
+/// </remarks>
+/// <param name="Readings">What the answers said, field by field, absent where unreadable.</param>
+/// <param name="Rejection">
+/// Why this sweep cannot be a reading — a sentence fit for a log, naming what was seen — or
+/// <see langword="null"/> when nothing rules it out. A guard that drops readings silently is worse
+/// than no guard (#209), so the sentence is part of the contract, not a courtesy.
+/// </param>
+public sealed record SweepInterpretation(FastReadings Readings, string? Rejection);
+
+/// <summary>
 /// Everything this application needs to know about one family of receiver (#122).
 /// </summary>
 /// <remarks>
@@ -27,7 +94,7 @@ public readonly record struct PollCadence(TimeSpan Fast, TimeSpan Full);
 /// that were previously static and silently meant "Z3805A".
 /// </para>
 /// <para>
-/// <b>Adding one is documented in <c>README.md</c>, under "Adding a receiver".</b> That walkthrough
+/// <b>Adding one is documented in <c>docs/adding-a-receiver.md</c>.</b> That walkthrough
 /// is the intended entry point; this interface is the contract it describes.
 /// </para>
 /// <para>
@@ -92,6 +159,13 @@ public interface IReceiverDriver
     /// <summary>How often to poll, fast and full.</summary>
     PollCadence Cadence { get; }
 
+    /// <summary>What each sweep sends — §7.3's schedule, as this receiver's own (#287).</summary>
+    /// <remarks>
+    /// Must be stable: the poller reads it every sweep and keys its refusal suppression on the
+    /// plan's shape. Every mnemonic it names must resolve through <see cref="Find"/>.
+    /// </remarks>
+    PollPlan Plan { get; }
+
     /// <summary>The serial configurations auto-detect walks, most-likely-first.</summary>
     IReadOnlyList<SerialSettings> AutoDetectSequence { get; }
 
@@ -105,4 +179,23 @@ public interface IReceiverDriver
     /// loop, which is the one failure the parser contract exists to prevent.
     /// </remarks>
     ReceiverStatus Parse(string? response);
+
+    /// <summary>
+    /// Reads one fast sweep's answers — <see cref="PollPlan.FastTier"/>'s, in its order — into the
+    /// common currency, or rejects the sweep with a reason (#287).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>It must never throw</b>, on the same §11.1 rule as <see cref="Parse"/> — and that includes
+    /// an <paramref name="answers"/> list of any length, null entries throughout, and answers that
+    /// are another command's reply. An unreadable field becomes null; a sweep that cannot be a
+    /// reading at all comes back with <see cref="SweepInterpretation.Rejection"/> saying why.
+    /// </para>
+    /// <para>
+    /// <b>Rejection is the driver's call because only the driver knows its own dialect.</b> The
+    /// poller separately bounds-checks what is accepted here against the common currency's
+    /// documented ranges, so this method owns "is this mine?" and the app owns "is this possible?".
+    /// </para>
+    /// </remarks>
+    SweepInterpretation InterpretSweep(IReadOnlyList<string?> answers);
 }

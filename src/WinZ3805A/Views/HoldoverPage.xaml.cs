@@ -17,24 +17,15 @@ namespace WinZ3805A.Views;
 /// </summary>
 public sealed partial class HoldoverPage : Page
 {
-    /// <summary>§8.3's manual holdover — one of §9.7.4's four strong variants.</summary>
-    private static readonly ScpiCommand ForceHoldover = CommandConfirmation.Require(":SYNC:HOLDover:INITiate");
-
-    /// <summary>
-    /// The two recovery actions, which §8.2 classes tier S: both move the receiver toward lock and
-    /// neither can lose anything, so they run on click with no dialog. Resolved from the catalog
-    /// all the same, because §8.1 admits no other source of a command.
-    /// </summary>
-    private static readonly ScpiCommand Recover = CommandConfirmation.Require(":SYNC:HOLD:REC:INIT");
-    private static readonly ScpiCommand IgnoreLimit = CommandConfirmation.Require(":SYNC:HOLD:REC:LIM:IGN");
-
-    /// <summary>§8.3's holdover threshold, with its range taken from the catalog.</summary>
-    private static readonly ScpiCommand SetThreshold = CommandConfirmation.Require(":SYNC:HOLD:DUR:THReshold");
-
     private HoldoverViewModel? _model;
     private DeviceContext? _device;
     private CommandInvoker? _invoker;
-    private readonly NumberFieldValidator _threshold;
+
+    /// <summary>
+    /// The threshold editor's validator, built in <c>OnNavigatedTo</c> rather than here (#287):
+    /// its range comes from the driver's catalog, and there is no driver until a device arrives.
+    /// </summary>
+    private NumberFieldValidator? _threshold;
     private bool _busy;
     private readonly DispatcherTimer _stalenessTicker = new() { Interval = TimeSpan.FromSeconds(1) };
 
@@ -46,9 +37,6 @@ public sealed partial class HoldoverPage : Page
         // Assigned here rather than in XAML: the parser reads a NumberBox.Value literal as a float
         // and widens it, so a round number arrives with a tail of decimals.
         ThresholdBox.Value = 1;
-
-        _threshold = new NumberFieldValidator(ThresholdBox, ThresholdError, SetThreshold.Parameters[0]);
-        _threshold.ValidityChanged += (_, _) => Render();
 
         _stalenessTicker.Tick += (_, _) => _model?.RaiseAll();
         Unloaded += (_, _) =>
@@ -73,6 +61,14 @@ public sealed partial class HoldoverPage : Page
 
         _device = device;
         _invoker = new CommandInvoker(device.Session);
+
+        // §8.3's holdover threshold, with its range taken from the driver's catalog.
+        _threshold = new NumberFieldValidator(
+            ThresholdBox,
+            ThresholdError,
+            CommandConfirmation.Require(device.Driver, ":SYNC:HOLD:DUR:THReshold").Parameters[0]);
+        _threshold.ValidityChanged += (_, _) => Render();
+
         _model = new HoldoverViewModel(device.Store)
         {
             Connection = device.Session.Status,
@@ -118,7 +114,7 @@ public sealed partial class HoldoverPage : Page
         PowerUpPill.Text = model.PowerUpVerdictText;
 
         ApplyThresholdButton.IsEnabled =
-            !_busy && _threshold.IsValid && model.Connection == ConnectionStatus.Connected;
+            !_busy && _threshold is { IsValid: true } && model.Connection == ConnectionStatus.Connected;
 
         ForceHoldoverButton.IsEnabled = !_busy && model.CanForceHoldover;
         RecoverButton.IsEnabled = !_busy && model.CanRecover;
@@ -134,7 +130,10 @@ public sealed partial class HoldoverPage : Page
     /// </summary>
     private async void OnForceHoldoverClicked(object sender, RoutedEventArgs e)
     {
-        if (_invoker is not CommandInvoker invoker || _model is not HoldoverViewModel model || _busy)
+        if (_invoker is not CommandInvoker invoker ||
+            _model is not HoldoverViewModel model ||
+            _device is not DeviceContext device ||
+            _busy)
         {
             return;
         }
@@ -142,14 +141,18 @@ public sealed partial class HoldoverPage : Page
         await RunAsync(async () => await CommandConfirmation.RunAsync(
             XamlRoot,
             invoker,
-            ForceHoldover,
+            // §8.3's manual holdover — one of §9.7.4's four strong variants.
+            CommandConfirmation.Require(device.Driver, ":SYNC:HOLDover:INITiate"),
             caution: model.PowerUpCaution));
     }
 
     /// <summary>§8.3's holdover threshold. Seconds on both sides, so nothing is scaled.</summary>
     private async void OnApplyThresholdClicked(object sender, RoutedEventArgs e)
     {
-        if (_invoker is not CommandInvoker invoker || _threshold.Value is not double seconds || _busy)
+        if (_invoker is not CommandInvoker invoker ||
+            _device is not DeviceContext device ||
+            _threshold?.Value is not double seconds ||
+            _busy)
         {
             return;
         }
@@ -159,27 +162,34 @@ public sealed partial class HoldoverPage : Page
         await RunAsync(async () => await CommandConfirmation.RunAsync(
             XamlRoot,
             invoker,
-            SetThreshold,
+            CommandConfirmation.Require(device.Driver, ":SYNC:HOLD:DUR:THReshold"),
             argument: seconds.ToString("0.###", CultureInfo.InvariantCulture),
             displayValue: seconds.ToString("0.###", CultureInfo.CurrentCulture)),
             ThresholdOutcome);
     }
 
-    private async void OnRecoverClicked(object sender, RoutedEventArgs e) => await RunSafeAsync(Recover);
+    private async void OnRecoverClicked(object sender, RoutedEventArgs e) => await RunSafeAsync(":SYNC:HOLD:REC:INIT");
 
-    private async void OnIgnoreLimitClicked(object sender, RoutedEventArgs e) => await RunSafeAsync(IgnoreLimit);
+    private async void OnIgnoreLimitClicked(object sender, RoutedEventArgs e) => await RunSafeAsync(":SYNC:HOLD:REC:LIM:IGN");
 
     /// <summary>
     /// Sends one of the two tier S recovery actions. No confirmation, and so no
     /// <see cref="CommandInvoker"/> either: §7.2 is explicit that the error-queue read belongs to
     /// tier C alone, and the invoker refuses anything else rather than quietly obliging.
     /// </summary>
-    private async Task RunSafeAsync(ScpiCommand command)
+    /// <param name="mnemonic">
+    /// Which action. §8.2 classes both tier S — they move the receiver toward lock and cannot lose
+    /// anything — but they are resolved through the driver's catalog all the same, because §8.1
+    /// admits no other source of a command.
+    /// </param>
+    private async Task RunSafeAsync(string mnemonic)
     {
         if (_device is not DeviceContext device || _busy)
         {
             return;
         }
+
+        ScpiCommand command = CommandConfirmation.Require(device.Driver, mnemonic);
 
         await RunAsync(async () =>
         {

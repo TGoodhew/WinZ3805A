@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     CI gate for P0-7 / §8.4: no excluded command is named anywhere but the one file that
     holds the exclusion patterns.
@@ -29,8 +29,12 @@
 
     Matching requires a leading colon, so ordinary English in a comment is not a hit.
 
-    docs/ is not scanned. The specification is where §8.4 is written down, and a gate that
-    flagged its own source would be nonsense.
+    docs/requirements.md is not scanned - the specification is where §8.4 is written down, and
+    a gate that flagged its own source would be nonsense. The REST of docs/ is scanned (#287
+    narrowed the old whole-directory exemption): docs/adding-a-receiver.md instructs third-party
+    driver authors about the exclusions, will be edited by people who have read the patterns, and
+    a leak written there would otherwise pass CI forever. Root-level files (README.md, CLAUDE.md)
+    are scanned for the same reason.
 
 .PARAMETER Root
     Repository root. Defaults to the parent of this script's directory.
@@ -155,15 +159,22 @@ function Test-ExclusionToken {
 # ---------------------------------------------------------------------------
 # Scan everything that ships or describes what ships.
 # ---------------------------------------------------------------------------
-$scanRoots = @('src', 'tests', 'build', '.github') |
+$scanRoots = @('src', 'tests', 'build', '.github', 'docs') |
     ForEach-Object { Join-Path $Root $_ } |
     Where-Object { Test-Path $_ }
+
+# The specification itself is the one document permitted to discuss §8.4 in its own terms.
+$specification = [System.IO.Path]::GetFullPath((Join-Path $Root 'docs\requirements.md'))
 
 $targets = @()
 foreach ($dir in $scanRoots) {
     $targets += Get-ChildItem -Path $dir -Recurse -File -Include '*.cs', '*.xaml', '*.ps1', '*.yml', '*.yaml', '*.md', '*.txt', '*.json', '*.appxmanifest' |
-        Where-Object { $_.FullName -notmatch '\\(bin|obj)\\' }
+        Where-Object { $_.FullName -notmatch '\\(bin|obj)\\' } |
+        Where-Object { [System.IO.Path]::GetFullPath($_.FullName) -ne $specification }
 }
+
+# Root-level documents ship the project's face; they are bound by the same rule.
+$targets += Get-ChildItem -Path $Root -File -Filter '*.md'
 
 $hits = @()
 foreach ($file in $targets) {

@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
@@ -20,12 +20,6 @@ namespace WinZ3805A.Views;
 /// </summary>
 public sealed partial class TimingPage : Page, ICsvExportSource
 {
-    /// <summary>§8.3's antenna delay, the one tier C command on this page.</summary>
-    private static readonly ScpiCommand SetDelay = CommandConfirmation.Require(":GPS:REF:ADELay");
-
-    /// <summary>§10.7's field range, taken from the catalog rather than restated here.</summary>
-    private static readonly ParameterSpec DelayRange = SetDelay.Parameters[0];
-
     private TimingViewModel? _model;
     private DeviceContext? _device;
     private TrendStore? _trends;
@@ -37,7 +31,12 @@ public sealed partial class TimingPage : Page, ICsvExportSource
     /// <summary>The window currently on screen, which is also what Export writes.</summary>
     private IReadOnlyList<TrendRecord> _exportable = [];
     private CommandInvoker? _invoker;
-    private readonly NumberFieldValidator _directDelay;
+    /// <summary>
+    /// The direct-entry validator, built in <c>OnNavigatedTo</c> rather than the constructor
+    /// (#287): §10.7's range comes from the driver's catalog entry for the delay command, and
+    /// there is no driver until a device arrives.
+    /// </summary>
+    private NumberFieldValidator? _directDelay;
     private readonly NumberFieldValidator _length;
     private readonly NumberFieldValidator _velocityFactor;
     private bool _busy;
@@ -67,9 +66,9 @@ public sealed partial class TimingPage : Page, ICsvExportSource
         LengthBox.Value = 20;
         DirectDelayBox.Value = 0;
 
-        // §9.11's validation model. The delay's bounds come from the catalog entry the command is
-        // built from; the cable length's are this page's own, since no command takes a length.
-        _directDelay = new NumberFieldValidator(DirectDelayBox, DirectDelayError, DelayRange);
+        // §9.11's validation model. The delay's bounds come from the driver's catalog entry and
+        // are wired in OnNavigatedTo; the cable length's are this page's own, since no command
+        // takes a length.
         _length = new NumberFieldValidator(LengthBox, LengthError, 0, 10000, "m");
 
         // The velocity factor never reaches the receiver - it feeds the local calculation - but it
@@ -80,7 +79,6 @@ public sealed partial class TimingPage : Page, ICsvExportSource
         // certainly read a percentage off a datasheet and not divided it by a hundred.
         _velocityFactor = new NumberFieldValidator(VelocityFactorBox, VelocityFactorError, 0.01, 0.99);
 
-        _directDelay.ValidityChanged += (_, _) => Render();
         _length.ValidityChanged += (_, _) => Render();
         _velocityFactor.ValidityChanged += (_, _) => Render();
 
@@ -115,6 +113,15 @@ public sealed partial class TimingPage : Page, ICsvExportSource
         }
 
         _device = device;
+
+        // §8.3's antenna delay is the one tier C command on this page; §10.7's field range is its
+        // catalog entry's, taken from the driver rather than restated here.
+        _directDelay = new NumberFieldValidator(
+            DirectDelayBox,
+            DirectDelayError,
+            CommandConfirmation.Require(device.Driver, ":GPS:REF:ADELay").Parameters[0]);
+        _directDelay.ValidityChanged += (_, _) => Render();
+
         _trends = App.Services?.GetService<TrendStore>();
 
         // #63. Built here rather than per render: it owns the last computed curve, and rebuilding
@@ -166,11 +173,11 @@ public sealed partial class TimingPage : Page, ICsvExportSource
         if (model.UseDirectEntry)
         {
             _length.Reset();
-            _directDelay.Revalidate();
+            _directDelay?.Revalidate();
         }
         else
         {
-            _directDelay.Reset();
+            _directDelay?.Reset();
             _length.Revalidate();
         }
     }
@@ -303,7 +310,7 @@ public sealed partial class TimingPage : Page, ICsvExportSource
             !_busy
             && model.CanApplyDelay
             && (model.UseDirectEntry
-                ? _directDelay.IsValid
+                ? _directDelay is { IsValid: true }
                 : _length.IsValid && (!model.UseVelocityFactor || _velocityFactor.IsValid));
 
         TimeInterval.Value = model.TimeIntervalNanoseconds;
@@ -385,6 +392,7 @@ public sealed partial class TimingPage : Page, ICsvExportSource
     {
         if (_invoker is not CommandInvoker invoker
             || _model is not TimingViewModel model
+            || _device is not DeviceContext device
             || model.DelayToApplyNanoseconds is not double nanoseconds
             || _busy)
         {
@@ -402,7 +410,7 @@ public sealed partial class TimingPage : Page, ICsvExportSource
             DelayOutcome.Show(await CommandConfirmation.RunAsync(
                 XamlRoot,
                 invoker,
-                SetDelay,
+                CommandConfirmation.Require(device.Driver, ":GPS:REF:ADELay"),
                 argument: (nanoseconds * 1e-9).ToString("0.#########E+00", CultureInfo.InvariantCulture),
                 displayValue: display));
         }
@@ -559,7 +567,7 @@ public sealed partial class TimingPage : Page, ICsvExportSource
             return;
         }
 
-        ScpiCommand? command = CommandCatalog.Find(":STAT:OPER:HARD:COND?");
+        ScpiCommand? command = device.Driver.Find(":STAT:OPER:HARD:COND?");
         if (command is null)
         {
             return;

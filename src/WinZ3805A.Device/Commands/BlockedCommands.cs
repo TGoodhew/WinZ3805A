@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 
 namespace WinZ3805A.Device.Commands;
 
@@ -10,8 +10,9 @@ namespace WinZ3805A.Device.Commands;
 /// §8.4 requires that these commands are absent from the application in every user-visible sense:
 /// not in the catalog, not in a picker, an autocomplete, help text, or any log a user can read.
 /// They are not catalog entries carrying a flag — they do not exist as data. This type holds
-/// patterns, never commands, and exists for exactly one caller: the Advanced Console's validator,
-/// which rejects a string a user typed by hand and logs the attempt.
+/// patterns, never commands, and has exactly one route out: the <c>IsBlocked</c> predicate, kept
+/// for the §8.4 tests and for any future path that accepts typed text. (The Advanced Console this
+/// was written for shipped as a picker with no free-text path — see the predicate's remarks.)
 /// </para>
 /// <para>
 /// <b>The collection is deliberately not public.</b> §8.4 names it

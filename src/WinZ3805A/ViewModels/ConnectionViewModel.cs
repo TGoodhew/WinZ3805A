@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.IO.Ports;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -431,7 +431,7 @@ public sealed class ConnectionViewModel : INotifyPropertyChanged
             $"{portName} disappeared while it was being opened. Reconnect the adapter, then choose Refresh.",
 
         _ when autoDetect =>
-            $"No receiver answered on {portName} at any of the eight standard settings. "
+            $"No receiver answered on {portName} at any supported setting. "
             + "Check that the receiver is powered on and that the cable is a null-modem type.",
 
         _ =>
@@ -466,7 +466,10 @@ public sealed class ConnectionViewModel : INotifyPropertyChanged
         CancellationToken cancellationToken)
     {
         int attempt = 0;
-        int total = SerialSettings.AutoDetectSequence.Count;
+        // The session's plan, not the transport's static: with more than one driver registered the
+        // walk is their union, and a count read from one family's list would finish at "8 of 8"
+        // with probes still running (#287).
+        int total = _session.AutoDetectPlan.Count;
 
         Progress<SerialSettings> progress = new(candidate =>
         {

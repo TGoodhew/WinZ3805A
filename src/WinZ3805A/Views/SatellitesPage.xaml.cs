@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 
 using Microsoft.Extensions.DependencyInjection;
 
@@ -34,14 +34,16 @@ namespace WinZ3805A.Views;
 /// </remarks>
 public sealed partial class SatellitesPage : Page
 {
-    /// <summary>§8.3's elevation mask, with its 0-90 range taken from the catalog.</summary>
-    private static readonly ScpiCommand SetMask = CommandConfirmation.Require(":GPS:SAT:TRAC:EMANgle");
-
     private SatellitesViewModel? _model;
     private DeviceContext? _device;
     private CommandInvoker? _invoker;
     private ISatellitesViewPreferenceStore? _preferences;
-    private readonly NumberFieldValidator _mask;
+    /// <summary>
+    /// The mask editor's validator, built in <c>OnNavigatedTo</c> rather than the constructor
+    /// (#287): its 0-90 range comes from the driver's catalog, and there is no driver until a
+    /// device arrives.
+    /// </summary>
+    private NumberFieldValidator? _mask;
     private bool _busy;
 
     /// <summary>Which form of the sky is showing.</summary>
@@ -71,9 +73,6 @@ public sealed partial class SatellitesPage : Page
         // Assigned here, not in XAML: the parser widens the literal and 10 arrives with a tail.
         MaskBox.Value = 10;
 
-        _mask = new NumberFieldValidator(MaskBox, MaskError, SetMask.Parameters[0]);
-        _mask.ValidityChanged += (_, _) => Render();
-
         _stalenessTicker.Tick += (_, _) => _model?.RaiseAll();
         Unloaded += (_, _) =>
         {
@@ -97,6 +96,14 @@ public sealed partial class SatellitesPage : Page
 
         _device = device;
         _invoker = new CommandInvoker(device.Session);
+
+        // §8.3's elevation mask, with its 0-90 range taken from the driver's catalog.
+        _mask = new NumberFieldValidator(
+            MaskBox,
+            MaskError,
+            CommandConfirmation.Require(device.Driver, ":GPS:SAT:TRAC:EMANgle").Parameters[0]);
+        _mask.ValidityChanged += (_, _) => Render();
+
         _model = new SatellitesViewModel(device.Store) { Connection = device.Session.Status };
         _model.PropertyChanged += (_, _) => DispatcherQueue.TryEnqueue(Render);
         device.Session.StatusChanged += OnStatusChanged;
@@ -183,7 +190,7 @@ public sealed partial class SatellitesPage : Page
         SkyPlotSelectionText.Text = DescribeSelection();
 
         ApplyMaskButton.IsEnabled =
-            !_busy && _mask.IsValid && model.Connection == ConnectionStatus.Connected;
+            !_busy && _mask is { IsValid: true } && model.Connection == ConnectionStatus.Connected;
 
         FooterText.Text = $"Satellite table {model.AgeDescription}";
     }
@@ -194,7 +201,10 @@ public sealed partial class SatellitesPage : Page
     /// </summary>
     private async void OnApplyMaskClicked(object sender, RoutedEventArgs e)
     {
-        if (_invoker is not CommandInvoker invoker || _mask.Value is not double degrees || _busy)
+        if (_invoker is not CommandInvoker invoker ||
+            _device is not DeviceContext device ||
+            _mask?.Value is not double degrees ||
+            _busy)
         {
             return;
         }
@@ -207,7 +217,11 @@ public sealed partial class SatellitesPage : Page
         {
             string value = degrees.ToString("0.###", CultureInfo.InvariantCulture);
             MaskOutcome.Show(await CommandConfirmation.RunAsync(
-                XamlRoot, invoker, SetMask, argument: value, displayValue: value));
+                XamlRoot,
+                invoker,
+                CommandConfirmation.Require(device.Driver, ":GPS:SAT:TRAC:EMANgle"),
+                argument: value,
+                displayValue: value));
         }
         finally
         {

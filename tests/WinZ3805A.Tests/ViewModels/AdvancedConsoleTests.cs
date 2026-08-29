@@ -1,4 +1,7 @@
-﻿using WinZ3805A.Device.Commands;
+﻿using Microsoft.Extensions.Time.Testing;
+
+using WinZ3805A.Device.Commands;
+using WinZ3805A.Device.Drivers;
 using WinZ3805A.ViewModels;
 
 namespace WinZ3805A.Tests.ViewModels;
@@ -20,6 +23,13 @@ namespace WinZ3805A.Tests.ViewModels;
 /// </remarks>
 public sealed class AdvancedConsoleTests
 {
+    /// <summary>
+    /// One catalog over the SmartClock driver. Instance-based since #287 — the picker offers the
+    /// connected receiver's vocabulary, so the tests build it the way the page does.
+    /// </summary>
+    private static ConsoleCatalog Catalog { get; } =
+        new(new SmartClockDriver(new FakeTimeProvider(new DateTimeOffset(2026, 8, 29, 4, 0, 0, TimeSpan.Zero))));
+
     // ------------------------------------------------------------------------- the picker's list
 
     /// <summary>
@@ -28,7 +38,7 @@ public sealed class AdvancedConsoleTests
     [Fact]
     public void EveryItemInThePickerIsACataloguedCommand() =>
         Assert.All(
-            ConsoleCatalog.All,
+            Catalog.All,
             entry => Assert.True(
                 CommandCatalog.Contains(entry.Mnemonic),
                 $"{entry.Mnemonic} is offered by the picker but is not in the catalog."));
@@ -45,7 +55,7 @@ public sealed class AdvancedConsoleTests
             .Select(command => command.Mnemonic)
             .Order(StringComparer.Ordinal);
 
-        Assert.Equal(expected, ConsoleCatalog.All.Select(entry => entry.Mnemonic));
+        Assert.Equal(expected, Catalog.All.Select(entry => entry.Mnemonic));
     }
 
     [Fact]
@@ -53,7 +63,7 @@ public sealed class AdvancedConsoleTests
     {
         // §8.5 makes them opt-in and off by default. Their switch is #56, not this page.
         Assert.NotEmpty(CommandCatalog.Experimental);
-        Assert.All(ConsoleCatalog.All, entry => Assert.False(entry.Command.IsExperimental));
+        Assert.All(Catalog.All, entry => Assert.False(entry.Command.IsExperimental));
     }
 
     /// <summary>
@@ -62,7 +72,7 @@ public sealed class AdvancedConsoleTests
     [Fact]
     public void NothingThePickerOffersIsAnExcludedCommand() =>
         Assert.All(
-            ConsoleCatalog.All,
+            Catalog.All,
             entry => Assert.False(
                 CommandCatalog.IsBlocked(entry.Mnemonic),
                 "The picker offered a command the safety model excludes."));
@@ -85,26 +95,26 @@ public sealed class AdvancedConsoleTests
     [Fact]
     public void ThePickersListCannotBeAddedTo()
     {
-        Assert.IsNotType<List<ConsoleCommand>>(ConsoleCatalog.All);
+        Assert.IsNotType<List<ConsoleCommand>>(Catalog.All);
 
-        ConsoleCommand smuggled = ConsoleCatalog.All[0];
+        ConsoleCommand smuggled = Catalog.All[0];
 
         Assert.Throws<NotSupportedException>(() =>
-            ((ICollection<ConsoleCommand>)ConsoleCatalog.All).Add(smuggled));
+            ((ICollection<ConsoleCommand>)Catalog.All).Add(smuggled));
         Assert.Throws<NotSupportedException>(() =>
-            ((IList<ConsoleCommand>)ConsoleCatalog.All).Insert(0, smuggled));
+            ((IList<ConsoleCommand>)Catalog.All).Insert(0, smuggled));
         Assert.Throws<NotSupportedException>(() =>
-            ((ICollection<ConsoleCommand>)ConsoleCatalog.All).Clear());
+            ((ICollection<ConsoleCommand>)Catalog.All).Clear());
     }
 
     [Fact]
     public void AFilteredListCannotBeAddedToEither()
     {
-        IReadOnlyList<ConsoleCommand> matches = ConsoleCatalog.Matching("SYNC");
+        IReadOnlyList<ConsoleCommand> matches = Catalog.Matching("SYNC");
 
         Assert.IsNotType<List<ConsoleCommand>>(matches);
         Assert.Throws<NotSupportedException>(() =>
-            ((ICollection<ConsoleCommand>)matches).Add(ConsoleCatalog.All[0]));
+            ((ICollection<ConsoleCommand>)matches).Add(Catalog.All[0]));
     }
 
     /// <summary>
@@ -128,7 +138,7 @@ public sealed class AdvancedConsoleTests
     [Fact]
     public void EveryParameterHasAnEditor() =>
         Assert.All(
-            ConsoleCatalog.All.SelectMany(entry => entry.Parameters),
+            Catalog.All.SelectMany(entry => entry.Parameters),
             parameter => Assert.Contains(
                 parameter.Kind,
                 new[]
@@ -149,7 +159,7 @@ public sealed class AdvancedConsoleTests
     public void TheCompositeCommandsDeclareTheirParts(string mnemonic, int parts)
     {
         ConsoleCommand entry = Assert.Single(
-            ConsoleCatalog.All,
+            Catalog.All,
             candidate => candidate.Mnemonic == mnemonic);
 
         Assert.Equal(parts, entry.Parameters.Count);
@@ -168,7 +178,7 @@ public sealed class AdvancedConsoleTests
     public void SeveralValuesAreJoinedWithCommas()
     {
         ConsoleCommand date = Assert.Single(
-            ConsoleCatalog.All,
+            Catalog.All,
             candidate => candidate.Mnemonic == ":GPS:INIT:DATE");
 
         Assert.Equal("1994,7,4", ConsoleArgument.For(date.Parameters, ["1994", "7", "4"]).Text);
@@ -183,7 +193,7 @@ public sealed class AdvancedConsoleTests
     public void ABadFieldRefusesTheWholeArgumentAndNamesItself()
     {
         ConsoleCommand time = Assert.Single(
-            ConsoleCatalog.All,
+            Catalog.All,
             candidate => candidate.Mnemonic == ":GPS:INIT:TIME");
 
         ConsoleArgument.Result result = ConsoleArgument.For(time.Parameters, ["12", "61", "56"]);
@@ -205,7 +215,7 @@ public sealed class AdvancedConsoleTests
     public void AnOmittedValueInTheMiddleIsRefused()
     {
         ConsoleCommand date = Assert.Single(
-            ConsoleCatalog.All,
+            Catalog.All,
             candidate => candidate.Mnemonic == ":GPS:INIT:DATE");
 
         Assert.False(ConsoleArgument.For(date.Parameters, ["1994", "", "4"]).IsValid);
@@ -216,7 +226,7 @@ public sealed class AdvancedConsoleTests
     public void TheWrongNumberOfValuesIsRefused()
     {
         ConsoleCommand date = Assert.Single(
-            ConsoleCatalog.All,
+            Catalog.All,
             candidate => candidate.Mnemonic == ":GPS:INIT:DATE");
 
         Assert.False(ConsoleArgument.For(date.Parameters, ["1994", "7"]).IsValid);
@@ -230,7 +240,7 @@ public sealed class AdvancedConsoleTests
     [Fact]
     public void APickerRowAnnouncesItselfAsASentence()
     {
-        ConsoleCommand query = Assert.Single(ConsoleCatalog.All, entry => entry.Mnemonic == "*IDN?");
+        ConsoleCommand query = Assert.Single(Catalog.All, entry => entry.Mnemonic == "*IDN?");
 
         Assert.Equal("*IDN? — Identify", query.ToString());
     }
@@ -243,7 +253,7 @@ public sealed class AdvancedConsoleTests
     public void ARowThatWillRaiseADialogSaysSo()
     {
         ConsoleCommand holdover = Assert.Single(
-            ConsoleCatalog.All,
+            Catalog.All,
             entry => entry.Mnemonic == ":SYNC:HOLDover:INITiate");
 
         Assert.EndsWith("needs confirmation", holdover.ToString(), StringComparison.Ordinal);
@@ -252,7 +262,7 @@ public sealed class AdvancedConsoleTests
     [Fact]
     public void NoRowAnnouncesItselfAsARecordDump() =>
         Assert.All(
-            ConsoleCatalog.All,
+            Catalog.All,
             entry => Assert.DoesNotContain("ScpiCommand {", entry.ToString(), StringComparison.Ordinal));
 
     // ------------------------------------------------------------------------------- the filter
@@ -262,12 +272,12 @@ public sealed class AdvancedConsoleTests
     [InlineData("   ")]
     [InlineData(null)]
     public void AnEmptyFilterShowsEverything(string? filter) =>
-        Assert.Equal(ConsoleCatalog.All.Count, ConsoleCatalog.Matching(filter).Count);
+        Assert.Equal(Catalog.All.Count, Catalog.Matching(filter).Count);
 
     [Fact]
     public void AFilterMatchesTheMnemonic()
     {
-        IReadOnlyList<ConsoleCommand> matches = ConsoleCatalog.Matching(":SYNC");
+        IReadOnlyList<ConsoleCommand> matches = Catalog.Matching(":SYNC");
 
         Assert.NotEmpty(matches);
         Assert.All(matches, entry => Assert.Contains(":SYNC", entry.Mnemonic, StringComparison.OrdinalIgnoreCase));
@@ -277,14 +287,14 @@ public sealed class AdvancedConsoleTests
     public void AFilterMatchesTheLabelToo()
     {
         // "Identify" is *IDN?'s display name, and nothing about the mnemonic contains it.
-        IReadOnlyList<ConsoleCommand> matches = ConsoleCatalog.Matching("Identify");
+        IReadOnlyList<ConsoleCommand> matches = Catalog.Matching("Identify");
 
         Assert.Contains(matches, entry => entry.Mnemonic == "*IDN?");
     }
 
     [Fact]
     public void AFilterMatchingNothingReturnsNothingRatherThanEverything() =>
-        Assert.Empty(ConsoleCatalog.Matching("zzzz-not-a-command"));
+        Assert.Empty(Catalog.Matching("zzzz-not-a-command"));
 
     /// <summary>
     /// A filter is a filter, not a search: it selects from the list and can never introduce
@@ -296,8 +306,8 @@ public sealed class AdvancedConsoleTests
     [InlineData("anything at all")]
     public void AFilterOnlyEverReturnsItemsTheFullListAlreadyHeld(string filter) =>
         Assert.All(
-            ConsoleCatalog.Matching(filter),
-            entry => Assert.Contains(entry, ConsoleCatalog.All));
+            Catalog.Matching(filter),
+            entry => Assert.Contains(entry, Catalog.All));
 
     // -------------------------------------------------------------------------- what can be sent
 
@@ -305,7 +315,7 @@ public sealed class AdvancedConsoleTests
     public void AConfirmTierCommandIsMarkedAsNeedingItsDialog()
     {
         ConsoleCommand entry = Assert.Single(
-            ConsoleCatalog.All,
+            Catalog.All,
             candidate => candidate.Mnemonic == ":SYNC:HOLDover:INITiate");
 
         Assert.True(entry.NeedsConfirmation);
@@ -316,7 +326,7 @@ public sealed class AdvancedConsoleTests
     public void AQueryNeedsNoConfirmation()
     {
         ConsoleCommand entry = Assert.Single(
-            ConsoleCatalog.All,
+            Catalog.All,
             candidate => candidate.Mnemonic == "*IDN?");
 
         Assert.False(entry.NeedsConfirmation);

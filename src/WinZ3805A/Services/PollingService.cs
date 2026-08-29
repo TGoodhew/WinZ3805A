@@ -3,7 +3,6 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using WinZ3805A.Device.Commands;
-using WinZ3805A.Controls;
 using WinZ3805A.Device.Drivers;
 using WinZ3805A.Device.Models;
 using WinZ3805A.Device.Parsing;
@@ -36,32 +35,18 @@ namespace WinZ3805A.Services;
 /// </remarks>
 public sealed class PollingService : IAsyncDisposable
 {
-    /// <summary>The §7.3 fast tier, in the order the specification lists it.</summary>
-    private static readonly string[] FastTier =
-    [
-        ":SYNC:STAT?",
-        ":SYNC:TFOM?",
-        ":SYNC:FFOM?",
-        ":SYNC:TINT?",
-        ":DIAG:ROSC:EFC:REL?",
-        ":GPS:SAT:TRAC:COUN?",
-    ];
-
-    /// <summary>Where <c>:SYNC:TINT?</c> sits in <see cref="FastTier"/>.</summary>
-    /// <remarks>
-    /// Derived rather than written as a literal, because §7.3 fixes the sweep's order and an index
-    /// that drifted from it would suppress the wrong reading — silently, and only while the receiver
-    /// was unlocked, which is the hardest case to notice.
-    /// </remarks>
-    private static readonly int TimeIntervalIndex = Array.IndexOf(FastTier, ":SYNC:TINT?");
-
-    private const string FullScreenCommand = ":SYST:STAT?";
-
     private readonly DeviceSessionService _session;
     private readonly ReceiverStateStore _store;
-    private readonly IReceiverDriver _driver;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<PollingService> _logger;
+
+    /// <summary>The driver for whatever is on the port right now (#287).</summary>
+    /// <remarks>
+    /// Read from the session per use rather than held, because the session re-selects it at every
+    /// connect — a reconnect can find a different receiver on the same port, and a poller holding
+    /// the old driver would sweep the new hardware with the old family's questions.
+    /// </remarks>
+    private IReceiverDriver Driver => _session.Driver;
 
     private CancellationTokenSource? _cts;
     private Task? _loop;
@@ -69,17 +54,18 @@ public sealed class PollingService : IAsyncDisposable
     private int _fullRequested;
 
     /// <summary>
-    /// The sync state under which the receiver last refused the time-interval query, or null.
+    /// The discriminator's answer under which the receiver last refused the plan's refusable query,
+    /// or null.
     /// </summary>
     /// <remarks>
     /// See <see cref="PollFastAsync"/>. Holding the state rather than a bare flag is what makes the
     /// suppression self-clearing: the question is asked again the moment the receiver's state
     /// changes, so nothing has to know which states support the reading.
     /// </remarks>
-    private string? _timeIntervalRefusedUnder;
+    private string? _refusedUnder;
 
-    /// <summary>How many sweeps have skipped the time-interval query, for the tests to see.</summary>
-    public long TimeIntervalSkips { get; private set; }
+    /// <summary>How many sweeps have skipped the refusable query, for the tests to see.</summary>
+    public long RefusedQuerySkips { get; private set; }
 
     /// <summary>Creates a poller for one session.</summary>
     /// <param name="session">The session whose transport the sweeps run over.</param>
@@ -89,17 +75,12 @@ public sealed class PollingService : IAsyncDisposable
     /// </param>
     /// <param name="logger">Optional; resolves to <c>NullLogger</c> when absent.</param>
     /// <param name="trends">P1-2's durable history. Optional, so a headless test needs no file.</param>
-    /// <param name="driver">
-    /// Which receiver family is on the port; it owns the parse. Optional, defaulting to
-    /// <see cref="SmartClockDriver"/> (#122).
-    /// </param>
     public PollingService(
         DeviceSessionService session,
         ReceiverStateStore store,
         TimeProvider timeProvider,
         ILogger<PollingService>? logger = null,
-        TrendStore? trends = null,
-        IReceiverDriver? driver = null)
+        TrendStore? trends = null)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(store);
@@ -109,17 +90,19 @@ public sealed class PollingService : IAsyncDisposable
         _store = store;
         _timeProvider = timeProvider;
         _trends = trends;
-        // Parsing belongs to the driver: the 80x24 screen is SmartClock's shape, and a receiver
-        // speaking anything else shares none of it (#122).
-        _driver = driver ?? new SmartClockDriver(timeProvider);
         _logger = logger ?? NullLogger<PollingService>.Instance;
     }
 
-    /// <summary>The fast cadence (§7.3 default 1 s, user-settable).</summary>
-    public TimeSpan FastInterval { get; init; } = TimeSpan.FromSeconds(1);
+    /// <summary>Overrides the fast cadence, or null to follow the driver's (§7.3 default 1 s).</summary>
+    /// <remarks>
+    /// Nullable since #287: the cadence is the driver's to state — it was measured on that family's
+    /// hardware — and this override exists for §7.3's "user-settable" and for tests that need a
+    /// cadence the clock can be wound past.
+    /// </remarks>
+    public TimeSpan? FastInterval { get; init; }
 
-    /// <summary>The full-screen cadence (§7.3 default 10 s, user-settable).</summary>
-    public TimeSpan FullInterval { get; init; } = TimeSpan.FromSeconds(10);
+    /// <summary>Overrides the full-screen cadence, or null to follow the driver's (§7.3 default 10 s).</summary>
+    public TimeSpan? FullInterval { get; init; }
 
     /// <summary>
     /// Asks for a full status screen at the next fast tick, ahead of its cadence.
@@ -219,7 +202,7 @@ public sealed class PollingService : IAsyncDisposable
     /// </remarks>
     private async Task RunAsync(CancellationToken cancellationToken)
     {
-        using PeriodicTimer timer = new(FastInterval, _timeProvider);
+        using PeriodicTimer timer = new(Positive(FastInterval ?? Driver.Cadence.Fast, TimeSpan.FromSeconds(1)), _timeProvider);
 
         // Due immediately, so the first screen arrives with the first readings rather than ten
         // seconds later — the satellite table is most of what the user is waiting to see.
@@ -229,6 +212,20 @@ public sealed class PollingService : IAsyncDisposable
         {
             while (!cancellationToken.IsCancellationRequested)
             {
+                // The cadence is re-read each pass because a reconnect can select a different
+                // driver (#287). Written only on change: setting Period recomputes the pending
+                // schedule, and doing that every second for the same value would be a way to
+                // perturb timer semantics for nothing. Clamped positive because PeriodicTimer
+                // throws for anything else and this loop is the one place that must not die of
+                // somebody else's bug — the contract tests make a non-positive cadence loud for
+                // any registered driver, so the clamp is a backstop, not the report.
+                TimeSpan fast = Positive(FastInterval ?? Driver.Cadence.Fast, TimeSpan.FromSeconds(1));
+                TimeSpan full = Positive(FullInterval ?? Driver.Cadence.Full, TimeSpan.FromSeconds(10));
+                if (timer.Period != fast)
+                {
+                    timer.Period = fast;
+                }
+
                 bool requested = Interlocked.Exchange(ref _fullRequested, 0) == 1;
 
                 if (requested || _timeProvider.GetUtcNow() >= nextFull)
@@ -240,7 +237,7 @@ public sealed class PollingService : IAsyncDisposable
                         // A screen the user asked for resets the cadence rather than advancing it.
                         // Advancing would leave the scheduled sweep still due, and they would get a
                         // second screen moments after the one they pressed F5 for.
-                        nextFull = _timeProvider.GetUtcNow() + FullInterval;
+                        nextFull = _timeProvider.GetUtcNow() + full;
                     }
                     else
                     {
@@ -248,14 +245,14 @@ public sealed class PollingService : IAsyncDisposable
                         // screen takes about 3.5 s to arrive on a 9600 baud link, so scheduling from
                         // completion silently stretches §7.3's 10 s cadence to 13.5 s — a drift that
                         // compounds and that nobody would think to look for.
-                        nextFull += FullInterval;
+                        nextFull += full;
 
                         // Unless it has fallen so far behind that catching up would mean two screens
                         // back to back, which would starve the fast tier for seven seconds to
                         // recover time that is already lost.
                         if (nextFull <= _timeProvider.GetUtcNow())
                         {
-                            nextFull = _timeProvider.GetUtcNow() + FullInterval;
+                            nextFull = _timeProvider.GetUtcNow() + full;
                         }
                     }
                 }
@@ -275,15 +272,19 @@ public sealed class PollingService : IAsyncDisposable
     }
 
     /// <summary>
-    /// Runs one §7.3 fast sweep, skipping a reading the receiver has said it cannot give.
+    /// Runs one fast sweep of the driver's plan, skipping a reading the receiver has said it
+    /// cannot give.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>The sweep is conditional on one command, and it has to be.</b> While the receiver is not
-    /// locked there is no 1 PPS to measure against, so <c>:SYNC:TINT?</c> answers nothing and puts
-    /// <c>E-230</c> in the prompt — once a second, indefinitely. On the bench receiver that
-    /// overflowed the error queue outright: it began answering <c>E-350</c>, and the Diagnostics
-    /// page could not drain it because the poll refilled it faster than the page emptied it (#155).
+    /// <b>The sweep is conditional on the plan's one refusable command, and it has to be.</b> The
+    /// case the mechanism was built for (§7.3.1): while a SmartClock receiver is not locked there
+    /// is no 1 PPS to measure against, so <c>:SYNC:TINT?</c> answers nothing and puts <c>E-230</c>
+    /// in the prompt — once a second, indefinitely. On the bench receiver that overflowed the
+    /// error queue outright: it began answering <c>E-350</c>, and the Diagnostics page could not
+    /// drain it because the poll refilled it faster than the page emptied it (#155). Which command
+    /// that is, if any, is the driver's to say (<see cref="PollPlan.RefusableIndex"/>, #287); the
+    /// suppression policy is this loop's either way.
     /// </para>
     /// <para>
     /// <b>The cost is not the churn.</b> §7.2 requires the error queue to be read after every tier C
@@ -302,56 +303,75 @@ public sealed class PollingService : IAsyncDisposable
     /// </remarks>
     private async Task PollFastAsync(CancellationToken cancellationToken)
     {
-        string?[] answers = new string?[FastTier.Length];
+        // Read once, so nothing about this sweep straddles a driver swap: the answers are
+        // positional, and driver B reading — or resolving, or timing — driver A's sweep would be
+        // #209's misalignment made in software. Every ask below goes through this reference, not
+        // the live property.
+        IReceiverDriver driver = Driver;
+        ForgetTheOldDriversState(driver);
 
-        // The sync state comes first in §7.3's order, which is what makes this possible at all.
-        answers[0] = await AskAsync(FastTier[0], cancellationToken).ConfigureAwait(false);
+        PollPlan plan = driver.Plan;
+        if (plan.FastTier.Count == 0)
+        {
+            // Contract-breaking — the driver tests say a plan sweeps something — but the poll loop
+            // is the one place that must not die of somebody else's bug (§11.1's reasoning).
+            WarnOnceAboutAnEmptyPlan(driver);
+            return;
+        }
+
+        string?[] answers = new string?[plan.FastTier.Count];
+
+        // The discriminator comes first in the plan's order, which is what makes this possible at
+        // all: its answer keys the refusal suppression for the rest of the sweep.
+        answers[0] = await AskAsync(driver, plan.FastTier[0], cancellationToken).ConfigureAwait(false);
         string? state = ScalarParsers.ParseKeyword(answers[0]);
 
-        for (int i = 1; i < FastTier.Length; i++)
+        for (int i = 1; i < answers.Length; i++)
         {
-            if (i == TimeIntervalIndex)
+            if (i == plan.RefusableIndex)
             {
-                if (string.Equals(_timeIntervalRefusedUnder, state ?? string.Empty, StringComparison.Ordinal))
+                if (string.Equals(_refusedUnder, state ?? string.Empty, StringComparison.Ordinal))
                 {
-                    TimeIntervalSkips++;
+                    RefusedQuerySkips++;
                     continue;
                 }
 
                 (answers[i], bool refused) =
-                    await AskWithStatusAsync(FastTier[i], cancellationToken).ConfigureAwait(false);
+                    await AskWithStatusAsync(driver, plan.FastTier[i], cancellationToken).ConfigureAwait(false);
 
-                _timeIntervalRefusedUnder = refused ? state ?? string.Empty : null;
+                _refusedUnder = refused ? state ?? string.Empty : null;
                 continue;
             }
 
-            answers[i] = await AskAsync(FastTier[i], cancellationToken).ConfigureAwait(false);
+            answers[i] = await AskAsync(driver, plan.FastTier[i], cancellationToken).ConfigureAwait(false);
         }
 
-        string? syncState = state;
-        int? tfom = ScalarParsers.ParseInteger(answers[1]);
-        int? tracked = ScalarParsers.ParseInteger(answers[5]);
+        SweepInterpretation sweep = driver.InterpretSweep(answers);
+        FastReadings readings = sweep.Readings;
 
-        LogStateChange(syncState, tfom, tracked);
+        LogStateChange(readings.SyncState, readings.Tfom, readings.SatellitesTracked);
 
-        double? timeInterval = ScalarParsers.ParseSecondsAsNanoseconds(answers[3]);
-        double? efc = ScalarParsers.ParseDecimal(answers[4]);
-
-        int? ffom = ScalarParsers.ParseInteger(answers[2]);
-
-        // Whether this sweep is a reading at all, decided once and applied to everything (#237).
+        // Whether this sweep is a reading at all, decided once and applied to everything (#237) —
+        // in two layers since #287, because the two questions have different owners.
         //
-        // #209 asks whether the sync state is a state this receiver has. That catches a slip which
-        // began before the sync state was read - but §7.3's order has it read on its own, ahead of
-        // the loop that reads the rest, so a slip beginning INSIDE that loop leaves it correct and
-        // shifts every later answer. #237's remaining risk in one sentence: a slip that leaves a
-        // plausible sync state while corrupting the others is stored in full, and nothing shows it.
+        // The driver owns "is this sweep mine?": #209's discriminator asks whether the sync state
+        // is a state the receiver reports, and only the driver knows its own closed vocabulary.
+        // That catches a slip which began before the sync state was read — but the plan's order has
+        // it read on its own, ahead of the loop that reads the rest, so a slip beginning INSIDE
+        // that loop leaves it correct and shifts every later answer. #237's remaining risk in one
+        // sentence: a slip that leaves a plausible sync state while corrupting the others is stored
+        // in full, and nothing shows it.
         //
-        // So the numeric fields are checked against bounds they cannot cross, all documented or
-        // physical rather than fitted to observed data - see ReadingPlausibility.
-        string? slipped = IsCoherent(syncState)
-            ? ReadingPlausibility.Implausible(timeInterval, tfom, ffom, efc, tracked)
-            : $"the sync state read \"{Summarise(syncState)}\", which is not a state this receiver reports";
+        // So this service owns the second layer: the accepted fields are checked against bounds the
+        // common currency's own definitions say they cannot cross, all documented or physical
+        // rather than fitted to observed data — see ReadingPlausibility.
+        string? slipped = sweep.Rejection
+            ?? ReadingPlausibility.Implausible(
+                readings.TimeIntervalNanoseconds,
+                readings.Tfom,
+                readings.Ffom,
+                readings.EfcPercent,
+                readings.SatellitesTracked);
 
         if (slipped is not null)
         {
@@ -377,20 +397,80 @@ public sealed class PollingService : IAsyncDisposable
         // P1-2: every fast sweep is a row. Append never throws (see TrendStore), so a locked file
         // or a full disk costs a gap in the trend rather than the polling cadence itself.
         _trends?.Append(new TrendRecord(
-            _timeProvider.GetUtcNow().UtcTicks, efc, timeInterval, syncState, tracked));
+            _timeProvider.GetUtcNow().UtcTicks,
+            readings.EfcPercent,
+            readings.TimeIntervalNanoseconds,
+            readings.SyncState,
+            readings.SatellitesTracked));
 
         MaybeCompact();
 
         _store.UpdateFast(
-            syncState,
-            tfom,
-            ffom,
-            timeInterval,
-            efc,
-            tracked);
+            readings.SyncState,
+            readings.Tfom,
+            readings.Ffom,
+            readings.TimeIntervalNanoseconds,
+            readings.EfcPercent,
+            readings.SatellitesTracked);
 
         FastSweeps++;
     }
+
+    /// <summary>Says once that the driver's plan sweeps nothing, then stays quiet.</summary>
+    /// <remarks>
+    /// Once, because the loop runs every second and the defect it reports is in a driver, not in
+    /// anything that changes between sweeps — a warning a second would be #155's error-queue
+    /// mistake made against the log file instead.
+    /// </remarks>
+    private void WarnOnceAboutAnEmptyPlan(IReceiverDriver driver)
+    {
+        if (_warnedAboutEmptyPlan)
+        {
+            return;
+        }
+
+        _warnedAboutEmptyPlan = true;
+
+        // "The fast sweep is idle", not "nothing is being polled": the full-status query still
+        // runs on its own cadence, and a log line that overstated the outage would misdirect
+        // whoever reads it.
+        _logger.LogWarning(
+            "The {Family} driver's poll plan has no fast-tier queries; the fast sweep is idle.",
+            driver.Family);
+    }
+
+    /// <summary>Whether the empty-plan warning has been given, for the current driver.</summary>
+    private bool _warnedAboutEmptyPlan;
+
+    /// <summary>The driver the poller's per-driver state belongs to.</summary>
+    private IReceiverDriver? _observedDriver;
+
+    /// <summary>
+    /// Clears state that describes one driver's receiver when a different driver appears (#287).
+    /// </summary>
+    /// <remarks>
+    /// The refusal suppression records only the discriminator's token, and state tokens are short
+    /// generic words — two families can both say <c>HOLD</c>. Carrying the suppression across a
+    /// swap would silently withhold the new driver's refusable query from hardware that was never
+    /// asked, so both it and the empty-plan warning reset the moment a different driver is
+    /// observed. Reference identity is the right test: the session hands out one instance per
+    /// registered driver.
+    /// </remarks>
+    private void ForgetTheOldDriversState(IReceiverDriver driver)
+    {
+        if (ReferenceEquals(_observedDriver, driver))
+        {
+            return;
+        }
+
+        _observedDriver = driver;
+        _refusedUnder = null;
+        _warnedAboutEmptyPlan = false;
+    }
+
+    /// <summary>A backstop for a cadence the timer would throw on; the contract tests are the report.</summary>
+    private static TimeSpan Positive(TimeSpan candidate, TimeSpan fallback) =>
+        candidate > TimeSpan.Zero ? candidate : fallback;
 
     /// <summary>
     /// Records mode, figure of merit and satellite count when any of them moves.
@@ -409,50 +489,6 @@ public sealed class PollingService : IAsyncDisposable
     /// cannot be reached physically. Information level, so it survives the default configuration.
     /// </para>
     /// </remarks>
-    /// <summary>
-    /// Whether a sweep is a reading at all, rather than the tail of another command's reply (#209).
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The discriminator is the sync state, because it is the one field with a closed set of legal
-    /// values - <c>LOCK</c>, <c>REC</c>, <c>WAIT</c>, <c>HOLD</c>, <c>POW</c>, <c>OFF</c>. Anything
-    /// else did not come from <c>:SYNC:STAT?</c>.
-    /// </para>
-    /// <para>
-    /// <b>The whole sweep is dropped, not the offending field</b>, and that is the point. When the
-    /// link had misaligned on 24 Aug the sync state held a diagnostic log dump, and the same sweep's
-    /// other fields held a time interval of two seconds and an EFC of +2 % - the second of which is
-    /// inside the control range and indistinguishable from a real reading by magnitude. No
-    /// per-field range check catches that one. What identifies it is the company it keeps.
-    /// </para>
-    /// <para>
-    /// <b>The cost is real and is logged.</b> A sync state this application has not been taught
-    /// would drop rows while looking healthy, so every rejection says what it saw. A silent guard
-    /// here would be worse than the defect it prevents.
-    /// </para>
-    /// </remarks>
-    /// <remarks>
-    /// <c>ReceiverModes</c> lives under <c>Controls/</c> and is used from here anyway, deliberately:
-    /// it holds the one definition of the closed set, it speaks no WinUI, and it is already linked
-    /// into the headless test project. Restating the six tokens here would be the second copy of a
-    /// list that has to stay identical, which is a worse problem than a using directive.
-    /// </remarks>
-    private static bool IsCoherent(string? syncState) =>
-        ReceiverModes.FromSyncState(syncState) != ReceiverMode.Disconnected;
-
-    /// <summary>A rejected sync state, short enough to log and long enough to recognise.</summary>
-    private static string Summarise(string? syncState)
-    {
-        if (string.IsNullOrWhiteSpace(syncState))
-        {
-            return "(empty)";
-        }
-
-        string oneLine = syncState.ReplaceLineEndings(" ").Trim();
-
-        return oneLine.Length <= 60 ? oneLine : oneLine[..60] + "…";
-    }
-
     private void LogStateChange(string? syncState, int? tfom, int? tracked)
     {
         if (syncState == _lastSyncState && tfom == _lastTfom && tracked == _lastTracked)
@@ -501,13 +537,17 @@ public sealed class PollingService : IAsyncDisposable
 
     private async Task PollFullAsync(CancellationToken cancellationToken)
     {
-        string? screen = await AskAsync(FullScreenCommand, cancellationToken).ConfigureAwait(false);
+        // Read once, so the ask and the parse cannot straddle a driver swap: whatever answered the
+        // plan's query is what interprets the answer.
+        IReceiverDriver driver = Driver;
+
+        string? screen = await AskAsync(driver, driver.Plan.FullStatus, cancellationToken).ConfigureAwait(false);
         if (screen is null)
         {
             return;
         }
 
-        ReceiverStatus status = _driver.Parse(screen);
+        ReceiverStatus status = driver.Parse(screen);
         _store.UpdateFull(status);
         FullSweeps++;
 
@@ -530,8 +570,8 @@ public sealed class PollingService : IAsyncDisposable
     /// the user would see an application that stops updating rather than one that says it has lost
     /// the link.
     /// </remarks>
-    private async Task<string?> AskAsync(string mnemonic, CancellationToken cancellationToken) =>
-        (await AskWithStatusAsync(mnemonic, cancellationToken).ConfigureAwait(false)).Text;
+    private async Task<string?> AskAsync(IReceiverDriver driver, string mnemonic, CancellationToken cancellationToken) =>
+        (await AskWithStatusAsync(driver, mnemonic, cancellationToken).ConfigureAwait(false)).Text;
 
     /// <summary>
     /// As <see cref="AskAsync"/>, and also reports whether the receiver <i>refused</i> the command.
@@ -543,15 +583,20 @@ public sealed class PollingService : IAsyncDisposable
     /// the cable was unplugged would keep it suppressed after it was plugged back in.
     /// </returns>
     private async Task<(string? Text, bool Refused)> AskWithStatusAsync(
+        IReceiverDriver driver,
         string mnemonic,
         CancellationToken cancellationToken)
     {
-        ScpiCommand? command = CommandCatalog.Find(mnemonic);
+        // The caller's captured driver, never the live property: the mnemonic came from that
+        // driver's plan, and resolving it through whatever the session holds NOW would let a
+        // mid-sweep reconnect swap pair one family's question with another's catalog entry.
+        ScpiCommand? command = driver.Find(mnemonic);
         if (command is null)
         {
-            // Only reachable if the catalog and this list disagree, which is a bug rather than a
-            // device condition — hence a warning rather than silence.
-            _logger.LogWarning("{Mnemonic} is not in the command catalog and was not polled.", mnemonic);
+            // Only reachable if the driver's catalog and its own plan disagree, which is a bug in
+            // the driver rather than a device condition — hence a warning rather than silence. The
+            // contract tests assert the plan resolves, so a registered driver cannot get here.
+            _logger.LogWarning("{Mnemonic} is not in the driver's command catalog and was not polled.", mnemonic);
             return (null, false);
         }
 

@@ -29,12 +29,19 @@ public sealed class CommandInvoker
     private readonly DeviceSessionService _session;
 
     /// <summary>
-    /// The error-queue read §7.2 requires after every tier C command, resolved from the catalog
-    /// rather than typed, so it is subject to the same allowlist as everything else (§8.1).
+    /// The error-queue read §7.2 requires after every tier C command, resolved from the driver's
+    /// catalog rather than typed, so it is subject to the same allowlist as everything else (§8.1).
     /// </summary>
-    private static readonly ScpiCommand NextError =
-        CommandCatalog.Find(":SYST:ERR?")
-        ?? throw new InvalidOperationException("The catalog has no :SYST:ERR? entry, which §7.2 requires.");
+    /// <remarks>
+    /// A property over the session's driver, not a field (#287): the driver is re-selected at every
+    /// connect, and a stale field would drain the queue with another family's spelling. The throw
+    /// stays because <c>:SYST:ERR?</c> is IEEE 488.2's own error query and the driver contract
+    /// tests require every catalog to carry it — a driver without one is a bug to surface, not a
+    /// device condition to tolerate.
+    /// </remarks>
+    private ScpiCommand NextError =>
+        _session.Driver.Find(":SYST:ERR?")
+        ?? throw new InvalidOperationException("The driver's catalog has no :SYST:ERR? entry, which §7.2 requires.");
 
     /// <summary>Creates an invoker over the shared session.</summary>
     public CommandInvoker(DeviceSessionService session)
@@ -191,10 +198,17 @@ public sealed class CommandInvoker
 
     private async Task<ScpiError?> ReadErrorAsync(CancellationToken cancellationToken)
     {
+        // Resolved OUTSIDE the try, deliberately: NextError throws InvalidOperationException for a
+        // driver whose catalog lacks the §7.2 error query, and the catch below — written for a
+        // session that went away mid-check — would otherwise swallow that into "no error", turning
+        // the promised loud failure into tier C commands that skip the mandated error-queue read
+        // and report success.
+        ScpiCommand nextError = NextError;
+
         try
         {
             Transaction reply = await _session
-                .ExecuteAsync(NextError, cancellationToken: cancellationToken)
+                .ExecuteAsync(nextError, cancellationToken: cancellationToken)
                 .ConfigureAwait(true);
 
             return reply.Succeeded ? ScpiError.TryParse(reply.FirstLine) : null;

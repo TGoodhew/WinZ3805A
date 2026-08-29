@@ -12,6 +12,7 @@ using AppInstance = Microsoft.Windows.AppLifecycle.AppInstance;
 
 using Windows.ApplicationModel;
 
+using WinZ3805A.Device.Drivers;
 using WinZ3805A.Device.Transport;
 using WinZ3805A.Services;
 using WinZ3805A.Views;
@@ -455,6 +456,13 @@ public partial class App : Application
             builder.Services.AddSingleton<ILoggerProvider>(
                 provider => provider.GetRequiredService<FileLoggerProvider>());
         });
+        // #287: the receiver families this build can drive, in priority order — the first
+        // registered is the fallback for an identity nothing claims. Adding a family is one more
+        // line here plus a driver in the Device library; docs/adding-a-receiver.md is the
+        // walkthrough. AddDevice hands every registration to each session it composes.
+        services.AddSingleton<IReceiverDriver>(
+            provider => new SmartClockDriver(provider.GetRequiredService<TimeProvider>()));
+
         services.AddDevice(DeviceKeys.Primary, (port, settings) => new SerialTransport(port, settings));
 
         // §9.8's reduced-motion rule. A singleton because the setting is the user's, not a

@@ -1,5 +1,6 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 
+using WinZ3805A.Device.Drivers;
 using WinZ3805A.Device.Models;
 
 namespace WinZ3805A.Services;
@@ -70,6 +71,15 @@ public sealed class DeviceContext : IAsyncDisposable
 
     /// <summary>The transport and command channel.</summary>
     public DeviceSessionService Session { get; }
+
+    /// <summary>The driver for the receiver on the port right now (#287).</summary>
+    /// <remarks>
+    /// A live read of <see cref="DeviceSessionService.Driver"/>, never a copy: the session
+    /// re-selects at every connect. This is the property pages resolve their commands through —
+    /// <c>_device.Driver.Find(…)</c> — so nothing outside the Device library reaches the static
+    /// catalog and silently means one family.
+    /// </remarks>
+    public IReceiverDriver Driver => Session.Driver;
 
     /// <summary>Last-known state, which the view models bind to.</summary>
     public ReceiverStateStore Store { get; }

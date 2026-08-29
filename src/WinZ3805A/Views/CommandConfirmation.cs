@@ -1,7 +1,8 @@
-using Microsoft.UI.Xaml;
+﻿using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
 using WinZ3805A.Device.Commands;
+using WinZ3805A.Device.Drivers;
 using WinZ3805A.Services;
 using WinZ3805A.ViewModels;
 
@@ -67,15 +68,34 @@ public static class CommandConfirmation
     }
 
     /// <summary>
-    /// Looks a tier C command up in the catalog, or fails loudly.
+    /// Looks a tier C command up in the driver's catalog, or fails loudly.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// A page naming a mnemonic the catalog does not hold is a bug in the page, not a condition to
     /// degrade around: §8.1 makes the catalog the only source of commands, so the absence means the
-    /// page and the catalog disagree about what exists. Better found on the first click than by a
-    /// button that silently does nothing.
+    /// page and the catalog disagree about what exists. Better found on the first navigation than
+    /// by a button that silently does nothing.
+    /// </para>
+    /// <para>
+    /// Takes the driver since #287, which moved every caller from a static field to a lookup at
+    /// the point of use — the commands a page runs are the connected receiver's, not the
+    /// process's, and the receiver can change between navigations. The failure moved from
+    /// type-initialisation to the first click, and the early loudness the static fields provided
+    /// lives in a test now: <c>ReceiverDriverTests</c> pins that every mnemonic a page requires
+    /// resolves through the SmartClock driver, which fails the build's test run rather than the
+    /// running application. Note what this contract means for a new family: the pages that call
+    /// this require these mnemonics of any driver they are used with — the capability-gating that
+    /// would soften that is #287's deferred item 4, and docs/adding-a-receiver.md names it
+    /// honestly.
+    /// </para>
     /// </remarks>
-    public static ScpiCommand Require(string mnemonic) =>
-        CommandCatalog.Find(mnemonic)
-        ?? throw new InvalidOperationException($"{mnemonic} is not in the command catalog.");
+    public static ScpiCommand Require(IReceiverDriver driver, string mnemonic)
+    {
+        ArgumentNullException.ThrowIfNull(driver);
+
+        return driver.Find(mnemonic)
+            ?? throw new InvalidOperationException(
+                $"{mnemonic} is not in the {driver.Family} driver's command catalog.");
+    }
 }

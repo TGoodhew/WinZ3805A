@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 
 using WinZ3805A.Device.Commands;
 
@@ -118,9 +118,10 @@ public sealed class ExperimentalQueryRow : INotifyPropertyChanged
 /// <summary>§8.5's fixed list, as rows.</summary>
 /// <remarks>
 /// <para>
-/// Built from <see cref="CommandCatalog.Experimental"/> rather than restated, so the six exist in
-/// exactly one place. A test asserts the count and that every one is a query — §8.5 calls the list
-/// fixed, and "fixed" is worth an assertion rather than a comment.
+/// Built by filtering the driver's allowlist rather than restated, so the six exist in exactly
+/// one place — <c>IsExperimental</c> is carried by the catalog entries themselves (#287 removed
+/// the last static reach). A test asserts the SmartClock count and that every one is a query —
+/// §8.5 calls the list fixed, and "fixed" is worth an assertion rather than a comment.
 /// </para>
 /// <para>
 /// <b>Five of the six do not exist on this receiver.</b> Run against the bench Z3805A, firmware
@@ -150,14 +151,26 @@ public sealed class ExperimentalQueryRow : INotifyPropertyChanged
 /// </remarks>
 public static class ExperimentalQueries
 {
-    /// <summary>How many §8.5 lists.</summary>
-    public const int Count = 6;
-
-    /// <summary>Fresh rows over the catalogued queries, in catalog order.</summary>
+    /// <summary>Fresh rows over the driver's experimental queries, in catalog order.</summary>
     /// <remarks>
+    /// <para>
     /// A factory rather than a static list: each row holds its own last result, and two Diagnostics
     /// pages sharing one set of rows would show each other's answers.
+    /// </para>
+    /// <para>
+    /// The old <c>Count</c> constant of six is gone with the static (#287): six is a fact about the
+    /// SmartClock catalog, asserted in its tests, not a cross-family constant for a view model to
+    /// compile in. A family with no experimental queries gets an empty card, which is the truth.
+    /// </para>
     /// </remarks>
-    public static IReadOnlyList<ExperimentalQueryRow> Create() =>
-        CommandCatalog.Experimental.Select(command => new ExperimentalQueryRow(command)).ToList().AsReadOnly();
+    public static IReadOnlyList<ExperimentalQueryRow> Create(Device.Drivers.IReceiverDriver driver)
+    {
+        ArgumentNullException.ThrowIfNull(driver);
+
+        return driver.Commands
+            .Where(command => command.IsExperimental)
+            .Select(command => new ExperimentalQueryRow(command))
+            .ToList()
+            .AsReadOnly();
+    }
 }

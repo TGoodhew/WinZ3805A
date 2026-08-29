@@ -19,16 +19,6 @@ namespace WinZ3805A.Views;
 /// </summary>
 public sealed partial class PositionPage : Page
 {
-    /// <summary>§8.3's four survey commands and the manual set, all tier C.</summary>
-    private static readonly ScpiCommand StartSurvey = CommandConfirmation.Require(":GPS:POSition:SURVey:STATe ONCE");
-    private static readonly ScpiCommand AdoptSurvey = CommandConfirmation.Require(":GPS:POSition SURVey");
-    private static readonly ScpiCommand CancelSurvey = CommandConfirmation.Require(":GPS:POSition LAST");
-    private static readonly ScpiCommand SurveyAtPowerUp = CommandConfirmation.Require(":GPS:POS:SURV:STAT:POWerup");
-    private static readonly ScpiCommand SetPosition = CommandConfirmation.Require(":GPS:POSition");
-
-    /// <summary>The §8.5-adjacent read behind the power-up checkbox — an ordinary tier S query.</summary>
-    private static readonly ScpiCommand ReadPowerUp = CommandConfirmation.Require(":GPS:POS:SURV:STAT:POW?");
-
     private PositionViewModel? _model;
     private DeviceContext? _device;
     private CommandInvoker? _invoker;
@@ -122,9 +112,12 @@ public sealed partial class PositionPage : Page
             return;
         }
 
+        // The read behind the power-up checkbox — an ordinary tier S query.
+        ScpiCommand readPowerUp = CommandConfirmation.Require(device.Driver, ":GPS:POS:SURV:STAT:POW?");
+
         try
         {
-            Transaction reply = await device.Session.ExecuteAsync(ReadPowerUp).ConfigureAwait(true);
+            Transaction reply = await device.Session.ExecuteAsync(readPowerUp).ConfigureAwait(true);
 
             // The body is the test, not the prompt. §7.2: a rejected query answers with the prompt
             // and nothing else, so a query that returned a line returned an answer — whatever an
@@ -234,13 +227,13 @@ public sealed partial class PositionPage : Page
     // ---- §8.3's survey commands ------------------------------------------------------------
 
     private async void OnStartSurveyClicked(object sender, RoutedEventArgs e) =>
-        await RunAsync(StartSurvey, SurveyOutcome, hint: SurveyRefusalAdvice.ForFailedStart);
+        await RunAsync(":GPS:POSition:SURVey:STATe ONCE", SurveyOutcome, hint: SurveyRefusalAdvice.ForFailedStart);
 
     private async void OnAdoptSurveyClicked(object sender, RoutedEventArgs e) =>
-        await RunAsync(AdoptSurvey, SurveyOutcome);
+        await RunAsync(":GPS:POSition SURVey", SurveyOutcome);
 
     private async void OnCancelSurveyClicked(object sender, RoutedEventArgs e) =>
-        await RunAsync(CancelSurvey, SurveyOutcome);
+        await RunAsync(":GPS:POSition LAST", SurveyOutcome);
 
     /// <summary>
     /// The power-up setting. A checkbox that sends a tier C command needs its own state put back
@@ -257,7 +250,7 @@ public sealed partial class PositionPage : Page
         string keyword = wanted ? "ON" : "OFF";
 
         CommandOutcome? outcome = await RunAsync(
-            SurveyAtPowerUp, SurveyOutcome, argument: keyword, displayValue: keyword);
+            ":GPS:POS:SURV:STAT:POWerup", SurveyOutcome, argument: keyword, displayValue: keyword);
 
         if (outcome is { Succeeded: true })
         {
@@ -365,25 +358,36 @@ public sealed partial class PositionPage : Page
             + $"{LongitudeSign.SelectedItem} {Whole(LongitudeDegrees)}° {Whole(LongitudeMinutes)}′ {Fractional(LongitudeSeconds)}″, "
             + $"{HeightBox.Value.ToString("0.00", CultureInfo.CurrentCulture)} m";
 
-        await RunAsync(SetPosition, PositionOutcome, argument, display);
+        await RunAsync(":GPS:POSition", PositionOutcome, argument, display);
 
         static string Whole(NumberBox box) => box.Value.ToString("0", CultureInfo.InvariantCulture);
 
         static string Fractional(NumberBox box) => box.Value.ToString("0.###", CultureInfo.InvariantCulture);
     }
 
-    /// <summary>Runs one tier C command with the page quiet and the result on the given card.</summary>
+    /// <summary>Confirms and runs one of this page's tier C commands, and shows the outcome.</summary>
+    /// <param name="mnemonic">
+    /// Which command — §8.3's four survey actions and the manual set, all tier C, resolved through
+    /// the driver's catalog at the click (#287) because the receiver on the port is the session's
+    /// to say, not the process's.
+    /// </param>
+    /// <param name="bar">Where the outcome is shown.</param>
+    /// <param name="argument">The value to send, already formatted for the receiver, or null.</param>
+    /// <param name="displayValue">The value as the user saw it, for the outcome sentence.</param>
+    /// <param name="hint">Advice for a failure, when the page has better words than the generic ones.</param>
     private async Task<CommandOutcome?> RunAsync(
-        ScpiCommand command,
+        string mnemonic,
         CommandOutcomeBar bar,
         string? argument = null,
         string? displayValue = null,
         Func<CommandOutcome?, string?>? hint = null)
     {
-        if (_invoker is not CommandInvoker invoker)
+        if (_invoker is not CommandInvoker invoker || _device is not DeviceContext device)
         {
             return null;
         }
+
+        ScpiCommand command = CommandConfirmation.Require(device.Driver, mnemonic);
 
         _busy = true;
         bar.Clear();
@@ -401,7 +405,7 @@ public sealed partial class PositionPage : Page
             bar.Show(
                 outcome,
                 failureHint: hint?.Invoke(outcome),
-                retry: () => _ = RunAsync(command, bar, argument, displayValue, hint));
+                retry: () => _ = RunAsync(mnemonic, bar, argument, displayValue, hint));
 
             return outcome;
         }

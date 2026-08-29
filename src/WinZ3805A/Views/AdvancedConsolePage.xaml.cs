@@ -19,7 +19,7 @@ namespace WinZ3805A.Views;
 /// <remarks>
 /// <para>
 /// <b>There is no path from this page to a command the catalog does not hold.</b> The picker's
-/// items come from <see cref="ConsoleCatalog"/>, which projects <see cref="CommandCatalog"/>; the
+/// items come from <see cref="ConsoleCatalog"/>, which projects the driver's allowlist; the
 /// session takes an <see cref="ScpiCommand"/> and has no overload accepting text; and the one free
 /// text field on the page filters that list rather than feeding it. The §8.4 exclusions are not in
 /// the catalog, so they are not here — absent, not filtered out.
@@ -33,6 +33,9 @@ namespace WinZ3805A.Views;
 public sealed partial class AdvancedConsolePage : Page, ICsvExportSource
 {
     private DeviceContext? _device;
+
+    /// <summary>The picker's list, projected from the device's driver in <c>OnNavigatedTo</c> (#287).</summary>
+    private ConsoleCatalog? _catalog;
     private CommandInvoker? _invoker;
     private CommandTranscript? _transcript;
 
@@ -78,10 +81,11 @@ public sealed partial class AdvancedConsolePage : Page, ICsvExportSource
         _transcript = device.Transcript;
         _transcript.Changed += OnTranscriptChanged;
 
-        CommandPicker.ItemsSource = ConsoleCatalog.All;
+        _catalog = new ConsoleCatalog(device.Driver);
+        CommandPicker.ItemsSource = _catalog.All;
         _ready = true;
 
-        if (ConsoleCatalog.All.Count > 0)
+        if (_catalog.All.Count > 0)
         {
             CommandPicker.SelectedIndex = 0;
         }
@@ -96,12 +100,12 @@ public sealed partial class AdvancedConsolePage : Page, ICsvExportSource
 
     private void OnFilterChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
     {
-        if (!_ready || args?.Reason != AutoSuggestionBoxTextChangeReason.UserInput)
+        if (!_ready || _catalog is not ConsoleCatalog catalog || args?.Reason != AutoSuggestionBoxTextChangeReason.UserInput)
         {
             return;
         }
 
-        IReadOnlyList<ConsoleCommand> matches = ConsoleCatalog.Matching(FilterBox.Text);
+        IReadOnlyList<ConsoleCommand> matches = catalog.Matching(FilterBox.Text);
 
         // The selection is kept when it survives the filter, because a filter that silently
         // reselected something else would change what Send does without the user touching it.

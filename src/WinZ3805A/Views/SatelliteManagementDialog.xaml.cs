@@ -34,18 +34,18 @@ namespace WinZ3805A.Views;
 /// </remarks>
 public sealed partial class SatelliteManagementDialog : ContentDialog
 {
-    /// <summary>The five §8.3 commands this dialog can offer, resolved from the catalog.</summary>
+    /// <summary>The five §8.3 commands this dialog can offer, resolved from the driver's catalog.</summary>
     /// <remarks>
     /// Two of them — excluding every satellite, and tracking none — carry <c>acknowledge: true</c>
     /// in the catalog because both drive the receiver into holdover. That flag lives on the catalog
     /// entry rather than here, so §9.7.4's checkbox appears because the command says so and not
     /// because this file remembered to ask for it.
     /// </remarks>
-    private static readonly ScpiCommand IncludeList = CommandConfirmation.Require(":GPS:SAT:TRAC:INCLude");
-    private static readonly ScpiCommand IncludeAll = CommandConfirmation.Require(":GPS:SAT:TRAC:INCLude ALL");
-    private static readonly ScpiCommand IncludeNone = CommandConfirmation.Require(":GPS:SAT:TRAC:INCLude NONE");
-    private static readonly ScpiCommand ExcludeAll = CommandConfirmation.Require(":GPS:SAT:TRAC:IGNore ALL");
-    private static readonly ScpiCommand ExcludeNone = CommandConfirmation.Require(":GPS:SAT:TRAC:IGNore NONE");
+    private readonly ScpiCommand _includeList;
+    private readonly ScpiCommand _includeAll;
+    private readonly ScpiCommand _includeNone;
+    private readonly ScpiCommand _excludeAll;
+    private readonly ScpiCommand _excludeNone;
 
     private readonly DeviceContext _device;
     private readonly List<SatelliteChoice> _choices = [];
@@ -58,6 +58,14 @@ public sealed partial class SatelliteManagementDialog : ContentDialog
         InitializeComponent();
 
         _device = device;
+
+        // Resolved through the device's driver in the constructor (#287): unlike a page, the
+        // dialog cannot exist without a device, so the commands can be readonly instance state.
+        _includeList = CommandConfirmation.Require(device.Driver, ":GPS:SAT:TRAC:INCLude");
+        _includeAll = CommandConfirmation.Require(device.Driver, ":GPS:SAT:TRAC:INCLude ALL");
+        _includeNone = CommandConfirmation.Require(device.Driver, ":GPS:SAT:TRAC:INCLude NONE");
+        _excludeAll = CommandConfirmation.Require(device.Driver, ":GPS:SAT:TRAC:IGNore ALL");
+        _excludeNone = CommandConfirmation.Require(device.Driver, ":GPS:SAT:TRAC:IGNore NONE");
 
         Opened += async (_, _) => await LoadAsync().ConfigureAwait(true);
     }
@@ -126,7 +134,7 @@ public sealed partial class SatelliteManagementDialog : ContentDialog
     /// </remarks>
     private async Task<IReadOnlyList<string>?> AskAsync(string mnemonic)
     {
-        if (CommandCatalog.Find(mnemonic) is not ScpiCommand command)
+        if (_device.Driver.Find(mnemonic) is not ScpiCommand command)
         {
             return null;
         }
@@ -163,15 +171,15 @@ public sealed partial class SatelliteManagementDialog : ContentDialog
 
         if (prns.Length > 0)
         {
-            Choose(IncludeList, prns);
+            Choose(_includeList, prns);
         }
     }
 
-    private void OnIncludeAllClicked(object sender, RoutedEventArgs e) => Choose(IncludeAll);
+    private void OnIncludeAllClicked(object sender, RoutedEventArgs e) => Choose(_includeAll);
 
-    private void OnIncludeNoneClicked(object sender, RoutedEventArgs e) => Choose(IncludeNone);
+    private void OnIncludeNoneClicked(object sender, RoutedEventArgs e) => Choose(_includeNone);
 
-    private void OnExcludeAllClicked(object sender, RoutedEventArgs e) => Choose(ExcludeAll);
+    private void OnExcludeAllClicked(object sender, RoutedEventArgs e) => Choose(_excludeAll);
 
-    private void OnExcludeNoneClicked(object sender, RoutedEventArgs e) => Choose(ExcludeNone);
+    private void OnExcludeNoneClicked(object sender, RoutedEventArgs e) => Choose(_excludeNone);
 }
