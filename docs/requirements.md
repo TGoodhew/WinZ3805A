@@ -578,7 +578,34 @@ The following exist in the shared command set but are **59551A-only hardware fea
 :SYST:COMM:SER2:*               Second serial port
 ```
 
-On a Z3805A, Port 2 is a time-of-day broadcast that does not accept commands. Probe `:SYST:COMM:SER2:BAUD?` once at connect; if it errors, mark SER2 unsupported and hide.
+**A Z3805A has one serial port.** There is no Port 2 to probe, address, or listen to.
+
+> **⚠ Corrected 28 Aug 2026 (#62, and this resolves OQ-2).** This paragraph read: *"On a Z3805A,
+> Port 2 is a time-of-day broadcast that does not accept commands. Probe `:SYST:COMM:SER2:BAUD?` once
+> at connect; if it errors, mark SER2 unsupported and hide."*
+>
+> The first sentence was wrong and had no source. It contradicted the table directly above it, which
+> already lists `:SYST:COMM:SER2:*` among the **59551A-only** features, and it was the entire basis of
+> #62 — a P2 item to decode a "fixed-format 15-byte binary time-of-day packet" whose byte count
+> appears nowhere in any manual or anywhere in this repository.
+>
+> Three independent checks, and the hardware confirmed by inspection:
+>
+> | Check | Result |
+> |---|---|
+> | `:SYST:COMM:SER2:BAUD?` on the live receiver | **`-113,"Undefined header"`** — the node does not exist. `:SYST:COMM:SER:BAUD?` answered `+9600` in the same session |
+> | Z3801A guide, rear-panel connectors | One serial interface, a 25-pin RS-422 port. The others are the 10 MHz BNC and the antenna N-type |
+> | 58503A guide | *"PORT 2 Front-Panel RS-232C Serial Port **(59551A Only)**"* |
+> | The unit itself | Tony confirmed: one serial port |
+>
+> **The probe rule is removed rather than kept as a harmless no-op.** A probe for a node that cannot
+> exist would put a `-113` in the receiver's error queue on every connect, and §10.9 surfaces that
+> queue to the user — so the cost of the sentence was a spurious error report at every startup. It
+> was never implemented, which is the only reason that never happened.
+>
+> The table above stands unchanged: `:SYST:COMM:SER2:*` remains a 59551A feature and stays hidden on
+> a Z3805A, which is now a statement about hardware that is absent rather than a port that will not
+> talk.
 
 ---
 
@@ -2408,7 +2435,7 @@ something might later branch on.
 | ID | Question | Owner | Blocking? |
 |---|---|---|---|
 | OQ-1 | Bit assignments for `:STAT:OPER:*` and `:STAT:QUES:*` registers are not in the fetched portion of the manual. Chapter 5 pp. 5-48 to 5-70 of 097-58503-13 contains the full status-reporting section. **Retrieve and transcribe these before implementing §10.10.** Until then, ship the register page showing raw values with unmapped bits. | Engineering | Blocks P1-4 only |
-| OQ-2 | Does the Z3805A accept `:SYST:COMM:SER2:*`? The second port is TOD-broadcast-only, but the parser may still respond. Probe at connect and record the result. | Engineering | No |
+| OQ-2 | Does the Z3805A accept `:SYST:COMM:SER2:*`? | **Resolved 28 Aug 2026 (#62): no, and the premise was wrong.** `:SYST:COMM:SER2:BAUD?` returns `-113,"Undefined header"` — the node does not exist — and the unit has **one** serial port, so there is no second port to be broadcast-only. §8.6 corrected. | Engineering | No |
 | OQ-3 | Is there a documented `PROMpt` node (`:SYST:COMM:SER1:PROM OFF`) to suppress the `scpi>` prompt? The keyword appears in the firmware string table and GPSCon requires the prompt *on*, implying it is settable. If it exists and works, it simplifies the read loop — but treat it as tier C and keep prompt-tolerant parsing regardless. | Engineering | No |
 | OQ-4 | ~~Exact `:PTIM:TCOD?` response format and its 20–980 ms lead relative to the 1 PPS.~~ **Answered 21 Aug 2026 (#37).** The bench receiver is in **T2**, not the documented T1 default — read `:PTIM:TCOD:FORM?` and branch, never assume. The message is 23 characters, its checksum is the sum of the 21 preceding characters mod 256 (verified on 103/103 samples), and it is emitted on the receiver’s own 1 Hz cadence **509 ms** before the 1 PPS it names, jitter ≤ 2.4 ms. It does **not** answer on demand. Worked decode in #37; the format query is now catalogued (§8.2, §10.14). | Engineering | Closed |
 | OQ-5 | Confirm `LiveChartsCore.SkiaSharpView.WinUI` supports Windows App SDK 2.3.x. If not, hand-roll the trend renderer on `Canvas`. | Engineering | Blocks P1-1 |
