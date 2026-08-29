@@ -344,6 +344,48 @@
                               Glyph="&#xE840;" />
                 </ToggleButton>
 
+                <!--
+                    A diagnostic, not a feature (issue 288). P1-9's notifications have never been
+                    observed working on a machine other than the development one, and "no
+                    notification appeared" has four indistinguishable causes: never registered, the
+                    shell has them off for this app, the user has them off entirely, or one was
+                    raised and dropped.
+
+                    So this button does NOT just raise a toast. Raising one and watching for it is
+                    the test that has already been run and produced no information. It reports what
+                    the shell says first, in a flyout, and raises the toast second - the flyout is
+                    the result, and the toast appearing is a bonus.
+
+                    It deliberately bypasses the Settings -> Advanced toggle and the whole of
+                    LockWatch's policy. Those are the layers being ruled out; a test that went
+                    through them would fail for reasons that are not the shell's.
+
+                    It is NOT wrapped in #if DEBUG. The sideload package is built Release, so a
+                    debug-only button would be absent from the only build being tested. It comes out
+                    when P1-9 is proven, and issue 288 tracks that.
+                -->
+                <Button x:Name="NotificationTestButton"
+                        Content="Test toast"
+                        Click="OnNotificationTestClicked"
+                        ToolTipService.ToolTip="Diagnostic: report what the shell says about notifications, then raise one">
+                    <Button.Flyout>
+                        <Flyout x:Name="NotificationTestFlyout">
+                            <StackPanel Width="380" Spacing="{StaticResource WzSpaceXs}">
+                                <TextBlock Style="{StaticResource WzBodyStrongTextStyle}"
+                                           Text="Notification diagnostic" />
+                                <TextBlock x:Name="NotificationTestText"
+                                           Style="{StaticResource WzBodyTextStyle}"
+                                           TextWrapping="Wrap"
+                                           IsTextSelectionEnabled="True" />
+                                <TextBlock Style="{StaticResource WzCaptionTextStyle}"
+                                           Foreground="{ThemeResource WzTextTertiaryBrush}"
+                                           TextWrapping="Wrap"
+                                           Text="Temporary, for diagnosing P1-9 (issue 288). Also written to the application log, which Diagnostics can export." />
+                            </StackPanel>
+                        </Flyout>
+                    </Button.Flyout>
+                </Button>
+
                 <Button x:Name="ConnectButton"
                         Style="{StaticResource AccentButtonStyle}"
                         Click="OnConnectClicked" />
