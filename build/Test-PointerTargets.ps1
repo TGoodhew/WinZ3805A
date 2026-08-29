@@ -179,8 +179,24 @@ foreach ($file in $xamlFiles) {
         $name = $element.GetAttribute('Name', 'http://schemas.microsoft.com/winfx/2006/xaml')
         if ([string]::IsNullOrWhiteSpace($name)) { $name = $element.GetAttribute('Name') }
 
-        # Is this a pointer target?
+        # Is this a pointer target? A tooltip can be attached three ways, and the gate has to
+        # know all three - it briefly knew only two, and the coverage count fell from 9 to 7
+        # without failing, because moving the two badges to a property element made them
+        # invisible to the gate written for them. A gate that silently stops checking something
+        # is worse than no gate: it reports a pass over ground it is no longer standing on.
         $hasXamlTip = -not [string]::IsNullOrWhiteSpace($element.GetAttribute('ToolTipService.ToolTip'))
+
+        if (-not $hasXamlTip) {
+            # <ToolTipService.ToolTip><ToolTip .../></ToolTipService.ToolTip>, which is how a
+            # tooltip whose content is updated at run time has to be declared.
+            foreach ($child in $element.ChildNodes) {
+                if ($child -is [System.Xml.XmlElement] -and $child.Name -eq 'ToolTipService.ToolTip') {
+                    $hasXamlTip = $true
+                    break
+                }
+            }
+        }
+
         $hasCodeTip = -not [string]::IsNullOrWhiteSpace($name) -and $namedInCode.ContainsKey($name)
         if (-not ($hasXamlTip -or $hasCodeTip)) { continue }
 
@@ -214,6 +230,18 @@ foreach ($file in $xamlFiles) {
 }
 
 Write-Host "Pointer targets checked (non-button, tooltip-bearing): $checked"
+
+# A floor under the coverage itself. The count fell from 9 to 7 once and nothing failed,
+# because the elements this gate exists for changed how they declare their tooltip. Losing
+# coverage must be as loud as failing a check.
+$expected = 9
+if ($checked -lt $expected) {
+    Write-Host ''
+    Write-Host "Coverage dropped: expected at least $expected pointer targets, found $checked." -ForegroundColor Red
+    Write-Host 'Either a target lost its tooltip, or it declares one in a form this gate cannot see.'
+    Write-Host 'Teach the gate the new form rather than lowering this number.'
+    exit 1
+}
 
 if ($failures.Count -gt 0) {
     Write-Host ''
