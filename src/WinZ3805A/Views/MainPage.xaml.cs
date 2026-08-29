@@ -1,6 +1,5 @@
 ﻿using System.Globalization;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 using Microsoft.UI;
 using Microsoft.UI.Xaml.Media;
@@ -300,91 +299,6 @@ public sealed partial class MainPage : Page
         {
             _model.DisplayZone = chosen;
         }
-    }
-
-    /// <summary>
-    /// The temporary notification diagnostic (issue 288).
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>The flyout is the result; the toast is a bonus.</b> Raising a notification and watching
-    /// for one is the test that has already been run on a clean machine and produced no
-    /// information, because the four things that stop a toast appearing are indistinguishable from
-    /// the outside. So this reports what the shell says <i>first</i>, and raises the toast second.
-    /// </para>
-    /// <para>
-    /// It bypasses Settings -> Advanced and the whole of <see cref="LockWatch"/>. Those layers are
-    /// what is being ruled out - a test that ran through them could fail for a reason that is not
-    /// the shell's, which is the ambiguity this exists to remove.
-    /// </para>
-    /// <para>
-    /// Guarded whole and never fatal, like everything else touching this API. A diagnostic that can
-    /// take down the application is worse than the defect it diagnoses.
-    /// </para>
-    /// </remarks>
-    private void OnNotificationTestClicked(object sender, RoutedEventArgs e)
-    {
-        string report;
-
-        try
-        {
-            IToastSink? sink = App.Services?.GetService<IToastSink>();
-            if (sink is null)
-            {
-                report = "No notification sink is registered at all, which is a wiring fault rather "
-                    + "than a shell one.";
-            }
-            else
-            {
-                ToastStatus status = sink.Status;
-
-                string sent;
-                try
-                {
-                    sink.Show(
-                        "WinZ3805A test",
-                        "This is a test notification. It carries no receiver information.");
-                    sent = "Sent through the shell without error.";
-                }
-                catch (Exception exception)
-                {
-                    sent = $"Sending threw - {exception.GetType().Name} "
-                        + $"0x{exception.HResult:X8}: {exception.Message}";
-                }
-
-                report = string.Join(
-                    Environment.NewLine,
-                    $"Shell setting: {status.ShellSetting}.",
-                    sent);
-
-                if (status.CanNotify)
-                {
-                    // Everything the application can see is fine, so what is left is the shell's
-                    // own suppression - which it does not report through this API and which the
-                    // user can check in two places.
-                    report += Environment.NewLine + Environment.NewLine
-                        + "Everything this app can see is in order, so if nothing appeared the "
-                        + "shell accepted it and did not show it. Check Settings > System > "
-                        + "Notifications for this app, and that Do Not Disturb is off. A delivered "
-                        + "toast also lands in the notification centre (Win+N) even if the banner "
-                        + "was missed.";
-                }
-            }
-        }
-        catch (Exception exception)
-        {
-            report = $"The diagnostic itself failed - {exception.GetType().Name}: {exception.Message}";
-        }
-
-        NotificationTestText.Text = report;
-
-        // Logged as well as shown. The flyout is gone as soon as it is dismissed, and this is
-        // exactly the evidence that wants attaching to an issue afterwards - the application log is
-        // exportable from Diagnostics, and a screenshot of a flyout is not.
-        App.Services?.GetService<ILogger<MainPage>>()?
-            .LogInformation("Notification diagnostic: {Report}", report.Replace(Environment.NewLine, " "));
-
-        NotificationTestFlyout.ShowAt(NotificationTestButton);
     }
 
     private async void OnConnectClicked(object sender, RoutedEventArgs e) =>
