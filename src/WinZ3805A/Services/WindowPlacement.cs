@@ -72,6 +72,28 @@ public sealed record WindowPlacement
     /// </remarks>
     public bool IsAlwaysOnTop { get; init; }
 
+    /// <summary>
+    /// The window width of the standard layout, kept while the window is compact so that leaving
+    /// compact has somewhere to go back to (#307).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Entering compact resizes the window to §9.6.2's compact floor, so <see cref="Width"/> and
+    /// <see cref="Height"/> are the compact size while <see cref="IsCompact"/> is set — and a launch
+    /// straight into compact would otherwise have nothing but the standard floor to leave to. These
+    /// two carry the size the user last had in the standard layout, in physical pixels like the
+    /// bounds beside them.
+    /// </para>
+    /// <para>
+    /// Nullable, and absent from files written before #307, which must still load: null means
+    /// "unknown", and the window falls back to the standard floor.
+    /// </para>
+    /// </remarks>
+    public int? StandardWidth { get; init; }
+
+    /// <summary>The window height of the standard layout; see <see cref="StandardWidth"/>.</summary>
+    public int? StandardHeight { get; init; }
+
     /// <summary>The restored bounds as a rectangle.</summary>
     /// <remarks>
     /// Not serialised: it is the four fields above in another shape, and letting it into the file

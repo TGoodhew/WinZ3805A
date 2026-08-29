@@ -139,4 +139,40 @@ public static class WindowSizing
 
         return (Math.Min(width, area.Width), Math.Min(height, area.Height));
     }
+
+    /// <summary>
+    /// The size the main window returns to when it leaves compact mode (#307).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Compact is entered by shrinking the window to §9.6.2's compact floor, so leaving it has to
+    /// put the size back — otherwise the user gets a 160 px medallion in a 380 × 144 frame, which
+    /// is the standard layout's floor holding a window it was never given. The remembered
+    /// standard-layout size wins when there is one; a launch straight into compact from a stored
+    /// compact state may have none, and then the standard floor is the honest answer — a "nice"
+    /// size invented here would be a size the user never chose.
+    /// </para>
+    /// <para>
+    /// Each axis is decided on its own, floored at the minimum — a size remembered before the
+    /// display scaling changed can be under today's floor — and capped at the work area, so the
+    /// window it produces is one whose edges the user can reach.
+    /// </para>
+    /// </remarks>
+    /// <param name="rememberedWidth">The standard-layout width last seen, in physical pixels, or null.</param>
+    /// <param name="rememberedHeight">The standard-layout height last seen, in physical pixels, or null.</param>
+    /// <param name="minimumWidth">The standard layout's physical floor, already clamped to the display.</param>
+    /// <param name="minimumHeight">The standard layout's physical floor, already clamped to the display.</param>
+    /// <param name="workArea">The work area of the display the window is on, or null when unknown.</param>
+    public static (int Width, int Height) SizeLeavingCompact(
+        int? rememberedWidth,
+        int? rememberedHeight,
+        int minimumWidth,
+        int minimumHeight,
+        WindowRect? workArea)
+    {
+        int width = Math.Max(rememberedWidth ?? minimumWidth, minimumWidth);
+        int height = Math.Max(rememberedHeight ?? minimumHeight, minimumHeight);
+
+        return ClampToWorkArea(width, height, workArea);
+    }
 }

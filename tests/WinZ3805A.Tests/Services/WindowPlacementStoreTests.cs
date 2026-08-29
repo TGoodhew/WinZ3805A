@@ -34,6 +34,8 @@ public sealed class WindowPlacementStoreTests : IDisposable
             IsMaximized = true,
             IsCompact = true,
             IsAlwaysOnTop = true,
+            StandardWidth = 900,
+            StandardHeight = 700,
         };
 
         new LocalWindowPlacementStore(Path_).Save(saved);
@@ -72,8 +74,9 @@ public sealed class WindowPlacementStoreTests : IDisposable
     }
 
     /// <summary>
-    /// A placement written before #54 has no always-on-top field, and must read as "not pinned"
-    /// rather than as a parse failure that discards the window's position with it.
+    /// A placement written before #54 has no always-on-top field, and one written before #307 has
+    /// no standard-layout size; both must read as "not pinned" and "unknown" rather than as a
+    /// parse failure that discards the window's position with them.
     /// </summary>
     [Fact]
     public void APlacementFromBeforeAlwaysOnTopStillLoads()
@@ -89,6 +92,8 @@ public sealed class WindowPlacementStoreTests : IDisposable
         Assert.Equal(100, read.Left);
         Assert.True(read.IsCompact);
         Assert.False(read.IsAlwaysOnTop);
+        Assert.Null(read.StandardWidth);
+        Assert.Null(read.StandardHeight);
     }
 
     [Fact]
