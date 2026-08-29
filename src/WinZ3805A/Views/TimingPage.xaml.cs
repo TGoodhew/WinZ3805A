@@ -29,6 +29,7 @@ public sealed partial class TimingPage : Page, ICsvExportSource
     private TimingViewModel? _model;
     private DeviceContext? _device;
     private TrendStore? _trends;
+    private StabilityViewModel? _stability;
 
     /// <summary>The selected range, in hours. §13's four settings are 1, 6, 24 and 168.</summary>
     private int _rangeHours = 1;
@@ -115,6 +116,15 @@ public sealed partial class TimingPage : Page, ICsvExportSource
 
         _device = device;
         _trends = App.Services?.GetService<TrendStore>();
+
+        // #63. Built here rather than per render: it owns the last computed curve, and rebuilding
+        // it on every poll would recompute the whole series for a card nobody asked to refresh.
+        if (_trends is TrendStore trends)
+        {
+            _stability = new StabilityViewModel(trends, device.TimeProvider);
+            StabilityRows.ItemsSource = _stability.Rows;
+            RefreshStability();
+        }
         _ = ReadEfcHardwareBitsAsync();
         _invoker = new CommandInvoker(device.Session);
         _model = new TimingViewModel(device.Store) { Connection = device.Session.Status };
@@ -228,6 +238,27 @@ public sealed partial class TimingPage : Page, ICsvExportSource
         {
             model.LengthMetres = args.NewValue;
         }
+    }
+
+    /// <summary>
+    /// Recomputes the §13 P2-3 stability curve (#63).
+    /// </summary>
+    /// <remarks>
+    /// Not called from <c>Render</c>. Render runs on every poll, and this walks the whole persisted
+    /// series — at the 24 h window that is tens of thousands of samples across a dozen averaging
+    /// times, which is real work to repeat every few seconds for a figure that cannot meaningfully
+    /// change in that time. It runs when the page is opened.
+    /// </remarks>
+    private void RefreshStability()
+    {
+        if (_stability is not StabilityViewModel stability)
+        {
+            return;
+        }
+
+        stability.Refresh();
+        StabilitySummary.Text = stability.Summary;
+        StabilityHeader.Visibility = stability.HasCurve ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void Render()
