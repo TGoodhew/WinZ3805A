@@ -229,12 +229,30 @@ public sealed class TrendChart : Control
             return;
         }
 
-        IReadOnlyList<TrendColumn> columns = TrendDecimation.ToColumns(
+        // Decimated TWICE, deliberately, and the second pass is the one that is drawn (#295).
+        //
+        // The axis needs a gutter wide enough for its widest label; the label text comes from the
+        // bounds; the bounds come from the columns; and the columns are built one per pixel of
+        // whatever width is left after the gutter. That circle has to be broken somewhere, so this
+        // pass exists only to learn the bounds. It costs one more O(samples) walk - about 80 000
+        // for a 7-day range, which is nothing beside the query that fetched them.
+        //
+        // The BOUNDS FROM THIS PASS ARE THE ONES USED THROUGHOUT, including for the labels and the
+        // drawing. Recomputing them from the narrower second pass would let the label text change
+        // after the gutter had been sized for it, which is how a label ends up wider than the space
+        // reserved for it. Framing on the finer decimation is also the more accurate of the two.
+        IReadOnlyList<TrendColumn> probe = TrendDecimation.ToColumns(
             Samples ?? [], FromTicks, ToTicks, (int)Math.Floor(width));
 
         (double minimum, double maximum) = Anchoring == TrendAnchoring.Data
-            ? TrendDecimation.AutoBounds(columns, MinimumSpan)
-            : TrendDecimation.ZeroAnchoredBounds(columns, Floor);
+            ? TrendDecimation.AutoBounds(probe, MinimumSpan)
+            : TrendDecimation.ZeroAnchoredBounds(probe, Floor);
+
+        double gutter = MeasureGutter(minimum, maximum, width);
+        double plotWidth = width - gutter;
+
+        IReadOnlyList<TrendColumn> columns = TrendDecimation.ToColumns(
+            Samples ?? [], FromTicks, ToTicks, (int)Math.Floor(plotWidth));
 
         double span = maximum - minimum;
 
@@ -248,12 +266,12 @@ public sealed class TrendChart : Control
         // that the diverging fill's neutral point map to zero is met by the same arithmetic.
         double scale = height / span;
 
-        DrawStateShading(surface, height);
-        DrawMidLine(surface, width, height / 2);
+        DrawStateShading(surface, gutter, plotWidth, height);
+        DrawMidLine(surface, gutter, width, height / 2);
 
         foreach (TrendColumn column in columns)
         {
-            double x = column.Column + 0.5;
+            double x = gutter + column.Column + 0.5;
             double top = height - ((column.Maximum - minimum) * scale);
             double bottom = height - ((column.Minimum - minimum) * scale);
 
@@ -276,7 +294,7 @@ public sealed class TrendChart : Control
             });
         }
 
-        DrawAxisLabels(surface, width, height, minimum, maximum);
+        DrawAxisLabels(surface, gutter, height, minimum, maximum);
         DrawClippedNote(surface, columns, width, minimum, maximum);
     }
 
@@ -340,15 +358,18 @@ public sealed class TrendChart : Control
     /// who cannot see the tint is not being denied a reading (§9.4.3, A11Y-12).
     /// </para>
     /// </remarks>
-    private void DrawStateShading(Canvas surface, double height)
+    private void DrawStateShading(Canvas surface, double gutter, double plotWidth, double height)
     {
         if (States is not { Count: > 0 } states)
         {
             return;
         }
 
+        // The plot width, not the surface width. Shading built for the full surface and then drawn
+        // from the gutter would run off the right-hand edge, and every shaded stretch would sit
+        // slightly to the right of the trace it is meant to be behind.
         IReadOnlyList<(int Column, int State)> shaded = TrendDecimation.ToStateColumns(
-            states, FromTicks, ToTicks, (int)Math.Floor(surface.ActualWidth));
+            states, FromTicks, ToTicks, (int)Math.Floor(plotWidth));
 
         Brush? caution = Resource<Brush>("WzCautionBrush");
         if (caution is null)
@@ -369,7 +390,7 @@ public sealed class TrendChart : Control
                 Height = height,
                 Fill = caution,
                 Opacity = 0.18,
-                Margin = new Thickness(column, 0, 0, 0),
+                Margin = new Thickness(gutter + column, 0, 0, 0),
             });
         }
     }
@@ -448,7 +469,7 @@ public sealed class TrendChart : Control
     /// data-framed one it is the midpoint of the window, and it is drawn because three labels down
     /// the left edge are easier to read against a rule than against nothing.
     /// </remarks>
-    private void DrawMidLine(Canvas surface, double width, double zeroY)
+    private void DrawMidLine(Canvas surface, double gutter, double width, double zeroY)
     {
         // Snapped to device pixels (#233). Drawn at a fractional Y this rule straddles two pixel
         // rows and each renders at about half intensity — measured at 2.66:1 under High Contrast
@@ -463,7 +484,10 @@ public sealed class TrendChart : Control
 
         surface.Children.Add(new Line
         {
-            X1 = 0,
+            // Starts at the gutter, not at zero. This rule exists to give the labels something to
+            // be read against; running it under them was the previous arrangement and is exactly
+            // what made them hard to read.
+            X1 = gutter,
             X2 = width,
             Y1 = centre,
             Y2 = centre,
@@ -483,7 +507,7 @@ public sealed class TrendChart : Control
     /// is to show a shape. On a zero-anchored axis the midpoint is zero, so this reads exactly as
     /// it always did.
     /// </remarks>
-    private void DrawAxisLabels(Canvas surface, double width, double height, double minimum, double maximum)
+    private void DrawAxisLabels(Canvas surface, double gutter, double height, double minimum, double maximum)
     {
         Add(Format(maximum), 0);
         Add(Format((minimum + maximum) / 2), (height / 2) - 8);
@@ -498,10 +522,57 @@ public sealed class TrendChart : Control
                 Foreground = Resource<Brush>("WzTextTertiaryBrush"),
             };
 
-            label.Measure(new Size(width, height));
-            Canvas.SetLeft(label, 0);
+            label.Measure(new Size(double.PositiveInfinity, height));
+
+            // Right-aligned against the plot edge, which is §9.5.3 rule 5 applied to an axis: these
+            // are a numeric column, and a column of numbers reads by its right-hand digits. It also
+            // means the gap to the trace is constant whatever the label's length.
+            Canvas.SetLeft(label, Math.Max(0, gutter - AxisGap - label.DesiredSize.Width));
             Canvas.SetTop(label, top);
             surface.Children.Add(label);
         }
     }
+
+    /// <summary>
+    /// How much room the axis labels need on the left, including their gap to the plot (#295).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Measured, not assumed.</b> The label is <see cref="Format"/>'s output, so its width
+    /// depends on the bounds, the unit, the decimal count and the user's text scaling - a constant
+    /// would be wrong for some chart on some machine, and the failure would be the very overlap
+    /// this exists to remove.
+    /// </para>
+    /// <para>
+    /// <b>Capped at a third of the control.</b> A pathologically narrow chart, or text scaled to
+    /// 225%, could otherwise reserve more than there is and leave no plot at all. Past that point
+    /// the labels are allowed to overlap again, because a chart with no trace in it is worse than
+    /// one whose axis is hard to read.
+    /// </para>
+    /// </remarks>
+    private double MeasureGutter(double minimum, double maximum, double width)
+    {
+        double widest = 0;
+
+        foreach (double value in new[] { maximum, (minimum + maximum) / 2, minimum })
+        {
+            TextBlock probe = new()
+            {
+                Text = Format(value),
+                Style = Resource<Style>("WzCaptionTextStyle"),
+            };
+
+            probe.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            widest = Math.Max(widest, probe.DesiredSize.Width);
+        }
+
+        return Math.Min(widest + AxisGap, width / 3);
+    }
+
+    /// <summary>The gap between the axis labels and the plot, in DIPs.</summary>
+    /// <remarks>
+    /// §9.6's XS step. A gutter that touches the trace has moved the overlap rather than removed
+    /// it: a label needs to be separated from the plot, not merely outside it.
+    /// </remarks>
+    private const double AxisGap = 4;
 }
