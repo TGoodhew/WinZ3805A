@@ -1,4 +1,4 @@
-# Adding a receiver to WinZ3805A
+﻿# Adding a receiver to WinZ3805A
 
 WinZ3805A ships speaking to one family of hardware — the HP/Symmetricom
 SmartClock GPS-disciplined oscillators — but every piece of device-specific
@@ -153,16 +153,25 @@ making the probe belong to no driver:
    shape test to the answer.
 
 3. **Selection.** The parsed identity is put to each driver's `Recognises` in
-   registration order; the first claimant serves the connection. No claimant →
-   the first-registered driver serves it anyway, with a logged warning —
-   refusing to connect would turn every receiver with an odd identity string
-   into a regression, and §8.6 already handles unknown *models* conservatively
-   within a family.
+   registration order (a `Recognises` that throws is read as "does not claim",
+   with a warning); the first claimant serves the connection. No claimant → the
+   first-registered driver serves it anyway — with a logged warning when more
+   than one driver is registered; a single-driver build stays silent, since the
+   fallback is the driver that would have served it regardless. Refusing to
+   connect would turn every receiver with an odd identity string into a
+   regression, and §8.6 already handles unknown *models* conservatively within
+   a family.
 
 4. **Re-selection.** Selection runs on *every* connect, including automatic
    reconnects, because the receiver on the port can have been swapped while
-   the link was down. For the same reason, never cache
-   `DeviceContext.Driver` — read it at the point of use.
+   the link was down. Services therefore read `DeviceContext.Driver` at the
+   point of use, never from a cached field. (Pages currently snapshot
+   driver-derived state — the console's picker, validator ranges — for one
+   navigation's lifetime; that staleness across a cross-family reconnect is
+   [#304](https://github.com/TGoodhew/WinZ3805A/issues/304), and it is safe
+   meanwhile because the session re-checks every command against the current
+   driver's allowlist at the moment it is served, refusing unsent what the
+   connected receiver's driver does not offer.)
 
 The whole flow is asserted in
 [`DriverSelectionTests.cs`](../tests/WinZ3805A.Tests/Services/DriverSelectionTests.cs),
@@ -189,8 +198,8 @@ best decided against a real second receiver rather than in the abstract:
 
 | Surface | SmartClock assumption | Where it bites a new family |
 |---|---|---|
-| Tier C page actions | The mnemonics in `ReceiverDriverTests.EveryMnemonicThePagesRequireIsCatalogued` | A driver lacking one fails loudly at the click (`CommandConfirmation.Require` throws). Capability-gating the pages is deferred item 4 territory |
-| Mode-driven UI (medallion, tray, badge) | `:SYNC:STAT?`'s six tokens, mapped in `Controls/ReceiverMode.cs` | A foreign family's sync states render as *Disconnected* — your sweep is stored and trended, but the mode mapping is app-side today |
+| Tier C page actions | The mnemonics in `ReceiverDriverTests.EveryMnemonicThePagesRequireIsCatalogued` | A driver lacking one fails loudly at the click (`CommandConfirmation.Require` throws). Capability-gating the pages is [#304](https://github.com/TGoodhew/WinZ3805A/issues/304) |
+| Mode-driven UI (medallion, tray, badge) | `:SYNC:STAT?`'s six tokens, mapped in `Controls/ReceiverMode.cs` | A foreign family's sync states render as *Disconnected* — your sweep is stored and trended, but the mode mapping is app-side today ([#304](https://github.com/TGoodhew/WinZ3805A/issues/304)) |
 | `ReceiverStatus` itself | `SmartClockMode`, `Tfom`, `Ffom`, `WeekRolloverEpochs` are HP concepts | Your receiver's own concepts have nowhere to go; leave the HP fields `null` and raise the §11.2 amendment for anything new |
 | Status Registers page | HP's `:STAT:` register maps and bit meanings | Renders HP's registers regardless of driver |
 | Time page | `:PTIM:LEAP:*`, HP time-code formats | Queries fail politely (null lookups), features show em dashes |
@@ -238,7 +247,8 @@ re-acquire over minutes.
    conservative default. A command harmless on one receiver may be destructive
    on another, and the names need not even correspond.
    `ReceiverDriverTests.EachDriverAnswersForItsOwnExclusions` demonstrates the
-   two shipped drivers giving opposite verdicts about the same headers.
+   two drivers in the repository giving opposite verdicts about the same
+   headers.
 2. **Return a verdict, never the patterns.** `IsBlocked` returns `bool` by
    design: §8.4 requires that excluded commands do not exist as data any view
    can enumerate, bind to, or log wholesale.
@@ -454,10 +464,11 @@ family, and §12's "Receiver readiness" bullet records that as a known gap.
 Adding a family means amending them so the document and the code do not drift
 apart — **raise the amendment rather than absorbing the divergence in code**.
 The same applies to anything on the [boundary
-table](#what-works-with-a-driver-alone--and-what-does-not-yet): mode mapping,
-capability-gated pages, binary protocols and network transports each have an
-issue-shaped conversation waiting, anchored at
-[#287](https://github.com/TGoodhew/WinZ3805A/issues/287)'s items 4–7.
+table](#what-works-with-a-driver-alone--and-what-does-not-yet): capability-gated
+pages and mode mapping are
+[#304](https://github.com/TGoodhew/WinZ3805A/issues/304); binary protocols and
+network transports are anchored at
+[#287](https://github.com/TGoodhew/WinZ3805A/issues/287)'s items 5 and 7.
 
 ---
 

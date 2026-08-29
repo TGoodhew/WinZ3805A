@@ -1,4 +1,4 @@
-using WinZ3805A.Device.Commands;
+﻿using WinZ3805A.Device.Commands;
 using WinZ3805A.Device.Models;
 using WinZ3805A.Device.Transport;
 
@@ -94,7 +94,7 @@ public sealed record SweepInterpretation(FastReadings Readings, string? Rejectio
 /// that were previously static and silently meant "Z3805A".
 /// </para>
 /// <para>
-/// <b>Adding one is documented in <c>README.md</c>, under "Adding a receiver".</b> That walkthrough
+/// <b>Adding one is documented in <c>docs/adding-a-receiver.md</c>.</b> That walkthrough
 /// is the intended entry point; this interface is the contract it describes.
 /// </para>
 /// <para>

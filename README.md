@@ -27,7 +27,7 @@ Two ideas shape this replacement:
 Feature-complete against the specification's P0 set and in daily use against a
 bench Z3805A; **there is no Store release yet**. The transport, parser, command
 model, design system and every view are implemented, with the test suite and
-twelve CI gates green. Progress is tracked in the
+eleven CI gates green. Progress is tracked in the
 [issue backlog](https://github.com/TGoodhew/WinZ3805A/issues), whose `§`
 references resolve against the specification.
 
@@ -177,7 +177,7 @@ records their provenance and which receiver states are still missing.
 
 ### The CI gates
 
-A dozen acceptance criteria — design-system, accessibility and safety — are
+Eleven acceptance criteria — design-system, accessibility and safety — are
 enforced by script rather than by review. All are dependency-free and answer in
 seconds, which makes them the fastest local check available; CI runs every one
 before any restore, so a regression fails in seconds instead of after a full

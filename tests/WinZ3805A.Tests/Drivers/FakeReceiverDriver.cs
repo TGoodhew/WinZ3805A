@@ -1,4 +1,4 @@
-using WinZ3805A.Device.Commands;
+﻿using WinZ3805A.Device.Commands;
 using WinZ3805A.Device.Drivers;
 using WinZ3805A.Device.Models;
 using WinZ3805A.Device.Parsing;
@@ -128,7 +128,12 @@ public sealed class FakeReceiverDriver : IReceiverDriver
         header?.TrimStart().StartsWith(":ACME:ZAP", StringComparison.OrdinalIgnoreCase) == true;
 
     /// <inheritdoc />
-    public TimeSpan TimeoutFor(string? mnemonic) => TimeSpan.FromMilliseconds(1500);
+    /// <remarks>
+    /// Ten seconds, not something realistic: the clock-wind test helpers advance a second at a
+    /// time, and a timeout inside the wind step is this repository's known flake family invited
+    /// back in. A fake's timeout only needs to be positive, bounded, and safely clear of the wind.
+    /// </remarks>
+    public TimeSpan TimeoutFor(string? mnemonic) => TimeSpan.FromSeconds(10);
 
     /// <inheritdoc />
     public PollPlan Plan { get; } = new(

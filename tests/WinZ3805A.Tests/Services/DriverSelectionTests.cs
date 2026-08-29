@@ -1,7 +1,9 @@
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
 
+using WinZ3805A.Device.Commands;
 using WinZ3805A.Device.Drivers;
+using WinZ3805A.Device.Models;
 using WinZ3805A.Device.Transport;
 using WinZ3805A.Services;
 using WinZ3805A.Tests.Drivers;
@@ -225,6 +227,152 @@ public sealed class DriverSelectionTests
         DeviceContext context = provider.GetRequiredKeyedService<DeviceContext>("bench");
 
         Assert.Equal("Acme", context.Driver.Family);
+    }
+
+    // -------------------------------------------------------------------------------------
+    // Guard rails the branch review added (#287)
+    // -------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// A command the connected receiver's driver does not offer is refused at the point of send,
+    /// unsent.
+    /// </summary>
+    /// <remarks>
+    /// Pages resolve commands when they open, and a reconnect can select a different family
+    /// underneath them — this is §8.1's "provably came from the allowlist" made true of the
+    /// receiver actually on the port, not of some driver at some earlier time. Refused as a
+    /// faulted transaction rather than an exception, so a stale click cannot take the poll loop
+    /// with it.
+    /// </remarks>
+    [Fact]
+    public async Task ACommandFromAnotherFamilysCatalogIsRefusedUnsent()
+    {
+        FakeTimeProvider clock = new();
+        ControllableTransport transport = Receiver(SmartClockIdentity, answer: "LOCK");
+        await using DeviceSessionService session = new(
+            (_, _) => transport, clock, drivers: BothDrivers(clock));
+        Assert.True(await session.ConnectAsync("COM3", SerialSettings.Default).WaitAsync(TestTimeout));
+        Assert.Equal("SmartClock", session.Driver.Family);
+
+        ScpiCommand foreign = new FakeReceiverDriver().Find(":ACME:STAT?")!;
+        Transaction refused = await session.ExecuteAsync(foreign).WaitAsync(TestTimeout);
+
+        Assert.False(refused.Succeeded);
+        Assert.Equal(TransactionOutcome.Faulted, refused.Outcome);
+        Assert.DoesNotContain(transport.CommandsWritten, written => written.Contains(":ACME:", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A driver whose Recognises throws is read as "does not claim" — the connect survives.
+    /// </summary>
+    /// <remarks>
+    /// The predicate has no never-throw contract the way Parse and InterpretSweep do, and the
+    /// connect path's catches filter on transport faults — so before this guard, one buggy
+    /// third-party predicate could take down every connect including the fire-and-forget
+    /// reconnect loop.
+    /// </remarks>
+    [Fact]
+    public async Task ADriverWhoseRecognisesThrowsIsSkippedNotFatal()
+    {
+        FakeTimeProvider clock = new();
+        await using DeviceSessionService session = new(
+            (_, _) => Receiver(AcmeIdentity),
+            clock,
+            drivers: [new ThrowingRecogniser(), new FakeReceiverDriver()]);
+
+        Assert.True(await session.ConnectAsync("COM3", SerialSettings.Default).WaitAsync(TestTimeout));
+        Assert.Equal("Acme", session.Driver.Family);
+    }
+
+    /// <summary>
+    /// A driver without the §7.2 error query fails a tier C command loudly, never silently.
+    /// </summary>
+    /// <remarks>
+    /// The invoker's missing-entry throw used to be swallowed by the catch written for a
+    /// torn-down session, which turned "this driver cannot satisfy §7.2" into tier C commands
+    /// that skipped the mandated error-queue read and reported success. The throw now escapes,
+    /// which is what the contract tests promise it does.
+    /// </remarks>
+    [Fact]
+    public async Task ATierCCommandWithoutAnErrorQueueFailsLoudly()
+    {
+        FakeTimeProvider clock = new();
+        ErrorlessDriver driver = new();
+        await using DeviceSessionService session = new(
+            (_, _) => Receiver(AcmeIdentity, answer: "OK"), clock, drivers: [driver]);
+        Assert.True(await session.ConnectAsync("COM3", SerialSettings.Default).WaitAsync(TestTimeout));
+
+        CommandInvoker invoker = new(session);
+        ScpiCommand tierC = driver.Find(":ACME:MARK")!;
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => invoker.ExecuteAsync(tierC).WaitAsync(TestTimeout));
+    }
+
+    /// <summary>A driver whose recognition predicate is a bug, for the guard test above.</summary>
+    private sealed class ThrowingRecogniser : IReceiverDriver
+    {
+        private readonly FakeReceiverDriver _inner = new();
+
+        public string Family => "Broken";
+
+        public IReadOnlyList<ScpiCommand> Commands => _inner.Commands;
+
+        public PollCadence Cadence => _inner.Cadence;
+
+        public IReadOnlyList<SerialSettings> AutoDetectSequence => _inner.AutoDetectSequence;
+
+        public PollPlan Plan => _inner.Plan;
+
+        public bool Recognises(DeviceIdentity? identity) =>
+            throw new InvalidOperationException("This predicate is a bug.");
+
+        public ScpiCommand? Find(string? mnemonic) => _inner.Find(mnemonic);
+
+        public bool IsBlocked(string? header) => _inner.IsBlocked(header);
+
+        public TimeSpan TimeoutFor(string? mnemonic) => _inner.TimeoutFor(mnemonic);
+
+        public ReceiverStatus Parse(string? response) => _inner.Parse(response);
+
+        public SweepInterpretation InterpretSweep(IReadOnlyList<string?> answers) => _inner.InterpretSweep(answers);
+    }
+
+    /// <summary>
+    /// A contract-breaking driver with no <c>:SYST:ERR?</c>, for the loud-failure test above.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately NOT in <c>ReceiverDriverTests.AllDrivers</c>: the contract tests would fail it
+    /// on <c>TheErrorQueueQueryIsCatalogued</c>, which is the point — it models the driver a
+    /// third party ships without reading the contract.
+    /// </remarks>
+    private sealed class ErrorlessDriver : IReceiverDriver
+    {
+        private readonly FakeReceiverDriver _inner = new();
+
+        public string Family => "Errorless";
+
+        public IReadOnlyList<ScpiCommand> Commands { get; } =
+            [.. new FakeReceiverDriver().Commands.Where(c => c.Mnemonic != ":SYST:ERR?")];
+
+        public PollCadence Cadence => _inner.Cadence;
+
+        public IReadOnlyList<SerialSettings> AutoDetectSequence => _inner.AutoDetectSequence;
+
+        public PollPlan Plan => _inner.Plan;
+
+        public bool Recognises(DeviceIdentity? identity) => _inner.Recognises(identity);
+
+        public ScpiCommand? Find(string? mnemonic) =>
+            Commands.FirstOrDefault(c => string.Equals(c.Mnemonic, mnemonic?.Trim(), StringComparison.OrdinalIgnoreCase));
+
+        public bool IsBlocked(string? header) => _inner.IsBlocked(header);
+
+        public TimeSpan TimeoutFor(string? mnemonic) => _inner.TimeoutFor(mnemonic);
+
+        public ReceiverStatus Parse(string? response) => _inner.Parse(response);
+
+        public SweepInterpretation InterpretSweep(IReadOnlyList<string?> answers) => _inner.InterpretSweep(answers);
     }
 
     // -------------------------------------------------------------------------------------

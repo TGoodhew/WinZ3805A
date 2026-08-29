@@ -198,10 +198,17 @@ public sealed class CommandInvoker
 
     private async Task<ScpiError?> ReadErrorAsync(CancellationToken cancellationToken)
     {
+        // Resolved OUTSIDE the try, deliberately: NextError throws InvalidOperationException for a
+        // driver whose catalog lacks the §7.2 error query, and the catch below — written for a
+        // session that went away mid-check — would otherwise swallow that into "no error", turning
+        // the promised loud failure into tier C commands that skip the mandated error-queue read
+        // and report success.
+        ScpiCommand nextError = NextError;
+
         try
         {
             Transaction reply = await _session
-                .ExecuteAsync(NextError, cancellationToken: cancellationToken)
+                .ExecuteAsync(nextError, cancellationToken: cancellationToken)
                 .ConfigureAwait(true);
 
             return reply.Succeeded ? ScpiError.TryParse(reply.FirstLine) : null;

@@ -370,10 +370,18 @@ public sealed class DeviceSessionService : IAsyncDisposable
     /// Queues a catalogued command and awaits its turn.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Takes an <see cref="ScpiCommand"/> rather than a string, so every command the application
     /// sends provably came from the §8.1 allowlist. There is deliberately no overload that accepts
     /// arbitrary text: the Advanced Console validates against the catalog and hands back an entry,
     /// it does not get a back door here.
+    /// </para>
+    /// <para>
+    /// Since #287 the entry is also checked against the <i>current</i> driver's catalog at the
+    /// moment it is served, because pages resolve commands when they open and a reconnect can
+    /// select a different family underneath them. A command the connected receiver's driver does
+    /// not offer comes back as a faulted transaction, unsent.
+    /// </para>
     /// </remarks>
     /// <param name="command">A catalogued command. There is no overload taking text.</param>
     /// <param name="argument">Its parameter, already formatted and validated by the caller.</param>
@@ -509,7 +517,27 @@ public sealed class DeviceSessionService : IAsyncDisposable
         IReceiverDriver? claimed = null;
         foreach (IReceiverDriver candidate in _drivers)
         {
-            if (candidate.Recognises(ParsedIdentity))
+            bool recognises;
+            try
+            {
+                recognises = candidate.Recognises(ParsedIdentity);
+            }
+            catch (Exception exception)
+            {
+                // A predicate that throws is a driver bug, but the connect path is the wrong place
+                // to pay for it: the exception would escape the transport-fault filters and take
+                // down a reconnect loop that is fire-and-forget. Parse and InterpretSweep carry an
+                // explicit never-throw contract; Recognises gets the same protection here because
+                // a claim that errored is soundly read as "does not claim".
+                _logger.LogWarning(
+                    exception,
+                    "The {Family} driver's Recognises threw for {Identity}; treating that as not claimed.",
+                    candidate.Family,
+                    Identity);
+                continue;
+            }
+
+            if (recognises)
             {
                 claimed = candidate;
                 break;
@@ -584,6 +612,36 @@ public sealed class DeviceSessionService : IAsyncDisposable
         if (protocol is null)
         {
             pending.Completion.TrySetException(new TransportException(TransportFault.NotOpen, "Not connected."));
+            return;
+        }
+
+        // #287: the command must be in the CURRENT driver's allowlist at the moment it is served,
+        // not merely have been in some registered driver's at some earlier time. Pages resolve
+        // their commands when they are opened, and a reconnect can select a different family
+        // underneath an open page — this check is what keeps §8.1's "every command sent provably
+        // came from the allowlist" true of the receiver actually on the port. Refused as a faulted
+        // transaction rather than an exception, because the poller treats non-transport exceptions
+        // as fatal and a stale page click must not take the poll loop with it. Nothing legitimate
+        // is caught: the identity probe goes over the protocol directly, and every in-family
+        // caller resolved through this same driver moments earlier.
+        if (_driver.Find(pending.Command.Mnemonic) is null)
+        {
+            Transaction refused = new()
+            {
+                Command = pending.Command.Mnemonic,
+                Outcome = TransactionOutcome.Faulted,
+                Lines = [],
+                EchoDiscarded = false,
+                Elapsed = TimeSpan.Zero,
+            };
+
+            pending.Completion.TrySetResult(refused);
+            Record(pending.Origin, refused);
+            _logger.LogWarning(
+                "{Mnemonic} was refused without being sent: it is not in the {Family} driver's catalog. "
+                + "The receiver on the port has changed since the command was resolved.",
+                pending.Command.Mnemonic,
+                _driver.Family);
             return;
         }
 

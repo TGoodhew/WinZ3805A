@@ -202,7 +202,7 @@ public sealed class PollingService : IAsyncDisposable
     /// </remarks>
     private async Task RunAsync(CancellationToken cancellationToken)
     {
-        using PeriodicTimer timer = new(FastInterval ?? Driver.Cadence.Fast, _timeProvider);
+        using PeriodicTimer timer = new(Positive(FastInterval ?? Driver.Cadence.Fast, TimeSpan.FromSeconds(1)), _timeProvider);
 
         // Due immediately, so the first screen arrives with the first readings rather than ten
         // seconds later — the satellite table is most of what the user is waiting to see.
@@ -215,9 +215,12 @@ public sealed class PollingService : IAsyncDisposable
                 // The cadence is re-read each pass because a reconnect can select a different
                 // driver (#287). Written only on change: setting Period recomputes the pending
                 // schedule, and doing that every second for the same value would be a way to
-                // perturb timer semantics for nothing.
-                TimeSpan fast = FastInterval ?? Driver.Cadence.Fast;
-                TimeSpan full = FullInterval ?? Driver.Cadence.Full;
+                // perturb timer semantics for nothing. Clamped positive because PeriodicTimer
+                // throws for anything else and this loop is the one place that must not die of
+                // somebody else's bug — the contract tests make a non-positive cadence loud for
+                // any registered driver, so the clamp is a backstop, not the report.
+                TimeSpan fast = Positive(FastInterval ?? Driver.Cadence.Fast, TimeSpan.FromSeconds(1));
+                TimeSpan full = Positive(FullInterval ?? Driver.Cadence.Full, TimeSpan.FromSeconds(10));
                 if (timer.Period != fast)
                 {
                     timer.Period = fast;
@@ -300,16 +303,19 @@ public sealed class PollingService : IAsyncDisposable
     /// </remarks>
     private async Task PollFastAsync(CancellationToken cancellationToken)
     {
-        // Read once, so the plan and the interpretation cannot straddle a driver swap: the answers
-        // are positional, and driver B reading driver A's sweep would be #209's misalignment made
-        // in software.
+        // Read once, so nothing about this sweep straddles a driver swap: the answers are
+        // positional, and driver B reading — or resolving, or timing — driver A's sweep would be
+        // #209's misalignment made in software. Every ask below goes through this reference, not
+        // the live property.
         IReceiverDriver driver = Driver;
+        ForgetTheOldDriversState(driver);
+
         PollPlan plan = driver.Plan;
         if (plan.FastTier.Count == 0)
         {
             // Contract-breaking — the driver tests say a plan sweeps something — but the poll loop
             // is the one place that must not die of somebody else's bug (§11.1's reasoning).
-            WarnOnceAboutAnEmptyPlan();
+            WarnOnceAboutAnEmptyPlan(driver);
             return;
         }
 
@@ -317,7 +323,7 @@ public sealed class PollingService : IAsyncDisposable
 
         // The discriminator comes first in the plan's order, which is what makes this possible at
         // all: its answer keys the refusal suppression for the rest of the sweep.
-        answers[0] = await AskAsync(plan.FastTier[0], cancellationToken).ConfigureAwait(false);
+        answers[0] = await AskAsync(driver, plan.FastTier[0], cancellationToken).ConfigureAwait(false);
         string? state = ScalarParsers.ParseKeyword(answers[0]);
 
         for (int i = 1; i < answers.Length; i++)
@@ -331,13 +337,13 @@ public sealed class PollingService : IAsyncDisposable
                 }
 
                 (answers[i], bool refused) =
-                    await AskWithStatusAsync(plan.FastTier[i], cancellationToken).ConfigureAwait(false);
+                    await AskWithStatusAsync(driver, plan.FastTier[i], cancellationToken).ConfigureAwait(false);
 
                 _refusedUnder = refused ? state ?? string.Empty : null;
                 continue;
             }
 
-            answers[i] = await AskAsync(plan.FastTier[i], cancellationToken).ConfigureAwait(false);
+            answers[i] = await AskAsync(driver, plan.FastTier[i], cancellationToken).ConfigureAwait(false);
         }
 
         SweepInterpretation sweep = driver.InterpretSweep(answers);
@@ -416,7 +422,7 @@ public sealed class PollingService : IAsyncDisposable
     /// anything that changes between sweeps — a warning a second would be #155's error-queue
     /// mistake made against the log file instead.
     /// </remarks>
-    private void WarnOnceAboutAnEmptyPlan()
+    private void WarnOnceAboutAnEmptyPlan(IReceiverDriver driver)
     {
         if (_warnedAboutEmptyPlan)
         {
@@ -424,13 +430,47 @@ public sealed class PollingService : IAsyncDisposable
         }
 
         _warnedAboutEmptyPlan = true;
+
+        // "The fast sweep is idle", not "nothing is being polled": the full-status query still
+        // runs on its own cadence, and a log line that overstated the outage would misdirect
+        // whoever reads it.
         _logger.LogWarning(
-            "The {Family} driver's poll plan has no fast-tier queries; nothing is being polled.",
-            Driver.Family);
+            "The {Family} driver's poll plan has no fast-tier queries; the fast sweep is idle.",
+            driver.Family);
     }
 
-    /// <summary>Whether the empty-plan warning has been given.</summary>
+    /// <summary>Whether the empty-plan warning has been given, for the current driver.</summary>
     private bool _warnedAboutEmptyPlan;
+
+    /// <summary>The driver the poller's per-driver state belongs to.</summary>
+    private IReceiverDriver? _observedDriver;
+
+    /// <summary>
+    /// Clears state that describes one driver's receiver when a different driver appears (#287).
+    /// </summary>
+    /// <remarks>
+    /// The refusal suppression records only the discriminator's token, and state tokens are short
+    /// generic words — two families can both say <c>HOLD</c>. Carrying the suppression across a
+    /// swap would silently withhold the new driver's refusable query from hardware that was never
+    /// asked, so both it and the empty-plan warning reset the moment a different driver is
+    /// observed. Reference identity is the right test: the session hands out one instance per
+    /// registered driver.
+    /// </remarks>
+    private void ForgetTheOldDriversState(IReceiverDriver driver)
+    {
+        if (ReferenceEquals(_observedDriver, driver))
+        {
+            return;
+        }
+
+        _observedDriver = driver;
+        _refusedUnder = null;
+        _warnedAboutEmptyPlan = false;
+    }
+
+    /// <summary>A backstop for a cadence the timer would throw on; the contract tests are the report.</summary>
+    private static TimeSpan Positive(TimeSpan candidate, TimeSpan fallback) =>
+        candidate > TimeSpan.Zero ? candidate : fallback;
 
     /// <summary>
     /// Records mode, figure of merit and satellite count when any of them moves.
@@ -501,7 +541,7 @@ public sealed class PollingService : IAsyncDisposable
         // plan's query is what interprets the answer.
         IReceiverDriver driver = Driver;
 
-        string? screen = await AskAsync(driver.Plan.FullStatus, cancellationToken).ConfigureAwait(false);
+        string? screen = await AskAsync(driver, driver.Plan.FullStatus, cancellationToken).ConfigureAwait(false);
         if (screen is null)
         {
             return;
@@ -530,8 +570,8 @@ public sealed class PollingService : IAsyncDisposable
     /// the user would see an application that stops updating rather than one that says it has lost
     /// the link.
     /// </remarks>
-    private async Task<string?> AskAsync(string mnemonic, CancellationToken cancellationToken) =>
-        (await AskWithStatusAsync(mnemonic, cancellationToken).ConfigureAwait(false)).Text;
+    private async Task<string?> AskAsync(IReceiverDriver driver, string mnemonic, CancellationToken cancellationToken) =>
+        (await AskWithStatusAsync(driver, mnemonic, cancellationToken).ConfigureAwait(false)).Text;
 
     /// <summary>
     /// As <see cref="AskAsync"/>, and also reports whether the receiver <i>refused</i> the command.
@@ -543,10 +583,14 @@ public sealed class PollingService : IAsyncDisposable
     /// the cable was unplugged would keep it suppressed after it was plugged back in.
     /// </returns>
     private async Task<(string? Text, bool Refused)> AskWithStatusAsync(
+        IReceiverDriver driver,
         string mnemonic,
         CancellationToken cancellationToken)
     {
-        ScpiCommand? command = Driver.Find(mnemonic);
+        // The caller's captured driver, never the live property: the mnemonic came from that
+        // driver's plan, and resolving it through whatever the session holds NOW would let a
+        // mid-sweep reconnect swap pair one family's question with another's catalog entry.
+        ScpiCommand? command = driver.Find(mnemonic);
         if (command is null)
         {
             // Only reachable if the driver's catalog and its own plan disagree, which is a bug in

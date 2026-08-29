@@ -1,4 +1,4 @@
-using WinZ3805A.Device.Commands;
+﻿using WinZ3805A.Device.Commands;
 using WinZ3805A.Device.Models;
 using WinZ3805A.Device.Parsing;
 using WinZ3805A.Device.Transport;
@@ -10,7 +10,7 @@ namespace WinZ3805A.Device.Drivers;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>This is the worked example the README's walkthrough describes.</b> Every piece it implements
+/// <b>This is the worked example <c>docs/adding-a-receiver.md</c> describes.</b> Every piece it implements
 /// already existed and was static; the driver is where "which receiver" stopped being implied and
 /// started being named. Nothing here changes behaviour — the acceptance criterion for #122 is that
 /// the existing tests pass unmodified, because a refactor whose tests had to be rewritten has not

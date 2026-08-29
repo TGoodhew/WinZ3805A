@@ -48,8 +48,12 @@ public class ReceiverDriverTests
     /// <remarks>
     /// §8.4 requires that excluded commands do not exist as data a view can enumerate. A driver
     /// returning a list would put them back. This is asserted against the <b>interface</b> by
-    /// reflection rather than by reading the source, because the rule has to bind every future
-    /// driver and not only the ones that exist.
+    /// reflection rather than by reading the source — and honestly: reflection cannot prove a
+    /// semantic property, so this is a tripwire against the likely shapes of the mistake (a
+    /// member named after blocking, a member whose type involves <see cref="System.Text.RegularExpressions.Regex"/>,
+    /// a non-bool verdict), not a proof that no member could smuggle the list. The review that
+    /// adds a member to this interface is where the real §8.4 judgement happens; this test makes
+    /// sure that review is prompted.
     /// </remarks>
     [Fact]
     public void TheDriverContractCannotExposeTheExclusionsAsData()
@@ -62,6 +66,17 @@ public class ReceiverDriverTests
 
         System.Reflection.MethodInfo blocked = contract.GetMethod(nameof(IReceiverDriver.IsBlocked))!;
         Assert.Equal(typeof(bool), blocked.ReturnType);
+
+        // No member of the contract traffics in regular expressions at all — the patterns' own
+        // type appearing anywhere in a signature would be the clearest smuggling route.
+        foreach (System.Reflection.MethodInfo method in contract.GetMethods())
+        {
+            Assert.DoesNotContain("Regex", method.ReturnType.ToString(), StringComparison.OrdinalIgnoreCase);
+            Assert.All(
+                method.GetParameters(),
+                parameter => Assert.DoesNotContain(
+                    "Regex", parameter.ParameterType.ToString(), StringComparison.OrdinalIgnoreCase));
+        }
     }
 
     [Fact]

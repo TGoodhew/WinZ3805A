@@ -365,7 +365,6 @@ public sealed partial class PositionPage : Page
         static string Fractional(NumberBox box) => box.Value.ToString("0.###", CultureInfo.InvariantCulture);
     }
 
-    /// <summary>Runs one tier C command with the page quiet and the result on the given card.</summary>
     /// <summary>Confirms and runs one of this page's tier C commands, and shows the outcome.</summary>
     /// <param name="mnemonic">
     /// Which command — §8.3's four survey actions and the manual set, all tier C, resolved through

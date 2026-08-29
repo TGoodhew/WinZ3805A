@@ -431,7 +431,7 @@ public sealed class ConnectionViewModel : INotifyPropertyChanged
             $"{portName} disappeared while it was being opened. Reconnect the adapter, then choose Refresh.",
 
         _ when autoDetect =>
-            $"No receiver answered on {portName} at any of the eight standard settings. "
+            $"No receiver answered on {portName} at any supported setting. "
             + "Check that the receiver is powered on and that the cable is a null-modem type.",
 
         _ =>
