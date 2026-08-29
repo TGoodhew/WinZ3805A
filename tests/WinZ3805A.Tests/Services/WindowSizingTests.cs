@@ -161,6 +161,64 @@ public sealed class WindowSizingTests
         Assert.Equal(2528, height);
     }
 
+    // -------------------------------------------------------------------------------------
+    // Leaving compact mode (#307)
+    // -------------------------------------------------------------------------------------
+
+    /// <summary>The size the user had in the standard layout is the size they get back.</summary>
+    [Fact]
+    public void LeavingCompactRestoresTheRememberedStandardSize()
+    {
+        (int width, int height) = WindowSizing.SizeLeavingCompact(900, 700, 396, 272, Screen(1920, 1032));
+
+        Assert.Equal(900, width);
+        Assert.Equal(700, height);
+    }
+
+    /// <remarks>
+    /// A launch straight into compact from a stored compact state may have no standard size on
+    /// record. The floor is the honest answer; a "nice" size invented here would be one the user
+    /// never chose.
+    /// </remarks>
+    [Fact]
+    public void WithNothingRememberedLeavingCompactLandsOnTheFloor()
+    {
+        (int width, int height) = WindowSizing.SizeLeavingCompact(null, null, 396, 272, Screen(1920, 1032));
+
+        Assert.Equal(396, width);
+        Assert.Equal(272, height);
+    }
+
+    /// <summary>A size remembered before the display scaling changed can be under today's floor.</summary>
+    [Fact]
+    public void ARememberedSizeUnderTheFloorIsRaisedToIt()
+    {
+        (int width, int height) = WindowSizing.SizeLeavingCompact(380, 240, 594, 408, Screen(1920, 1032));
+
+        Assert.Equal(594, width);
+        Assert.Equal(408, height);
+    }
+
+    /// <summary>Each axis is decided on its own.</summary>
+    [Fact]
+    public void AHalfRememberedSizeFillsTheMissingAxisFromTheFloor()
+    {
+        (int width, int height) = WindowSizing.SizeLeavingCompact(900, null, 396, 272, Screen(1920, 1032));
+
+        Assert.Equal(900, width);
+        Assert.Equal(272, height);
+    }
+
+    /// <summary>A size remembered on a larger display is capped at the one the window is on now.</summary>
+    [Fact]
+    public void ARememberedSizeLargerThanTheDisplayIsCappedAtIt()
+    {
+        (int width, int height) = WindowSizing.SizeLeavingCompact(2600, 1500, 396, 272, Screen(1920, 1032));
+
+        Assert.Equal(1920, width);
+        Assert.Equal(1032, height);
+    }
+
     /// <remarks>
     /// The two functions compose in one direction only. Clamping first and scaling afterwards would
     /// multiply the display's own size by the scaling factor, which is how a floor ends up larger

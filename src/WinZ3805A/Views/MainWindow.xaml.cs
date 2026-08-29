@@ -21,7 +21,7 @@ public sealed partial class MainWindow : Window
     /// <summary>Names this window's placement file. Unchanged from before it was keyed.</summary>
     public const string PlacementKey = "window";
 
-    /// <summary>The §10.3 floor: 380 x 240 standard, 380 x 120 in the compact layout.</summary>
+    /// <summary>The §10.3 floor: 380 x 240 standard, 380 x 144 in the compact layout (#99).</summary>
     /// <remarks>
     /// <b>Content sizes, in effective pixels</b>, converted to a physical window size by
     /// <see cref="WindowSizing"/> — the reading #101 forced on the Details window's 1024 x 720,
@@ -68,6 +68,16 @@ public sealed partial class MainWindow : Window
 
     /// <summary>The physical floor last applied, for the layout the page is currently showing.</summary>
     private SizeInt32 _minimum;
+
+    /// <summary>
+    /// The window size of the standard layout, remembered across compact mode (#307).
+    /// </summary>
+    /// <remarks>
+    /// Kept current from <c>AppWindow.Changed</c> while the window is restored and not compact,
+    /// captured as compact is entered, and persisted beside the placement so a launch straight into
+    /// compact still knows what to leave to. Null until a standard-layout size has been seen.
+    /// </remarks>
+    private SizeInt32? _standardSize;
 
     /// <summary>Recomputes the §10.3 floor when the display scaling under the window changes.</summary>
     private readonly ScalingWatch _scaling;
@@ -331,8 +341,10 @@ public sealed partial class MainWindow : Window
     /// </summary>
     /// <remarks>
     /// The compact state is applied to the page <i>before</i> the size, because the §10.3 floor
-    /// depends on it — restoring a 380 x 120 compact window against the standard 240 floor would
-    /// silently double its height on every launch.
+    /// depends on it — restoring a 380 x 144 compact window against the standard 240 floor would
+    /// silently grow its height on every launch. Setting it raises <see cref="OnCompactChanged"/>,
+    /// which sizes the window for compact; the stored bounds then land on top, which is the same
+    /// size unless the user resized the compact window, in which case theirs wins.
     /// </remarks>
     private void RestorePlacement()
     {
@@ -366,6 +378,22 @@ public sealed partial class MainWindow : Window
             placement.Height));
 
         _restoredBounds = placement.Bounds;
+
+        // What leaving compact returns to (#307). A window stored in the standard layout is its own
+        // answer; one stored compact carries the standard size it had beside its bounds, if it ever
+        // had one, and otherwise leaves to the floor.
+        if (!placement.IsCompact)
+        {
+            _standardSize = new SizeInt32(placement.Width, placement.Height);
+        }
+        else if (placement.StandardWidth is int standardWidth && placement.StandardHeight is int standardHeight)
+        {
+            _standardSize = new SizeInt32(standardWidth, standardHeight);
+        }
+        else
+        {
+            _standardSize = null;
+        }
 
         if (placement.IsMaximized)
         {
@@ -422,9 +450,71 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// Resizes the window with the layout (#307): compact is for being small, so entering it takes
+    /// the window down to §9.6.2's compact floor, and leaving it puts the standard size back.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Before this the toggle changed only the content, and a standard-sized window kept its frame
+    /// around a 64 px medallion and one line of text until the user dragged it down by hand — the
+    /// mode arrived and the smallness, which is its point, did not.
+    /// </para>
+    /// <para>
+    /// Only a restored window is resized. A maximised one is un-maximised first, because compact in
+    /// a maximised frame is the failure above at its largest; a minimised one is left alone and
+    /// takes its size when it comes back. The size to return to is read <i>before</i> the floor is
+    /// raised, because raising it grows the window, and the change event would otherwise record
+    /// that grown size as the standard one.
+    /// </para>
+    /// </remarks>
     private void OnCompactChanged(object? sender, EventArgs e)
     {
-        ApplyMinimumSize();
+        if (_page?.IsCompact == true)
+        {
+            if (Presenter?.State == OverlappedPresenterState.Maximized)
+            {
+                Presenter.Restore();
+            }
+
+            if (Presenter?.State == OverlappedPresenterState.Restored)
+            {
+                _standardSize = AppWindow.Size;
+            }
+            else if (_restoredBounds is WindowRect bounds)
+            {
+                _standardSize = new SizeInt32(bounds.Width, bounds.Height);
+            }
+
+            ApplyMinimumSize();
+
+            if (Presenter?.State == OverlappedPresenterState.Restored)
+            {
+                AppWindow.Resize(_minimum);
+            }
+        }
+        else
+        {
+            SizeInt32? remembered = _standardSize;
+
+            ApplyMinimumSize();
+
+            if (Presenter?.State == OverlappedPresenterState.Restored)
+            {
+                (int width, int height) = WindowSizing.SizeLeavingCompact(
+                    remembered?.Width,
+                    remembered?.Height,
+                    _minimum.Width,
+                    _minimum.Height,
+                    DisplayWorkAreas.ForWindow(AppWindow));
+
+                if (width != AppWindow.Size.Width || height != AppWindow.Size.Height)
+                {
+                    AppWindow.Resize(new SizeInt32(width, height));
+                }
+            }
+        }
+
         ScheduleSave();
     }
 
@@ -442,6 +532,13 @@ public sealed partial class MainWindow : Window
                 sender.Position.Y,
                 sender.Size.Width,
                 sender.Size.Height);
+
+            // The standard layout's size follows the user's resizes; the compact layout's does not
+            // count as one, since it is what leaving compact returns FROM (#307).
+            if (_page?.IsCompact != true)
+            {
+                _standardSize = sender.Size;
+            }
         }
 
         // A move is how the window reaches a display of a different size, and two displays can
@@ -485,6 +582,8 @@ public sealed partial class MainWindow : Window
             IsMaximized = Presenter?.State == OverlappedPresenterState.Maximized,
             IsCompact = _page?.IsCompact == true,
             IsAlwaysOnTop = _page?.IsAlwaysOnTop == true,
+            StandardWidth = _standardSize?.Width,
+            StandardHeight = _standardSize?.Height,
         });
     }
 }
