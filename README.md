@@ -113,20 +113,25 @@ Sources: [Windows App SDK and supported Windows releases](https://learn.microsof
 
 ## Installing
 
-There is no release yet. When there is, the application will be distributed
-through the Microsoft Store, with a signed MSIX available for sideloading.
-Deployment of the Windows App SDK is framework-dependent rather than
-self-contained, so the framework package dependency is resolved at install time
-(§6.3).
+The application is installed by sideloading. No package is published yet, so
+the install is built from source:
+[`build/New-SideloadPackage.ps1`](build/New-SideloadPackage.ps1) builds the
+MSIX, signs it, and wraps it — with the x64 Windows App Runtime, an
+`Install.cmd` and a plain-language [README](build/sideload/README.txt) — into
+`dist\WinZ3805A-<version>-x64.zip`, which a machine with neither Visual Studio
+nor an internet connection can install from. Deployment of the Windows App SDK
+is framework-dependent rather than self-contained (§6.3), which is why the
+runtime travels in the zip.
 
-Until then, [`build/New-SideloadPackage.ps1`](build/New-SideloadPackage.ps1)
-builds the signed MSIX and wraps it — with the x64 runtime, an `Install.cmd` and
-a plain-language [README](build/sideload/README.txt) — into one zip that a
-machine without Visual Studio can install from, and
-[`build/Invoke-Wack.ps1`](build/Invoke-Wack.ps1) runs the Windows App
-Certification Kit over the Release package. The Store submission itself is
-drafted in [docs/store-listing.md](docs/store-listing.md), and the privacy
-policy it will point at is [docs/privacy.md](docs/privacy.md).
+The package is signed with a self-signed certificate (`build/devcert.pfx`,
+generated from the manifest on first use so its subject cannot drift from the
+declared publisher), so the person installing trusts it once: `Install.cmd`
+asks for administrator permission for exactly that step — adding the
+certificate to *Trusted People* and nothing wider — and the README in the zip
+explains what that does and does not grant before asking. Uninstall from
+*Settings › Apps*, or with
+[`build/Uninstall-Sideload.ps1`](build/Uninstall-Sideload.ps1), which also
+removes the certificate and is what puts a test machine back to clean.
 
 ## Building from source
 
@@ -170,6 +175,11 @@ and there is no ARM64 hardware to certify a submission on. See §6.1.
 `TreatWarningsAsErrors` and `EnforceCodeStyleInBuild` are both on, so a clean
 build produces zero warnings and a code-style violation is a build error rather
 than an editor suggestion.
+
+[`build/Invoke-Wack.ps1`](build/Invoke-Wack.ps1) builds the Release MSIX and
+runs the Windows App Certification Kit over it. It must run elevated, and it
+takes over the desktop for ten to twenty minutes while the kit installs,
+drives, and uninstalls the package.
 
 ### Run
 
