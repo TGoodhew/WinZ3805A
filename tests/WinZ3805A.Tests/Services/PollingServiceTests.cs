@@ -603,7 +603,7 @@ public class PollingServiceTests
         await using PollingService poller = new(owned, store, clock);
         poller.Start();
 
-        await WaitFor(clock, () => poller.TimeIntervalSkips >= 3, () => (int)poller.FastSweeps);
+        await WaitFor(clock, () => poller.RefusedQuerySkips >= 3, () => (int)poller.FastSweeps);
 
         // Asked once, refused once, and never asked again while the state stayed the same.
         Assert.Equal(1, asked);
@@ -651,7 +651,7 @@ public class PollingServiceTests
         await using PollingService poller = new(owned, store, clock);
         poller.Start();
 
-        await WaitFor(clock, () => poller.TimeIntervalSkips >= 2, () => (int)poller.FastSweeps);
+        await WaitFor(clock, () => poller.RefusedQuerySkips >= 2, () => (int)poller.FastSweeps);
         Assert.Equal(1, asked);
 
         state = " LOCK";
@@ -659,10 +659,10 @@ public class PollingServiceTests
         await WaitFor(clock, () => asked >= 2, () => asked);
 
         // Asked again on the new state, accepted this time, and not suppressed thereafter.
-        long skipsAfterRecovery = poller.TimeIntervalSkips;
+        long skipsAfterRecovery = poller.RefusedQuerySkips;
         await WaitFor(clock, () => asked >= 4, () => asked);
 
-        Assert.Equal(skipsAfterRecovery, poller.TimeIntervalSkips);
+        Assert.Equal(skipsAfterRecovery, poller.RefusedQuerySkips);
     }
 
     /// <summary>
@@ -681,6 +681,6 @@ public class PollingServiceTests
 
         await WaitFor(clock, () => poller.FastSweeps >= 3, () => (int)poller.FastSweeps);
 
-        Assert.Equal(0, poller.TimeIntervalSkips);
+        Assert.Equal(0, poller.RefusedQuerySkips);
     }
 }
