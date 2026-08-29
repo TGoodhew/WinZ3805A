@@ -57,6 +57,9 @@ public sealed partial class MainWindow : Window
     /// </remarks>
     private DetailsWindow? _details;
 
+    /// <summary>The user's guide while it is open — one, reachable from either window (#312).</summary>
+    private HelpWindow? _help;
+
     /// <summary>
     /// The last bounds seen while the window was neither maximised nor minimised.
     /// </summary>
@@ -160,6 +163,7 @@ public sealed partial class MainWindow : Window
             // Before App disposes the container. Details binds to the same session, and leaving it
             // open over a disposed one would be a window showing a receiver that no longer exists.
             _details?.Close();
+            _help?.Close();
             _saveAfterIdle.Stop();
             SavePlacement();
         };
@@ -214,10 +218,26 @@ public sealed partial class MainWindow : Window
                 }
             };
 
+            // F1 and the Help button in Details open the same window this one owns (#312).
+            details.HelpRequested += (_, _) => ShowHelp();
+
             _details = details;
         }
 
         _details.Activate();
+    }
+
+    /// <summary>Opens the user's guide, or brings the open one forward (#312).</summary>
+    public void ShowHelp()
+    {
+        if (_help is null)
+        {
+            HelpWindow help = new(_services);
+            help.Closed += (_, _) => _help = null;
+            _help = help;
+        }
+
+        _help.BringToFront();
     }
 
     /// <remarks>
@@ -237,6 +257,13 @@ public sealed partial class MainWindow : Window
         Add(Windows.System.VirtualKey.D, Windows.System.VirtualKeyModifiers.Control, () =>
         {
             ShowDetails();
+            return true;
+        });
+
+        // §9.7.5's F1: the user's guide (#312).
+        Add(Windows.System.VirtualKey.F1, Windows.System.VirtualKeyModifiers.None, () =>
+        {
+            ShowHelp();
             return true;
         });
 

@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <!--
     Assembly metadata. Absent until 29 Aug 2026, which left the file properties of a
     shipped binary reading as the project name and nothing else.
@@ -74,6 +74,16 @@
     <Content Include="Assets\**\*.png" />
     <Content Include="Assets\AppIcon.ico" />
     <!--
+      The user's guide, shipped inside the package so F1 works on a bench machine with no
+      internet (#312). The document and its images are the ones under docs/, linked rather
+      than copied, so the guide a visitor reads on github.com and the one the application
+      shows are the same bytes. HelpWindow reads them from AppContext.BaseDirectory\Help -
+      CopyToOutputDirectory is what puts a linked item there for the loose layout winapp
+      runs; the MSIX carries Content items regardless.
+    -->
+    <Content Include="..\..\docs\how-to-use.md" Link="Help\how-to-use.md" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\docs\images\how-to-use\*.png" Link="Help\images\how-to-use\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <!--
       §9.5.1: Cascadia Mono is embedded rather than assumed present. It is inbox on
       Windows 11 but ships with Windows Terminal, so it cannot be relied on for the
       Windows 10 floor in §6.1. SIL OFL 1.1 permits the redistribution; the licence
@@ -139,6 +149,7 @@
       e_sqlite3.dll into every package for a feature no code path could reach;
       TrendStore is that code path.
     -->
+    <PackageReference Include="Markdig" Version="1.3.2" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.11" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.11" />
     <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.11" />
