@@ -636,7 +636,7 @@ Three consequences follow, and they govern everything below:
 
 **Signature moment — the state medallion.**
 
-The main window's primary element is a circular medallion: a mode glyph at the centre, wrapped by a ring that is a **live 60-second radial sparkline of 1 PPS time interval**. One object answers both questions a glance is asking — *what state is it in* (discrete, from the glyph and colour) and *how well is it behaving* (continuous, from whether the ring is smooth or ragged). A calm ring means a calm loop. A ring that suddenly grows teeth means the loop is hunting, and you see it before TFOM changes.
+The main window's primary element is a circular medallion: a mode glyph at the centre, wrapped by a ring that is a **live 60-second radial sparkline of 1 PPS time interval**. One object answers both questions a glance is asking — *what state is it in* (discrete, from the glyph and colour) and *how well is it behaving* (continuous, from whether the ring is smooth or ragged). A calm ring means a calm loop. A ring that suddenly grows teeth means the loop is hunting, and you see it before TFOM changes. At the 64 px compact size the ring is uniform rather than a sparkline (§9.10.2, #307): that small, marks of differing length cost the circle its shape, and the shape is what this paragraph is about.
 
 The ring is **qualitative by design**. It is not a chart and must never be read for values; the precise TI figure is always set adjacent to it in `WzReadoutMedium`. Circles are reserved exclusively for the medallion — every other surface in the app uses a 4 px or 8 px radius (§9.3). That reservation is what makes it read as an instrument face rather than one card among many.
 
@@ -806,7 +806,8 @@ Both exceed the 4.5:1 floor with margin, so accent-coloured text is permitted at
 
 The four severity shapes are drawn as `Path` geometry, not as glyphs from a font, so they render identically under high contrast where they resolve to `SystemColorWindowTextColor` outlines with a hairline fill distinction.
 
-> **One stated exception, added 29 Aug 2026 (#279): the medallion centre in compact mode.**
+> **One stated exception, added 29 Aug 2026 (#279) and widened the same day (#307): the medallion
+> centre whenever the readout row is off the screen.**
 >
 > §9.6.2 keeps only two things in compact — the mode text and the tracked-satellite count — and G1
 > requires both legible at two metres. The count therefore takes the medallion's centre there, in
@@ -814,19 +815,25 @@ The four severity shapes are drawn as `Path` geometry, not as glyphs from a font
 > colour and no shape.**
 >
 > This is permitted because the pair, not the circle, is the severity surface: §9.6.2 keeps the
-> **mode text beside the medallion in compact, always and in words**, so the state is still stated
-> in a second channel on the same screen. The rule above is about a user never having to read
-> colour to know severity, and they do not have to here.
+> **mode text beside the medallion, always and in words**, so the state is still stated in a
+> second channel on the same screen. The rule above is about a user never having to read colour to
+> know severity, and they do not have to here.
 >
-> The alternatives were examined and are worse. The ring cannot carry the shape — it already draws
-> the sixty-sample time-interval sparkline in Light and Dark. A glyph shown beside the number
-> cannot either — a numeral sized for two metres fills a 64 px circle, and shrinking it to make
-> room defeats the requirement that motivated the change.
+> The alternatives were examined and are worse. The ring cannot carry the shape — at 96 and 160 px
+> it is the sixty-sample time-interval sparkline and at 64 px it is a uniform ring (§9.10.2), and
+> neither is a severity shape. A glyph shown beside the number cannot either — a numeral sized for
+> two metres fills a 64 px circle, and shrinking it to make room defeats the requirement that
+> motivated the change.
 >
-> **The exception is bounded to compact, and to a count that exists.** At Standard and Large the
-> glyph keeps the centre, and a receiver that has not reported a count shows the glyph rather than
-> §11.1's em dash — a dash belongs in a readout, where it holds a column; in a small circle it says
-> less than the shape it replaced.
+> **The exception is bounded to the layouts in which the readout row is collapsed, and to a count
+> that exists.** *Amended 29 Aug 2026 (#307): it was bounded to compact alone, and at the standard
+> layout's 380 × 240 minimum — where §9.6.2 collapses the readout row that carries the count — the
+> count was shown nowhere, inside G1's own ≤ 420 × 260 acceptance box.* While the readout row is on
+> the screen the glyph keeps the centre, the count being printed once there already; and a receiver
+> that has not reported a count shows the glyph rather than §11.1's em dash — a dash belongs in a
+> readout, where it holds a column; in a small circle it says less than the shape it replaced.
+> Whether the row is on the screen is the page's fact to state, not the control's to infer from its
+> diameter: the Overview page's 96 px medallion sits beside a readout row and keeps its glyph.
 
 ##### 9.4.3.1 Shell surfaces: the notification area and the taskbar badge
 
@@ -1113,7 +1120,7 @@ See the amendment below the table before implementing one of them.
 
 | Window | Minimum (content) | Behaviour at minimum |
 |---|---|---|
-| Main | 380 × 240 | Medallion 160 px and the two mode lines. The readout row, the figures of merit, the clock line and the footer are **collapsed** — not clipped, not scrolled: they are removed from the layout, so nothing is focusable or hit-testable off-screen (A11Y-1, A11Y-6). |
+| Main | 380 × 240 | Medallion 160 px **with the satellite count in its centre** (§9.4.3, #307) and the two mode lines. The readout row, the figures of merit, the clock line and the footer are **collapsed** — not clipped, not scrolled: they are removed from the layout, so nothing is focusable or hit-testable off-screen (A11Y-1, A11Y-6). |
 | Main, compact mode | 380 × 144 | Medallion 64 px **with the satellite count in its centre** (§9.4.3, #279), mode text; readout row and footer hidden |
 | Receiver Details | **1024 × 720** | Medium breakpoint; `NavigationView` in `Left` mode; no horizontal scrolling |
 
@@ -1384,7 +1391,7 @@ Construction rules:
 
 | Control | Must do |
 |---|---|
-| **`StatusMedallion`** | Circular. Centre: mode glyph + optional value. Ring: 60-sample radial sparkline of 1 PPS TI, redrawn on each fast poll with **no animation**, autoscaled to ±3σ of the window with a fixed floor of ±50 ns so a calm loop does not amplify into noise. Ring colour = current severity token. Sizes 64 / 96 / 160 px. Exposes `AutomationProperties.Name` as a full sentence, e.g. *"Locked to GPS, stabilising frequency, 6 satellites tracked, time interval −33.1 nanoseconds."* Ring is decorative to assistive tech (`AccessibilityView="Raw"`) since the numeric value is announced. Under high contrast: ring drawn as a 2 px `SystemColorWindowTextColor` stroke, severity conveyed by the glyph and the accompanying label. |
+| **`StatusMedallion`** | Circular. Centre: mode glyph + optional value. Ring: 60-sample radial sparkline of 1 PPS TI, redrawn on each fast poll with **no animation**, autoscaled to ±3σ of the window with a fixed floor of ±50 ns so a calm loop does not amplify into noise. Ring colour = current severity token. Sizes 64 / 96 / 160 px. **The sparkline is drawn at 96 and 160 px; at 64 px the ring is uniform** — sixty marks of one length in every slot, in the severity colour, from the first second — because marks of differing length make a circle that small read as misshapen, and the circle is the one shape the eye finds without focusing (§9.7) *(amended 29 Aug 2026, #307)*. Exposes `AutomationProperties.Name` as a full sentence, e.g. *"Locked to GPS, stabilising frequency, 6 satellites tracked, time interval −33.1 nanoseconds."* Ring is decorative to assistive tech (`AccessibilityView="Raw"`) since the numeric value is announced. Under high contrast: ring drawn as a 2 px `SystemColorWindowTextColor` stroke, severity conveyed by the glyph and the accompanying label. |
 | **`ReadoutTile`** | Label + value + unit + optional severity. Enforces §9.5.3 rules 1–4 and 6 so no page can get numeric typesetting wrong locally. Width reserved from a `MaxDigits` property. |
 | **`SeverityPill`** | Colour + `Path` shape + text. The *only* way severity is rendered anywhere in the app. Takes a `Severity` enum, never a brush. |
 | **`SkyPlotControl`** | Polar plot per §10.5. North up, 0° elevation at rim, 90° at centre. Dashed elevation-mask circle. Marker area scales with signal strength; fill from the sequential ramp (§9.4.4). Keyboard: arrow keys move a focus ring between markers in PRN order, Enter selects. Exposes each marker as an automation peer with name *"PRN 19, elevation 65 degrees, azimuth 52 degrees, carrier to noise 49, tracked."* Provides a `ListView` alternate view toggle for users who cannot use the spatial form. |
@@ -1640,8 +1647,8 @@ Two behavioural principles remain here because they are functional rather than v
 - **Locked with zero satellites** renders a `WzCautionBrush` `SeverityPill` beside the count reading "coasting", with tooltip *"Locked but tracking no satellites. The receiver is coasting on a 1 PPS it can no longer verify."* This condition appears in real units with antenna or bias-tee faults and is the single most useful diagnostic the app surfaces — it is the reason the satellite count shares top billing with the mode.
 - Date shows the rollover-corrected value with a trailing `\uE946` Info glyph when `WeekRolloverEpochs != 0`; the raw device date is in the tooltip (§7.4).
 - Footer staleness per §9.11: `WzTextTertiaryBrush` normally, `WzCautionBrush` past 15 s, `WzCriticalBrush` past 60 s, always with the elapsed time in words.
-- Always-on-top toggle; size, position, and compact state persist across launches.
-- Compact mode toggles on double-click of the medallion or `Ctrl+Shift+M`. Type sizes, targets, and focus visuals are unchanged (§9.6.3).
+- Always-on-top toggle; size, position, and compact state persist across launches — and so does the standard layout's size while the window is compact, so a launch straight into compact still knows what to leave to (#307).
+- Compact mode toggles on double-click of the medallion or `Ctrl+Shift+M`. Type sizes, targets, and focus visuals are unchanged (§9.6.3). **Entering compact resizes the window to §9.6.2's compact minimum, and leaving it restores the standard-layout size the window had** *(amended 29 Aug 2026, #307: the toggle changed the content and left the frame, so compact arrived without the smallness that is its point)*.
 - Opening Details runs a `ConnectedAnimation` on the medallion into the Overview page medallion (§9.8.2).
 
 #### 10.3.1 Closing, and staying alive (#280)
