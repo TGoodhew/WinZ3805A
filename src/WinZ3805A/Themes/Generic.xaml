@@ -35,12 +35,27 @@
         <Setter Property="IsTabStop" Value="False" />
         <Setter Property="HorizontalAlignment" Value="Left" />
         <Setter Property="VerticalAlignment" Value="Center" />
+
+        <!--
+            A11Y-5's 32 px pointer floor, which applies "at all times" and whose only recorded
+            exception is §9.10.2's sky-plot markers. Measured at 73 x 28 on 28 Aug 2026 - the dot
+            and its label are 20 px of line height inside XXS padding, which lands four short.
+
+            Not every pill is a pointer target, but several carry a ToolTipService tooltip and any
+            of them may gain one, so the floor lives on the control rather than on the sites that
+            happen to need it today. That is the difference between a guarantee and a habit.
+
+            Safe against §9.6.3's dense rows: no SeverityPill sits inside a DataTemplate, so this
+            raises no table row. Check that again before putting one in a list.
+        -->
+        <Setter Property="MinHeight" Value="32" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="controls:SeverityPill">
                     <Border x:Name="PillRoot"
                             Background="Transparent"
                             CornerRadius="{ThemeResource WzControlCornerRadius}"
+                            MinHeight="{TemplateBinding MinHeight}"
                             Padding="{ThemeResource WzSpaceXxsThickness}">
                         <StackPanel Orientation="Horizontal"
                                     Spacing="{ThemeResource WzSpaceXxs}"

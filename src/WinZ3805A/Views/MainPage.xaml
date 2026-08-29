@@ -133,13 +133,33 @@
             <TextBlock x:Name="ClockText"
                        Style="{StaticResource WzMonoTextStyle}"
                        Foreground="{ThemeResource WzTextPrimaryBrush}" />
-            <TextBlock x:Name="RolloverBadge"
-                       FontFamily="{ThemeResource SymbolThemeFontFamily}"
-                       FontSize="12"
-                       VerticalAlignment="Center"
-                       Foreground="{ThemeResource WzInfoBrush}"
-                       Visibility="Collapsed"
-                       Text="&#xE946;" />
+            <!--
+                A11Y-5: pointer targets are >= 32 x 32 px AT ALL TIMES, and §9.10.2's sky-plot
+                markers are the one recorded exception. A bare TextBlock is hit-testable only where
+                its glyph is, so at FontSize 12 this badge was about 12 x 15 px - under a fifth of
+                the required area. It was reachable in practice only by hitting the glyph exactly,
+                and the tooltip dismissed the moment the pointer left it.
+
+                The Border is what carries the target. Background MUST be Transparent and not left
+                unset: an unset Background is null, which is not hit-testable at all, so the padding
+                would enlarge the box visually and change nothing about where the pointer works.
+
+                The tooltip and the automation name move onto the Border with the target, so the
+                thing a pointer can hit and the thing a screen reader announces are one element.
+            -->
+            <Border x:Name="RolloverBadge"
+                    Background="Transparent"
+                    MinWidth="32"
+                    MinHeight="32"
+                    VerticalAlignment="Center"
+                    Visibility="Collapsed">
+                <TextBlock FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                           FontSize="12"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           Foreground="{ThemeResource WzInfoBrush}"
+                           Text="&#xE946;" />
+            </Border>
 
             <!--
                 #245. A separate badge from the rollover one, because both can be in force at once -
@@ -150,13 +170,19 @@
                 application has already applied, while this reading may be wrong by any amount and
                 nothing on the screen says by how much.
             -->
-            <TextBlock x:Name="ProvisionalBadge"
-                       FontFamily="{ThemeResource SymbolThemeFontFamily}"
-                       FontSize="12"
-                       VerticalAlignment="Center"
-                       Foreground="{ThemeResource WzCautionBrush}"
-                       Visibility="Collapsed"
-                       Text="&#xE9CE;" />
+            <Border x:Name="ProvisionalBadge"
+                    Background="Transparent"
+                    MinWidth="32"
+                    MinHeight="32"
+                    VerticalAlignment="Center"
+                    Visibility="Collapsed">
+                <TextBlock FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                           FontSize="12"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           Foreground="{ThemeResource WzCautionBrush}"
+                           Text="&#xE9CE;" />
+            </Border>
 
             <!--
                 The zone picker. Its long-term home is Settings -> Time, a page in the Details
