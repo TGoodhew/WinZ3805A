@@ -1,3 +1,6 @@
+using Windows.Foundation;
+using System.Globalization;
+
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -62,11 +65,15 @@ public enum ReadoutSize
 public sealed class ReadoutTile : Control
 {
     private const string ValueRunPart = "PART_ValueRun";
+    private const string FractionRunPart = "PART_FractionRun";
+    private const string PointRunPart = "PART_PointRun";
+    private const string PointTextPart = "PART_PointText";
+    private const string LabelTextPart = "LabelText";
+    private const string ValueGridPart = "PART_ValueGrid";
+    private const string ReserveTextPart = "PART_ReserveText";
     private const string SpacerRunPart = "PART_SpacerRun";
     private const string UnitRunPart = "PART_UnitRun";
     private const string ReserveValueRunPart = "PART_ReserveValueRun";
-    private const string ReserveSpacerRunPart = "PART_ReserveSpacerRun";
-    private const string ReserveUnitRunPart = "PART_ReserveUnitRun";
 
     /// <summary>Identifies the <see cref="Label"/> dependency property.</summary>
     public static readonly DependencyProperty LabelProperty = DependencyProperty.Register(
@@ -191,16 +198,137 @@ public sealed class ReadoutTile : Control
     /// The indexer on <c>ResourceDictionary</c> throws on a missing key, and this is called during
     /// the first layout pass, so a typo would be a startup crash rather than a visible defect.
     /// </remarks>
+    /// <summary>
+    /// Centres the caption on the decimal axis rather than on the tile.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The axis sits at the right edge of the reserved integer column, which is not the middle of
+    /// the tile — the fractional side and the unit are narrower than the integer side on every
+    /// quantity here. Centring the caption on the tile therefore puts it off the point it names.
+    /// </para>
+    /// <para>
+    /// A centred element shifts right by half of any left margin, so the correction is twice the
+    /// offset. Applied as a margin rather than a translation so it participates in layout and
+    /// cannot overlap its neighbours.
+    /// </para>
+    /// </remarks>
+    /// <summary>Guards the one re-arrange that setting the caption's margin costs.</summary>
+    private bool _aligning;
+
+    /// <summary>
+    /// Places the caption on the decimal axis, once every child has its final size.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>This has to happen in arrange, not in a <c>SizeChanged</c> handler.</b> The axis is
+    /// measured from three elements' <c>ActualWidth</c>, and those are only true after a layout
+    /// pass — so a handler-driven version was correct only when its last firing happened to follow
+    /// the final pass. Changing digit count reorders those passes, which made the caption jump
+    /// between correct and badly offset with no code change involved. A measurement taken at the
+    /// wrong moment is not a slightly-wrong measurement, it is a coin toss.
+    /// </para>
+    /// <para>
+    /// Setting a margin here invalidates layout, so the guard lets exactly one further pass through
+    /// and the margin has settled by then. Assigning only on a real change keeps that from becoming
+    /// a loop.
+    /// </para>
+    /// </remarks>
+    protected override Size ArrangeOverride(Size finalSize)
+    {
+        Size arranged = base.ArrangeOverride(finalSize);
+
+        if (!_aligning)
+        {
+            _aligning = true;
+            try
+            {
+                AlignLabelToAxis();
+            }
+            finally
+            {
+                _aligning = false;
+            }
+        }
+
+        return arranged;
+    }
+
+    private void AlignLabelToAxis()
+    {
+        if (GetTemplateChild(LabelTextPart) is not FrameworkElement label ||
+            GetTemplateChild(ValueGridPart) is not FrameworkElement grid ||
+            GetTemplateChild(ReserveTextPart) is not FrameworkElement reserve)
+        {
+            return;
+        }
+
+        if (reserve.ActualWidth <= 0 || grid.ActualWidth <= 0)
+        {
+            return;
+        }
+
+        // With a fractional part the axis is the MIDDLE of the decimal point, not the boundary
+        // beside it — at 56 px that glyph is wide enough for the difference to read as an error.
+        //
+        // Without one there is no point to centre on, and the axis would fall after the last digit,
+        // pushing the caption off the number entirely. A count like "satellites" therefore centres
+        // on its digits, which is what the reserved column already describes.
+        double point = GetTemplateChild(PointTextPart) is FrameworkElement separator
+            ? separator.ActualWidth
+            : 0;
+
+        double axis = point > 0
+            ? reserve.ActualWidth + (point / 2)
+            : reserve.ActualWidth / 2;
+
+        double offset = axis - (grid.ActualWidth / 2);
+
+        Thickness wanted = offset >= 0
+            ? new Thickness(offset * 2, 0, 0, 0)
+            : new Thickness(0, 0, offset * -2, 0);
+
+        // Only on a real change. Assigning an equal margin still invalidates layout, which would
+        // arrange, align, invalidate, arrange - forever.
+        if (Math.Abs(label.Margin.Left - wanted.Left) > 0.5 ||
+            Math.Abs(label.Margin.Right - wanted.Right) > 0.5)
+        {
+            label.Margin = wanted;
+        }
+    }
+
     private static Brush? Lookup(string key) =>
         Application.Current.Resources.TryGetValue(key, out object? found) ? found as Brush : null;
 
     private void Refresh()
     {
+
         string formatted = ReadoutFormatter.Format(Value, DecimalPlaces);
+
+        // Split at the decimal separator, because that is the axis everything else hangs from.
+        // The integer side is right-aligned against it and the fractional side runs left from it,
+        // so the point itself never moves as digits are gained or lost.
+        int point = formatted.IndexOf(
+            CultureInfo.CurrentCulture.NumberFormat.NumberDecimalSeparator, StringComparison.Ordinal);
+
+        string separator = CultureInfo.CurrentCulture.NumberFormat.NumberDecimalSeparator;
+        string integerPart = point < 0 ? formatted : formatted[..point];
+        string pointPart = point < 0 ? string.Empty : separator;
+        string fractionPart = point < 0 ? string.Empty : formatted[(point + separator.Length)..];
+
+        if (GetTemplateChild(PointRunPart) is Run pointRun)
+        {
+            pointRun.Text = pointPart;
+        }
+
+        if (GetTemplateChild(FractionRunPart) is Run fractionRun)
+        {
+            fractionRun.Text = fractionPart;
+        }
 
         if (GetTemplateChild(ValueRunPart) is Run valueRun)
         {
-            valueRun.Text = formatted;
+            valueRun.Text = integerPart;
 
             // §11.1's "—" is right, and at readout size it stops reading as one. An em dash set in
             // Segoe UI Variable Display Semibold at 56 px is a 40 x 5 px bar: on the primary window
@@ -243,6 +371,9 @@ public sealed class ReadoutTile : Control
             unitRun.Text = hasUnit ? Unit : string.Empty;
         }
 
+        // The reserve covers the DIGITS only. The unit lives in its own column now and never
+        // changes width, so reserving it here would reserve it twice and push the number left.
+        //
         // The reserve is invisible but measured, so the tile keeps a constant width whatever the
         // value does. It mirrors the value line run for run — widest number, hair space, unit —
         // rather than just the number: the unit is set in caption size, so reserving the number
@@ -253,15 +384,7 @@ public sealed class ReadoutTile : Control
             reserveValueRun.Text = ReadoutFormatter.WidestString(MaxIntegerDigits, DecimalPlaces, AllowNegative);
         }
 
-        if (GetTemplateChild(ReserveSpacerRunPart) is Run reserveSpacerRun)
-        {
-            reserveSpacerRun.Text = hasUnit ? ReadoutFormatter.HairSpace : string.Empty;
-        }
 
-        if (GetTemplateChild(ReserveUnitRunPart) is Run reserveUnitRun)
-        {
-            reserveUnitRun.Text = hasUnit ? Unit : string.Empty;
-        }
 
         // One phrase rather than three adjacent runs, which a screen reader would otherwise read as
         // disconnected fragments.
