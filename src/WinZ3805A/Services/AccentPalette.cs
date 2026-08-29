@@ -14,15 +14,22 @@ namespace WinZ3805A.Services;
 /// <param name="Applied">Brushes found and set.</param>
 /// <param name="Expected">Brushes the ramp names.</param>
 /// <param name="Base">The accent that was applied.</param>
+/// <param name="Source">
+/// <b>Which ramp was actually applied, which is not the same as which was asked for (#290).</b>
+/// The startup log reported <c>preferences.UseSystemAccent</c> here until 29 Aug 2026, so a user
+/// who had opted into the Windows accent and hit a failed read was told <c>source Windows</c> while
+/// the brand ramp was on screen. A missing log line costs a search; one asserting the read
+/// succeeded sends the reader downstream into the wrong half of the code.
+/// </param>
 /// <remarks>
 /// Reported so a mismatch is visible in the log rather than only on screen. A key renamed in
 /// <c>Colors.xaml</c> and not here fails silently — the brush simply is not found, the accent
 /// applies everywhere except one control, and nothing says so.
 /// </remarks>
-public readonly record struct AppliedCount(int Applied, int Expected, Rgb Base)
+public readonly record struct AppliedCount(int Applied, int Expected, Rgb Base, AccentSource Source)
 {
     /// <summary>Nothing was applied, because there was nothing sensible to apply.</summary>
-    public static AppliedCount None { get; } = new(0, 0, default);
+    public static AppliedCount None { get; } = new(0, 0, default, AccentSource.Unchanged);
 
     /// <summary>Whether every brush the ramp names was found.</summary>
     public bool IsComplete => Applied == Expected;
@@ -50,13 +57,18 @@ public readonly record struct AppliedCount(int Applied, int Expected, Rgb Base)
 public static class AccentPalette
 {
     /// <summary>Reads the Windows accent ramp, or null if it is unavailable.</summary>
+    /// <param name="logger">
+    /// Where a failed read is recorded. Optional, but worth passing on the same reasoning
+    /// <see cref="Apply"/>'s parameter gives: without a line in the log, a user who chose the
+    /// Windows accent and got the brand one has nothing to look at.
+    /// </param>
     /// <remarks>
     /// <see cref="UISettings"/> reaches out to the shell, and a WinAppSDK process that is starting,
     /// shutting down, or running without a user session can fail to reach it. There is no useful
     /// recovery beyond using the brand ramp, which is a perfectly good accent — so this reports
     /// "no" rather than propagating.
     /// </remarks>
-    public static AccentRamp? ReadSystemRamp()
+    public static AccentRamp? ReadSystemRamp(ILogger? logger = null)
     {
         try
         {
@@ -71,8 +83,14 @@ public static class AccentPalette
                 Convert(settings.GetColorValue(UIColorType.AccentLight2)),
                 Convert(settings.GetColorValue(UIColorType.AccentLight3)));
         }
-        catch (Exception)
+        catch (Exception exception)
         {
+            // Logged since #290. Falling back to the brand ramp is right and the remarks above say
+            // why, but the failure left NO trace anywhere - a user who had opted into the Windows
+            // accent silently got a different one, and nothing recorded that the read was even
+            // attempted. At Warning, because the file log keeps Information and above and a failure
+            // recorded below the level anyone keeps is a failure nobody can find.
+            logger?.LogWarning(exception, "The Windows accent could not be read; using the built-in ramp.");
             return null;
         }
 
@@ -110,13 +128,22 @@ public static class AccentPalette
             return AppliedCount.None;
         }
 
+        // Read once and kept, because whether it SUCCEEDED is half of what gets reported. Resolving
+        // straight into the call would leave the outcome unknowable a line later, which is exactly
+        // how #290 happened.
+        AccentRamp? system = ReadSystemRamp(logger);
+
         // No ramp means the token dictionary could not be read, so there is nothing to substitute
         // and - importantly - nothing to restore: the brushes still hold the colours the
         // dictionary gave them, which is exactly what the brand ramp would have set.
-        if (AppearanceViewModel.Resolve(preferences, ReadSystemRamp()) is not AccentRamp ramp)
+        if (AppearanceViewModel.Resolve(preferences, system) is not AccentRamp ramp)
         {
             return AppliedCount.None;
         }
+
+        // The OUTCOME, not the preference. Asking for the Windows accent and getting the brand ramp
+        // because the read threw is precisely the case this has to be able to say.
+        AccentSource source = AccentSources.For(preferences.UseSystemAccent, system is not null);
 
         IReadOnlyList<KeyValuePair<string, Rgb>> assignments =
             ramp.BrushAssignments(root.ActualTheme != ElementTheme.Dark);
@@ -133,6 +160,6 @@ public static class AccentPalette
             }
         }
 
-        return new AppliedCount(applied, assignments.Count, ramp.Base);
+        return new AppliedCount(applied, assignments.Count, ramp.Base, source);
     }
 }
