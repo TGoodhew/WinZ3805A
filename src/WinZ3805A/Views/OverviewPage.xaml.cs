@@ -24,9 +24,6 @@ namespace WinZ3805A.Views;
 /// </remarks>
 public sealed partial class OverviewPage : Page
 {
-    /// <summary>The one tier C command on this page (§8.3), resolved from the catalog once.</summary>
-    private static readonly ScpiCommand SelfTest = CommandConfirmation.Require("*TST?");
-
     private OverviewViewModel? _model;
     private DeviceContext? _device;
     private CommandInvoker? _invoker;
@@ -159,7 +156,7 @@ public sealed partial class OverviewPage : Page
     /// </summary>
     private async void OnRunTestClicked(object sender, RoutedEventArgs e)
     {
-        if (_invoker is not CommandInvoker invoker || _testRunning)
+        if (_invoker is not CommandInvoker invoker || _device is not DeviceContext device || _testRunning)
         {
             return;
         }
@@ -168,9 +165,12 @@ public sealed partial class OverviewPage : Page
         RunTestButton.IsEnabled = false;
         SelfTestOutcome.Clear();
 
+        // The one tier C command on this page (§8.3), resolved through the driver (#287).
+        ScpiCommand selfTest = CommandConfirmation.Require(device.Driver, "*TST?");
+
         try
         {
-            CommandOutcome? outcome = await CommandConfirmation.RunAsync(XamlRoot, invoker, SelfTest);
+            CommandOutcome? outcome = await CommandConfirmation.RunAsync(XamlRoot, invoker, selfTest);
             SelfTestOutcome.Show(outcome, DescribeSelfTest(outcome));
         }
         finally

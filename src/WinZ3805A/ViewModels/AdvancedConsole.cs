@@ -67,12 +67,17 @@ public sealed record ConsoleCommand(ScpiCommand Command)
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>The list is the catalog and cannot be added to.</b> Every item is projected from
-/// <see cref="CommandCatalog"/> at construction and the collection handed to the picker is
-/// read-only, so there is no runtime path — binding, reflection over an observable collection, or a
-/// helpful extension method — that puts a command in front of the user which §8.1 did not
-/// authorise. The §8.4 exclusions are not in the catalog at all, so no filtering is needed to keep
-/// them out and none is done: they are absent, not hidden.
+/// <b>The list is the driver's allowlist and cannot be added to.</b> Every item is projected from
+/// <see cref="Device.Drivers.IReceiverDriver.Commands"/> at construction and the collection handed
+/// to the picker is read-only, so there is no runtime path — binding, reflection over an
+/// observable collection, or a helpful extension method — that puts a command in front of the user
+/// which §8.1 did not authorise. The §8.4 exclusions are not in the catalog at all, so no
+/// filtering is needed to keep them out and none is done: they are absent, not hidden.
+/// </para>
+/// <para>
+/// <b>An instance over a driver, not a static (#287).</b> As a static it was one family's list
+/// compiled into the process; the console page builds it in <c>OnNavigatedTo</c> from the device's
+/// driver, so the picker offers the connected receiver's vocabulary and nothing else's.
 /// </para>
 /// <para>
 /// <b>§8.5's experimental queries are left out.</b> They are opt-in and off by default, and their
@@ -80,16 +85,24 @@ public sealed record ConsoleCommand(ScpiCommand Command)
 /// switch than the one §8.5 describes, which is worse than not offering them yet.
 /// </para>
 /// </remarks>
-public static class ConsoleCatalog
+public sealed class ConsoleCatalog
 {
-    /// <summary>Everything the picker may offer, in mnemonic order.</summary>
-    public static IReadOnlyList<ConsoleCommand> All { get; } =
-        CommandCatalog.All
+    /// <summary>Projects one driver's allowlist for the picker.</summary>
+    /// <param name="driver">Whose commands the console offers.</param>
+    public ConsoleCatalog(Device.Drivers.IReceiverDriver driver)
+    {
+        ArgumentNullException.ThrowIfNull(driver);
+
+        All = driver.Commands
             .Where(command => !command.IsExperimental)
             .OrderBy(command => command.Mnemonic, StringComparer.Ordinal)
             .Select(command => new ConsoleCommand(command))
             .ToList()
             .AsReadOnly();
+    }
+
+    /// <summary>Everything the picker may offer, in mnemonic order.</summary>
+    public IReadOnlyList<ConsoleCommand> All { get; }
 
     /// <summary>
     /// The subset matching a filter, matched against the mnemonic, the short form and the label.
@@ -103,7 +116,7 @@ public static class ConsoleCatalog
     /// The distinction matters: this is the one place a user types free text near a command, and
     /// what they type selects from the allowlist rather than contributing to what is sent.
     /// </remarks>
-    public static IReadOnlyList<ConsoleCommand> Matching(string? filter)
+    public IReadOnlyList<ConsoleCommand> Matching(string? filter)
     {
         if (string.IsNullOrWhiteSpace(filter))
         {

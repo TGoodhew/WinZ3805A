@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Globalization;
 
 using WinZ3805A.Controls;
@@ -270,9 +270,9 @@ public sealed class StatusRegistersViewModel : INotifyPropertyChanged
 
         // Resolved from the catalog rather than sent as a string: §8.1 makes the catalog an
         // allowlist, and ExecuteAsync takes an ScpiCommand precisely so nothing can route around it.
-        if (CommandCatalog.Find(mnemonic) is not ScpiCommand command)
+        if (_session.Driver.Find(mnemonic) is not ScpiCommand command)
         {
-            _error = $"{mnemonic} is not in the command catalog.";
+            _error = $"{mnemonic} is not in the driver's command catalog.";
             return null;
         }
 

@@ -29,12 +29,19 @@ public sealed class CommandInvoker
     private readonly DeviceSessionService _session;
 
     /// <summary>
-    /// The error-queue read §7.2 requires after every tier C command, resolved from the catalog
-    /// rather than typed, so it is subject to the same allowlist as everything else (§8.1).
+    /// The error-queue read §7.2 requires after every tier C command, resolved from the driver's
+    /// catalog rather than typed, so it is subject to the same allowlist as everything else (§8.1).
     /// </summary>
-    private static readonly ScpiCommand NextError =
-        CommandCatalog.Find(":SYST:ERR?")
-        ?? throw new InvalidOperationException("The catalog has no :SYST:ERR? entry, which §7.2 requires.");
+    /// <remarks>
+    /// A property over the session's driver, not a field (#287): the driver is re-selected at every
+    /// connect, and a stale field would drain the queue with another family's spelling. The throw
+    /// stays because <c>:SYST:ERR?</c> is IEEE 488.2's own error query and the driver contract
+    /// tests require every catalog to carry it — a driver without one is a bug to surface, not a
+    /// device condition to tolerate.
+    /// </remarks>
+    private ScpiCommand NextError =>
+        _session.Driver.Find(":SYST:ERR?")
+        ?? throw new InvalidOperationException("The driver's catalog has no :SYST:ERR? entry, which §7.2 requires.");
 
     /// <summary>Creates an invoker over the shared session.</summary>
     public CommandInvoker(DeviceSessionService session)

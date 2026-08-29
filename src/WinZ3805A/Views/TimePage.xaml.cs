@@ -200,12 +200,13 @@ public sealed partial class TimePage : Page
     /// Asks one catalogued query and returns its lines, or null if it did not answer.
     /// </summary>
     /// <remarks>
-    /// Resolved through the catalog rather than sent as text: §8.1 makes the catalog an allowlist and
-    /// <c>ExecuteAsync</c> takes an <see cref="ScpiCommand"/> precisely so nothing routes around it.
+    /// Resolved through the driver's catalog rather than sent as text: §8.1 makes the catalog an
+    /// allowlist and <c>ExecuteAsync</c> takes an <see cref="ScpiCommand"/> precisely so nothing
+    /// routes around it.
     /// </remarks>
     private async Task<IReadOnlyList<string>?> AskLinesAsync(string mnemonic, CancellationToken token)
     {
-        if (_device is not DeviceContext device || CommandCatalog.Find(mnemonic) is not ScpiCommand command)
+        if (_device is not DeviceContext device || device.Driver.Find(mnemonic) is not ScpiCommand command)
         {
             return null;
         }

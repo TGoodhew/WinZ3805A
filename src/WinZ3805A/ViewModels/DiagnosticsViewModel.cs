@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Globalization;
 
 using WinZ3805A.Device.Commands;
@@ -261,9 +261,9 @@ public sealed class DiagnosticsViewModel : INotifyPropertyChanged
     {
         // §8.1 makes the catalog an allowlist, and ExecuteAsync takes an ScpiCommand so nothing can
         // route around it.
-        if (CommandCatalog.Find(mnemonic) is not ScpiCommand command)
+        if (_session.Driver.Find(mnemonic) is not ScpiCommand command)
         {
-            _fault ??= $"{mnemonic} is not in the command catalog.";
+            _fault ??= $"{mnemonic} is not in the driver's command catalog.";
             return new Transaction
             {
                 Command = mnemonic,

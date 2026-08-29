@@ -1,4 +1,4 @@
-using Microsoft.UI.Xaml;
+﻿using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
 
@@ -22,12 +22,6 @@ namespace WinZ3805A.Views;
 /// </summary>
 public sealed partial class DiagnosticsPage : Page, ICsvExportSource
 {
-    /// <summary>§8.3's log clear — the one tier C command on this page.</summary>
-    private static readonly ScpiCommand ClearLog = CommandConfirmation.Require(":DIAG:LOG:CLEar");
-
-    /// <summary>§8.3's subsystem diagnostic, which costs the receiver its lock (#53).</summary>
-    private static readonly ScpiCommand RunDiagnostic = CommandConfirmation.Require(":DIAG:TEST?");
-
     private DiagnosticsViewModel? _model;
     private DeviceContext? _device;
     private FileLoggerProvider? _logProvider;
@@ -39,7 +33,7 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
     private CancellationTokenSource? _reading;
     private bool _ready;
 
-    /// <summary>§8.5's six, or empty before navigation.</summary>
+    /// <summary>§8.5's rows for this driver — the SmartClock family's six — or empty before navigation.</summary>
     private IReadOnlyList<ExperimentalQueryRow> _experimental = [];
 
     /// <summary>Creates the page.</summary>
@@ -91,7 +85,7 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
 
         // §8.5's opt-in. Rows are created per page rather than shared: each holds its own last
         // answer, and two pages over one set would show each other's.
-        _experimental = ExperimentalQueries.Create();
+        _experimental = ExperimentalQueries.Create(device.Driver);
         ExperimentalRows.ItemsSource = _experimental;
         SettingsPage.AdvancedChanged += OnAdvancedChanged;
         ApplyExperimentalVisibility();
@@ -432,6 +426,7 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
         if (_invoker is not CommandInvoker invoker ||
             _model is not DiagnosticsViewModel model ||
             _selfTest is not SelfTestViewModel selfTest ||
+            _device is not DeviceContext device ||
             !model.CanRead)
         {
             return;
@@ -446,7 +441,8 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
             CommandOutcome? outcome = await CommandConfirmation.RunAsync(
                 XamlRoot,
                 invoker,
-                RunDiagnostic,
+                // §8.3's subsystem diagnostic, which costs the receiver its lock (#53).
+                CommandConfirmation.Require(device.Driver, ":DIAG:TEST?"),
                 selfTest.Selected.Keyword,
                 selfTest.Selected.DisplayName);
 
@@ -471,7 +467,10 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
     /// </summary>
     private async void OnClearLogClicked(object sender, RoutedEventArgs e)
     {
-        if (_invoker is not CommandInvoker invoker || _model is not DiagnosticsViewModel model || !model.CanRead)
+        if (_invoker is not CommandInvoker invoker ||
+            _model is not DiagnosticsViewModel model ||
+            _device is not DeviceContext device ||
+            !model.CanRead)
         {
             return;
         }
@@ -479,9 +478,12 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
         ClearLogButton.IsEnabled = false;
         LogOutcome.Clear();
 
+        // §8.3's log clear — the one other tier C command on this page.
+        ScpiCommand clearLog = CommandConfirmation.Require(device.Driver, ":DIAG:LOG:CLEar");
+
         try
         {
-            CommandOutcome? outcome = await CommandConfirmation.RunAsync(XamlRoot, invoker, ClearLog);
+            CommandOutcome? outcome = await CommandConfirmation.RunAsync(XamlRoot, invoker, clearLog);
             LogOutcome.Show(outcome);
 
             if (outcome is { Succeeded: true })

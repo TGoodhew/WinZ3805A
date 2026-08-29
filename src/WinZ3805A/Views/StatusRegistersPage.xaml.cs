@@ -1,4 +1,4 @@
-using Microsoft.UI.Xaml;
+﻿using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
 
@@ -164,6 +164,7 @@ public sealed partial class StatusRegistersPage : Page
     {
         if (_invoker is not CommandInvoker invoker ||
             _model is not StatusRegistersViewModel model ||
+            _device is not DeviceContext device ||
             !model.CanApplyMasks)
         {
             return;
@@ -177,6 +178,7 @@ public sealed partial class StatusRegistersPage : Page
             foreach ((RegisterMask mask, int value) in model.PendingWrites)
             {
                 ScpiCommand command = CommandConfirmation.Require(
+                    device.Driver,
                     $":STAT:{model.Register.Node}:{RegisterMaskEdit.Field(mask)}");
 
                 string formatted = value.ToString(CultureInfo.InvariantCulture);
