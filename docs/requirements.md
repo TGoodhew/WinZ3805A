@@ -828,6 +828,40 @@ The four severity shapes are drawn as `Path` geometry, not as glyphs from a font
 > §11.1's em dash — a dash belongs in a readout, where it holds a column; in a small circle it says
 > less than the shape it replaced.
 
+##### 9.4.3.1 Shell surfaces: the notification area and the taskbar badge
+
+Two surfaces outside the window carry the receiver's state, and **both draw §9.4.3's shapes from the
+same rasteriser** — one vocabulary, so a hexagon cannot come to mean different things in two places.
+Both derive the mode through a single shared expression, because a mode is a claim about *now* and a
+link that has dropped no longer justifies the last one the store held.
+
+| | Notification area (P1-10) | Taskbar overlay badge (#274) |
+|---|---|---|
+| Shown | Always, while the app runs | **Only when the receiver is not locked** |
+| Artwork | §9.4.3 shape, severity colour | The same, at 32 px |
+| Assistive text | Tooltip: name — mode | `pszDescription`, which the shell surfaces as the taskbar button's `HelpText` |
+| Cleared | On exit | On lock, and on exit |
+
+**The badge is absent while locked, and this is the point rather than an economy.** Windows'
+overlay geometry is fixed and generous — the badge covers a meaningful part of the icon rather than
+annotating a corner of it — so a permanent badge in the healthy state obscures the icon exactly when
+there is nothing to say, and makes the button harder to find in a crowded taskbar. Showing it only
+on exception makes the badge's **appearance** informative, not only its colour.
+
+> **The description is set in every state, including locked, even though the badge is not.**
+> Discovered 29 Aug 2026 while building #274: passing a null `pszDescription` does clear the badge,
+> but **Windows keeps the previous description as the button's `HelpText`**. A receiver that went
+> from disconnected at launch to locked showed a clean icon and still told a screen reader
+> *"Disconnected: this application is not talking to the receiver."*
+>
+> A sighted user saw the truth and a screen-reader user did not, which is the inversion these
+> criteria exist to prevent. So the visual is decluttered in the healthy state and the assistive
+> text never is.
+
+Descriptions are **whole sentences**, in the style of `StatusMedallion`'s automation name. "Holdover"
+alone is this application's vocabulary; someone meeting it through Narrator on a taskbar button has
+no other context to read it in.
+
 #### 9.4.4 Data visualisation palette
 
 Charting colour is a separate concern from UI colour and must not reuse semantic tokens — a trace coloured `WzCriticalBrush` implies an alarm that is not being asserted.
@@ -2495,6 +2529,7 @@ something might later branch on.
 | P1-8 | Experimental read-only queries, opt-in |
 | P1-9 | Windows notification on holdover entry / lock loss |
 | P1-10 | System tray icon reflecting lock state |
+| P1-13 | Taskbar overlay badge reflecting lock state (§9.4.3.1) |
 
 ### P2 — designed for, not built
 

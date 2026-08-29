@@ -77,11 +77,11 @@ public sealed class TrayIconService : IDisposable
     /// </summary>
     /// <remarks>
     /// Identical to <c>MainViewModel.Mode</c>, and deliberately so: a mode is a claim about now, and
-    /// a link that has dropped no longer justifies the last one the store happened to hold.
+    /// a link that has dropped no longer justifies the last one the store happened to hold. Moved
+    /// into <see cref="ShellMode"/> for #274, when the taskbar badge became a third surface that has
+    /// to agree with this one.
     /// </remarks>
-    private ReceiverMode Mode => _connection == ConnectionStatus.Connected
-        ? ReceiverModes.FromSyncState(_store.SyncState)
-        : ReceiverMode.Disconnected;
+    private ReceiverMode Mode => ShellMode.For(_store, _connection);
 
     private void OnSessionChanged(object? sender, ConnectionStatusChanged e)
     {

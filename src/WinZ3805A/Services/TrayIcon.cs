@@ -209,7 +209,12 @@ public sealed class TrayIcon : IDisposable
     /// bottom-up section would show every shape mirrored. The mask bitmap is required by
     /// <c>ICONINFO</c> and ignored for a 32-bit colour bitmap, so it is left blank.
     /// </remarks>
-    private static nint CreateIcon(uint[] pixels, int size)
+    /// <remarks>
+    /// <b>Internal rather than private since #274.</b> The taskbar overlay builds an HICON from the
+    /// same raster, and two copies of this would be two chances to get the top-down DIB wrong in
+    /// different ways.
+    /// </remarks>
+    internal static nint CreateIcon(uint[] pixels, int size)
     {
         BITMAPINFO info = new()
         {
@@ -408,6 +413,27 @@ public sealed class TrayIcon : IDisposable
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool DestroyIcon(nint icon);
+
+    /// <summary>Releases an HICON built by <see cref="CreateIcon"/> (#274).</summary>
+    /// <remarks>
+    /// The caller owns what <c>CreateIcon</c> returns, whether it went to the notification area or
+    /// to a taskbar button. Exposed so the overlay does not need its own <c>DestroyIcon</c>
+    /// declaration for the handles this class made.
+    /// </remarks>
+    internal static void Destroy(nint icon)
+    {
+        if (icon != 0)
+        {
+            DestroyIcon(icon);
+        }
+    }
+
+    /// <summary>The colour §9.4.3 gives a mode's badge, high contrast included (#274).</summary>
+    /// <remarks>
+    /// Delegates to the same <see cref="ColourFor"/> the notification area uses, so a hexagon means
+    /// the same thing and is the same colour in both places.
+    /// </remarks>
+    internal static Rgb OverlayColour(ReceiverMode mode) => ColourFor(ReceiverModes.SeverityOf(mode));
 
     [DllImport("user32.dll")]
     private static extern int GetSystemMetrics(int index);

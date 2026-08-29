@@ -46,6 +46,7 @@ public partial class App : Application
 
     /// <summary>P1-10's tray icon, while the window is open.</summary>
     private TrayIconService? _tray;
+    private TaskbarOverlayService? _overlay;
 
     /// <summary>
     /// The §12 composition root, for the few things a page cannot be handed.
@@ -225,6 +226,20 @@ public partial class App : Application
 
             _services.GetService<ILoggerFactory>()?.CreateLogger("Tray")
                 .LogInformation("Tray icon started.");
+
+            // #274's badge, started here rather than in its own guarded method because it wants
+            // exactly the same three things and the same "never fatal" treatment. The window
+            // handle is the one piece the tray does not need: an overlay belongs to a taskbar
+            // button, and a taskbar button belongs to a window.
+            _overlay = new TaskbarOverlayService(
+                device.Store,
+                device.Session,
+                _window.DispatcherQueue,
+                WinRT.Interop.WindowNative.GetWindowHandle(_window),
+                _services.GetService<ILoggerFactory>()?.CreateLogger("Taskbar"));
+
+            _services.GetService<ILoggerFactory>()?.CreateLogger("Taskbar")
+                .LogInformation("Taskbar overlay started.");
         }
         catch (Exception exception)
         {
@@ -466,6 +481,10 @@ public partial class App : Application
     private async void OnMainWindowClosed(object sender, WindowEventArgs args)
     {
         _tray?.Dispose();
+
+        // Before the process goes, so the badge does not outlive it. An overlay left behind sits on
+        // a taskbar button belonging to nothing.
+        _overlay?.Dispose();
         _tray = null;
 
         if (_services is ServiceProvider services)
