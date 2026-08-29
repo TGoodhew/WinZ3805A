@@ -140,6 +140,17 @@
                 the required area. It was reachable in practice only by hitting the glyph exactly,
                 and the tooltip dismissed the moment the pointer left it.
 
+                THE HOVER FILL IS NOT DECORATION. Enlarging the target fixed where the pointer
+                works and left the badge looking exactly as dead as before: the time-zone button
+                beside it lights up because it is a Button and gets PointerOver from its template,
+                while a Border gets nothing. With a tooltip's delay in front of it, an unlit target
+                is indistinguishable from one that is not responding - which is how this was
+                reported the second time, after the size was already fixed.
+
+                §9.4.3's colour-plus-shape-plus-text rule does not apply here and the
+                colour-only-states gate exempts pointer feedback for the same reason: this conveys
+                no information to read, it only says the pointer is where the user thinks it is.
+
                 The Border is what carries the target. Background MUST be Transparent and not left
                 unset: an unset Background is null, which is not hit-testable at all, so the padding
                 would enlarge the box visually and change nothing about where the pointer works.
@@ -149,10 +160,25 @@
             -->
             <Border x:Name="RolloverBadge"
                     Background="Transparent"
+                    CornerRadius="{ThemeResource WzControlCornerRadius}"
                     MinWidth="32"
                     MinHeight="32"
                     VerticalAlignment="Center"
+                    PointerEntered="OnBadgePointerEntered"
+                    PointerExited="OnBadgePointerExited"
                     Visibility="Collapsed">
+
+                <!--
+                    Declared here rather than attached from code. ToolTipService.SetToolTip
+                    on a Border set the value without ever opening a tooltip - the hover
+                    fill proved the pointer events were arriving, and no tooltip window was
+                    created. Declaring the ToolTip in XAML and updating its Content is what
+                    the time-zone button beside these already does, and it works.
+                -->
+                <ToolTipService.ToolTip>
+                    <ToolTip x:Name="RolloverTip" />
+                </ToolTipService.ToolTip>
+
                 <TextBlock FontFamily="{ThemeResource SymbolThemeFontFamily}"
                            FontSize="12"
                            HorizontalAlignment="Center"
@@ -172,10 +198,25 @@
             -->
             <Border x:Name="ProvisionalBadge"
                     Background="Transparent"
+                    CornerRadius="{ThemeResource WzControlCornerRadius}"
                     MinWidth="32"
                     MinHeight="32"
                     VerticalAlignment="Center"
+                    PointerEntered="OnBadgePointerEntered"
+                    PointerExited="OnBadgePointerExited"
                     Visibility="Collapsed">
+
+                <!--
+                    Declared here rather than attached from code. ToolTipService.SetToolTip
+                    on a Border set the value without ever opening a tooltip - the hover
+                    fill proved the pointer events were arriving, and no tooltip window was
+                    created. Declaring the ToolTip in XAML and updating its Content is what
+                    the time-zone button beside these already does, and it works.
+                -->
+                <ToolTipService.ToolTip>
+                    <ToolTip x:Name="ProvisionalTip" />
+                </ToolTipService.ToolTip>
+
                 <TextBlock FontFamily="{ThemeResource SymbolThemeFontFamily}"
                            FontSize="12"
                            HorizontalAlignment="Center"
