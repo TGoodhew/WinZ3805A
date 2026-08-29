@@ -1,4 +1,18 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Assembly metadata. Absent until 29 Aug 2026, which left the file properties of a
+    shipped binary reading as the project name and nothing else.
+
+    Distinct from the manifest's Publisher distinguished name, which is bound to the
+    signing certificate and to package identity (§6.3) and is not set from here.
+  -->
+  <PropertyGroup>
+    <Authors>Tony Goodhew</Authors>
+    <Company>The Schanzuer Group LLC</Company>
+    <Product>WinZ3805A</Product>
+    <Copyright>Copyright (c) 2026 Tony Goodhew</Copyright>
+  </PropertyGroup>
+
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>

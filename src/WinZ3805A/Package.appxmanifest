@@ -45,11 +45,16 @@
          via Package.Current.DisplayName; never hard-coded in XAML or tests. -->
     <DisplayName>WinZ3805A</DisplayName>
     <!--
-      TODO (blocked by OQ-6, issue #39): Partner Center publisher display name -
-      the third of the three values above. This one is shown to users on the
-      listing, unlike the Publisher distinguished name.
+      The publisher as a person reads it. This is display only, unlike the
+      Publisher distinguished name in Identity above, which is bound to the
+      signing certificate and to package identity (§6.3) and is NOT changed here.
+
+      Still subject to OQ-6 / #39 at Store submission: Partner Center issues its
+      own publisher display name and it must match the account, so this may be
+      overwritten by the value they give. It is correct for the sideloaded build,
+      which is the only one that exists.
     -->
-    <PublisherDisplayName>AppPublisher</PublisherDisplayName>
+    <PublisherDisplayName>The Schanzuer Group LLC</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
   </Properties>
 
