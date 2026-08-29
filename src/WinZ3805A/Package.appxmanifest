@@ -5,8 +5,6 @@
   xmlns:mp="http://schemas.microsoft.com/appx/2014/phone/manifest"
   xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
-  xmlns:com="http://schemas.microsoft.com/appx/manifest/com/windows10"
-  xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
   IgnorableNamespaces="uap rescap">
 
   <!--
@@ -35,7 +33,7 @@
   <Identity
     Name="WinZ3805A"
     Publisher="CN=AppPublisher"
-    Version="1.0.0.2" />
+    Version="1.0.0.3" />
 
   <mp:PhoneIdentity PhoneProductId="DB5D1AF4-65FD-41CA-91F9-D83D5ACEB3B0" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
 
@@ -103,34 +101,15 @@
       </uap:VisualElements>
 
       <!--
-        P1-9's notifications did not work before this, on any machine, and failed silently.
-        AppNotificationManager.Default.Register() threw "No COM servers are registered for this
-        app": the Windows App SDK activates a packaged app through a COM server to deliver and
-        route a notification, and without these two declarations there is nothing for it to
-        activate. The exception was caught and logged at Debug, below the captured level, so the
-        feature was simply absent with nothing anywhere saying why.
+        NO COM SERVER AND NO TOAST ACTIVATOR. Both were added on 28 Aug 2026 to satisfy
+        AppNotificationManager, whose Register() then failed with 0x80070490 on every machine
+        anyway, and both were removed on 29 Aug 2026 with that API (issue 288).
 
-        The CLSID is this application's own and permanent. Changing it orphans any notification
-        already in the Action Center, because the shell routes an activation by that id.
+        Notifications now go through ToastNotificationManager, which needs no declaration here at
+        all - only package identity. They are deliverable BECAUSE §8 forbids a notification carrying
+        buttons or arguments: activation is the only thing an activator provides, and nothing here
+        can be activated. Do not add one back without a reason that survives that rule.
       -->
-      <Extensions>
-        <com:Extension Category="windows.comServer">
-          <com:ComServer>
-            <com:ExeServer Executable="WinZ3805A.exe" DisplayName="WinZ3805A">
-              <com:Class Id="2E20441A-C498-402F-B109-61BE8672CB1C" DisplayName="WinZ3805A notifications" />
-            </com:ExeServer>
-          </com:ComServer>
-        </com:Extension>
-
-        <!--
-          desktop:, not uap:. The uap namespace has a closed enumeration of categories and this is
-          not one of them - it rejects the package outright with 0xC00CE169 rather than ignoring
-          the element, which is the good failure of the two.
-        -->
-        <desktop:Extension Category="windows.toastNotificationActivation">
-          <desktop:ToastNotificationActivation ToastActivatorCLSID="2E20441A-C498-402F-B109-61BE8672CB1C" />
-        </desktop:Extension>
-      </Extensions>
     </Application>
   </Applications>
 

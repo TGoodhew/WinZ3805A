@@ -338,29 +338,22 @@ public sealed partial class MainPage : Page
             {
                 ToastStatus status = sink.Status;
 
-                // The shell's own answer, before anything is sent. This is the line that
-                // distinguishes "we never registered" from "you have them switched off".
-                string registration = status.Registered
-                    ? "Windows App SDK registration: succeeded."
-                    : $"Windows App SDK registration: FAILED - {status.RegistrationError ?? "no reason recorded"}";
-
                 string sent;
                 try
                 {
                     sink.Show(
                         "WinZ3805A test",
                         "This is a test notification. It carries no receiver information.");
-                    sent = "Handed to the shell without error.";
+                    sent = "Sent through the shell without error.";
                 }
                 catch (Exception exception)
                 {
-                    sent = $"Sending threw - {exception.GetType().Name}: {exception.Message}";
+                    sent = $"Sending threw - {exception.GetType().Name} "
+                        + $"0x{exception.HResult:X8}: {exception.Message}";
                 }
 
                 report = string.Join(
                     Environment.NewLine,
-                    registration,
-                    $"Delivering through: {status.Route}.",
                     $"Shell setting: {status.ShellSetting}.",
                     sent);
 
