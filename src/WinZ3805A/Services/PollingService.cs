@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using WinZ3805A.Device.Commands;
 using WinZ3805A.Controls;
+using WinZ3805A.Device.Drivers;
 using WinZ3805A.Device.Models;
 using WinZ3805A.Device.Parsing;
 using WinZ3805A.Device.Transport;
@@ -58,7 +59,7 @@ public sealed class PollingService : IAsyncDisposable
 
     private readonly DeviceSessionService _session;
     private readonly ReceiverStateStore _store;
-    private readonly StatusScreenParser _parser;
+    private readonly IReceiverDriver _driver;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<PollingService> _logger;
 
@@ -81,12 +82,24 @@ public sealed class PollingService : IAsyncDisposable
     public long TimeIntervalSkips { get; private set; }
 
     /// <summary>Creates a poller for one session.</summary>
+    /// <param name="session">The session whose transport the sweeps run over.</param>
+    /// <param name="store">Where each sweep's readings are published.</param>
+    /// <param name="timeProvider">
+    /// Drives the cadence and stamps each sample. Injected so tests can advance it rather than wait.
+    /// </param>
+    /// <param name="logger">Optional; resolves to <c>NullLogger</c> when absent.</param>
+    /// <param name="trends">P1-2's durable history. Optional, so a headless test needs no file.</param>
+    /// <param name="driver">
+    /// Which receiver family is on the port; it owns the parse. Optional, defaulting to
+    /// <see cref="SmartClockDriver"/> (#122).
+    /// </param>
     public PollingService(
         DeviceSessionService session,
         ReceiverStateStore store,
         TimeProvider timeProvider,
         ILogger<PollingService>? logger = null,
-        TrendStore? trends = null)
+        TrendStore? trends = null,
+        IReceiverDriver? driver = null)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(store);
@@ -96,7 +109,9 @@ public sealed class PollingService : IAsyncDisposable
         _store = store;
         _timeProvider = timeProvider;
         _trends = trends;
-        _parser = new StatusScreenParser(timeProvider);
+        // Parsing belongs to the driver: the 80x24 screen is SmartClock's shape, and a receiver
+        // speaking anything else shares none of it (#122).
+        _driver = driver ?? new SmartClockDriver(timeProvider);
         _logger = logger ?? NullLogger<PollingService>.Instance;
     }
 
@@ -492,7 +507,7 @@ public sealed class PollingService : IAsyncDisposable
             return;
         }
 
-        ReceiverStatus status = _parser.Parse(screen);
+        ReceiverStatus status = _driver.Parse(screen);
         _store.UpdateFull(status);
         FullSweeps++;
 
