@@ -298,12 +298,28 @@ public partial class App : Application
 
             if (applied.IsComplete)
             {
+                // {Source} is the OUTCOME, not the preference (#290). It read
+                // preferences.UseSystemAccent until 29 Aug 2026, so a user who had opted into the
+                // Windows accent and hit a failed read was told "source Windows" while the brand
+                // ramp was on screen. A log line that asserts a read succeeded is worse than a
+                // missing one: it sends whoever is debugging a wrong accent into the half of the
+                // code that worked.
                 log?.LogInformation(
                     "Accent applied: {Base}, {Applied} brushes, source {Source}, theme {Theme}.",
                     applied.Base,
                     applied.Applied,
-                    preferences.UseSystemAccent ? "Windows" : "built-in",
+                    applied.Source,
                     root.ActualTheme);
+
+                // The divergence itself, said plainly, because it is the case a reader is looking
+                // for and inferring it from two lines is work. ReadSystemRamp logs the exception;
+                // this says what it cost.
+                if (preferences.UseSystemAccent && applied.Source == AccentSource.BuiltIn)
+                {
+                    log?.LogWarning(
+                        "The Windows accent was chosen but could not be read; the built-in ramp is "
+                        + "on screen instead.");
+                }
             }
             else
             {

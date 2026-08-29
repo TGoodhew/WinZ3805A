@@ -59,6 +59,13 @@
          report whatever the test machine happens to be set to. -->
     <Compile Include="..\..\src\WinZ3805A\Services\HighContrast.cs"
              Link="Services\HighContrast.cs" />
+    <!-- #290's accent source. Linked for the same reason as the rest: AccentPalette speaks WinUI and
+         cannot come in, but the rule deciding which ramp was actually applied is a boolean pair. It
+         is tested here because the case that matters - the Windows accent chosen and the read
+         failing - cannot be produced by running the application, which is how the defect survived
+         review for months. -->
+    <Compile Include="..\..\src\WinZ3805A\Services\AccentSource.cs"
+             Link="Services\AccentSource.cs" />
     <Compile Include="..\..\src\WinZ3805A\Controls\ReadoutFormatter.cs"
              Link="Formatting\ReadoutFormatter.cs" />
     <Compile Include="..\..\src\WinZ3805A\Controls\MedallionRingMath.cs"

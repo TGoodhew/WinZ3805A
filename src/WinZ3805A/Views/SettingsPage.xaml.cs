@@ -1,5 +1,7 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 
+using Microsoft.Extensions.Logging;
+
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
@@ -85,7 +87,7 @@ public sealed partial class SettingsPage : Page
         _appearance.Save(Appearance with { UseSystemAccent = SystemAccentSwitch.IsOn });
         App.ApplyAccent();
 
-        AccentRamp? system = AccentPalette.ReadSystemRamp();
+        AccentRamp? system = AccentPalette.ReadSystemRamp(AccentLog());
         AccentCollision? collision = AppearanceViewModel.WarningFor(Appearance, system);
 
         if (collision is null)
@@ -130,7 +132,7 @@ public sealed partial class SettingsPage : Page
     private void OnKeepAccent(TeachingTip sender, object args)
     {
         if (_appearance is not null
-            && AccentPalette.ReadSystemRamp() is AccentRamp system)
+            && AccentPalette.ReadSystemRamp(AccentLog()) is AccentRamp system)
         {
             _appearance.Save(AppearanceViewModel.Acknowledge(Appearance, system));
         }
@@ -173,4 +175,13 @@ public sealed partial class SettingsPage : Page
 
         AdvancedChanged?.Invoke(this, EventArgs.Empty);
     }
+
+    /// <summary>The logger a failed accent read is recorded through (#290).</summary>
+    /// <remarks>
+    /// These two call sites are on the preview path, where a user has just chosen the Windows
+    /// accent and is being shown the result. A read that fails here is exactly the moment they need
+    /// explaining, so they get a logger rather than the null default.
+    /// </remarks>
+    private static ILogger? AccentLog() =>
+        App.Services?.GetService<ILoggerFactory>()?.CreateLogger("Accent");
 }
