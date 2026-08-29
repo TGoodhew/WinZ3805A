@@ -243,18 +243,25 @@
     <!-- The value and the reserve string share one Grid cell. The reserve is          -->
     <!-- invisible but still measured, so the cell is always as wide as the widest     -->
     <!-- value this quantity can produce and the layout never reflows as digits come   -->
-    <!-- and go. Both are right-aligned, so the ones column stays put (§9.5.3 rule 5). -->
+    <!-- and go. See the alignment note below for why both are centred rather than    -->
+    <!-- right-aligned, and what that trades away.                                     -->
     <!--                                                                              -->
-    <!-- THE LABEL IS RIGHT-ALIGNED TOO, and that is deliberate. It was left-aligned   -->
+    <!-- LABEL AND VALUE ARE BOTH CENTRED ON THE FIELD. The label was left-aligned    -->
     <!-- until 28 Aug 2026, which put it on a different axis from its own number: the  -->
     <!-- reserve for 1 PPS TI is wide enough for -9999.9, so the value sat far to the  -->
     <!-- right of the words naming it and the tile read as two unrelated pieces.       -->
     <!--                                                                              -->
-    <!-- The alternative was to left-align the number instead, which lines the tile up -->
-    <!-- the more familiar way round but moves the ones column every time a digit is   -->
-    <!-- gained or lost - the apparent motion rule 1 exists to prevent. The axis the   -->
-    <!-- eye returns to on a glanced-at readout is the one under the last digit, so    -->
-    <!-- that is the one both parts are hung from.                                     -->
+    <!-- BOTH, and that is the whole point. Centring the caption alone looked no more  -->
+    <!-- centred than before, because the value was still pinned to the right edge of  -->
+    <!-- a reserve that is mostly empty: the two were centred on different things.     -->
+    <!-- Two halves of a tile agree only when they share one axis, whichever it is.    -->
+    <!--                                                                               -->
+    <!-- WHAT THIS COSTS. §9.5.3 rule 2's reserved width still stops the tile          -->
+    <!-- reflowing, and rule 1's tabular figures still stop the digits jostling, but a -->
+    <!-- centred value shifts by half a character when the digit count changes - 7 to  -->
+    <!-- 12, or -1.7 to -12.3. Right alignment is the only arrangement that holds the  -->
+    <!-- ones column still. That was tried and read as pushed-away; this is the        -->
+    <!-- deliberate trade, not an oversight.                                           -->
     <!-- =========================================================================== -->
 
     <Style TargetType="controls:ReadoutTile">
@@ -268,7 +275,7 @@
                         <TextBlock x:Name="LabelText"
                                    Style="{ThemeResource WzCaptionTextStyle}"
                                    Foreground="{ThemeResource WzTextSecondaryBrush}"
-                                   HorizontalAlignment="Right"
+                                   HorizontalAlignment="Center"
                                    Text="{TemplateBinding Label}" />
 
                         <!--
@@ -299,7 +306,7 @@
                             <TextBlock x:Name="PART_ValueText"
                                        Style="{ThemeResource WzReadoutMediumTextStyle}"
                                        Foreground="{ThemeResource WzTextPrimaryBrush}"
-                                       HorizontalAlignment="Right"
+                                       HorizontalAlignment="Center"
                                        AutomationProperties.AccessibilityView="Raw">
                                 <Run x:Name="PART_ValueRun" />
                                 <!--
