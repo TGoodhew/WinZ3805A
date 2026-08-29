@@ -109,6 +109,54 @@ public static class MedallionRingMath
 
         return Math.Clamp(value / halfRange, -1d, 1d);
     }
+
+    /// <summary>
+    /// The radial extent of one sparkline mark: from the baseline outward for a positive reading,
+    /// inward for a negative one, by the reading's share of the band (§9.10.2).
+    /// </summary>
+    /// <param name="fraction">The reading as <see cref="Fraction"/> maps it, −1 to +1.</param>
+    /// <param name="midRadius">The radius of the ring's baseline.</param>
+    /// <param name="band">The full radial depth the ring may occupy; a reading of ±1 reaches half of it.</param>
+    /// <returns>The inner and outer radii of the mark. The outer is the smaller for a negative reading.</returns>
+    /// <remarks>
+    /// A reading of exactly zero still gets a one-pixel mark, outward, or a perfect loop would look
+    /// like a dead one: the minimum tick is what distinguishes "on target" from "no data". A reading
+    /// too small to reach a pixel is lifted to one on its own side for the same reason.
+    /// </remarks>
+    public static (double Inner, double Outer) SparklineMark(double fraction, double midRadius, double band)
+    {
+        double outer = midRadius + (fraction * band / 2);
+
+        if (Math.Abs(outer - midRadius) < 1)
+        {
+            outer = midRadius + Math.Sign(fraction == 0 ? 1 : fraction);
+        }
+
+        return (midRadius, outer);
+    }
+
+    /// <summary>
+    /// The radial extent of one mark on a uniform ring, which is what the compact medallion draws
+    /// (§9.10.2, #307).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// At 64 px the sparkline's sixty marks of differing length make the circle read as lumpy rather
+    /// than as a circle with a trace on it — and the circle being the one shape the eye finds without
+    /// focusing is the whole reason §9.7 reserves it for the medallion. So compact gives the trace
+    /// up: every mark is the same length, centred on the baseline, and the ring says "this is the
+    /// medallion, in this state's colour" and nothing more. The reading is not lost; the figure
+    /// itself is a Details page away, and §9.7 says the ring must never be read for values anyway.
+    /// </para>
+    /// <para>
+    /// Half the band, symmetric: long enough to read as a dotted ring rather than a hairline, short
+    /// enough that the marks stay inside the depth the sparkline would have used, so the two rings
+    /// share an outline and switching between sizes does not change the medallion's silhouette.
+    /// </para>
+    /// </remarks>
+    public static (double Inner, double Outer) UniformMark(double midRadius, double band) =>
+        (midRadius - (band / 4), midRadius + (band / 4));
+
     /// <summary>The medallion glyph's font size for a given diameter (§10.3, #48).</summary>
     /// <remarks>
     /// <para>

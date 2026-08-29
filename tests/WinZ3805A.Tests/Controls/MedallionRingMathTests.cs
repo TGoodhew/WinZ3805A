@@ -204,4 +204,93 @@ public class MedallionRingMathTests
     public void TheGlyphScalesWithTheMedallion(double diameter, double expected) =>
         Assert.Equal(expected, MedallionRingMath.GlyphSize(diameter), 3);
 
+    // -------------------------------------------------------------------------------------
+    // Count size (#279, #307)
+    // -------------------------------------------------------------------------------------
+
+    /// <summary>The numeral is half the diameter at every size, so two digits fit inside the ring.</summary>
+    /// <remarks>
+    /// #279 derived the ratio at 64 px; #307 puts the count in the 160 px medallion as well, where
+    /// the same ratio gives 80 — larger than the 56 px glyph it replaces, which is the point: G1
+    /// measures the count's legibility at two metres and the glyph's only at arm's length. The
+    /// ratio is the rule because the reason for it — two lining figures inside the ring — holds at
+    /// every diameter, and a size-specific cap would make the count smallest where there is most room.
+    /// </remarks>
+    [Theory]
+    [InlineData(64, 32.0)]
+    [InlineData(96, 48.0)]
+    [InlineData(160, 80.0)]
+    public void TheCountIsHalfTheDiameter(double diameter, double expected) =>
+        Assert.Equal(expected, MedallionRingMath.CountSize(diameter), 3);
+
+    // -------------------------------------------------------------------------------------
+    // Mark extent (§9.10.2, #307)
+    // -------------------------------------------------------------------------------------
+
+    /// <summary>A sparkline mark runs from the baseline by the reading's share of half the band.</summary>
+    [Theory]
+    [InlineData(1.0, 35.0)]
+    [InlineData(-1.0, 25.0)]
+    [InlineData(0.5, 32.5)]
+    public void ASparklineMarkReachesItsShareOfTheBand(double fraction, double expectedOuter)
+    {
+        (double inner, double outer) = MedallionRingMath.SparklineMark(fraction, 30, 10);
+
+        Assert.Equal(30.0, inner, 3);
+        Assert.Equal(expectedOuter, outer, 3);
+    }
+
+    /// <summary>A reading of zero is a mark, not a gap: a perfect loop must not look like a dead one.</summary>
+    [Fact]
+    public void AReadingOfZeroStillGetsAOnePixelMark()
+    {
+        (double inner, double outer) = MedallionRingMath.SparklineMark(0, 30, 10);
+
+        Assert.Equal(1.0, outer - inner, 3);
+    }
+
+    /// <summary>A reading too small for a pixel is lifted to one, on its own side of the baseline.</summary>
+    [Theory]
+    [InlineData(0.05, 1.0)]
+    [InlineData(-0.05, -1.0)]
+    public void ATinyReadingIsLiftedToOnePixelOnItsOwnSide(double fraction, double expectedLength)
+    {
+        (double inner, double outer) = MedallionRingMath.SparklineMark(fraction, 30, 10);
+
+        Assert.Equal(expectedLength, outer - inner, 3);
+    }
+
+    /// <summary>
+    /// The compact ring is uniform: every mark the same length, centred on the baseline, whatever
+    /// the loop is doing (#307).
+    /// </summary>
+    /// <remarks>
+    /// Sixty marks of differing length make a 64 px circle read as lumpy, and the circle is the one
+    /// shape §9.7 relies on the eye finding without focusing. The sparkline is a property of the two
+    /// larger sizes; this mark takes no reading at all, which is the property under test.
+    /// </remarks>
+    [Fact]
+    public void AUniformMarkIsCentredOnTheBaselineAndHalfTheBandLong()
+    {
+        (double inner, double outer) = MedallionRingMath.UniformMark(30, 10);
+
+        Assert.Equal(27.5, inner, 3);
+        Assert.Equal(32.5, outer, 3);
+    }
+
+    /// <summary>The uniform mark stays inside the depth a full sparkline reading would use.</summary>
+    /// <remarks>
+    /// So the two rings share an outline, and switching the medallion between sizes changes its
+    /// diameter and nothing about its silhouette.
+    /// </remarks>
+    [Fact]
+    public void AUniformMarkNeverReachesPastAFullReading()
+    {
+        (double uniformInner, double uniformOuter) = MedallionRingMath.UniformMark(30, 10);
+        (_, double fullOuter) = MedallionRingMath.SparklineMark(1.0, 30, 10);
+        (_, double fullInner) = MedallionRingMath.SparklineMark(-1.0, 30, 10);
+
+        Assert.True(uniformOuter <= fullOuter);
+        Assert.True(uniformInner >= fullInner);
+    }
 }
