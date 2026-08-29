@@ -14,35 +14,6 @@ public interface IToastSink
 {
     /// <summary>Shows one notification.</summary>
     void Show(string title, string body);
-
-    /// <summary>Why a notification would or would not appear, for the main window's test button.</summary>
-    ToastStatus Status { get; }
-}
-
-/// <summary>
-/// What the shell has said about this application's notifications.
-/// </summary>
-/// <remarks>
-/// <para>
-/// Exists because "no notification appeared" has causes that look identical from the outside: the
-/// shell has them off for this app, the user has them off entirely, or one was raised and dropped.
-/// None of them is visible without asking.
-/// </para>
-/// <para>
-/// <b>It no longer carries a registration result</b>, because there is no longer a registration -
-/// see <see cref="AppNotificationSink"/> for why the Windows App SDK path was removed rather than
-/// kept as a preferred-but-broken first choice.
-/// </para>
-/// </remarks>
-/// <param name="ShellSetting">
-/// What the shell reports about this app's notifications - <c>Enabled</c>, or one of the several
-/// ways of being disabled. <c>unavailable</c> if the query itself failed, which is itself the
-/// answer for a build with no package identity.
-/// </param>
-public sealed record ToastStatus(string ShellSetting)
-{
-    /// <summary>Whether a notification can be delivered at all.</summary>
-    public bool CanNotify => !ShellSetting.StartsWith("Disabled", StringComparison.Ordinal);
 }
 
 /// <summary>
@@ -227,32 +198,6 @@ public sealed class AppNotificationSink : IToastSink
     /// </remarks>
     public AppNotificationSink(ILogger<AppNotificationSink>? logger = null)
         => _logger = logger ?? NullLogger<AppNotificationSink>.Instance;
-
-    /// <inheritdoc />
-    /// <remarks>
-    /// The shell setting is read on every access rather than cached, because the user can change it
-    /// in Windows Settings while the application is running - which is precisely the case the test
-    /// button exists to catch, and a cached "Enabled" from launch would report the opposite.
-    /// </remarks>
-    public ToastStatus Status => new(ReadShellSetting());
-
-    /// <summary>Asks the shell what it will do with this app's notifications.</summary>
-    /// <remarks>
-    /// Guarded like everything else here. An unpackaged run has no identity to have a setting for,
-    /// and the query throwing is a usable answer rather than a reason to fail.
-    /// </remarks>
-    private static string ReadShellSetting()
-    {
-        try
-        {
-            return Windows.UI.Notifications.ToastNotificationManager.CreateToastNotifier()
-                .Setting.ToString();
-        }
-        catch (Exception exception)
-        {
-            return $"unavailable ({exception.GetType().Name} 0x{exception.HResult:X8})";
-        }
-    }
 
     /// <inheritdoc />
     /// <remarks>
