@@ -908,7 +908,19 @@ This is the part that separates a careful instrument app from a sloppy one, and 
 
 1. **Tabular figures everywhere a number can change in place.** Set `Typography.NumeralAlignment="Tabular"` on every readout and every numeric column. Without this, a value stepping from `-33.1` to `-9.8` shifts horizontally and, at a glance across a bench, reads as motion where there is none. See OQ-D1 for verification of this attached property in WinUI 3.
 2. **Numerals never reflow.** Reserve width for the maximum expected string, including sign. A field that can show `-999.9` reserves six characters even while showing `0.0`.
-3. **Units are typeset, not concatenated.** The unit is a separate `Run` in `WzCaptionTextStyle` / `WzTextSecondaryBrush`, separated by a hair space (`\u200A`), never bolded, never part of the numeric string. `−33.1` is `WzReadoutMedium`; ` ns` is caption-secondary.
+3. **Units are typeset, not concatenated.** The unit is a separate **element** in `WzCaptionTextStyle` / `WzTextSecondaryBrush`, separated by a hair space (`\u200A`), never bolded, never part of the numeric string. `−33.1` is `WzReadoutMedium`; ` ns` is caption-secondary.
+
+   > **⚠ Amended 28 Aug 2026.** This said "a separate `Run`", and a `Run` has to live inside the same
+   > `TextBlock` as the digits — which put the unit *inside* the readout's alignment box. Once the
+   > caption was centred over that box it centred over `−7.2 ns` rather than over `−7.2`, and the
+   > caption names the quantity, which is the number. Every stated intent is unchanged: caption size,
+   > secondary colour, hair space, never bolded, never part of the numeric string. Only the container
+   > changes, so the unit can sit outside the axis the number is aligned on.
+   >
+   > The same pass fixed a defect the wording had been hiding. The hair-space `Run` carried **no font
+   > size**, so it inherited the *readout's* size — a hair space set at 56 px beside a 12 px unit,
+   > which is why the gap read as far too wide. It now takes the unit's own size: same character,
+   > same rule, about a fifth of the width.
 4. **Minus sign, not hyphen.** Use U+2212 MINUS SIGN in readouts. A hyphen is optically too short and sits too high next to lining figures. Format with a custom `NumberFormatInfo` where `NegativeSign = "\u2212"`. Raw SCPI text in `WzMonoTextStyle` is exempt — it is reproduced verbatim.
 5. **Right-align numeric table columns**, left-align text columns, and align on the decimal separator where fractional digits vary.
 6. **Fixed decimal places per quantity**, never variable: TI 1 dp, EFC 1 dp, holdover uncertainty 1 dp, C/N integer, percentages 1 dp, **EFC drift rate, scatter and diurnal amplitude 1 dp in ppm of control range** (§10.7.1). A column that changes its precision row to row is unreadable. Where a figure is too small to survive its quantity's precision, **change the unit, not the number of decimals** — the rule is about a reader comparing two lines, and it does not stop applying because a surface is prose. Chart axis labels take the precision their step requires, fixed per chart and not varying with the selected range (§9.10.2).

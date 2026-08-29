@@ -284,43 +284,114 @@
                             makes both children span that full width so the two right edges are the
                             same edge. Left-aligning the Grid was what let the axes diverge.
                         -->
-                        <Grid HorizontalAlignment="Stretch">
+                        <!--
+                            Two columns: the number, and the unit beside it. The unit is OUTSIDE the
+                            aligned box, which is what lets the caption centre over the digits rather
+                            than over "-7.2 ns" - the caption named the quantity, and the quantity is
+                            the number.
+
+                            §9.5.3 rule 3 already treats the unit as typographically separate; this
+                            makes it structurally separate too, and the amendment there records the
+                            wording change from "a separate Run" to "a separate element".
+                        -->
+                        <!--
+                            THE DECIMAL POINT IS THE AXIS, and the caption is centred on it.
+
+                            §9.5.3 rule 5 asks for alignment on the decimal separator and this is
+                            what that means for a single readout. Two properties fall out of it that
+                            no other arrangement gives at once:
+
+                            - the decimal point NEVER MOVES. Integer digits grow leftward into the
+                              reserved column, so 5.9 becoming 12.3 shifts nothing the eye is resting
+                              on. Centring the whole number moved it by half a character each time.
+                            - the unit sits a hair space from the last digit, always. It follows the
+                              fractional part, whose width is fixed per quantity by rule 6, so it can
+                              neither drift nor be stranded at the far edge of a wide reserve.
+
+                            Column 0 holds the sign and integer digits, right-aligned against the
+                            axis. Column 1 holds the fractional digits and the unit, left-aligned
+                            from it. The invisible reserve sets column 0's width, so the axis is
+                            fixed by the widest number this quantity can produce rather than by the
+                            one showing.
+                        -->
+                        <Grid x:Name="PART_ValueGrid" HorizontalAlignment="Stretch">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
                             <!--
                                 Opacity 0 rather than Visibility Collapsed: a collapsed element is
-                                not measured, and being measured is this element's entire job.
-                                Raw and not hit-testable so it reaches neither assistive technology
-                                nor the pointer.
+                                not measured, and being measured is this element's entire job. Raw
+                                and not hit-testable so it reaches neither assistive technology nor
+                                the pointer. It reserves the integer side only - that is what fixes
+                                the axis.
                             -->
                             <TextBlock x:Name="PART_ReserveText"
+                                       Grid.Column="0"
                                        Style="{ThemeResource WzReadoutMediumTextStyle}"
+                                       HorizontalAlignment="Right"
                                        Opacity="0"
                                        IsHitTestVisible="False"
                                        AutomationProperties.AccessibilityView="Raw">
                                 <Run x:Name="PART_ReserveValueRun" />
-                                <Run x:Name="PART_ReserveSpacerRun" />
-                                <Run x:Name="PART_ReserveUnitRun"
-                                     FontSize="12"
-                                     FontWeight="Normal" />
                             </TextBlock>
 
                             <TextBlock x:Name="PART_ValueText"
+                                       Grid.Column="0"
                                        Style="{ThemeResource WzReadoutMediumTextStyle}"
                                        Foreground="{ThemeResource WzTextPrimaryBrush}"
-                                       HorizontalAlignment="Center"
+                                       HorizontalAlignment="Right"
                                        AutomationProperties.AccessibilityView="Raw">
                                 <Run x:Name="PART_ValueRun" />
-                                <!--
-                                    The unit is a separate Run in caption size and secondary colour,
-                                    after a hair space (§9.5.3 rule 3). It never changes, so giving
-                                    it the weight of the digits would make the digits harder to find.
-                                    Never bolded, never part of the numeric string.
-                                -->
-                                <Run x:Name="PART_SpacerRun" />
-                                <Run x:Name="PART_UnitRun"
-                                     FontSize="12"
-                                     FontWeight="Normal"
-                                     Foreground="{ThemeResource WzTextSecondaryBrush}" />
                             </TextBlock>
+
+                            <!--
+                                The separator is its own element so the axis can be MEASURED rather
+                                than estimated. Aligning the caption to the boundary between the
+                                columns put it on the left edge of the point rather than its middle,
+                                which is visibly off at 56 px; half of this block's width is the
+                                correction, and it costs nothing to read exactly.
+                            -->
+                            <TextBlock x:Name="PART_PointText"
+                                       Grid.Column="1"
+                                       Style="{ThemeResource WzReadoutMediumTextStyle}"
+                                       Foreground="{ThemeResource WzTextPrimaryBrush}"
+                                       AutomationProperties.AccessibilityView="Raw">
+                                <Run x:Name="PART_PointRun" />
+                            </TextBlock>
+
+                            <StackPanel Grid.Column="2"
+                                        Orientation="Horizontal"
+                                        HorizontalAlignment="Left">
+                                <TextBlock x:Name="PART_FractionText"
+                                           Style="{ThemeResource WzReadoutMediumTextStyle}"
+                                           Foreground="{ThemeResource WzTextPrimaryBrush}"
+                                           AutomationProperties.AccessibilityView="Raw">
+                                    <Run x:Name="PART_FractionRun" />
+                                </TextBlock>
+
+                                <!--
+                                    The unit carries the READOUT'S style and shrinks its runs rather
+                                    than being a small TextBlock. VerticalAlignment aligns line BOXES,
+                                    not baselines, so a 12 px block against a 56 px one sits below the
+                                    digits by the whole descender - which is what an earlier attempt
+                                    did. Sharing the style shares the line height, and the smaller
+                                    runs sit on the shared baseline for free.
+
+                                    The hair space (rule 3) is at the unit's size too. It used to
+                                    inherit the readout's, so it was a hair space set at 56 px beside
+                                    a 12 px unit - the reason the gap read as far too wide.
+                                -->
+                                <TextBlock x:Name="PART_UnitText"
+                                           Style="{ThemeResource WzReadoutMediumTextStyle}"
+                                           Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                           AutomationProperties.AccessibilityView="Raw">
+                                    <Run x:Name="PART_SpacerRun" FontSize="12" FontWeight="Normal" />
+                                    <Run x:Name="PART_UnitRun" FontSize="12" FontWeight="Normal" />
+                                </TextBlock>
+                            </StackPanel>
                         </Grid>
 
                         <VisualStateManager.VisualStateGroups>
@@ -329,18 +400,27 @@
                                     <VisualState.Setters>
                                         <Setter Target="PART_ValueText.Style" Value="{ThemeResource WzReadoutSmallTextStyle}" />
                                         <Setter Target="PART_ReserveText.Style" Value="{ThemeResource WzReadoutSmallTextStyle}" />
+                                        <Setter Target="PART_UnitText.Style" Value="{ThemeResource WzReadoutSmallTextStyle}" />
+                                        <Setter Target="PART_FractionText.Style" Value="{ThemeResource WzReadoutSmallTextStyle}" />
+                                        <Setter Target="PART_PointText.Style" Value="{ThemeResource WzReadoutSmallTextStyle}" />
                                     </VisualState.Setters>
                                 </VisualState>
                                 <VisualState x:Name="Medium">
                                     <VisualState.Setters>
                                         <Setter Target="PART_ValueText.Style" Value="{ThemeResource WzReadoutMediumTextStyle}" />
                                         <Setter Target="PART_ReserveText.Style" Value="{ThemeResource WzReadoutMediumTextStyle}" />
+                                        <Setter Target="PART_UnitText.Style" Value="{ThemeResource WzReadoutMediumTextStyle}" />
+                                        <Setter Target="PART_FractionText.Style" Value="{ThemeResource WzReadoutMediumTextStyle}" />
+                                        <Setter Target="PART_PointText.Style" Value="{ThemeResource WzReadoutMediumTextStyle}" />
                                     </VisualState.Setters>
                                 </VisualState>
                                 <VisualState x:Name="Large">
                                     <VisualState.Setters>
                                         <Setter Target="PART_ValueText.Style" Value="{ThemeResource WzReadoutLargeTextStyle}" />
                                         <Setter Target="PART_ReserveText.Style" Value="{ThemeResource WzReadoutLargeTextStyle}" />
+                                        <Setter Target="PART_UnitText.Style" Value="{ThemeResource WzReadoutLargeTextStyle}" />
+                                        <Setter Target="PART_FractionText.Style" Value="{ThemeResource WzReadoutLargeTextStyle}" />
+                                        <Setter Target="PART_PointText.Style" Value="{ThemeResource WzReadoutLargeTextStyle}" />
                                     </VisualState.Setters>
                                 </VisualState>
                             </VisualStateGroup>
