@@ -7,14 +7,17 @@
 # OQ-6 records that only submission needs the URL to resolve - so index.md and
 # privacy.md are written for the day it is.
 #
-# Every other document in this folder is excluded deliberately. They are already
-# readable on github.com for anyone who wants them - and that is where a link
-# into src/ or tests/ resolves, which it would not here - and rendering them as
-# indexable web pages alongside the privacy policy would make the site about
-# something other than what it is for. index.md links to each of them where it
-# lives. Excluding them is presentation, not secrecy - §8.4's command exclusions
-# are a rule about what the *application* exposes, and the specification is
-# where they are written down.
+# The site publishes the documents a person USING the application needs, and
+# nothing else: the privacy policy, and how-to-use.md with its images (#308) -
+# a user guide belongs at the same address as the policy, and it links nothing
+# in src/ or tests/. Every other document in this folder is excluded
+# deliberately. They are already readable on github.com for anyone who wants
+# them - and that is where a link into src/ or tests/ resolves, which it would
+# not here - and rendering them as indexable web pages alongside the policy
+# would make the site about something other than what it is for. index.md
+# links to each of them where it lives. Excluding them is presentation, not
+# secrecy - §8.4's command exclusions are a rule about what the *application*
+# exposes, and the specification is where they are written down.
 #
 # Jekyll publishes whatever is not listed here, so a new document added to docs/
 # needs a line below unless it is meant for the site.

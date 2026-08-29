@@ -271,6 +271,9 @@ SmartClock dialect.
 Both are linked rather than restated here, so there is one authority per fact.
 The rest of `docs/`, and the other documents worth knowing about:
 
+- [docs/how-to-use.md](docs/how-to-use.md) — the user's guide: every window and
+  control, every keyboard shortcut, and how to get the window back from the
+  notification area, with screenshots from the running application.
 - [docs/adding-a-receiver.md](docs/adding-a-receiver.md) — the driver author's
   guide, summarised in [Adding a receiver](#adding-a-receiver) above.
 - [docs/manual-qa.md](docs/manual-qa.md) — the manual QA checklist: the checks
