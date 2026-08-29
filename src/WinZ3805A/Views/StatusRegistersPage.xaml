@@ -131,21 +131,31 @@
                                         what the 0 here was for. But 0 let the box render 28 px wide,
                                         under A11Y-5's 32 px pointer floor, measured on all 21 of
                                         them. 32 satisfies the floor and still fits the column.
+
+                                        MinHeight is stated for the same reason rather than left to
+                                        the framework's default. These carry a tooltip, so they are
+                                        pointer targets, and Test-PointerTargets.ps1 requires the
+                                        floor to be DECLARED - a floor that holds only while a stock
+                                        style happens to supply it is not a floor, it is a
+                                        coincidence that survives until someone restyles the control.
                                     -->
                                     <CheckBox Grid.Column="3"
                                               MinWidth="32"
+                                              MinHeight="32"
                                               IsChecked="{x:Bind EnableBit, Mode=TwoWay}"
                                               IsEnabled="{x:Bind CanEditEnable}"
                                               AutomationProperties.Name="{x:Bind EnableName}"
                                               ToolTipService.ToolTip="Enable mask" />
                                     <CheckBox Grid.Column="4"
                                               MinWidth="32"
+                                              MinHeight="32"
                                               IsChecked="{x:Bind PositiveBit, Mode=TwoWay}"
                                               IsEnabled="{x:Bind CanEditPositive}"
                                               AutomationProperties.Name="{x:Bind PositiveName}"
                                               ToolTipService.ToolTip="Positive-transition mask" />
                                     <CheckBox Grid.Column="5"
                                               MinWidth="32"
+                                              MinHeight="32"
                                               IsChecked="{x:Bind NegativeBit, Mode=TwoWay}"
                                               IsEnabled="{x:Bind CanEditNegative}"
                                               AutomationProperties.Name="{x:Bind NegativeName}"

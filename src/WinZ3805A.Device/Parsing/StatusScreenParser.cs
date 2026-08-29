@@ -102,7 +102,7 @@ public sealed partial class StatusScreenParser(TimeProvider timeProvider)
         (IReadOnlyList<TrackedSatellite> tracked, IReadOnlyList<PredictedSatellite> notTracked, SignalStrengthKind strengthKind) =
             ParseSatelliteTable(lines, warnings);
 
-        (DateTimeOffset? deviceTime, TimeScale timeScale) = ParseDeviceTime(lines, warnings);
+        (DateTimeOffset? deviceTime, TimeScale timeScale, bool provisionalTime) = ParseDeviceTime(lines, warnings);
         (int epochs, DateTimeOffset? corrected) = ApplyWeekRollover(deviceTime, capturedAt);
         ClockAdvisory advisory = ParseClockAdvisory(lines, warnings);
         (GeoPosition? position, HeightDatum datum) = ParsePosition(lines, warnings);
@@ -136,6 +136,7 @@ public sealed partial class StatusScreenParser(TimeProvider timeProvider)
 
             TimeScale = timeScale,
             DeviceDateTime = deviceTime,
+            DeviceTimeIsProvisional = provisionalTime,
             WeekRolloverEpochs = epochs,
             CorrectedDateTime = corrected,
             OnePpsClockAdvisory = advisory,
@@ -507,7 +508,9 @@ public sealed partial class StatusScreenParser(TimeProvider timeProvider)
     /// Matched on the whole shape rather than on the leading word alone, because
     /// <c>GPS 1PPS Synchronized to UTC</c> sits two lines below and starts with a scale name too.
     /// </remarks>
-    private static (DateTimeOffset? DeviceTime, TimeScale Scale) ParseDeviceTime(string[] lines, List<string> warnings)
+    private static (DateTimeOffset? DeviceTime, TimeScale Scale, bool Provisional) ParseDeviceTime(
+        string[] lines,
+        List<string> warnings)
     {
         foreach (string line in lines)
         {
@@ -531,7 +534,7 @@ public sealed partial class StatusScreenParser(TimeProvider timeProvider)
                     out DateTime parsed))
             {
                 warnings.Add($"The clock row did not parse as a date and time: '{line.Trim()}'.");
-                return (null, scale);
+                return (null, scale, false);
             }
 
             if (scale is TimeScale.Local or TimeScale.LocalGps)
@@ -542,7 +545,12 @@ public sealed partial class StatusScreenParser(TimeProvider timeProvider)
                 warnings.Add("The receiver is reporting local time, so the UTC offset is unknown and zero was assumed.");
             }
 
-            return (new DateTimeOffset(parsed, TimeSpan.Zero), scale);
+            // The marker is carried out with the value rather than warned about. §11.1 puts
+            // ParseWarnings in Diagnostics, which nobody reads while looking at a clock - and this
+            // is a property of the reading that the UI has to show next to it, not a parse problem.
+            bool provisional = match.Groups["provisional"].Success;
+
+            return (new DateTimeOffset(parsed, TimeSpan.Zero), scale, provisional);
         }
 
         // A clock row that is present but unreadable is a different report from an absent one, and
@@ -550,11 +558,13 @@ public sealed partial class StatusScreenParser(TimeProvider timeProvider)
         // so a field report about an odd firmware revision is actionable; "no clock row was found"
         // sends the reader looking for a line that is sitting right there in the capture.
         //
-        // The case that prompted this is a power-up screen (#245): the receiver prints
+        // The case that prompted this was a power-up screen (#245): the receiver prints
         //     GPS      05:10:04 (?) 12 Jan 2007
-        // where (?) marks a provisional power-up time, and the marker between the time and the date
-        // defeats the full pattern. Whether that time should be read at all is a model question and
-        // is open on #245 - this only stops the parser denying the line exists.
+        // and the (?) between the time and the date used to defeat the full pattern. That row now
+        // parses, and the marker is carried on DeviceTimeIsProvisional - but this fallback is kept,
+        // because the reason it was written has not gone away. A row this loop finds and the full
+        // pattern does not is a shape nobody has seen yet, and saying so beats denying the line
+        // exists.
         foreach (string line in lines)
         {
             if (ClockRowShapePattern().IsMatch(line))
@@ -562,12 +572,12 @@ public sealed partial class StatusScreenParser(TimeProvider timeProvider)
                 warnings.Add(
                     $"A clock row was found but did not parse: '{line.Trim()}'. " +
                     "The time was not read.");
-                return (null, TimeScale.Unknown);
+                return (null, TimeScale.Unknown, false);
             }
         }
 
         warnings.Add("No clock row was found on the status screen.");
-        return (null, TimeScale.Unknown);
+        return (null, TimeScale.Unknown, false);
     }
 
     private static TimeScale ParseTimeScale(string text)
@@ -1272,9 +1282,34 @@ public sealed partial class StatusScreenParser(TimeProvider timeProvider)
     [GeneratedRegex(@"\bANT\s+DLY\s+(?<value>[-+]?[\d.]+)\s*(?<unit>ps|ns|us|µs|μs|ms|s)\b", RegexOptions.IgnoreCase)]
     private static partial Regex AntennaDelayPattern();
 
+    /// <summary>
+    /// A clock row: a time scale, a time of day, an optional power-up marker, and a date.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Two shapes of the same row, both seen in the field (#245).
+    /// </para>
+    /// <para>
+    /// <b>The provisional marker.</b> Between the time and the date the receiver may print
+    /// <c>(?)</c> — printed <c>[?]</c> in the Z3801A user guide's Figure 3-1, which is the same
+    /// field on a sibling model. It means the time is the <b>default power-up value, not yet
+    /// corrected from GPS</b>, and the guide says it is corrected once the first satellite is
+    /// tracked. It is captured rather than merely tolerated — see
+    /// <see cref="ReceiverStatus.DeviceTimeIsProvisional"/> for why reading the value while
+    /// discarding the marker would be worse than not reading it at all.
+    /// </para>
+    /// <para>
+    /// <b>Two date orders.</b> Every screen captured from this unit prints <c>12 Jan 2007</c>, but
+    /// the 58503A and Z3801A manuals both print <c>1994 DEC 01</c> — year first, day last. §11.1's
+    /// header-relative parsing exists to survive exactly this kind of cross-model difference, and
+    /// the alternation costs nothing on a unit that never emits the second form.
+    /// </para>
+    /// </remarks>
     [GeneratedRegex(
-        @"(?<scale>\b(?:UTC|GPS|LOCAL(?:\s+GPS)?|LCL(?:\s+GPS)?)\b)\s+(?<time>\d{1,2}:\d{2}:\d{2})\s+" +
-        @"(?<day>\d{1,2})\s+(?<month>[A-Za-z]{3})\s+(?<year>\d{4})",
+        @"(?<scale>\b(?:UTC|GPS|LOCAL(?:\s+GPS)?|LCL(?:\s+GPS)?)\b)\s+(?<time>\d{1,2}:\d{2}:\d{2})\s*" +
+        @"(?<provisional>[(\[]\s*\?\s*[)\]])?\s*" +
+        @"(?:(?<day>\d{1,2})\s+(?<month>[A-Za-z]{3})\s+(?<year>\d{4})" +
+        @"|(?<year>\d{4})\s+(?<month>[A-Za-z]{3})\s+(?<day>\d{1,2}))",
         RegexOptions.IgnoreCase)]
     private static partial Regex DeviceTimePattern();
 

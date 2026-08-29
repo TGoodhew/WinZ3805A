@@ -1,6 +1,8 @@
 ﻿using System.Globalization;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
+using Microsoft.UI;
+using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -442,12 +444,51 @@ public sealed partial class MainPage : Page
         };
     }
 
+    /// <summary>
+    /// Lights a badge under the pointer, and unlights it again.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The time-zone button next to these gets its hover fill from the stock <c>Button</c> template.
+    /// A <c>Border</c> has no template and therefore no <c>PointerOver</c> state, so enlarging the
+    /// badges to A11Y-5's 32 px fixed <i>where</i> the pointer worked and left them looking exactly
+    /// as unresponsive as before — which is how the defect was reported a second time, after the
+    /// size was already right. A tooltip's delay sits in front of the only other feedback there is.
+    /// </para>
+    /// <para>
+    /// Handled in code rather than through a <c>VisualStateGroup</c> because these are page
+    /// elements rather than templated controls, and <c>GoToState</c> needs a control to target.
+    /// </para>
+    /// </remarks>
+    private void OnBadgePointerEntered(object sender, PointerRoutedEventArgs e)
+    {
+        if (sender is Border badge)
+        {
+            badge.Background = (Brush)Application.Current.Resources["WzSurfaceHoverBrush"];
+        }
+    }
+
+    /// <summary>Restores the badge's transparent fill when the pointer leaves.</summary>
+    /// <remarks>
+    /// Transparent and never null. An unset <c>Background</c> is not hit-testable at all, so
+    /// clearing it here would shrink the target back to the glyph on the first hover — the original
+    /// defect, reintroduced by the fix for it.
+    /// </remarks>
+    private void OnBadgePointerExited(object sender, PointerRoutedEventArgs e)
+    {
+        if (sender is Border badge)
+        {
+            badge.Background = new SolidColorBrush(Colors.Transparent);
+        }
+    }
+
     private void RenderClock()
     {
         if (_model.ShownTime is not DisplayTime shown)
         {
             ClockText.Text = "—";
             RolloverBadge.Visibility = Visibility.Collapsed;
+            ProvisionalBadge.Visibility = Visibility.Collapsed;
             return;
         }
 
@@ -463,7 +504,19 @@ public sealed partial class MainPage : Page
         RolloverBadge.Visibility = _model.IsDateCorrected ? Visibility.Visible : Visibility.Collapsed;
         // The same sentence to the tooltip and to the automation name, because §9.9 wants an
         // icon-only control to have both and a screen-reader user has no other route to it.
-        ToolTipService.SetToolTip(RolloverBadge, _model.RolloverExplanation);
+        RolloverTip.Content = _model.RolloverExplanation ?? string.Empty;
         AutomationProperties.SetName(RolloverBadge, _model.RolloverExplanation ?? string.Empty);
+
+        // #245. The receiver's own marker for "this is the power-up default, not yet corrected from
+        // GPS". It belongs on the primary window rather than only in Details, because §10.3's whole
+        // premise is a window somebody leaves running and glances at - and this is the one reading
+        // on that surface that can be arbitrarily wrong while looking entirely ordinary.
+        const string provisional =
+            "Power-up time. The receiver has not yet corrected this from GPS, so it may be wrong by "
+            + "any amount until the first satellite is tracked.";
+
+        ProvisionalBadge.Visibility = _model.IsTimeProvisional ? Visibility.Visible : Visibility.Collapsed;
+        ProvisionalTip.Content = provisional;
+        AutomationProperties.SetName(ProvisionalBadge, provisional);
     }
 }

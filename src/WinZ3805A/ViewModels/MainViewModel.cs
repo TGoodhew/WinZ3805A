@@ -186,6 +186,16 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// <summary>The uncorrected, unconverted value, kept for the §7.4 tooltip.</summary>
     public DateTimeOffset? DisplayTime => _store.Status?.CorrectedDateTime ?? _store.Status?.DeviceDateTime;
 
+    /// <summary>
+    /// Whether the receiver marked its time as provisional (#245).
+    /// </summary>
+    /// <remarks>
+    /// Surfaced on the primary window and not only in Details, because §10.3's whole premise is a
+    /// window a lab user leaves running and glances at. A provisional power-up time shown there with
+    /// no mark is the one reading on the surface that can be silently and arbitrarily wrong.
+    /// </remarks>
+    public bool IsTimeProvisional => _store.Status?.DeviceTimeIsProvisional ?? false;
+
     /// <summary>Whether the shown date has been corrected, which earns the §7.4 info glyph.</summary>
     public bool IsDateCorrected => (_store.Status?.WeekRolloverEpochs ?? 0) != 0;
 

@@ -37,6 +37,16 @@ jobs:
         shell: pwsh
         run: ./build/Test-IconOnlyButtons.ps1
 
+      # A11Y-5. The gate above owns Button-like controls; this one owns everything
+      # else that carries a tooltip, which is what a pointer target is. Added
+      # 28 Aug 2026 after a user found the §7.4 rollover badge unhittable: a bare
+      # TextBlock is hit-testable only where its glyph is, so the target was about
+      # 12 x 15 px. Measuring its neighbours then found the TFOM and FFOM pills at
+      # 73 x 28. A11Y-5 had been recorded as passing for weeks.
+      - name: Non-button pointer targets declare the 32 px floor
+        shell: pwsh
+        run: ./build/Test-PointerTargets.ps1
+
       # §9.4 / A11Y-8. Light and Dark get exercised whenever anyone runs the app;
       # HighContrast does not, because testing it means switching the whole
       # desktop over. A token missing from one theme fails only for the user who

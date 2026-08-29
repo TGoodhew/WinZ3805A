@@ -234,6 +234,33 @@ public sealed record ReceiverStatus
     public DateTimeOffset? DeviceDateTime { get; init; }
 
     /// <summary>
+    /// Whether the clock row carried the power-up marker, meaning the time has not yet been
+    /// corrected from GPS (§11.2, #245).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The receiver prints <c>(?)</c> between the time and the date — <c>[?]</c> in the Z3801A user
+    /// guide, Figure 3-1 — and the guide says the value is *"the default power-up setting … corrected
+    /// when the first satellite is tracked"*.
+    /// </para>
+    /// <para>
+    /// <b>This flag is why the marker is not simply tolerated in the pattern.</b> The two known
+    /// examples show how far apart a marked time can be from the truth: the screen captured from
+    /// this unit read <c>05:10:04 (?) 12 Jan 2007</c> and was right to the minute, because the
+    /// oscillator held time across the power cycle, while the manual's <c>12:00:00[?] 01 JAN 1996</c>
+    /// is a placeholder that is arbitrarily wrong. <b>The marker is the only thing that distinguishes
+    /// them.</b> Parsing the value and dropping the marker would convert a knowable caveat into a
+    /// silent inaccuracy — worse than the old behaviour of refusing the row, not better.
+    /// </para>
+    /// <para>
+    /// Distinct from <see cref="OnePpsClockAdvisory"/>, which describes the 1 PPS <i>signal</i> and is
+    /// read from the <c>GPS 1PPS …</c> line two rows below. This is a property of the time-of-day
+    /// reading itself.
+    /// </para>
+    /// </remarks>
+    public bool DeviceTimeIsProvisional { get; init; }
+
+    /// <summary>
     /// How many 1024-week GPS epochs the device's date is behind, per §7.4. Zero on a receiver
     /// whose firmware has not rolled over.
     /// </summary>

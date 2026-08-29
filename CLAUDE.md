@@ -175,6 +175,7 @@ pwsh build/Test-SpacingScale.ps1         # §9.13 item 4 / §9.6
 pwsh build/Test-HighContrastLegibility.ps1 # A11Y-8 / §9.2
 pwsh build/Test-NoColourOnlyStates.ps1   # A11Y-12 / §9.4.3
 pwsh build/Test-FocusVisualCoverage.ps1  # A11Y-2 / §9.12
+pwsh build/Test-PointerTargets.ps1       # A11Y-5 / §9.6.3
 ```
 
 One more script runs in CI and is **not** a gate on the source — it checks a tool rather
@@ -184,7 +185,7 @@ than a rule:
 pwsh build/Capture-Fixtures.ps1 -SelfTest # #4 / #185 — the harness, not the app
 ```
 
-`.github/workflows/ci.yml` runs all eleven first, before any restore, so a token,
+`.github/workflows/ci.yml` runs all twelve first, before any restore, so a token,
 accessibility, or safety regression fails in seconds rather than after a full build. It then
 builds both Configuration × Platform combinations — Debug and Release against x64,
 since §6.1 dropped ARM64 on 15 Aug 2026 — and runs the tests.
@@ -207,6 +208,24 @@ The theme-parity gate exists because Light and Dark are exercised every time any
 runs the app and HighContrast is not — testing it means switching the whole
 desktop over. A token defined in one theme and not another compiles, passes
 review, and then fails at run time for precisely the user who needs that theme.
+
+The pointer-target gate is the newest, added 28 Aug 2026, and it exists because **A11Y-5 was signed
+off as passing while two breaches sat in the primary window**. Tony found the first by trying to use
+it: the §7.4 rollover badge was a bare `TextBlock` in a symbol font, and **a `TextBlock` is
+hit-testable only where its glyph is**, so the target was about 12 × 15 px against a 32 × 32 floor —
+hittable only by landing on the glyph exactly, and the tooltip dismissed the moment the pointer
+slipped off. `Test-IconOnlyButtons.ps1` already checks that floor but **only on `Button`-like
+controls**, so a `Border`, a `TextBlock` or a custom control never reached it. Measuring the
+neighbours rather than trusting the first fix then found `TfomPill` and `FfomPill` at **73 × 28** — a
+20 px line inside XXS padding lands four short — so the floor now lives on the `SeverityPill` style
+rather than on the two call sites that happen to need it today. Two things worth not rediscovering: a
+hit target's `Background` must be **`Transparent` and not unset**, because an unset background is
+`null` and not hit-testable at all, so padding enlarges the box on screen and changes nothing; and
+the gate reads tooltips **set in code** as well as in XAML, since `ToolTipService.SetToolTip` is how
+the badge that prompted it got its tooltip — a gate reading only XAML would have missed the defect it
+exists to catch. It requires the floor to be **declared** rather than inferred, on the same reasoning
+the icon gate gives: a floor that holds only while a stock style happens to supply it is a
+coincidence, not a floor.
 
 The focus-visual coverage gate is the newest, added 27 Aug 2026 alongside the A11Y-2 pass that
 closed #22. **The surface behind a focus ring is not knowable from source**: the accent-filled

@@ -33,7 +33,7 @@
   <Identity
     Name="WinZ3805A"
     Publisher="CN=AppPublisher"
-    Version="1.0.0.0" />
+    Version="1.0.0.1" />
 
   <mp:PhoneIdentity PhoneProductId="DB5D1AF4-65FD-41CA-91F9-D83D5ACEB3B0" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
 
