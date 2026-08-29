@@ -47,7 +47,22 @@ public interface IToastSink
 /// ways of being disabled. <c>unavailable</c> if the query itself failed, which is itself the
 /// answer for a build with no package identity.
 /// </param>
-public sealed record ToastStatus(bool Registered, string? RegistrationError, string ShellSetting);
+/// <param name="Route">
+/// Which API a notification will actually go out through. Two exist because the Windows App SDK's
+/// has never registered successfully; see <see cref="AppNotificationSink.Show"/>.
+/// </param>
+public sealed record ToastStatus(
+    bool Registered,
+    string? RegistrationError,
+    string ShellSetting,
+    string Route)
+{
+    /// <summary>
+    /// Whether a notification can be delivered at all - which is no longer the same question as
+    /// whether registration succeeded.
+    /// </summary>
+    public bool CanNotify => !ShellSetting.StartsWith("Disabled", StringComparison.Ordinal);
+}
 
 /// <summary>
 /// P1-9's Windows notifications for losing and regaining GPS lock (§10.3).
@@ -223,16 +238,25 @@ public sealed class AppNotificationSink : IToastSink
             // Kept, not merely logged. The log is the right place for it and was not enough: this
             // failure is what a user experiences as "no notifications", and they cannot be asked to
             // find a log line to learn that a feature switched itself off.
-            _registrationError = $"{exception.GetType().Name}: {exception.Message}";
+            _registrationError = Describe(exception);
+
             // WARNING, not Debug. This is a shipped feature turning itself off, and it stayed
             // broken from the first release to 28 Aug 2026 precisely because the one line that
             // explained it sat below the captured level. A feature that silently does nothing must
             // say so loudly enough to be read.
-            _logger.LogWarning(exception, "Notifications are unavailable; P1-9 is off for this session.");
+            //
+            // No longer fatal to the feature, either - see Show. This path now costs the modern
+            // API and its activation, not the notification.
+            _logger.LogWarning(exception, "AppNotificationManager registration failed; falling back to the packaged toast API.");
         }
     }
 
-    /// <summary>Whether the shell accepted the registration.</summary>
+    /// <summary>Whether the Windows App SDK path registered.</summary>
+    /// <remarks>
+    /// No longer the same question as "will a notification appear", which is what
+    /// <see cref="ToastStatus.CanNotify"/> answers. Kept because it is still the honest name for
+    /// what it reports.
+    /// </remarks>
     public bool IsAvailable => _registered;
 
     /// <inheritdoc />
@@ -241,7 +265,11 @@ public sealed class AppNotificationSink : IToastSink
     /// in Windows Settings while the application is running - which is precisely the case the test
     /// button exists to catch, and a cached "Enabled" from launch would report the opposite.
     /// </remarks>
-    public ToastStatus Status => new(_registered, _registrationError, ReadShellSetting());
+    public ToastStatus Status => new(
+        _registered,
+        _registrationError,
+        ReadShellSetting(),
+        _registered ? "AppNotification (Windows App SDK)" : "ToastNotification (packaged shell API)");
 
     /// <summary>Asks the shell what it will do with this app's notifications.</summary>
     /// <remarks>
@@ -260,19 +288,101 @@ public sealed class AppNotificationSink : IToastSink
         }
     }
 
+    /// <summary>
+    /// Flattens an exception into one line, with its HRESULT.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>A <c>COMException</c>'s message contains its own newlines</b> - "Element not found." twice,
+    /// separated by blank lines - which turned the diagnostic flyout into four ragged lines with a
+    /// full stop stranded on one of them. Collapsing whitespace is presentation, but a diagnostic
+    /// nobody can read is not doing its job.
+    /// </para>
+    /// <para>
+    /// <b>The HRESULT is the half that was missing.</b> "Element not found" is the text of several
+    /// unrelated failures; <c>0x80070490</c> is the one that identifies this bug and the one worth
+    /// pasting into a search or an issue.
+    /// </para>
+    /// </remarks>
+    private static string Describe(Exception exception)
+    {
+        string message = string.Join(' ', exception.Message.Split(
+            (char[]?)null, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+
+        return $"{exception.GetType().Name} 0x{exception.HResult:X8}: {message}";
+    }
+
     /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// <b>Two routes, because the modern one has never worked here.</b>
+    /// <c>AppNotificationManager.Register</c> fails with <c>0x80070490</c> on every machine tried,
+    /// including the one this was written on, and the manifest declares everything the documentation
+    /// asks for. Rather than ship a feature that is off for everyone while that is chased, this
+    /// falls back to <c>ToastNotificationManager</c> - the packaged-app API that predates the
+    /// Windows App SDK.
+    /// </para>
+    /// <para>
+    /// <b>The fallback is sound precisely because of a decision already made above:</b> these toasts
+    /// carry no buttons and no arguments, deliberately, so that a notification can never be a
+    /// command path outside §8's tiers. A notification nobody can click needs no activation, and
+    /// activation is the only thing the COM server and the whole registration dance exist to
+    /// provide. The older API needs no manifest declaration, no CLSID and no registration - it
+    /// needs package identity, which this application has.
+    /// </para>
+    /// <para>
+    /// The modern path is still tried first and still preferred, so this repairs itself if the
+    /// registration failure is ever fixed. Neither route may throw: see the class remarks.
+    /// </para>
+    /// </remarks>
     public void Show(string title, string body)
     {
-        if (!_registered)
+        // The branch is on REGISTRATION, not on delivery, so exactly one path can ever run. Do not
+        // refactor this into a try-the-modern-one-and-fall-back-if-it-throws arrangement: that
+        // would send two notifications on the day the modern path registers and then fails to
+        // deliver, which is a worse failure than the one being fixed.
+        if (_registered)
         {
+            AppNotification notification = new AppNotificationBuilder()
+                .AddText(title)
+                .AddText(body)
+                .BuildNotification();
+
+            AppNotificationManager.Default.Show(notification);
+
+            // Which path DELIVERED, not which was attempted. That distinction is not pedantry: it
+            // is #290, one day old, where the accent log reported the preference rather than the
+            // outcome and so asserted a read had succeeded while the fallback had quietly taken
+            // over. Keeping the modern path first is only useful if it repairs itself visibly -
+            // otherwise the day it starts working and the day it stops again look identical.
+            _logger.LogInformation("Notification delivered via AppNotificationManager.");
             return;
         }
 
-        AppNotification notification = new AppNotificationBuilder()
-            .AddText(title)
-            .AddText(body)
-            .BuildNotification();
+        ShowThroughShell(title, body);
 
-        AppNotificationManager.Default.Show(notification);
+        _logger.LogInformation(
+            "Notification delivered via ToastNotificationManager; the Windows App SDK path is "
+            + "unavailable ({Error}).",
+            _registrationError ?? "no reason recorded");
+    }
+
+    /// <summary>The pre-Windows App SDK packaged toast, built as XML because that API takes XML.</summary>
+    /// <remarks>
+    /// <c>ToastText02</c> is one bold heading over one wrapping body, which is the shape §10.3 asks
+    /// for and the shape <c>AppNotificationBuilder</c> was producing from two AddText calls.
+    /// </remarks>
+    private static void ShowThroughShell(string title, string body)
+    {
+        Windows.Data.Xml.Dom.XmlDocument xml =
+            Windows.UI.Notifications.ToastNotificationManager.GetTemplateContent(
+                Windows.UI.Notifications.ToastTemplateType.ToastText02);
+
+        Windows.Data.Xml.Dom.XmlNodeList texts = xml.GetElementsByTagName("text");
+        texts[0].AppendChild(xml.CreateTextNode(title));
+        texts[1].AppendChild(xml.CreateTextNode(body));
+
+        Windows.UI.Notifications.ToastNotificationManager.CreateToastNotifier()
+            .Show(new Windows.UI.Notifications.ToastNotification(xml));
     }
 }
