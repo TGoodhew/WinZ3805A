@@ -2595,6 +2595,41 @@ something might later branch on.
 
 **`:PTIM:TCOD:FORMat` is catalogued as a query only; its setter is deliberately absent.** Changing the format changes what every consumer of the time code output sees, which makes it tier C by the same reasoning §8.3 applies to `:PTIM:TZONe`. It is not catalogued because nothing in the application reads the time code, so the setter would be a tier C write existing solely to break other equipment's decoding. It goes in when something needs it, with a §8.3 consequence line of its own.
 
+### 16.1 Documented commands deliberately not catalogued
+
+The catalog is an allowlist (§8.1), so a documented command absent from it is one the application
+cannot send. For §8.4's exclusions that is the point. For everything else it needs a reason, and
+these are them — recorded 29 Aug 2026, closing the inventory #154 kept.
+
+**`:PULSe:` — the programmable pulse output (5 commands).** §4's user monitors a
+GPS-disciplined oscillator; they do not drive a pulse generator from it. Every one of these is a
+**setter** for an output other equipment may be triggering from, which puts them at tier C for a
+capability nobody has asked for. They are also 59551A hardware, and the bench Z3805A answers
+`:PULS:CONT:STAT?` while rejecting `:PULS:REF:EDGE?` — so the subsystem is split and a shipped
+feature would need §8.6's per-model masking (#64) or would have to degrade on an `E-113`. **Not a
+gap to close; a subsystem out of scope.**
+
+**`:PTIMe:PPS:EDGE` — the 1 PPS on-time edge.** Cannot be built for this receiver. Measured on the
+bench Z3805A: `-113,"Undefined header"`. The edge is neither selectable nor queryable, so the
+Timing page cannot report which edge the receiver considers on time, and no amount of work here
+changes that. **Settled by the hardware, not by a decision.**
+
+**`:FORMat:DATA` — the read format for the measurement memory.** Answers `ASC`, and means nothing
+on its own: it selects how `:SENSe:DATA:` returns its entries. It goes in when that does.
+
+**`:LED:ALARm:USER` — direct control of the front-panel alarm LED.** Found 29 Aug 2026 in the
+Z3801A guide, which describes it as *"a way to directly set Alarm."* Deliberately not catalogued:
+it lets the application assert an alarm the receiver is not reporting, which is a lie told on the
+instrument's own front panel, where a lab user reads it without the application in front of them.
+§9.4.3 makes severity a claim about the receiver's state; this would make it a claim about the
+software's. **The three `:LED:*?` queries are catalogued and are the right half of this subsystem.**
+
+**`:SENSe:DATA:` — the receiver's timestamp memory (5 commands).** The one family here with real
+value, and it has its own issue rather than a reason (#300). `:SENS:DATA:POIN?` answers `+4,+5,+6` on the
+bench receiver: three buffers with entries in them, holding measurements taken while nothing was
+connected. It is not built because it needs per-node probing and a surface of its own, not because
+it should not be.
+
 **Note on the Z3805A specifically:** no Z3805A-specific programming manual was published. The command set is inherited from the 58503A/B SmartClock firmware family, which is why the 58503B guide is the reference. Where behaviour diverges — dual 10 MHz and dual 1 PPS outputs, 9600-8-N-1 default rather than the Z3801A's 19200-7-O-1 — this document calls it out explicitly. (**"Port 2 being TOD-only" was removed from this list on 28 Aug 2026**: the Z3805A has one serial port, `:SYST:COMM:SER2:BAUD?` answers `-113,"Undefined header"`, and the claim is corrected in §8.6 under #62.) Any command whose Z3805A behaviour is unverified should be probed at connect and disabled if it errors, rather than assumed present.
 
 ---
