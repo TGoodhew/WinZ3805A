@@ -129,4 +129,23 @@ public static class MedallionRingMath
     /// </remarks>
     public static double GlyphSize(double diameter) => diameter * (56.0 / 160.0);
 
+    /// <summary>
+    /// The centre numeral's size for a medallion of this diameter (#279).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Larger than the glyph, on purpose.</b> A digit is a simpler shape than a symbol and can
+    /// be read smaller, but this goes the other way because of what it is for: G1 asks for the
+    /// count legible at <b>two metres</b>, and compact is the mode that promise is measured in. At
+    /// the 64 px compact diameter this gives 32 px against the glyph's 22.
+    /// </para>
+    /// <para>
+    /// <b>Half the diameter, not more, because two digits have to fit.</b> A count can reach twelve
+    /// or more, and two lining figures at half the diameter occupy roughly two thirds of the
+    /// circle's width - inside the ring with room to spare. A larger ratio reads better for one
+    /// digit and clips for two.
+    /// </para>
+    /// </remarks>
+    public static double CountSize(double diameter) => diameter * 0.5;
+
 }

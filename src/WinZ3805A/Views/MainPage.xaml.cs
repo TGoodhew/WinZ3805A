@@ -392,11 +392,6 @@ public sealed partial class MainPage : Page
 
         Satellites.Value = _model.SatelliteCount;
 
-        // §9.6.2's compact content. Same property as the tile above, so the two cannot disagree;
-        // the em dash is §11.1's, for a receiver that has not said yet.
-        CompactSatellitesText.Text = _model.SatelliteCount is int count
-            ? $"{count} satellite{(count == 1 ? string.Empty : "s")}"
-            : $"{ReadoutFormatter.NoValue} satellites";
         TimeInterval.Value = _model.TimeIntervalNanoseconds;
 
         RenderMerit(TfomPill, "TFOM", _model.Tfom);

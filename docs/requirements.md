@@ -806,6 +806,28 @@ Both exceed the 4.5:1 floor with margin, so accent-coloured text is permitted at
 
 The four severity shapes are drawn as `Path` geometry, not as glyphs from a font, so they render identically under high contrast where they resolve to `SystemColorWindowTextColor` outlines with a hairline fill distinction.
 
+> **One stated exception, added 29 Aug 2026 (#279): the medallion centre in compact mode.**
+>
+> §9.6.2 keeps only two things in compact — the mode text and the tracked-satellite count — and G1
+> requires both legible at two metres. The count therefore takes the medallion's centre there, in
+> the state's colour, and the mode glyph gives up its place. **The medallion alone then carries
+> colour and no shape.**
+>
+> This is permitted because the pair, not the circle, is the severity surface: §9.6.2 keeps the
+> **mode text beside the medallion in compact, always and in words**, so the state is still stated
+> in a second channel on the same screen. The rule above is about a user never having to read
+> colour to know severity, and they do not have to here.
+>
+> The alternatives were examined and are worse. The ring cannot carry the shape — it already draws
+> the sixty-sample time-interval sparkline in Light and Dark. A glyph shown beside the number
+> cannot either — a numeral sized for two metres fills a 64 px circle, and shrinking it to make
+> room defeats the requirement that motivated the change.
+>
+> **The exception is bounded to compact, and to a count that exists.** At Standard and Large the
+> glyph keeps the centre, and a receiver that has not reported a count shows the glyph rather than
+> §11.1's em dash — a dash belongs in a readout, where it holds a column; in a small circle it says
+> less than the shape it replaced.
+
 #### 9.4.4 Data visualisation palette
 
 Charting colour is a separate concern from UI colour and must not reuse semantic tokens — a trace coloured `WzCriticalBrush` implies an alarm that is not being asserted.
@@ -1058,7 +1080,7 @@ See the amendment below the table before implementing one of them.
 | Window | Minimum (content) | Behaviour at minimum |
 |---|---|---|
 | Main | 380 × 240 | Medallion 160 px and the two mode lines. The readout row, the figures of merit, the clock line and the footer are **collapsed** — not clipped, not scrolled: they are removed from the layout, so nothing is focusable or hit-testable off-screen (A11Y-1, A11Y-6). |
-| Main, compact mode | 380 × 144 | Medallion 64 px, mode text and satellite count only; readout row and footer hidden |
+| Main, compact mode | 380 × 144 | Medallion 64 px **with the satellite count in its centre** (§9.4.3, #279), mode text; readout row and footer hidden |
 | Receiver Details | **1024 × 720** | Medium breakpoint; `NavigationView` in `Left` mode; no horizontal scrolling |
 
 > **⚠ Amends §10.2.** The Details window minimum was previously specified as 1000 × 700. That sits 24 px below the `Left`-mode threshold, so the window would open in `LeftCompact` at its own minimum size — the pane would be an icon rail at the exact width the layout was designed around. Raised to **1024 × 720** so the default state is the Medium breakpoint. Enforced via `AppWindow` `OverlappedPresenter.PreferredMinimumWidth/Height`.
