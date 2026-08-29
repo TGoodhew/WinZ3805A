@@ -52,6 +52,7 @@ public sealed class StatusMedallion : Control
     private const string RingPart = "PART_Ring";
     private const string PlainRingPart = "PART_PlainRing";
     private const string GlyphPart = "Glyph";
+    private const string CountPart = "Count";
 
 
     /// <summary>What fraction of the radius the sparkline band occupies.</summary>
@@ -197,8 +198,16 @@ public sealed class StatusMedallion : Control
         medallion.Redraw();
     }
 
-    private static void OnAnnouncementChanged(DependencyObject d, DependencyPropertyChangedEventArgs e) =>
-        ((StatusMedallion)d).UpdateAnnouncement();
+    private static void OnAnnouncementChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        StatusMedallion medallion = (StatusMedallion)d;
+        medallion.UpdateAnnouncement();
+
+        // SatelliteCount is drawn as well as announced now (#279), and it shares this callback with
+        // the other two properties that only feed the sentence. Redrawing the centre for all three
+        // is cheaper than a second callback and cannot fall out of step with the announcement.
+        medallion.UpdateCentre();
+    }
 
     private void ApplySize()
     {
@@ -210,6 +219,55 @@ public sealed class StatusMedallion : Control
         {
             glyph.FontSize = MedallionRingMath.GlyphSize(diameter);
         }
+
+        if (GetTemplateChild(CountPart) is TextBlock count)
+        {
+            count.FontSize = MedallionRingMath.CountSize(diameter);
+        }
+
+        UpdateCentre();
+    }
+
+    /// <summary>
+    /// Chooses what the centre holds: the tracked-satellite count, or the mode glyph (#279).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The count replaces the glyph in compact, and only in compact.</b> G1 asks for mode and
+    /// count legible at two metres and §9.6.2 names those two as the only things compact keeps, so
+    /// the number earns the centre there. At Standard and Large the readout row is on screen and
+    /// already carries the count; putting it here as well would print it twice.
+    /// </para>
+    /// <para>
+    /// <b>The glyph is the fallback when there is no count</b>, rather than §11.1's em dash. The
+    /// dash is right in a readout, where a column of figures needs a placeholder holding its
+    /// column; in a 64 px circle it is a wide bar that says less than the shape it replaced. So a
+    /// receiver that has not reported a count shows the state, which is the thing it does know.
+    /// </para>
+    /// <para>
+    /// <b>The medallion carries colour only while the count is shown</b>, and that is a deliberate
+    /// exception recorded in §9.4.3 rather than an oversight. §9.6.2 keeps the mode text beside the
+    /// medallion in compact, always and in words, so the state is on the surface in a second
+    /// channel - just not inside the circle. The alternatives were worse: the ring already carries
+    /// the sixty-sample sparkline, and a numeral sized for two metres leaves no room beside it.
+    /// </para>
+    /// </remarks>
+    private void UpdateCentre()
+    {
+        if (GetTemplateChild(GlyphPart) is not TextBlock glyph
+            || GetTemplateChild(CountPart) is not TextBlock count)
+        {
+            return;
+        }
+
+        bool showCount = Size == MedallionSize.Compact && SatelliteCount is int;
+
+        count.Text = SatelliteCount is int satellites
+            ? satellites.ToString(System.Globalization.CultureInfo.CurrentCulture)
+            : string.Empty;
+
+        count.Visibility = showCount ? Visibility.Visible : Visibility.Collapsed;
+        glyph.Visibility = showCount ? Visibility.Collapsed : Visibility.Visible;
     }
 
 

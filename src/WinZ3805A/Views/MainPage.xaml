@@ -78,21 +78,6 @@
                                        Text="coasting"
                                        Visibility="Collapsed" />
 
-                <!--
-                    §9.6.2 gives compact mode "mode text and satellite count only", and the count
-                    lives in the readout row that compact mode hides. So it is said again here, in
-                    the same words the tile uses and from the same view-model property - one fact,
-                    two places to draw it, and no second source to drift from.
-
-                    Not a smaller readout tile: §9.6.3 is explicit that compact is a reduced content
-                    mode and not a reduced density one, so this is body text beside body text rather
-                    than a shrunken version of anything.
-                -->
-                <TextBlock x:Name="CompactSatellitesText"
-                           Style="{StaticResource WzBodyTextStyle}"
-                           TextWrapping="Wrap"
-                           Foreground="{ThemeResource WzTextSecondaryBrush}"
-                           Visibility="Collapsed" />
             </StackPanel>
         </Grid>
 
@@ -480,7 +465,6 @@
                         <Setter Target="ClockRow.Visibility" Value="Collapsed" />
                         <Setter Target="CoastingPill.Visibility" Value="Collapsed" />
                         <Setter Target="FooterRow.Visibility" Value="Collapsed" />
-                        <Setter Target="CompactSatellitesText.Visibility" Value="Visible" />
                     </VisualState.Setters>
                 </VisualState>
             </VisualStateGroup>

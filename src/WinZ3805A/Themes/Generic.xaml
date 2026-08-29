@@ -395,35 +395,6 @@
                         </Grid>
 
                         <VisualStateManager.VisualStateGroups>
-                            <VisualStateGroup x:Name="SizeStates">
-                                <VisualState x:Name="Small">
-                                    <VisualState.Setters>
-                                        <Setter Target="PART_ValueText.Style" Value="{ThemeResource WzReadoutSmallTextStyle}" />
-                                        <Setter Target="PART_ReserveText.Style" Value="{ThemeResource WzReadoutSmallTextStyle}" />
-                                        <Setter Target="PART_UnitText.Style" Value="{ThemeResource WzReadoutSmallTextStyle}" />
-                                        <Setter Target="PART_FractionText.Style" Value="{ThemeResource WzReadoutSmallTextStyle}" />
-                                        <Setter Target="PART_PointText.Style" Value="{ThemeResource WzReadoutSmallTextStyle}" />
-                                    </VisualState.Setters>
-                                </VisualState>
-                                <VisualState x:Name="Medium">
-                                    <VisualState.Setters>
-                                        <Setter Target="PART_ValueText.Style" Value="{ThemeResource WzReadoutMediumTextStyle}" />
-                                        <Setter Target="PART_ReserveText.Style" Value="{ThemeResource WzReadoutMediumTextStyle}" />
-                                        <Setter Target="PART_UnitText.Style" Value="{ThemeResource WzReadoutMediumTextStyle}" />
-                                        <Setter Target="PART_FractionText.Style" Value="{ThemeResource WzReadoutMediumTextStyle}" />
-                                        <Setter Target="PART_PointText.Style" Value="{ThemeResource WzReadoutMediumTextStyle}" />
-                                    </VisualState.Setters>
-                                </VisualState>
-                                <VisualState x:Name="Large">
-                                    <VisualState.Setters>
-                                        <Setter Target="PART_ValueText.Style" Value="{ThemeResource WzReadoutLargeTextStyle}" />
-                                        <Setter Target="PART_ReserveText.Style" Value="{ThemeResource WzReadoutLargeTextStyle}" />
-                                        <Setter Target="PART_UnitText.Style" Value="{ThemeResource WzReadoutLargeTextStyle}" />
-                                        <Setter Target="PART_FractionText.Style" Value="{ThemeResource WzReadoutLargeTextStyle}" />
-                                        <Setter Target="PART_PointText.Style" Value="{ThemeResource WzReadoutLargeTextStyle}" />
-                                    </VisualState.Setters>
-                                </VisualState>
-                            </VisualStateGroup>
                         </VisualStateManager.VisualStateGroups>
                     </StackPanel>
                 </ControlTemplate>
@@ -486,12 +457,35 @@
                                    AutomationProperties.AccessibilityView="Raw"
                                    Text="&#xE8CD;" />
 
+                        <!--
+                            §9.6.2's tracked-satellite count, shown INSTEAD of the glyph in compact
+                            (#279). G1 asks for mode and count legible at two metres, and §9.5.3's
+                            token table already describes this centre as holding a value.
+
+                            A separate element rather than reusing Glyph, because the two want
+                            different fonts: the glyph is Segoe Fluent Icons and the count is lining
+                            figures in the body face. Every mode state below sets BOTH foregrounds,
+                            so the two can never disagree about the state's colour.
+
+                            Raw to automation, like the glyph. The medallion's automation name is
+                            built as a whole sentence in code and already carries the count; a
+                            screen reader finding a bare numeral here as well would hear it twice.
+                        -->
+                        <TextBlock x:Name="Count"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   FontWeight="SemiBold"
+                                   Foreground="{ThemeResource WzNeutralBrush}"
+                                   AutomationProperties.AccessibilityView="Raw"
+                                   Visibility="Collapsed" />
+
                         <VisualStateManager.VisualStateGroups>
                             <VisualStateGroup x:Name="ModeStates">
                                 <VisualState x:Name="Locked">
                                     <VisualState.Setters>
                                         <Setter Target="Glyph.Text" Value="&#xE73E;" />
                                         <Setter Target="Glyph.Foreground" Value="{ThemeResource WzSuccessBrush}" />
+                                        <Setter Target="Count.Foreground" Value="{ThemeResource WzSuccessBrush}" />
                                         <Setter Target="PART_Ring.Stroke" Value="{ThemeResource WzSuccessBrush}" />
                                     </VisualState.Setters>
                                 </VisualState>
@@ -499,6 +493,7 @@
                                     <VisualState.Setters>
                                         <Setter Target="Glyph.Text" Value="&#xE72C;" />
                                         <Setter Target="Glyph.Foreground" Value="{ThemeResource WzCautionBrush}" />
+                                        <Setter Target="Count.Foreground" Value="{ThemeResource WzCautionBrush}" />
                                         <Setter Target="PART_Ring.Stroke" Value="{ThemeResource WzCautionBrush}" />
                                     </VisualState.Setters>
                                 </VisualState>
@@ -506,6 +501,7 @@
                                     <VisualState.Setters>
                                         <Setter Target="Glyph.Text" Value="&#xE769;" />
                                         <Setter Target="Glyph.Foreground" Value="{ThemeResource WzCautionBrush}" />
+                                        <Setter Target="Count.Foreground" Value="{ThemeResource WzCautionBrush}" />
                                         <Setter Target="PART_Ring.Stroke" Value="{ThemeResource WzCautionBrush}" />
                                     </VisualState.Setters>
                                 </VisualState>
@@ -513,6 +509,7 @@
                                     <VisualState.Setters>
                                         <Setter Target="Glyph.Text" Value="&#xE7BA;" />
                                         <Setter Target="Glyph.Foreground" Value="{ThemeResource WzCriticalBrush}" />
+                                        <Setter Target="Count.Foreground" Value="{ThemeResource WzCriticalBrush}" />
                                         <Setter Target="PART_Ring.Stroke" Value="{ThemeResource WzCriticalBrush}" />
                                     </VisualState.Setters>
                                 </VisualState>
@@ -520,6 +517,7 @@
                                     <VisualState.Setters>
                                         <Setter Target="Glyph.Text" Value="&#xE823;" />
                                         <Setter Target="Glyph.Foreground" Value="{ThemeResource WzNeutralBrush}" />
+                                        <Setter Target="Count.Foreground" Value="{ThemeResource WzNeutralBrush}" />
                                         <Setter Target="PART_Ring.Stroke" Value="{ThemeResource WzNeutralBrush}" />
                                     </VisualState.Setters>
                                 </VisualState>
@@ -527,6 +525,7 @@
                                     <VisualState.Setters>
                                         <Setter Target="Glyph.Text" Value="&#xE7E8;" />
                                         <Setter Target="Glyph.Foreground" Value="{ThemeResource WzNeutralBrush}" />
+                                        <Setter Target="Count.Foreground" Value="{ThemeResource WzNeutralBrush}" />
                                         <Setter Target="PART_Ring.Stroke" Value="{ThemeResource WzNeutralBrush}" />
                                     </VisualState.Setters>
                                 </VisualState>
@@ -534,6 +533,7 @@
                                     <VisualState.Setters>
                                         <Setter Target="Glyph.Text" Value="&#xE8CD;" />
                                         <Setter Target="Glyph.Foreground" Value="{ThemeResource WzNeutralBrush}" />
+                                        <Setter Target="Count.Foreground" Value="{ThemeResource WzNeutralBrush}" />
                                         <Setter Target="PART_Ring.Stroke" Value="{ThemeResource WzNeutralBrush}" />
                                     </VisualState.Setters>
                                 </VisualState>
@@ -553,23 +553,6 @@
                                 Standard, at 36, is a size nothing currently asks for. It is left
                                 alone rather than adjusted to match a rule §9.9 does not state for it.
                             -->
-                            <VisualStateGroup x:Name="SizeStates">
-                                <VisualState x:Name="Compact">
-                                    <VisualState.Setters>
-                                        <Setter Target="Glyph.FontSize" Value="40" />
-                                    </VisualState.Setters>
-                                </VisualState>
-                                <VisualState x:Name="Standard">
-                                    <VisualState.Setters>
-                                        <Setter Target="Glyph.FontSize" Value="36" />
-                                    </VisualState.Setters>
-                                </VisualState>
-                                <VisualState x:Name="Large">
-                                    <VisualState.Setters>
-                                        <Setter Target="Glyph.FontSize" Value="56" />
-                                    </VisualState.Setters>
-                                </VisualState>
-                            </VisualStateGroup>
                         </VisualStateManager.VisualStateGroups>
                     </Grid>
                 </ControlTemplate>
