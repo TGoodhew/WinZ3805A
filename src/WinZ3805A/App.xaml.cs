@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using System.Runtime.InteropServices;
 
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 // Aliased: Windows.ApplicationModel also declares AppInstance, and the two are unrelated. The
 // AppLifecycle one is the Windows App SDK redirection API; the other is the old UWP multi-instance
 // type, which does not redirect.
@@ -40,6 +41,14 @@ public partial class App : Application
 
     private ServiceProvider? _services;
     private Window? _window;
+
+    /// <summary>True once the user has asked to exit, so the close handler stops intercepting (#280).</summary>
+    /// <remarks>
+    /// Without it, Exit from the tray menu would close the window, be caught by the close-to-tray
+    /// handler, and hide it again - an application that cannot be quit by the one affordance added
+    /// to let it be quit.
+    /// </remarks>
+    private bool _exiting;
 
     /// <summary>Whether <see cref="ApplyAccent"/> has already subscribed to theme changes.</summary>
     private bool _accentFollowsTheme;
@@ -104,7 +113,16 @@ public partial class App : Application
 
         _window = new MainWindow(_services);
         _window.Closed += OnMainWindowClosed;
+
+        // #280's start-minimised. Activate() is still called first: a window that has never been
+        // activated has no AppWindow to hide, and skipping activation leaves it in a state where a
+        // later show does not reliably present it.
         _window.Activate();
+
+        if (StartsMinimised())
+        {
+            HideWindow();
+        }
 
         // The other half of #46. Redirecting an activation delivers it here and does nothing else -
         // without this the second launch exits silently and the user, who just double-clicked the
@@ -223,6 +241,9 @@ public partial class App : Application
             // one that the window does not already do, and every command worth reaching goes
             // through §8's tiers rather than a shell context menu.
             _tray.Activated += (_, _) => _window?.Activate();
+
+            // #280's only way out, once the close button no longer exits.
+            _tray.ExitRequested += (_, _) => _window?.DispatcherQueue.TryEnqueue(RequestExit);
 
             _services.GetService<ILoggerFactory>()?.CreateLogger("Tray")
                 .LogInformation("Tray icon started.");
@@ -494,7 +515,155 @@ public partial class App : Application
     /// released by process exit. <b>When the §10.4 Details window lands this needs a window count</b>
     /// — closing Main while Details is open must not take the session with it.
     /// </remarks>
+    /// <summary>
+    /// Closing the window hides it and keeps the application running (#280).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>This is what makes the tray icon and P1-9's notifications worth having.</b> Before it,
+    /// closing the window ended the process, so both worked only while a window was open somewhere
+    /// - the case they are least needed for. §9.1's user leaves this docked beside a spectrum
+    /// analyser for weeks, and a close button that stops the polling stops it exactly when they
+    /// were trying to get the window out of the way.
+    /// </para>
+    /// <para>
+    /// <b>The user is told once, and only once.</b> Silently turning close into hide is the
+    /// well-known way to annoy people, so the first close explains itself and offers the exit they
+    /// may have meant. <c>HasSeenCloseToTrayNotice</c> remembers that it has been said.
+    /// </para>
+    /// <para>
+    /// Guarded whole, falling through to exiting. A preference store that will not load must not be
+    /// able to trap someone in an application they cannot close.
+    /// </para>
+    /// </remarks>
     private async void OnMainWindowClosed(object sender, WindowEventArgs args)
+    {
+        try
+        {
+            if (!_exiting && args is not null && KeepsRunningWhenClosed())
+            {
+                // Cancels the close, so the window survives and its XamlRoot stays valid.
+                args.Handled = true;
+
+                // EXPLAINED BEFORE HIDING, and the order is the whole point. The first draft hid
+                // the window and then showed the notice on its XamlRoot, reasoning that the close
+                // should feel immediate - which produces a dialog over a window nobody can see.
+                // Testing found HasSeenCloseToTrayNotice saved true with the notice never
+                // displayed: the one telling the user runs out, spent, without telling anyone.
+                if (await ExplainCloseToTrayOnceAsync())
+                {
+                    // They meant to quit. The close is already cancelled, so ending the process is
+                    // this method's job rather than a second Close() re-entering it.
+                    await ShutDownAsync();
+                    Exit();
+                    return;
+                }
+
+                HideWindow();
+                return;
+            }
+        }
+        catch (Exception)
+        {
+            // Deliberately broad and deliberately silent, then falls through to exiting. The one
+            // outcome that must not be reachable here is an application the user cannot close.
+        }
+
+        await ShutDownAsync();
+    }
+
+    /// <summary>Whether the close button should hide rather than exit.</summary>
+    private bool KeepsRunningWhenClosed() =>
+        _services?.GetService<IAdvancedPreferenceStore>()?.Load().KeepRunningWhenClosed ?? false;
+
+    /// <summary>Whether launch should go straight to the notification area.</summary>
+    private bool StartsMinimised()
+    {
+        try
+        {
+            return _services?.GetService<IAdvancedPreferenceStore>()?.Load().StartMinimised ?? false;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Hides the window without ending the process.</summary>
+    private void HideWindow() => _window?.AppWindow?.Hide();
+
+    /// <summary>
+    /// Says once that closing did not exit, and offers the exit the user may have meant.
+    /// </summary>
+    /// <remarks>
+    /// Shown <b>while the window is still visible</b>, and hidden only afterwards. A dialog put up
+    /// over a window that has already gone is a dialog nobody reads, which is worse than not
+    /// explaining at all - it spends the one chance and leaves the user just as surprised.
+    /// </remarks>
+    /// <returns><see langword="true"/> if the user chose to exit rather than keep running.</returns>
+    private async Task<bool> ExplainCloseToTrayOnceAsync()
+    {
+        if (_services?.GetService<IAdvancedPreferenceStore>() is not IAdvancedPreferenceStore store)
+        {
+            return false;
+        }
+
+        AdvancedPreferences preferences = store.Load();
+        if (preferences.HasSeenCloseToTrayNotice || _window?.Content?.XamlRoot is not XamlRoot root)
+        {
+            return false;
+        }
+
+        // Saved before it is shown, not after. A dialog that throws, or a process killed while it
+        // is up, must not leave the notice owed - being told twice is the thing this exists to
+        // prevent.
+        store.Save(preferences with { HasSeenCloseToTrayNotice = true });
+
+        ContentDialog dialog = new()
+        {
+            XamlRoot = root,
+            // The TITLE carries what happened, so the body only has to carry what to do.
+            // A dialog constrained by a small host window has room for about two lines,
+            // and a notice shown once should not need scrolling to be read.
+            Title = "Still running and still polling",
+
+            // A SCROLLING TextBlock, not the bare string this started as, and short.
+            // Two things clip a ContentDialog here. A bare string goes into a single-line
+            // presenter, so only the first paragraph survived. And a dialog cannot exceed
+            // its host window - which is 592 px tall as this was tested and can be §9.6.2's
+            // 380 x 144 in compact, so ANY long body is clipped on a small window however
+            // it is wrapped. Both were found by screenshotting it rather than by reading it
+            // back, which reported the dialog present and said nothing about the half of it
+            // that was off-screen.
+            //
+            // So: two sentences, and a ScrollViewer as the backstop for the case where even
+            // that does not fit.
+            Content = new ScrollViewer
+            {
+                Content = new TextBlock
+                {
+                    TextWrapping = TextWrapping.Wrap,
+                    Text = "Click the notification area icon to reopen this window, or "
+                        + "right-click it to exit.",
+                },
+            },
+            PrimaryButtonText = "Keep running",
+            CloseButtonText = "Exit now",
+            DefaultButton = ContentDialogButton.Primary,
+        };
+
+        return await dialog.ShowAsync() == ContentDialogResult.None;
+    }
+
+    /// <summary>Exits for real, from the tray menu or the first-run notice (#280).</summary>
+    public void RequestExit()
+    {
+        _exiting = true;
+        _window?.Close();
+    }
+
+    /// <summary>Releases everything the application owns.</summary>
+    private async Task ShutDownAsync()
     {
         _tray?.Dispose();
 

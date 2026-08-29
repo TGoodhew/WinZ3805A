@@ -58,6 +58,8 @@ public sealed partial class SettingsPage : Page
         ConsoleSwitch.IsOn = stored.IsConsoleEnabled;
         ExperimentalSwitch.IsOn = stored.AreExperimentalQueriesEnabled;
         LockNotificationsSwitch.IsOn = stored.AreLockNotificationsEnabled;
+        KeepRunningSwitch.IsOn = stored.KeepRunningWhenClosed;
+        StartMinimisedSwitch.IsOn = stored.StartMinimised;
 
         _appearance = App.Services?.GetService<IAppearancePreferenceStore>();
         SystemAccentSwitch.IsOn = Appearance.UseSystemAccent;
@@ -146,26 +148,51 @@ public sealed partial class SettingsPage : Page
 
     private void OnLockNotificationsToggled(object sender, RoutedEventArgs e) => Save();
 
+    private void OnKeepRunningToggled(object sender, RoutedEventArgs e) => Save();
+
+    private void OnStartMinimisedToggled(object sender, RoutedEventArgs e) => Save();
+
+    /// <summary>Quits, without needing the notification area to be reachable (#280).</summary>
+    /// <remarks>
+    /// No confirmation. Polling is not a transaction and <c>trend.db</c> commits as it goes, so
+    /// there is nothing to lose by stopping - and a prompt on the way out of an application whose
+    /// close button already asks a question once would be the second interruption in the same job.
+    /// </remarks>
+    private void OnExitClicked(object sender, RoutedEventArgs e) =>
+        (Application.Current as App)?.RequestExit();
+
     /// <summary>
-    /// Writes both switches, because the record is written whole.
+    /// Writes every switch at once, onto the record that is already stored.
     /// </summary>
     /// <remarks>
-    /// Saving one field at a time would mean constructing the record from one switch and the
-    /// default for the other, which silently turns the other one off. The record is small; writing
-    /// it whole is both simpler and the only version that is correct.
+    /// <para>
+    /// Saving one field at a time would construct the record from one switch and the defaults for
+    /// the others, silently turning them off. The original note said as much and built a whole new
+    /// record from the switches, which was correct while every field <i>was</i> a switch.
+    /// </para>
+    /// <para>
+    /// <b>It stopped being correct with #280.</b> <c>HasSeenCloseToTrayNotice</c> is a fact the
+    /// application remembers rather than a preference anyone sets, so no switch carries it - and a
+    /// freshly constructed record would reset it to false on every settings change, re-showing a
+    /// notice whose entire purpose is to appear once. So this loads and applies <c>with</c>:
+    /// switches overwrite their own fields and nothing else is touched, which stays right as fields
+    /// are added.
+    /// </para>
     /// </remarks>
     private void Save()
     {
-        if (!_ready)
+        if (!_ready || _preferences is null)
         {
             return;
         }
 
-        _preferences?.Save(new AdvancedPreferences
+        _preferences.Save(_preferences.Load() with
         {
             IsConsoleEnabled = ConsoleSwitch.IsOn,
             AreExperimentalQueriesEnabled = ExperimentalSwitch.IsOn,
             AreLockNotificationsEnabled = LockNotificationsSwitch.IsOn,
+            KeepRunningWhenClosed = KeepRunningSwitch.IsOn,
+            StartMinimised = StartMinimisedSwitch.IsOn,
         });
 
         // The notifier reads its own switch rather than being told, so this is one call whatever

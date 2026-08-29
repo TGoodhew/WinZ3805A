@@ -38,6 +38,12 @@ public sealed class TrayIcon : IDisposable
     private const uint NifIcon = 0x00000002;
     private const uint NifTip = 0x00000004;
     private const uint WmLeftButtonUp = 0x0202;
+    private const uint WmRightButtonUp = 0x0205;
+    private const uint WmCommand = 0x0111;
+
+    // Menu item ids. Arbitrary, but must not be 0 - TrackPopupMenu returns 0 for "dismissed".
+    private const uint MenuOpen = 1;
+    private const uint MenuExit = 2;
     private const int SmallIconMetric = 49;
     private const int ColorWindowText = 8;
 
@@ -89,6 +95,14 @@ public sealed class TrayIcon : IDisposable
 
         Update(ReceiverMode.Disconnected);
     }
+
+    /// <summary>Raised when Exit is chosen from the menu (#280).</summary>
+    /// <remarks>
+    /// The only way out of the application once the close button no longer exits. Raised rather
+    /// than acted on here: this class knows about an icon, not about a service provider or a
+    /// receiver that may be mid-transaction.
+    /// </remarks>
+    public event EventHandler? ExitRequested;
 
     /// <summary>Raised when the user clicks the icon.</summary>
     public event EventHandler? Activated;
@@ -246,11 +260,83 @@ public sealed class TrayIcon : IDisposable
         return handle;
     }
 
+    /// <summary>
+    /// The right-click menu: Open and Exit, and nothing else (#280).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>This class had no menu until close-to-tray landed, and the reason it had none was
+    /// good</b> - "there is nothing to put on one that the window does not already do". That stops
+    /// being true the moment the close button no longer exits, because an application with no
+    /// window and no menu cannot be quit except through Task Manager. The menu exists to carry
+    /// <i>Exit</i>; <i>Open</i> is there because one item is a worse affordance than two, and it
+    /// duplicates the left-click that already works.
+    /// </para>
+    /// <para>
+    /// <b>Nothing that touches the receiver goes here.</b> Every command reaches the device through
+    /// §8's tiers with §8.3's consequence text, and a shell context menu is not a place any of that
+    /// can be shown.
+    /// </para>
+    /// <para>
+    /// <b>SetForegroundWindow and the trailing PostMessage are required, not decorative.</b>
+    /// Without them a popup menu shown from a notification icon does not dismiss when the user
+    /// clicks away - a documented Win32 quirk, and the reason both calls are here.
+    /// </para>
+    /// </remarks>
+    private void ShowMenu()
+    {
+        nint menu = CreatePopupMenu();
+        if (menu == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            AppendMenu(menu, MfString, MenuOpen, "&Open");
+            AppendMenu(menu, MfSeparator, 0, null);
+            AppendMenu(menu, MfString, MenuExit, "E&xit");
+
+            if (!GetCursorPos(out POINT cursor))
+            {
+                return;
+            }
+
+            SetForegroundWindow(_window);
+            TrackPopupMenu(menu, TpmRightButton | TpmBottomAlign, cursor.X, cursor.Y, 0, _window, 0);
+            PostMessage(_window, 0, 0, 0);
+        }
+        finally
+        {
+            DestroyMenu(menu);
+        }
+    }
+
     private nint HandleMessage(nint window, uint message, nint wParam, nint lParam)
     {
         if (message == CallbackMessage && (uint)lParam == WmLeftButtonUp)
         {
             Activated?.Invoke(this, EventArgs.Empty);
+        }
+        else if (message == CallbackMessage && (uint)lParam == WmRightButtonUp)
+        {
+            ShowMenu();
+        }
+        else if (message == WmCommand)
+        {
+            switch ((uint)wParam & 0xFFFF)
+            {
+                case MenuOpen:
+                    Activated?.Invoke(this, EventArgs.Empty);
+                    break;
+
+                case MenuExit:
+                    ExitRequested?.Invoke(this, EventArgs.Empty);
+                    break;
+
+                default:
+                    break;
+            }
         }
         else if (message == _taskbarCreated)
         {
@@ -413,6 +499,40 @@ public sealed class TrayIcon : IDisposable
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool DestroyIcon(nint icon);
+
+    [DllImport("user32.dll")]
+    private static extern nint CreatePopupMenu();
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern bool AppendMenu(nint menu, uint flags, uint id, string? item);
+
+    [DllImport("user32.dll")]
+    private static extern bool DestroyMenu(nint menu);
+
+    [DllImport("user32.dll")]
+    private static extern bool TrackPopupMenu(
+        nint menu, uint flags, int x, int y, int reserved, nint window, nint rectangle);
+
+    [DllImport("user32.dll")]
+    private static extern bool GetCursorPos(out POINT point);
+
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(nint window);
+
+    [DllImport("user32.dll")]
+    private static extern bool PostMessage(nint window, uint message, nint wParam, nint lParam);
+
+    private const uint MfString = 0x0000;
+    private const uint MfSeparator = 0x0800;
+    private const uint TpmRightButton = 0x0002;
+    private const uint TpmBottomAlign = 0x0020;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct POINT
+    {
+        public int X;
+        public int Y;
+    }
 
     /// <summary>Releases an HICON built by <see cref="CreateIcon"/> (#274).</summary>
     /// <remarks>

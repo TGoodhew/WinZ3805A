@@ -143,6 +143,63 @@
                 </StackPanel>
             </Border>
 
+            <!--
+                §10.3's close behaviour (#280). Its own card rather than a row under Alerts: this is
+                about whether the application is running at all, which is a larger claim than
+                whether it speaks up.
+            -->
+            <Border Style="{ThemeResource WzCardStyle}">
+                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Running in the background" />
+
+                    <ToggleSwitch x:Name="KeepRunningSwitch"
+                                  Header="Keep running when I close the window"
+                                  OnContent="On"
+                                  OffContent="Off"
+                                  AutomationProperties.Name="Keep running when the window is closed"
+                                  Toggled="OnKeepRunningToggled" />
+
+                    <TextBlock Style="{ThemeResource WzCaptionTextStyle}"
+                               Foreground="{ThemeResource WzTextTertiaryBrush}"
+                               MaxWidth="{ThemeResource WzProseMaxWidth}"
+                               TextWrapping="Wrap"
+                               Text="On, closing the window leaves the receiver being polled, so the trend keeps filling and the alerts above still reach you. Click the notification area icon to bring the window back, or right-click it and choose Exit. Off, closing the window exits and monitoring stops with it." />
+
+                    <ToggleSwitch x:Name="StartMinimisedSwitch"
+                                  Header="Start in the notification area"
+                                  OnContent="On"
+                                  OffContent="Off"
+                                  AutomationProperties.Name="Start in the notification area with no window"
+                                  Toggled="OnStartMinimisedToggled" />
+
+                    <TextBlock x:Name="StartMinimisedNote"
+                               Style="{ThemeResource WzCaptionTextStyle}"
+                               Foreground="{ThemeResource WzTextTertiaryBrush}"
+                               MaxWidth="{ThemeResource WzProseMaxWidth}"
+                               TextWrapping="Wrap"
+                               Text="Starts with no window, monitoring from the notification area." />
+
+                    <!--
+                        An exit that does not depend on the notification area (#280).
+
+                        The tray menu is the documented way out once the close button stops
+                        exiting - but Windows 11 does not promote a newly registered tray icon.
+                        It goes into the hidden overflow, and a user who has not dragged it out
+                        cannot right-click what they cannot see. Leaving the tray as the ONLY exit
+                        would mean an application quittable in principle and, on a fresh install,
+                        by Task Manager in practice.
+
+                        So the application can always be quit from its own surface. §13's
+                        acceptance asks for a discoverable, non-Task-Manager way out, and this is
+                        the one that does not depend on shell behaviour nobody here controls.
+                    -->
+                    <Button x:Name="ExitButton"
+                            Content="Exit WinZ3805A"
+                            Click="OnExitClicked"
+                            ToolTipService.ToolTip="Stop monitoring and close the application" />
+                </StackPanel>
+            </Border>
+
             <!-- ============================== Not built yet ============================ -->
             <Border Style="{ThemeResource WzCardStyle}">
                 <StackPanel Spacing="{ThemeResource WzSpaceSm}">
