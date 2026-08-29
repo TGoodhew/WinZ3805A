@@ -229,6 +229,17 @@
     <!-- invisible but still measured, so the cell is always as wide as the widest     -->
     <!-- value this quantity can produce and the layout never reflows as digits come   -->
     <!-- and go. Both are right-aligned, so the ones column stays put (§9.5.3 rule 5). -->
+    <!--                                                                              -->
+    <!-- THE LABEL IS RIGHT-ALIGNED TOO, and that is deliberate. It was left-aligned   -->
+    <!-- until 28 Aug 2026, which put it on a different axis from its own number: the  -->
+    <!-- reserve for 1 PPS TI is wide enough for -9999.9, so the value sat far to the  -->
+    <!-- right of the words naming it and the tile read as two unrelated pieces.       -->
+    <!--                                                                              -->
+    <!-- The alternative was to left-align the number instead, which lines the tile up -->
+    <!-- the more familiar way round but moves the ones column every time a digit is   -->
+    <!-- gained or lost - the apparent motion rule 1 exists to prevent. The axis the   -->
+    <!-- eye returns to on a glanced-at readout is the one under the last digit, so    -->
+    <!-- that is the one both parts are hung from.                                     -->
     <!-- =========================================================================== -->
 
     <Style TargetType="controls:ReadoutTile">
@@ -242,9 +253,16 @@
                         <TextBlock x:Name="LabelText"
                                    Style="{ThemeResource WzCaptionTextStyle}"
                                    Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   HorizontalAlignment="Right"
                                    Text="{TemplateBinding Label}" />
 
-                        <Grid HorizontalAlignment="Left">
+                        <!--
+                            Stretch, not Left. The Grid is sized by the reserve, and the StackPanel
+                            is sized by whichever of the label and the reserve is wider; stretching
+                            makes both children span that full width so the two right edges are the
+                            same edge. Left-aligning the Grid was what let the axes diverge.
+                        -->
+                        <Grid HorizontalAlignment="Stretch">
                             <!--
                                 Opacity 0 rather than Visibility Collapsed: a collapsed element is
                                 not measured, and being measured is this element's entire job.
