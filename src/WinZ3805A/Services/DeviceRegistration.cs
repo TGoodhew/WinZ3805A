@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
+using WinZ3805A.Device.Drivers;
 using WinZ3805A.Device.Transport;
 
 namespace WinZ3805A.Services;
@@ -42,10 +43,18 @@ public static class DeviceRegistration
             TimeProvider time = provider.GetRequiredService<TimeProvider>();
             ILoggerFactory? loggers = provider.GetService<ILoggerFactory>();
 
+            // Every registered driver, in registration order — which the session treats as
+            // priority order, so the first is the fallback for an identity nothing claims (#287).
+            // Adding a receiver family is one AddSingleton<IReceiverDriver> in the composition
+            // root; nothing here changes. An empty list falls through to the session's own
+            // default, so a test composition that registers no driver keeps working.
+            IReadOnlyList<IReceiverDriver> drivers = [.. provider.GetServices<IReceiverDriver>()];
+
             DeviceSessionService session = new(
                 transportFactory,
                 time,
-                loggers?.CreateLogger<DeviceSessionService>());
+                loggers?.CreateLogger<DeviceSessionService>(),
+                drivers.Count > 0 ? drivers : null);
 
             ReceiverStateStore store = new(time);
 
