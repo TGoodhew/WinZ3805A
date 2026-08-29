@@ -823,6 +823,33 @@ Charting colour is a separate concern from UI colour and must not reuse semantic
 | 7 | `#085AA6` blue | `#719BEA` |
 | 8 | `#4A4A4A` graphite | `#C4C4C4` |
 
+> **A chart drawing more than one series on a shared axis must carry a second channel** — a dash
+> pattern per series, plus direct labelling of each trace — **in every theme, not only in high
+> contrast.** Colour is the first channel and it is not sufficient on its own.
+>
+> **Under high contrast it is not merely insufficient, it is absent.** The series tokens there
+> alternate between two `SystemColor*` values, because the user's chosen scheme supplies two and
+> not eight. Eight traces cannot be told apart by colour at all, and no re-derivation can change
+> that — the values are the user's, not this application's. `build/Test-SeriesSeparation.ps1` says
+> so where it stops: *"HighContrast is not checked: its series alternate between two SystemColor\*
+> values, so eight traces cannot be separated by colour there at all."*
+>
+> A gate cannot enforce this one, because whether a chart draws two series is a fact about a chart
+> rather than about a token. It is written here so that the requirement arrives with the work
+> instead of after it.
+>
+> **Nothing in the application draws more than one series on an axis today.** `TrendChart` takes a
+> single `Samples` collection, and the two instances on the Timing page sit on separate axes with
+> their own scales. The rule therefore binds the next multi-series chart rather than describing
+> anything that exists — which is the point of recording it now, while there is no code to argue
+> with.
+>
+> **Amended 29 Aug 2026, closing #87.** That issue found four pairs collapsing under simulated
+> dichromacy — series 1 against 7 at **3.1 ΔE₀₀** under deuteranopia, which is one colour to a
+> deuteranope. The palette was re-derived on 22 Aug and the gate now measures every one of the 28
+> pairs in both themes under three vision models, worst case **10.4 ΔE₀₀**. What #87 could not
+> settle by re-derivation was high contrast, and this paragraph is that answer.
+
 Assign by index in a stable order (PRN ascending), never by hash — a satellite must keep its colour across sessions. A hue belongs to an index in **both** themes, so series 5 is the teal one wherever it is drawn; a satellite must not change identity when the desktop theme does.
 
 > **⚠ Why this ramp replaced the Okabe–Ito one, 22 Aug 2026 (#87, #177).**
@@ -862,7 +889,7 @@ The neutral midpoint must map to exactly 0 ns, not to the data midpoint. A TI ch
 
 **Verification.** `build/Test-SeriesSeparation.ps1` gates CI on the categorical palette: all 28 pairs, both themes, three vision models, plus the hue-gap and semantic-clearance rules above. `build/palette/` holds the derivation, and `build/palette/validate.py` checks the colour maths against the figures published on #87 before anything trusts it.
 
-**HighContrast is not checked and cannot be.** Its series alternate between `SystemColorWindowTextColor` and `SystemColorHighlightColor` — the user's own two colours — so **eight traces cannot be separated by colour there at all.** A pass from the gate is not a statement that the chart is accessible. A second channel (dash pattern plus direct labelling) is required for HighContrast regardless of what this ramp contains, and is tracked on #87.
+**HighContrast is not checked and cannot be.** Its series alternate between `SystemColorWindowTextColor` and `SystemColorHighlightColor` — the user's own two colours — so **eight traces cannot be separated by colour there at all.** A pass from the gate is not a statement that the chart is accessible. A second channel (dash pattern plus direct labelling) is required for HighContrast regardless of what this ramp contains — **stated as a rule in the categorical palette above** rather than tracked as an open issue, because it binds the next multi-series chart and nothing draws one today (#87 closed 29 Aug 2026).
 
 #### 9.4.5 Contrast floor
 

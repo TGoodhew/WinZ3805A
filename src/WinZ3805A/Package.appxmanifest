@@ -5,6 +5,8 @@
   xmlns:mp="http://schemas.microsoft.com/appx/2014/phone/manifest"
   xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  xmlns:com="http://schemas.microsoft.com/appx/manifest/com/windows10"
+  xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
   IgnorableNamespaces="uap rescap">
 
   <!--
@@ -94,6 +96,36 @@
           Wide310x150Logo="Assets\Wide310x150Logo.png" />
         <uap:SplashScreen Image="Assets\SplashScreen.png" />
       </uap:VisualElements>
+
+      <!--
+        P1-9's notifications did not work before this, on any machine, and failed silently.
+        AppNotificationManager.Default.Register() threw "No COM servers are registered for this
+        app": the Windows App SDK activates a packaged app through a COM server to deliver and
+        route a notification, and without these two declarations there is nothing for it to
+        activate. The exception was caught and logged at Debug, below the captured level, so the
+        feature was simply absent with nothing anywhere saying why.
+
+        The CLSID is this application's own and permanent. Changing it orphans any notification
+        already in the Action Center, because the shell routes an activation by that id.
+      -->
+      <Extensions>
+        <com:Extension Category="windows.comServer">
+          <com:ComServer>
+            <com:ExeServer Executable="WinZ3805A.exe" DisplayName="WinZ3805A">
+              <com:Class Id="2E20441A-C498-402F-B109-61BE8672CB1C" DisplayName="WinZ3805A notifications" />
+            </com:ExeServer>
+          </com:ComServer>
+        </com:Extension>
+
+        <!--
+          desktop:, not uap:. The uap namespace has a closed enumeration of categories and this is
+          not one of them - it rejects the package outright with 0xC00CE169 rather than ignoring
+          the element, which is the good failure of the two.
+        -->
+        <desktop:Extension Category="windows.toastNotificationActivation">
+          <desktop:ToastNotificationActivation ToastActivatorCLSID="2E20441A-C498-402F-B109-61BE8672CB1C" />
+        </desktop:Extension>
+      </Extensions>
     </Application>
   </Applications>
 

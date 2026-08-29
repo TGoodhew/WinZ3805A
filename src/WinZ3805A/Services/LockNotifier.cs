@@ -188,7 +188,11 @@ public sealed class AppNotificationSink : IToastSink
         }
         catch (Exception exception)
         {
-            _logger.LogDebug(exception, "Notifications are unavailable; the feature is off.");
+            // WARNING, not Debug. This is a shipped feature turning itself off, and it stayed
+            // broken from the first release to 28 Aug 2026 precisely because the one line that
+            // explained it sat below the captured level. A feature that silently does nothing must
+            // say so loudly enough to be read.
+            _logger.LogWarning(exception, "Notifications are unavailable; P1-9 is off for this session.");
         }
     }
 
