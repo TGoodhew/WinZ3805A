@@ -10,10 +10,13 @@ Z3801A, 58503A/B, 59551A and Z3816A — over RS-232. It is built with WinUI 3 on
 .NET 10, runs on Windows 10 and 11, and supports other receivers through a
 driver interface.
 
+- [How to use](how-to-use.md) — every window and control, every keyboard
+  shortcut, and how to get the window back from the notification area
 - [Privacy policy](privacy.md)
 - [Source code and issues](https://github.com/TGoodhew/WinZ3805A)
 
-This site carries the privacy policy the Microsoft Store listing points at, and
+This site carries the two documents a person using the application needs — the
+user's guide and the privacy policy the Microsoft Store listing points at — and
 publishes nothing else. The project's other documents live in the repository,
 where a link into the source resolves:
 
