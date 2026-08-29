@@ -34,7 +34,7 @@
 
         <!--
             §9.7.3: 48 px, icon and name at the left, the connection pill centred, and Refresh /
-            Export / Settings at the right. Nothing else is permitted in the bar.
+            Export / Settings / Help at the right (#312). Nothing else is permitted in the bar.
 
             Caption-button clearance is not set here and must never be: the TitleBar control reads
             AppWindowTitleBar.RightInset/LeftInset itself, which is what makes it correct in RTL and
@@ -88,6 +88,17 @@
                             AutomationProperties.Name="Settings"
                             ToolTipService.ToolTip="Settings (Ctrl+,)">
                         <FontIcon Glyph="&#xE713;" FontSize="16" />
+                    </Button>
+                    <!-- §9.7.5's F1, as a button too, so the guide is findable by a person who does not know the key (#312). -->
+                    <Button x:Name="HelpButton"
+                            MinWidth="32"
+                            MinHeight="32"
+                            Click="OnHelpClicked"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            AutomationProperties.Name="Help"
+                            ToolTipService.ToolTip="Help (F1)">
+                        <FontIcon Glyph="&#xE897;" FontSize="16" />
                     </Button>
                 </StackPanel>
             </TitleBar.RightHeader>

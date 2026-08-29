@@ -173,6 +173,12 @@ public sealed partial class DetailsWindow : Window
     /// </remarks>
     public event EventHandler? ConnectionRequested;
 
+    /// <summary>
+    /// Raised by <c>F1</c> and the Help button. The main window owns the guide's window, as it
+    /// owns this one, so there is one of it whichever window asked (#312).
+    /// </summary>
+    public event EventHandler? HelpRequested;
+
     /// <summary>The destinations whose real page exists, by tag. The rest fall back to a placeholder.</summary>
     private static readonly IReadOnlyDictionary<string, Type> Pages = new Dictionary<string, Type>
     {
@@ -328,6 +334,9 @@ public sealed partial class DetailsWindow : Window
 
         // VK_OEM_COMMA. VirtualKey has no member for it, and §9.7.5 asks for Ctrl+, by name.
         Add((VirtualKey)188, VirtualKeyModifiers.Control, OpenSettings);
+
+        // §9.7.5's F1: the user's guide (#312).
+        Add(VirtualKey.F1, VirtualKeyModifiers.None, () => HelpRequested?.Invoke(this, EventArgs.Empty));
 
         void Add(VirtualKey key, VirtualKeyModifiers modifiers, Action action)
         {
@@ -609,6 +618,7 @@ public sealed partial class DetailsWindow : Window
         RefreshButton.Foreground = brush;
         ExportButton.Foreground = brush;
         SettingsButton.Foreground = brush;
+        HelpButton.Foreground = brush;
     }
 
     private void OnStatusPillClicked(object sender, RoutedEventArgs e) =>
@@ -619,6 +629,8 @@ public sealed partial class DetailsWindow : Window
     private void OnExportClicked(object sender, RoutedEventArgs e) => ExportCurrentView();
 
     private void OnSettingsClicked(object sender, RoutedEventArgs e) => OpenSettings();
+
+    private void OnHelpClicked(object sender, RoutedEventArgs e) => HelpRequested?.Invoke(this, EventArgs.Empty);
 
     /// <remarks>
     /// F5 takes the full §7.3 sweep ahead of its 10 s cadence. The poller owns both cadences (§12),
