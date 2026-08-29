@@ -983,7 +983,23 @@ This is the part that separates a careful instrument app from a sloppy one, and 
    > same rule, about a fifth of the width.
 4. **Minus sign, not hyphen.** Use U+2212 MINUS SIGN in readouts. A hyphen is optically too short and sits too high next to lining figures. Format with a custom `NumberFormatInfo` where `NegativeSign = "\u2212"`. Raw SCPI text in `WzMonoTextStyle` is exempt — it is reproduced verbatim.
 5. **Right-align numeric table columns**, left-align text columns, and align on the decimal separator where fractional digits vary.
-6. **Fixed decimal places per quantity**, never variable: TI 1 dp, EFC 1 dp, holdover uncertainty 1 dp, C/N integer, percentages 1 dp, **EFC drift rate, scatter and diurnal amplitude 1 dp in ppm of control range** (§10.7.1). A column that changes its precision row to row is unreadable. Where a figure is too small to survive its quantity's precision, **change the unit, not the number of decimals** — the rule is about a reader comparing two lines, and it does not stop applying because a surface is prose. Chart axis labels take the precision their step requires, fixed per chart and not varying with the selected range (§9.10.2).
+6. **Fixed decimal places per quantity**, never variable: TI 1 dp, **EFC 2 dp**, holdover uncertainty 1 dp, C/N integer, percentages 1 dp, **EFC drift rate, scatter and diurnal amplitude 1 dp in ppm of control range** (§10.7.1). A column that changes its precision row to row is unreadable. Where a figure is too small to survive its quantity's precision, **change the unit, not the number of decimals** — the rule is about a reader comparing two lines, and it does not stop applying because a surface is prose. Chart axis labels take the precision their step requires, fixed per chart and not varying with the selected range (§9.10.2).
+
+   > **Amended 29 Aug 2026 (#285): EFC is 2 dp, not 1.** This rule said 1 dp while §10.4's own
+   > wireframe showed `Current: −16.83 %`, and the shipped Timing chart had used 2 dp since it was
+   > built, with the reason written beside it: **at 1 dp, −16.86 and −16.80 render identically**.
+   > EFC is the quantity a user watches for small movement, so a precision that hides movement of
+   > that size defeats the readout.
+   >
+   > The remedy this rule offers — *change the unit, not the number of decimals* — was considered
+   > and not taken **for the instantaneous value**. It is already applied where it fits: §10.7.1
+   > expresses drift rate, scatter and diurnal amplitude in ppm of control range at 1 dp, and those
+   > stay as they are. But EFC as a percentage of control range is what the receiver reports and
+   > what every other surface names, and restating one live readout in ppm while its own drift
+   > figures use it as a different unit would trade a precision problem for a units problem.
+   >
+   > The rule's purpose survives intact: the count is still fixed per quantity, and EFC is 2 dp
+   > **everywhere** — the Overview card, the Timing chart and its axis alike.
 7. **Coordinates in Cascadia Mono**, DMS with fixed field widths, so latitude and longitude align vertically.
 
 **Prose line length** is capped at **72 characters** (`MaxWidth` ≈ 640 px at `WzBodyTextStyle`). Applies to descriptions, confirmation dialog bodies, empty states, and error text.

@@ -198,15 +198,74 @@
                                           Size="Medium" />
 
                     <!--
-                        §10.4 draws a 6-hour trend here. Charting is P1-1 and is blocked on OQ-5
-                        (#38), so the number is shown without a frame around empty space: an empty
-                        chart implies data is on its way, and none is being kept yet.
+                        §10.4's trend (#285). The card carried a placeholder saying this "arrives
+                        with the P1 charting work" from the beginning; the charting (#49), the
+                        blocker (OQ-5, #38) and the trend store (#50) have all been closed for some
+                        time, so it was an unbuilt feature rather than an untidy comment.
+
+                        The range selector is §9.10.2's, with §13's four settings, and it is
+                        INDEPENDENT of the Timing page's rather than shared. §10.4 names six hours
+                        as this card's default and Timing defaults to one, so a single shared
+                        setting would have to discard one of the two specified defaults on every
+                        visit. The two surfaces also do different jobs - this one is glanced at,
+                        Timing is where a reading is examined.
+
+                        Its own GroupName, not Timing's. RadioButton grouping is per visual tree so
+                        the two could not actually collide, but naming it after this page rather
+                        than the quantity means the next chart added here does not silently join a
+                        group it should not be in.
                     -->
-                    <TextBlock Style="{ThemeResource WzCaptionTextStyle}"
+                    <StackPanel Orientation="Horizontal"
+                                Spacing="{ThemeResource WzSpaceXs}">
+                        <RadioButton x:Name="OverviewRange1h" Content="1 h"
+                                     GroupName="OverviewTrendRange"
+                                     Checked="OnRangeChanged" Tag="1" />
+                        <RadioButton x:Name="OverviewRange6h" Content="6 h"
+                                     GroupName="OverviewTrendRange"
+                                     Checked="OnRangeChanged" Tag="6" />
+                        <RadioButton x:Name="OverviewRange24h" Content="24 h"
+                                     GroupName="OverviewTrendRange"
+                                     Checked="OnRangeChanged" Tag="24" />
+                        <RadioButton x:Name="OverviewRange7d" Content="7 d"
+                                     GroupName="OverviewTrendRange"
+                                     Checked="OnRangeChanged" Tag="168" />
+                    </StackPanel>
+
+                    <!--
+                        Same control and the same settings as the Timing page's EFC chart, because
+                        it is the same quantity: Anchoring="Data" because EFC does not meaningfully
+                        return to zero, MinimumSpan so a flat trace does not get magnified into
+                        noise, and Decimals="2".
+
+                        Two, not one. §9.5.3 rule 6 said EFC was 1 dp while §10.4's wireframe showed
+                        -16.83 and this chart's sibling had shipped at 2 dp since it was built -
+                        at 1 dp, -16.86 and -16.80 render identically, which defeats the one
+                        quantity a user watches for small movement. §9.5.3 was amended on
+                        29 Aug 2026 to say 2, so all three now agree.
+
+                        Height matches Timing's 140 px, and nothing adaptive is needed: both pages
+                        live in the Details window inside the same ScrollViewer over a width-capped
+                        StackPanel. §9.6.2's compact and short layouts are the MAIN window's, and
+                        this card is not on it.
+                    -->
+                    <controls:TrendChart x:Name="EfcTrend"
+                                         Height="140"
+                                         Unit="%"
+                                         Anchoring="Data"
+                                         MinimumSpan="0.01"
+                                         Decimals="2"
+                                         AutomationProperties.Name="Oscillator control trend" />
+
+                    <!--
+                        Names the shading in words as well as colour (§9.4.3, A11Y-12), and reports
+                        the count - a 7-day range drawn from four hours of history looks exactly
+                        like one drawn from seven days, and only the count separates them.
+                    -->
+                    <TextBlock x:Name="TrendSummaryText"
+                               Style="{ThemeResource WzCaptionTextStyle}"
                                Foreground="{ThemeResource WzTextTertiaryBrush}"
                                TextWrapping="Wrap"
-                               MaxWidth="{ThemeResource WzProseMaxWidth}"
-                               Text="The trend plot arrives with the P1 charting work." />
+                               MaxWidth="{ThemeResource WzProseMaxWidth}" />
                 </StackPanel>
             </Border>
 
