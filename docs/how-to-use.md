@@ -152,6 +152,7 @@ existing one forward.
 - **Export current view** (`Ctrl+E`) saves what the current page is showing as a file. It is
   disabled on pages that have nothing exportable.
 - **Settings** (`Ctrl+,`) goes to the Settings page.
+- **Help** (`F1`) opens this guide in its own window. `F1` does the same from the main window.
 
 ### The pages
 
@@ -409,6 +410,7 @@ has focus.
 | Details | `F5` | Refresh full status now |
 | Details | `Ctrl+E` | Export the current view |
 | Details | `Ctrl+,` | Settings |
+| Anywhere | `F1` | Open this guide |
 | Anywhere | `Esc` | Cancel a dialog, close a flyout |
 | Anywhere | `Tab`, `Shift+Tab`, arrows | Move between controls; on the sky plot, arrows move between satellites and `Enter` selects |
 

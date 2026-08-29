@@ -1250,7 +1250,7 @@ Pane is **user-collapsible**, state persisted. Selection is rendered with the Wi
 | Height | 32 px | 48 px |
 | Left content | App icon 16 px + app name `WzCaptionTextStyle` | Icon + name |
 | Centre content | none | `ConnectionStatusPill` (§9.10) |
-| Right content | none | Refresh, Export, Settings icon buttons |
+| Right content | none | Refresh, Export, Settings, Help icon buttons *(Help added 29 Aug 2026, #312 — the F1 guide, findable by someone who does not know the key)* |
 | Drag regions | Full bar minus interactive elements | Same |
 
 Rules:
@@ -1290,7 +1290,7 @@ No page-level `CommandBar`. The commands are card-scoped and a page-level bar wo
 | `Ctrl+E` | Export current view |
 | `Ctrl+,` | Settings |
 | `Ctrl+Shift+M` | Toggle main window compact mode |
-| `F1` | About |
+| `F1` | Help — opens the user's guide (`docs/how-to-use.md`, carried in the package and laid out natively) in its own window, from either window. *Amended 29 Aug 2026 (#312): the row said About, nothing registered it, and there was no About surface; what a person pressing F1 wants is the guide, and the version line an About would have carried sits at the guide's foot.* |
 | `Esc` | Cancel dialog, close flyout, exit compact mode |
 
 Declared as `KeyboardAccelerator` on the command, with `KeyboardAcceleratorPlacementMode="Auto"` so the shortcut renders in the tooltip automatically. Icon-only buttons must show accelerator text in their tooltip.
