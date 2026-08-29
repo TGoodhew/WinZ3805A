@@ -71,7 +71,7 @@ public static class CommandCatalog
     /// A null answer means "not in the allowlist", which covers a typo, an unsupported model's
     /// command, and an excluded one alike. Callers must not infer which: reporting that a
     /// particular unknown string was excluded would name it, and §8.4 forbids that. Use
-    /// <see cref="IsBlocked"/> only where the Advanced Console needs to log the attempt.
+    /// <see cref="IsBlocked"/> only where a validator must reject and log an attempt.
     /// </remarks>
     public static ScpiCommand? Find(string? mnemonic) =>
         mnemonic is not null && ByName.TryGetValue(Header(mnemonic), out ScpiCommand? command) ? command : null;
@@ -83,10 +83,20 @@ public static class CommandCatalog
     /// True when a user-typed string is one the §8.4 exclusions cover.
     /// </summary>
     /// <remarks>
-    /// The single caller is the Advanced Console's validator, which rejects the string and logs
-    /// that an excluded command was attempted — without echoing what it was. This is the only
-    /// route out of the assembly for the exclusion list, and it answers one bool about one
-    /// candidate precisely so that nothing can enumerate, bind to, or display the list itself.
+    /// <para>
+    /// This is the only route out of the assembly for the exclusion list, and it answers one bool
+    /// about one candidate precisely so that nothing can enumerate, bind to, or display the list
+    /// itself. <c>SmartClockDriver.IsBlocked</c> re-exposes the verdict through the driver seam.
+    /// </para>
+    /// <para>
+    /// <b>No production caller feeds it typed text today, and that is better than the validator
+    /// this comment once described.</b> §8.4 was written expecting an Advanced Console that took a
+    /// typed string, rejected the excluded ones, and logged the attempt; the console that shipped
+    /// (#55) is a picker over the allowlist with no free-text path at all, so there is nothing to
+    /// validate — what the user types filters a fixed list and never reaches the wire. The
+    /// predicate stays because the tests exercise it and because any future typed path must call
+    /// it — and would also have to write the log-the-attempt half, which does not exist.
+    /// </para>
     /// </remarks>
     public static bool IsBlocked(string? candidate) =>
         !string.IsNullOrWhiteSpace(candidate) && BlockedCommands.Matches(Header(candidate));

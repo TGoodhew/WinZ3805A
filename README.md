@@ -1,4 +1,4 @@
-# WinZ3805A
+﻿# WinZ3805A
 
 A WinUI 3 desktop application for monitoring and controlling HP/Symmetricom
 SmartClock GPS-disciplined oscillators over RS-232.
@@ -24,12 +24,12 @@ Two ideas shape this replacement:
 
 ## Status
 
-Early development; **there is no release yet**, and the application does not yet
-do anything useful when run. The serial transport and line protocol are
-implemented and tested against a real receiver; the status-screen parser, command
-catalog, design-token layer, and every view are still to come. Progress is
-tracked in the [issue backlog](https://github.com/TGoodhew/WinZ3805A/issues),
-whose `§` references resolve against the specification.
+Feature-complete against the specification's P0 set and in daily use against a
+bench Z3805A; **there is no Store release yet**. The transport, parser, command
+model, design system and every view are implemented, with the test suite and
+twelve CI gates green. Progress is tracked in the
+[issue backlog](https://github.com/TGoodhew/WinZ3805A/issues), whose `§`
+references resolve against the specification.
 
 ## Supported hardware
 
@@ -177,17 +177,19 @@ records their provenance and which receiver states are still missing.
 
 ### The CI gates
 
-Two of the design-system acceptance criteria are enforced by script rather than
-by review. Both are dependency-free and answer in about a second, which makes
-them the fastest local check available — CI runs them before any restore, so a
-regression fails in seconds instead of after four builds:
+A dozen acceptance criteria — design-system, accessibility and safety — are
+enforced by script rather than by review. All are dependency-free and answer in
+seconds, which makes them the fastest local check available; CI runs every one
+before any restore, so a regression fails in seconds instead of after a full
+build. The list, with what each guards and why it exists, is in
+[CLAUDE.md](CLAUDE.md); the two below are the ones to know first:
 
 ```powershell
-pwsh build/Test-NoHexLiterals.ps1     # no hex colour literals outside Themes/Colors.xaml
-pwsh build/Test-IconOnlyButtons.ps1   # icon-only controls carry an automation name and a tooltip
+pwsh build/Test-NoHexLiterals.ps1       # no hex colour literals outside Themes/Colors.xaml
+pwsh build/Test-NoBlockedCommands.ps1   # §8.4's exclusions appear nowhere but their one file
 ```
 
-Run them before pushing.
+Run them all before pushing.
 
 ## Repository layout
 
@@ -196,7 +198,7 @@ docs/requirements.md          the specification
 src/WinZ3805A/                WinUI 3 app, single-project MSIX
 src/WinZ3805A.Device/         class library — no UI references
 tests/WinZ3805A.Tests/        xUnit, with Fixtures/ for captured status screens
-build/                        the two CI gate scripts
+build/                        the CI gate scripts and the fixture-capture harness
 ```
 
 The `Device` library has zero dependency on `Microsoft.UI.*`. All parsing,
@@ -205,195 +207,20 @@ highest-risk logic testable without a UI.
 
 ## Adding a receiver
 
-WinZ3805A talks to the HP/Symmetricom SmartClock family, but the device-specific
-knowledge sits behind one interface so another GPS-disciplined oscillator can be
-added without touching the UI. This section is the walkthrough: what to
-implement, in what order, and where each decision is made.
+WinZ3805A talks to the HP/Symmetricom SmartClock family, but every piece of
+device-specific knowledge sits behind one interface — `IReceiverDriver` — so
+supporting another GPS-disciplined oscillator means writing a driver, not
+modifying the application. The receiver's own `*IDN?` answer chooses the driver
+at every connect, the poller sweeps whatever the driver's plan says to sweep,
+and a registered driver is one line in the composition root.
 
-**The seam is the device, not the wire.** `ITransport` already abstracts the
-serial port. `IReceiverDriver` abstracts what is *said* over it and how the
-answers are read.
-
-### What a driver owns
-
-`src/WinZ3805A.Device/Drivers/IReceiverDriver.cs`, and nothing else:
-
-| Member | What it decides |
-|---|---|
-| `Family` | A short name for logs and diagnostics — `"SmartClock"` |
-| `Recognises(identity)` | Whether this driver handles the receiver that answered `*IDN?` |
-| `Commands` | The **allowlist** of everything this receiver may be sent |
-| `Find(mnemonic)` | One command by name, or `null` if this receiver has none |
-| `IsBlocked(header)` | Whether a typed header is one of this receiver's §8.4 exclusions |
-| `TimeoutFor(mnemonic)` | How long to wait, per §7.2's classes |
-| `Cadence` | How often to poll — fast sweep and full sweep |
-| `AutoDetectSequence` | Serial configurations to try, most likely first |
-| `Parse(response)` | Turn a status response into a `ReceiverStatus` |
-
-The worked example is
-[`SmartClockDriver.cs`](src/WinZ3805A.Device/Drivers/SmartClockDriver.cs). Read
-it alongside this section — it is deliberately thin, because each piece it
-returns already existed and the driver is only where "which receiver" stopped
-being implied.
-
-### Step 1 — capture what the receiver actually says
-
-Before any code. Connect the receiver with a terminal and save its real output
-to `tests/WinZ3805A.Tests/Fixtures/captured/`, one file per interesting state.
-
-**Capture the awkward states, not just the good one.** The states worth having
-are the ones you cannot conjure later: power-up, acquiring, holdover, a failing
-self-test, a survey in progress. `locked` is the easiest to get and the least
-informative. Follow
-[`Fixtures/captured/capture-log.md`](tests/WinZ3805A.Tests/Fixtures/captured/capture-log.md)
-for how existing captures are recorded — each says what the receiver was doing
-and when, because a fixture whose provenance is unknown cannot settle an
-argument later.
-
-Save the bytes verbatim. Do not tidy whitespace: column positions carry meaning,
-and trailing spaces are often significant.
-
-### Step 2 — decide what `ReceiverStatus` can hold
-
-[`Models/ReceiverStatus.cs`](src/WinZ3805A.Device/Models/ReceiverStatus.cs) is
-the common currency between every driver and the whole UI.
-
-**A field your receiver has no equivalent for is left `null`.** That is not a
-workaround, it is the contract: §11.1 requires it of the parser, and every
-readout in the UI already renders `null` as an em dash. Do not invent a value to
-fill the shape, and in particular do not use zero — a 1 PPS offset of `0 ns`
-reads as a *perfect* lock, not as a missing one.
-
-Some fields are HP's rather than general, and a new driver will simply leave
-them empty: `SmartClockMode`, `Tfom`, `Ffom`, `WeekRolloverEpochs`. If your
-receiver has a concept the record cannot express at all, add a nullable field
-rather than overloading an existing one, and raise the §11.2 amendment — the
-specification describes that record field by field.
-
-### Step 3 — write the parser
-
-Your `Parse` implementation, called once per sweep.
-
-**It must never throw.** §11.1 is absolute about this and the reason is
-structural: the poll loop calls it, and an exception there stops the receiver
-being polled at all. An unreadable field becomes `null` and the reason goes into
-`ReceiverStatus.ParseWarnings`, which Diagnostics displays. An unrecognisable
-response yields a status whose fields are all absent and whose warnings say so.
-Wrap the whole body in a last-resort `catch`, as
-[`StatusScreenParser`](src/WinZ3805A.Device/Parsing/StatusScreenParser.cs) does.
-
-**Do not hard-code column positions.** The SmartClock parser derives every
-column from the header row, which is what lets it survive a firmware revision
-that shifts a field by a character. If your receiver speaks a binary protocol
-this does not apply — but the equivalent discipline does: parse by field
-identity, never by "the byte that was at offset 12 last time".
-
-Write the tests against the fixtures from step 1, asserting real values from real
-captures rather than values you computed with your own parser.
-
-### Step 4 — declare the command catalog
-
-An **allowlist** (§8.1). A command that is not in it cannot be sent, and that is
-the property everything else depends on.
-
-Each entry carries its safety tier (§8.2):
-
-| Tier | Meaning | UI treatment |
-|---|---|---|
-| **A** | Read-only queries | Sent freely |
-| **B** | Writes with a bounded, reversible effect | Sent with feedback |
-| **C** | Writes that disturb service | Confirmation dialog with consequence text, and sometimes an explicit acknowledgement |
-
-**Tier C confirmation text must say what actually happens**, in the user's terms
-rather than the protocol's. Get this from measurement, not assumption: the
-SmartClock self-test text said it "may briefly interrupt normal operation" until
-someone ran it and found the receiver drops out of lock and re-acquires over
-several minutes.
-
-### Step 5 — the exclusions, and read this one twice
-
-`IsBlocked` implements §8.4 — commands that must never be sent, offered,
-displayed, logged or referenced.
-
-**Every rule here is a safety rule, and the wrong abstraction is a defect rather
-than a missing feature.**
-
-1. **Decide your own.** Do not inherit another family's list. It is not a
-   conservative default: a command harmless on one receiver may be destructive
-   on another, and the names need not even correspond.
-2. **Return a verdict, never the patterns.** `IsBlocked` returns `bool` by
-   design. §8.4 requires that excluded commands do not exist as data any view can
-   enumerate, bind to, or log wholesale. A driver exposing a list would
-   reintroduce exactly what the rule forbids — and
-   `ReceiverDriverTests.TheDriverContractCannotExposeTheExclusionsAsData`
-   asserts against the *interface* by reflection, so it binds you and not merely
-   the existing driver.
-3. **Keep them in one file.** The SmartClock patterns live only in
-   [`Commands/BlockedCommands.cs`](src/WinZ3805A.Device/Commands/BlockedCommands.cs),
-   which is `internal`. Put yours in one equivalent file and reference it from
-   nowhere else. `build/Test-NoBlockedCommands.ps1` reads its tokens out of that
-   file rather than restating them, so it keeps working if you follow the same
-   shape — and it runs in CI on every push.
-4. **Not in issue titles, branch names, commit messages, TODOs or test
-   fixtures.** The rule covers writing them down anywhere, which is why the
-   driver tests discover an excluded header by asking the validator rather than
-   containing one.
-
-### Step 6 — timeouts and cadence
-
-**These are measurements, not conventions.** Copying another receiver's figures
-gives numbers that are either wastefully long or short enough to fail healthy
-hardware — the SmartClock GPS self-test takes up to 24.0 s against a 30 s class,
-and its full status screen takes 3521 ms of wire time, which is why the full
-sweep is not simply the fast sweep with more in it.
-
-Time your receiver's slowest command and set the class from that, with headroom.
-`TimeoutFor` must return a positive value for **every** input including an
-unknown mnemonic: returning `TimeSpan.Zero` fails every transaction instantly
-rather than waiting for one.
-
-### Step 7 — wire it up
-
-`DeviceSessionService` and `PollingService` each take an `IReceiverDriver?` as
-their last constructor parameter, defaulting to `SmartClockDriver`. Pass yours
-from
-[`DeviceRegistration.AddDevice`](src/WinZ3805A/Services/DeviceRegistration.cs).
-
-Devices are registered **keyed**, so a second receiver is a second `AddDevice`
-call and nothing else (§12).
-
-#### Choosing a driver before the identity is known
-
-There is a genuine ordering problem here, and it is not solved yet. Auto-detect
-must send `*IDN?` *before* anything can know what is attached — so the driver
-used for that first exchange is chosen before there is an identity to choose it
-by. `SmartClockDriver.Recognises(null)` returns `true` for exactly that reason,
-which is correct while it is the only driver and wrong the moment there are two.
-
-**If you are adding the second driver, this is the piece you will have to
-design.** The likely shape is a probe phase belonging to no driver, sending a
-neutral `*IDN?` at each candidate serial configuration, then selecting the driver
-whose `Recognises` claims the answer. Raise it rather than quietly making your
-driver claim `null` as well — two drivers both claiming an unknown identity is a
-race, not a default.
-
-### Step 8 — run the gates
-
-```powershell
-dotnet test tests\WinZ3805A.Tests\WinZ3805A.Tests.csproj
-pwsh build/Test-NoBlockedCommands.ps1     # §8.4 — the one that matters most here
-```
-
-and the rest of the gates listed in [CLAUDE.md](CLAUDE.md). CI runs all of them
-before it builds anything.
-
-### What the specification will need
-
-§7, §8 and §11 are written throughout in terms of one receiver family and name
-SmartClock behaviour as *the* behaviour. Adding a driver means amending them so
-the document and the code do not drift apart — **raise that rather than
-absorbing the divergence in code.** Where `docs/requirements.md` and anything
-else disagree, the document wins.
+**The complete walkthrough is
+[docs/adding-a-receiver.md](docs/adding-a-receiver.md)**: the architecture, the
+contract member by member, the §8 safety obligations that bind third-party
+drivers, the development process in order, the testing story (a fictional
+second family in the test project runs the real connect and poll paths), and an
+honest map of what a driver gets you today versus what is still written in the
+SmartClock dialect.
 
 ## Where the authority lives
 
