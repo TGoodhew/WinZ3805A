@@ -187,10 +187,12 @@ public sealed class ConnectionViewModelTests
             }
         }
 
+        // Second is the Z3801A's DOCUMENTED factory default, odd parity - it was even here, and
+        // eighth, until 28 Aug 2026. Reading the guide moved it (#64).
         Assert.Equal(8, progress.Count);
         Assert.Equal("Trying 9600-8-N-1 — 1 of 8", progress[0]);
-        Assert.Equal("Trying 19200-7-E-1 — 2 of 8", progress[1]);
-        Assert.Equal("Trying 19200-7-O-1 — 8 of 8", progress[7]);
+        Assert.Equal("Trying 19200-7-O-1 — 2 of 8", progress[1]);
+        Assert.Equal("Trying 9600-7-O-1 — 8 of 8", progress[7]);
     }
 
     /// <summary>

@@ -2,6 +2,7 @@ using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using WinZ3805A.Device.Commands;
+using WinZ3805A.Device.Models;
 using WinZ3805A.Device.Transport;
 
 namespace WinZ3805A.Services;
@@ -112,6 +113,25 @@ public sealed class DeviceSessionService : IAsyncDisposable
 
     /// <summary>The identity string the receiver answered <c>*IDN?</c> with, once connected.</summary>
     public string? Identity { get; private set; }
+
+    /// <summary>
+    /// <see cref="Identity"/> parsed into its four fields, or null when it did not parse (#64).
+    /// </summary>
+    /// <remarks>
+    /// The raw string is kept alongside rather than replaced: §11.1's rule is that an unparseable
+    /// field becomes null and the reader still gets what the device said. Diagnostics shows the raw
+    /// line, so a model this build has never heard of loses nothing.
+    /// </remarks>
+    public DeviceIdentity? ParsedIdentity { get; private set; }
+
+    /// <summary>
+    /// What this model has, per §8.6 — the conservative profile until an identity is read.
+    /// </summary>
+    /// <remarks>
+    /// Conservative before connecting, and conservative for a model that is not recognised, so the
+    /// failure mode is a feature that is absent rather than a command sent to hardware without it.
+    /// </remarks>
+    public ModelProfile Profile => ModelProfile.For(ParsedIdentity);
 
     /// <summary>The port this session is bound to, once a connection has been attempted.</summary>
     public string? PortName { get; private set; }
@@ -387,6 +407,7 @@ public sealed class DeviceSessionService : IAsyncDisposable
             }
 
             Identity = identity.FirstLine!.Trim();
+            ParsedIdentity = DeviceIdentity.Parse(Identity);
             _consecutiveTimeouts = 0;
 
             _sessionCts = new CancellationTokenSource();
