@@ -2624,11 +2624,27 @@ instrument's own front panel, where a lab user reads it without the application 
 §9.4.3 makes severity a claim about the receiver's state; this would make it a claim about the
 software's. **The three `:LED:*?` queries are catalogued and are the right half of this subsystem.**
 
-**`:SENSe:DATA:` — the receiver's timestamp memory (5 commands).** The one family here with real
-value, and it has its own issue rather than a reason (#300). `:SENS:DATA:POIN?` answers `+4,+5,+6` on the
-bench receiver: three buffers with entries in them, holding measurements taken while nothing was
-connected. It is not built because it needs per-node probing and a surface of its own, not because
-it should not be.
+**`:SENSe:DATA:` and `:SENSe:TSTamp<channel>:EDGE` — event time stamping (7 commands).**
+**Not implementable on this hardware.** The subsystem records the time of TTL edges arriving on
+**three Time Tag BNC input connectors**, which the operating guide heads `Time Tagging Inputs
+(59551A Only)`. The bench Z3805A has **one BNC output and no Time Tag inputs** — confirmed at the
+front panel on 29 Aug 2026 — so the buffers cannot receive anything, ever, on this receiver.
+
+> **`:SENS:DATA:POIN?` answering `+4,+5,+6` is not evidence to the contrary**, and #300 was filed
+> claiming it was. It is firmware answering for absent hardware: `4,5,6` is an enumeration of the
+> three data sets rather than four, five and six captured events, and the guide gives each input a
+> capacity of 256.
+>
+> **This is the boundary of the "probe the node" rule that the rest of this section rests on.**
+> Probing settles whether the parser *accepts* a command. It does not settle whether the hardware
+> behind the command *exists*, and those are different claims — a receiver with no BNCs will still
+> answer about a buffer it can never fill. The model column is unreliable about the parser, as §16
+> records above; the connector list is not, because a connector is either fitted or it is not.
+
+Also recorded so it is not re-derived: these commands take a **quoted data-set parameter** —
+`:SENSe:DATA:POINts? "TSTamp 1"`, `:SENSe:DATA:TSTamp? "TSTamp 1", <entry>` — and #154's inventory
+listed them as bare queries. `:SENSe:TSTamp<channel>:EDGE`, which selects the polarity each input
+timestamps, was never in that inventory at all.
 
 **Note on the Z3805A specifically:** no Z3805A-specific programming manual was published. The command set is inherited from the 58503A/B SmartClock firmware family, which is why the 58503B guide is the reference. Where behaviour diverges — dual 10 MHz and dual 1 PPS outputs, 9600-8-N-1 default rather than the Z3801A's 19200-7-O-1 — this document calls it out explicitly. (**"Port 2 being TOD-only" was removed from this list on 28 Aug 2026**: the Z3805A has one serial port, `:SYST:COMM:SER2:BAUD?` answers `-113,"Undefined header"`, and the claim is corrected in §8.6 under #62.) Any command whose Z3805A behaviour is unverified should be probed at connect and disabled if it errors, rather than assumed present.
 
