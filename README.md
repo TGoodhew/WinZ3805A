@@ -3,6 +3,13 @@
 A WinUI 3 desktop application for monitoring and controlling HP/Symmetricom
 SmartClock GPS-disciplined oscillators over RS-232.
 
+| | |
+|---|---|
+| **Receivers** | the HP/Symmetricom **Z3805A**, and its SmartClock siblings — Z3801A, 58503A/B, 59551A, Z3816A |
+| **Platform** | Windows 10 (1809 or later) and Windows 11, x64 — see [Supported platforms](#supported-platforms) |
+| **Stack** | WinUI 3 (Windows App SDK) on .NET 10, packaged as MSIX |
+| **Extensible** | every receiver-specific fact sits behind one interface, `IReceiverDriver`; another GPS-disciplined oscillator is a driver plus one registration line, not a fork — see [Adding a receiver](#adding-a-receiver) |
+
 The SmartClock family — the Z3805A and its siblings — is widely used in home and
 small labs as a 10 MHz frequency and 1 PPS time reference. The receivers expose a
 rich SCPI command set over a serial port, but the tools built to drive them are
@@ -29,7 +36,9 @@ bench Z3805A; **there is no Store release yet**. The transport, parser, command
 model, design system and every view are implemented, with the test suite and
 eleven CI gates green. Progress is tracked in the
 [issue backlog](https://github.com/TGoodhew/WinZ3805A/issues), whose `§`
-references resolve against the specification.
+references resolve against the specification. Where it stands against Lady
+Heather, the tool most people run on these receivers today, is in
+[docs/lady-heather-comparison.md](docs/lady-heather-comparison.md).
 
 ## Supported hardware
 
@@ -110,6 +119,15 @@ Deployment of the Windows App SDK is framework-dependent rather than
 self-contained, so the framework package dependency is resolved at install time
 (§6.3).
 
+Until then, [`build/New-SideloadPackage.ps1`](build/New-SideloadPackage.ps1)
+builds the signed MSIX and wraps it — with the x64 runtime, an `Install.cmd` and
+a plain-language [README](build/sideload/README.txt) — into one zip that a
+machine without Visual Studio can install from, and
+[`build/Invoke-Wack.ps1`](build/Invoke-Wack.ps1) runs the Windows App
+Certification Kit over the Release package. The Store submission itself is
+drafted in [docs/store-listing.md](docs/store-listing.md), and the privacy
+policy it will point at is [docs/privacy.md](docs/privacy.md).
+
 ## Building from source
 
 ### Prerequisites
@@ -173,15 +191,22 @@ dotnet test tests\WinZ3805A.Tests\WinZ3805A.Tests.csproj
 
 Fixtures are status screens captured from real hardware.
 [tests/WinZ3805A.Tests/Fixtures/README.md](tests/WinZ3805A.Tests/Fixtures/README.md)
-records their provenance and which receiver states are still missing.
+records their provenance and which receiver states are still missing; new
+captures from [`build/Capture-Fixtures.ps1`](build/Capture-Fixtures.ps1) land in
+[Fixtures/captured/](tests/WinZ3805A.Tests/Fixtures/captured/README.md) until
+they are promoted.
+
+What neither the tests nor the gates can reach — anything that needs a person, a
+receiver, or a machine setting — is in [docs/manual-qa.md](docs/manual-qa.md),
+the release checklist.
 
 ### The CI gates
 
 Eleven acceptance criteria — design-system, accessibility and safety — are
 enforced by script rather than by review. All are dependency-free and answer in
-seconds, which makes them the fastest local check available; CI runs every one
-before any restore, so a regression fails in seconds instead of after a full
-build. The list, with what each guards and why it exists, is in
+seconds, which makes them the fastest local check available;
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs every one before any
+restore, so a regression fails in seconds instead of after a full build. The list, with what each guards and why it exists, is in
 [CLAUDE.md](CLAUDE.md); the two below are the ones to know first:
 
 ```powershell
@@ -195,10 +220,12 @@ Run them all before pushing.
 
 ```
 docs/requirements.md          the specification
+docs/                         the other project documents — listed under Documentation below
 src/WinZ3805A/                WinUI 3 app, single-project MSIX
 src/WinZ3805A.Device/         class library — no UI references
 tests/WinZ3805A.Tests/        xUnit, with Fixtures/ for captured status screens
-build/                        the CI gate scripts and the fixture-capture harness
+build/                        the CI gate scripts, the fixture-capture harness, and the sideload and WACK packaging scripts
+.github/workflows/ci.yml      the gates first, then Debug and Release x64 builds and the tests
 ```
 
 The `Device` library has zero dependency on `Microsoft.UI.*`. All parsing,
@@ -222,15 +249,35 @@ second family in the test project runs the real connect and poll paths), and an
 honest map of what a driver gets you today versus what is still written in the
 SmartClock dialect.
 
-## Where the authority lives
+## Documentation
 
 - **[docs/requirements.md](docs/requirements.md) is the specification.** It is
   the authority on behaviour, and the `§` references in issues, commit messages,
   and code comments resolve against it. Where anything else disagrees with it,
   the document wins.
-- **[CLAUDE.md](CLAUDE.md)** carries the working conventions for the repository.
+- **[CLAUDE.md](CLAUDE.md)** carries the working conventions for the repository,
+  including every CI gate with what it guards and why it exists.
 
 Both are linked rather than restated here, so there is one authority per fact.
+The rest of `docs/`, and the other documents worth knowing about:
+
+- [docs/adding-a-receiver.md](docs/adding-a-receiver.md) — the driver author's
+  guide, summarised in [Adding a receiver](#adding-a-receiver) above.
+- [docs/manual-qa.md](docs/manual-qa.md) — the manual QA checklist: the checks
+  that need a person, a receiver, or a machine setting.
+- [docs/lady-heather-comparison.md](docs/lady-heather-comparison.md) — where the
+  application stands against Lady Heather, the incumbent tool for this family.
+- [docs/privacy.md](docs/privacy.md) — the privacy policy: the application
+  collects nothing and transmits nothing.
+- [docs/store-listing.md](docs/store-listing.md) — everything the Microsoft
+  Store submission asks for that is a decision rather than a file.
+- [docs/index.md](docs/index.md) — the front page of the GitHub Pages site,
+  which exists to give the Store listing a privacy-policy URL and is not enabled
+  until submission needs it; it publishes the policy and nothing else.
+- [tests/WinZ3805A.Tests/Fixtures/README.md](tests/WinZ3805A.Tests/Fixtures/README.md)
+  — provenance of the captured status screens the parser is tested against.
+- [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) — the third-party components
+  the application ships with, and the trademark position.
 
 ## Naming
 
@@ -246,4 +293,5 @@ the application talks to.
 
 ## Licence
 
-[MIT](LICENSE).
+[MIT](LICENSE). Third-party components and trademarks are listed in
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
