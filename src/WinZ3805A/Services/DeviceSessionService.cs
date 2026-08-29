@@ -2,6 +2,7 @@ using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using WinZ3805A.Device.Commands;
+using WinZ3805A.Device.Drivers;
 using WinZ3805A.Device.Models;
 using WinZ3805A.Device.Transport;
 
@@ -49,6 +50,7 @@ public sealed class DeviceSessionService : IAsyncDisposable
 
     private readonly Func<string, SerialSettings, ITransport> _transportFactory;
     private readonly TimeProvider _timeProvider;
+    private readonly IReceiverDriver _driver;
     private readonly ILogger<DeviceSessionService> _logger;
 
     private readonly Channel<PendingCommand> _queue = Channel.CreateUnbounded<PendingCommand>(
@@ -77,10 +79,16 @@ public sealed class DeviceSessionService : IAsyncDisposable
     /// pin the clock rather than sleep through a 30 s cap.
     /// </param>
     /// <param name="logger">Optional log sink.</param>
+    /// <param name="driver">
+    /// Which receiver family is on the port. Optional, defaulting to <see cref="SmartClockDriver"/>
+    /// — the family this application was written against — so every existing construction site
+    /// keeps working untouched (#122).
+    /// </param>
     public DeviceSessionService(
         Func<string, SerialSettings, ITransport> transportFactory,
         TimeProvider timeProvider,
-        ILogger<DeviceSessionService>? logger = null)
+        ILogger<DeviceSessionService>? logger = null,
+        IReceiverDriver? driver = null)
     {
         ArgumentNullException.ThrowIfNull(transportFactory);
         ArgumentNullException.ThrowIfNull(timeProvider);
@@ -88,6 +96,10 @@ public sealed class DeviceSessionService : IAsyncDisposable
         _transportFactory = transportFactory;
         _timeProvider = timeProvider;
         _logger = logger ?? NullLogger<DeviceSessionService>.Instance;
+
+        // Optional, and defaulting to the family this application was written against, so every
+        // existing construction site and every existing test keeps working untouched (#122).
+        _driver = driver ?? new SmartClockDriver(timeProvider);
     }
 
     /// <summary>Raised whenever <see cref="Status"/> changes.</summary>
@@ -112,6 +124,13 @@ public sealed class DeviceSessionService : IAsyncDisposable
     public ConnectionStatus Status { get; private set; } = ConnectionStatus.Disconnected;
 
     /// <summary>The identity string the receiver answered <c>*IDN?</c> with, once connected.</summary>
+    /// <summary>The driver for the receiver on this port (#122).</summary>
+    /// <remarks>
+    /// Held rather than resolved per call so a future driver swap happens in one place, at the point
+    /// the identity is read, instead of at every site that needs a timeout or a command.
+    /// </remarks>
+    public IReceiverDriver Driver => _driver;
+
     public string? Identity { get; private set; }
 
     /// <summary>
@@ -549,7 +568,13 @@ public sealed class DeviceSessionService : IAsyncDisposable
     /// and the session never consulted it, so a 15 kB read kept failing on a 3 s timeout while the
     /// table said 60 s and its tests passed. One table, one lookup.
     /// </remarks>
-    private static TimeSpan TimeoutFor(ScpiCommand command) => TransactionTimeouts.For(command.Mnemonic);
+    /// <summary>How long to wait for a command, asked of the driver rather than of a static (#122).</summary>
+    /// <remarks>
+    /// These are measurements against one receiver, not conventions — the Z3805A's GPS self-test
+    /// reached 24.0 s against a 30 s class — so which receiver is attached decides them. Routing
+    /// through the driver is what makes that true rather than merely intended.
+    /// </remarks>
+    private TimeSpan TimeoutFor(ScpiCommand command) => _driver.TimeoutFor(command.Mnemonic);
 
     /// <summary>
     /// Counts consecutive timeouts toward the §7.2 reconnect trigger, and resets on any success.

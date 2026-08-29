@@ -2376,6 +2376,13 @@ something might later branch on.
 - Trend data (EFC, 1 PPS TI, TFOM) lands in a ring buffer sized for 7 days at 1 s (604 800 samples × ~16 bytes ≈ 10 MB — acceptable; downsample to 10 s beyond 24 h to cut this to ~1 MB).
 - Persist trends to a SQLite file under `LocalApplicationData` so restarts do not lose history. `Microsoft.Data.Sqlite` is packaged-app safe. **The reference was removed on 15 Aug 2026** and P1-2 (#50) restores it: it was carrying 1.89 MB of native `e_sqlite3.dll` into every package for a feature no code path could reach. Note the folder — not `ApplicationData.Current.LocalFolder`, for the reason given against §6.1's logging row.
 - **Multi-device readiness:** `DeviceSessionService` must be instantiable per device and resolved from a keyed DI registration, even though v1 creates exactly one. Do not use static state for connection or device identity.
+- **Receiver readiness (added 29 Aug 2026, #122):** the device-specific knowledge sits behind `IReceiverDriver` — the command allowlist, §8.4's exclusions, §7.2's timeouts, the poll cadence, the auto-detect sequence and the parse. `SmartClockDriver` is the one implementation and changes no behaviour. `README.md`'s **"Adding a receiver"** is the walkthrough.
+
+  > **⚠ The specification has not followed the code here, and that is a known gap rather than an oversight.** §7, §8 and §11 are written throughout in terms of one receiver family and name SmartClock behaviour as *the* behaviour — the 80×24 status screen in §11.1, the SCPI command tree in §8.1, the timeout classes in §7.2. All of it is correct for the Z3805A and none of it is stated as being *about* the Z3805A.
+  >
+  > Generalising that prose is a large edit with no second receiver to check it against, and #122's own note says to raise the amendment rather than let code and document drift apart. **This is that raise.** Until it is done, read §7, §8 and §11 as describing the SmartClock driver specifically, and `IReceiverDriver` as the contract any other would have to meet.
+  >
+  > The one part that must not wait for it is §8.4: exclusions are per-device by nature, the interface exposes a verdict and never the patterns, and a test asserts that against the interface by reflection so the rule binds every future driver rather than only the existing one.
 - **No `DateTime.Now` / `DateTime.UtcNow` anywhere in the Device library.** Inject `TimeProvider` and call `provider.GetUtcNow()`. This is not stylistic — the week-rollover logic (§7.4), staleness display, and poll scheduling are all clock-dependent, and fixture tests must be able to pin the clock. Enforce with a Roslyn analyzer rule or a code-review checklist item.
 
 ---
