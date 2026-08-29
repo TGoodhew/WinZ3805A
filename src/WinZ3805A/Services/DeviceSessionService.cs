@@ -50,8 +50,17 @@ public sealed class DeviceSessionService : IAsyncDisposable
 
     private readonly Func<string, SerialSettings, ITransport> _transportFactory;
     private readonly TimeProvider _timeProvider;
-    private readonly IReceiverDriver _driver;
+    private readonly IReadOnlyList<IReceiverDriver> _drivers;
     private readonly ILogger<DeviceSessionService> _logger;
+
+    /// <summary>The driver for the receiver on this port. Starts as the first registered (#287).</summary>
+    /// <remarks>
+    /// Volatile because the poller reads it from its own thread between sweeps, and the write
+    /// happens on the connect path. The swap is a single reference assignment made before the pump
+    /// starts, so a sweep never sees half a driver — at worst it sees the previous one for commands
+    /// that will fail anyway, the link being down while the swap happens.
+    /// </remarks>
+    private volatile IReceiverDriver _driver;
 
     private readonly Channel<PendingCommand> _queue = Channel.CreateUnbounded<PendingCommand>(
         new UnboundedChannelOptions { SingleReader = true, SingleWriter = false });
@@ -79,16 +88,17 @@ public sealed class DeviceSessionService : IAsyncDisposable
     /// pin the clock rather than sleep through a 30 s cap.
     /// </param>
     /// <param name="logger">Optional log sink.</param>
-    /// <param name="driver">
-    /// Which receiver family is on the port. Optional, defaulting to <see cref="SmartClockDriver"/>
-    /// — the family this application was written against — so every existing construction site
-    /// keeps working untouched (#122).
+    /// <param name="drivers">
+    /// The receiver families this session can drive, in priority order — the first is the fallback
+    /// when no identity is claimed. Optional, defaulting to <see cref="SmartClockDriver"/> alone —
+    /// the family this application was written against — so every existing construction site keeps
+    /// working untouched (#122, #287).
     /// </param>
     public DeviceSessionService(
         Func<string, SerialSettings, ITransport> transportFactory,
         TimeProvider timeProvider,
         ILogger<DeviceSessionService>? logger = null,
-        IReceiverDriver? driver = null)
+        IReadOnlyList<IReceiverDriver>? drivers = null)
     {
         ArgumentNullException.ThrowIfNull(transportFactory);
         ArgumentNullException.ThrowIfNull(timeProvider);
@@ -99,7 +109,16 @@ public sealed class DeviceSessionService : IAsyncDisposable
 
         // Optional, and defaulting to the family this application was written against, so every
         // existing construction site and every existing test keeps working untouched (#122).
-        _driver = driver ?? new SmartClockDriver(timeProvider);
+        _drivers = drivers is { Count: > 0 } ? drivers : [new SmartClockDriver(timeProvider)];
+        _driver = _drivers[0];
+
+        // The union in registration order, first-seen wins, so adding a driver can only append
+        // probes — it cannot reorder the walk §10.12 fixes for the family already shipped.
+        AutoDetectPlan = _drivers
+            .SelectMany(candidate => candidate.AutoDetectSequence)
+            .Distinct()
+            .ToList()
+            .AsReadOnly();
     }
 
     /// <summary>Raised whenever <see cref="Status"/> changes.</summary>
@@ -123,14 +142,27 @@ public sealed class DeviceSessionService : IAsyncDisposable
     /// <summary>Where the session stands.</summary>
     public ConnectionStatus Status { get; private set; } = ConnectionStatus.Disconnected;
 
-    /// <summary>The identity string the receiver answered <c>*IDN?</c> with, once connected.</summary>
     /// <summary>The driver for the receiver on this port (#122).</summary>
     /// <remarks>
-    /// Held rather than resolved per call so a future driver swap happens in one place, at the point
-    /// the identity is read, instead of at every site that needs a timeout or a command.
+    /// Selected where the identity is read (#287): the connect sequence probes neutrally, then
+    /// picks the first registered driver whose <see cref="IReceiverDriver.Recognises"/> claims the
+    /// answer, falling back to the first registered when none does. Callers should read it per use
+    /// rather than caching it, because a reconnect re-selects — the receiver on the port can have
+    /// been swapped while the link was down.
     /// </remarks>
     public IReceiverDriver Driver => _driver;
 
+    /// <summary>
+    /// The serial configurations auto-detect walks: every registered driver's, in registration
+    /// order, first appearance wins (#287).
+    /// </summary>
+    /// <remarks>
+    /// Exposed so the connection dialog's "n of m" counts the walk that will actually run, rather
+    /// than restating one family's list.
+    /// </remarks>
+    public IReadOnlyList<SerialSettings> AutoDetectPlan { get; }
+
+    /// <summary>The identity string the receiver answered <c>*IDN?</c> with, once connected.</summary>
     public string? Identity { get; private set; }
 
     /// <summary>
@@ -285,7 +317,7 @@ public sealed class DeviceSessionService : IAsyncDisposable
             PortName = portName;
             SetStatus(ConnectionStatus.Connecting, $"Detecting settings on {portName}.");
 
-            foreach (SerialSettings candidate in SerialSettings.AutoDetectSequence)
+            foreach (SerialSettings candidate in AutoDetectPlan)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 progress?.Report(candidate);
@@ -429,6 +461,13 @@ public sealed class DeviceSessionService : IAsyncDisposable
             ParsedIdentity = DeviceIdentity.Parse(Identity);
             _consecutiveTimeouts = 0;
 
+            // #287: the probe above belonged to no driver — a bare *IDN? at a neutral timeout —
+            // and this is where the answer chooses one. It runs on every connect, including a
+            // reconnect, because the receiver on the port can have been swapped while the link was
+            // down, and before the pump starts, so no command is ever served under a driver the
+            // identity has disqualified.
+            SelectDriver();
+
             _sessionCts = new CancellationTokenSource();
             _pump = Task.Run(() => PumpAsync(_sessionCts.Token), CancellationToken.None);
 
@@ -445,6 +484,59 @@ public sealed class DeviceSessionService : IAsyncDisposable
             _logger.LogDebug(exception, "Opening {Port} at {Settings} failed.", PortName, Settings);
             return false;
         }
+    }
+
+    /// <summary>
+    /// Picks the driver for the identity just read: the first registered that claims it, or the
+    /// first registered outright when none does (#287).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Registration order is priority order, deterministically.</b> Two drivers both claiming an
+    /// identity is a race only if the winner depends on anything but the list — here it never does,
+    /// so a driver author who over-claims loses to whoever registered first and finds out from the
+    /// log rather than from intermittent behaviour.
+    /// </para>
+    /// <para>
+    /// <b>The fallback is a warning, not a refusal.</b> An unrecognised identity connected fine
+    /// before there was any selection at all — the SmartClock driver simply drove it — and §8.6
+    /// already handles an unknown <i>model</i> conservatively. Refusing to connect would turn every
+    /// receiver with an odd identity string into a regression.
+    /// </para>
+    /// </remarks>
+    private void SelectDriver()
+    {
+        IReceiverDriver? claimed = null;
+        foreach (IReceiverDriver candidate in _drivers)
+        {
+            if (candidate.Recognises(ParsedIdentity))
+            {
+                claimed = candidate;
+                break;
+            }
+        }
+
+        if (claimed is null && _drivers.Count > 1)
+        {
+            // Only worth a warning when there was a choice to make. With one registered driver
+            // this is the pre-#287 behaviour exactly, and §8.6's conservative profile already
+            // covers the unknown-model case within the family.
+            _logger.LogWarning(
+                "No registered driver recognises {Identity}; continuing with {Family}.",
+                Identity,
+                _drivers[0].Family);
+        }
+
+        IReceiverDriver selected = claimed ?? _drivers[0];
+        if (!ReferenceEquals(selected, _driver))
+        {
+            _logger.LogInformation(
+                "The {Family} driver now serves {Identity}.",
+                selected.Family,
+                Identity);
+        }
+
+        _driver = selected;
     }
 
     /// <summary>
