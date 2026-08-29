@@ -341,8 +341,8 @@ public sealed partial class MainPage : Page
                 // The shell's own answer, before anything is sent. This is the line that
                 // distinguishes "we never registered" from "you have them switched off".
                 string registration = status.Registered
-                    ? "Registered with the shell: yes."
-                    : $"Registered with the shell: NO - {status.RegistrationError ?? "no reason recorded"}.";
+                    ? "Windows App SDK registration: succeeded."
+                    : $"Windows App SDK registration: FAILED - {status.RegistrationError ?? "no reason recorded"}";
 
                 string sent;
                 try
@@ -350,9 +350,7 @@ public sealed partial class MainPage : Page
                     sink.Show(
                         "WinZ3805A test",
                         "This is a test notification. It carries no receiver information.");
-                    sent = status.Registered
-                        ? "Handed to the shell without error."
-                        : "Not sent - the sink is inert because registration failed.";
+                    sent = "Handed to the shell without error.";
                 }
                 catch (Exception exception)
                 {
@@ -362,10 +360,11 @@ public sealed partial class MainPage : Page
                 report = string.Join(
                     Environment.NewLine,
                     registration,
+                    $"Delivering through: {status.Route}.",
                     $"Shell setting: {status.ShellSetting}.",
                     sent);
 
-                if (status.Registered && status.ShellSetting == "Enabled")
+                if (status.CanNotify)
                 {
                     // Everything the application can see is fine, so what is left is the shell's
                     // own suppression - which it does not report through this API and which the
