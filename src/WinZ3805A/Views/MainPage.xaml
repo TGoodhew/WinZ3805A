@@ -407,7 +407,7 @@
             </VisualStateGroup>
 
             <!--
-                §10.3's compact mode, 380 x 120: the medallion drops to 64 px and everything below
+                §10.3's compact mode, 380 x 144: the medallion drops to 64 px and everything below
                 the mode line goes away. Type sizes, targets and focus visuals are unchanged (§9.6.3)
                 — this is less content, not smaller content.
             -->
@@ -428,10 +428,17 @@
                     the children in them are collapsed, so leaving it at WzSpaceXl would keep 96 px
                     of gaps for four rows that are no longer there - and that is 96 px out of the
                     240 the medallion has to fit into.
+
+                    The readout row carried the satellite count, so the count moves into the
+                    medallion's centre here, as it does in compact (§9.4.3, #307). G1 measures the
+                    window at 420 x 260 or less with mode AND count legible, and before this the
+                    count was shown nowhere at that size: #279 had bound the centre to compact and
+                    this state collapsed the only other place it appeared.
                 -->
                 <VisualState x:Name="ShortLayout">
                     <VisualState.Setters>
                         <Setter Target="RootGrid.RowSpacing" Value="0" />
+                        <Setter Target="Medallion.CentreShowsCount" Value="True" />
                         <Setter Target="ReadoutRow.Visibility" Value="Collapsed" />
                         <Setter Target="MeritRow.Visibility" Value="Collapsed" />
                         <Setter Target="ClockRow.Visibility" Value="Collapsed" />
@@ -439,15 +446,17 @@
                     </VisualState.Setters>
                 </VisualState>
                 <!--
-                    §9.6.2: "Medallion 64 px, mode text and satellite count only; readout row and
-                    footer hidden." All four rows go, and the count comes back as text beside the
-                    mode. Nothing here changes a type size, a target size or a focus visual -
-                    §9.6.3 forbids that, and it is the difference between this and a density switch.
+                    §9.6.2: "Medallion 64 px with the satellite count in its centre, mode text;
+                    readout row and footer hidden." All four rows go, and the count takes the
+                    medallion's centre (#279). Nothing here changes a type size, a target size or a
+                    focus visual - §9.6.3 forbids that, and it is the difference between this and a
+                    density switch.
                 -->
                 <VisualState x:Name="CompactDensity">
                     <VisualState.Setters>
                         <Setter Target="RootGrid.RowSpacing" Value="0" />
                         <Setter Target="Medallion.Size" Value="Compact" />
+                        <Setter Target="Medallion.CentreShowsCount" Value="True" />
                         <!--
                             The detail line is not in §9.6.2's list either, and was drawn anyway.
                             That is #215: at 200 % text the column ran past the 144 px minimum and

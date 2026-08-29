@@ -81,6 +81,11 @@ public sealed class StatusMedallion : Control
         nameof(SatelliteCount), typeof(int?), typeof(StatusMedallion),
         new PropertyMetadata(null, OnAnnouncementChanged));
 
+    /// <summary>Identifies the <see cref="CentreShowsCount"/> dependency property.</summary>
+    public static readonly DependencyProperty CentreShowsCountProperty = DependencyProperty.Register(
+        nameof(CentreShowsCount), typeof(bool), typeof(StatusMedallion),
+        new PropertyMetadata(false, OnCentreChanged));
+
     /// <summary>Identifies the <see cref="TimeIntervalNanoseconds"/> dependency property.</summary>
     public static readonly DependencyProperty TimeIntervalNanosecondsProperty = DependencyProperty.Register(
         nameof(TimeIntervalNanoseconds), typeof(double?), typeof(StatusMedallion),
@@ -125,11 +130,28 @@ public sealed class StatusMedallion : Control
         set => SetValue(SizeProperty, value);
     }
 
-    /// <summary>Satellites tracked, for the spoken description.</summary>
+    /// <summary>Satellites tracked, for the spoken description and, when the page asks, the centre.</summary>
     public int? SatelliteCount
     {
         get => (int?)GetValue(SatelliteCountProperty);
         set => SetValue(SatelliteCountProperty, value);
+    }
+
+    /// <summary>
+    /// Whether the centre should show <see cref="SatelliteCount"/> in place of the mode glyph
+    /// (§9.4.3, #279, #307).
+    /// </summary>
+    /// <remarks>
+    /// Set by the page, from its layout, rather than inferred here from <see cref="Size"/>: the
+    /// count belongs in the centre exactly when the readout row that normally carries it is off the
+    /// screen, and that is a fact about what surrounds the medallion, not about its diameter. The
+    /// main page sets it in compact and in §9.6.2's short layout; the Overview page's 96 px
+    /// medallion sits beside a readout row and leaves it false.
+    /// </remarks>
+    public bool CentreShowsCount
+    {
+        get => (bool)GetValue(CentreShowsCountProperty);
+        set => SetValue(CentreShowsCountProperty, value);
     }
 
     /// <summary>The current time interval in nanoseconds, for the spoken description.</summary>
@@ -209,6 +231,9 @@ public sealed class StatusMedallion : Control
         medallion.UpdateCentre();
     }
 
+    private static void OnCentreChanged(DependencyObject d, DependencyPropertyChangedEventArgs e) =>
+        ((StatusMedallion)d).UpdateCentre();
+
     private void ApplySize()
     {
         double diameter = (double)(int)Size;
@@ -229,27 +254,35 @@ public sealed class StatusMedallion : Control
     }
 
     /// <summary>
-    /// Chooses what the centre holds: the tracked-satellite count, or the mode glyph (#279).
+    /// Chooses what the centre holds: the tracked-satellite count, or the mode glyph (#279, #307).
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>The count replaces the glyph in compact, and only in compact.</b> G1 asks for mode and
-    /// count legible at two metres and §9.6.2 names those two as the only things compact keeps, so
-    /// the number earns the centre there. At Standard and Large the readout row is on screen and
-    /// already carries the count; putting it here as well would print it twice.
+    /// <b>The count takes the centre whenever the readout row is not on screen</b>, and the page
+    /// says when that is through <see cref="CentreShowsCount"/>: compact mode, and the standard
+    /// layout at its §9.6.2 minimum, where #194 collapses the row that carries the count. G1 asks
+    /// for mode and count legible at two metres, and in both of those layouts the medallion is the
+    /// only place left for the number. While the readout row is on screen the glyph keeps the
+    /// centre; the count is already printed once there, and printing it twice would say less.
+    /// </para>
+    /// <para>
+    /// #279 inferred this from <see cref="Size"/> — compact and only compact — and that was true of
+    /// compact and false of the 380 × 240 minimum, where the row went and the count went with it
+    /// (#307). Whether the count is elsewhere on the surface is the page's fact, not the diameter's.
     /// </para>
     /// <para>
     /// <b>The glyph is the fallback when there is no count</b>, rather than §11.1's em dash. The
     /// dash is right in a readout, where a column of figures needs a placeholder holding its
-    /// column; in a 64 px circle it is a wide bar that says less than the shape it replaced. So a
+    /// column; in a small circle it is a wide bar that says less than the shape it replaced. So a
     /// receiver that has not reported a count shows the state, which is the thing it does know.
     /// </para>
     /// <para>
     /// <b>The medallion carries colour only while the count is shown</b>, and that is a deliberate
     /// exception recorded in §9.4.3 rather than an oversight. §9.6.2 keeps the mode text beside the
-    /// medallion in compact, always and in words, so the state is on the surface in a second
-    /// channel - just not inside the circle. The alternatives were worse: the ring already carries
-    /// the sixty-sample sparkline, and a numeral sized for two metres leaves no room beside it.
+    /// medallion in both layouts, always and in words, so the state is on the surface in a second
+    /// channel - just not inside the circle. The alternatives were worse: the ring is a sparkline
+    /// or a uniform circle, neither of them a severity shape, and a numeral sized for two metres
+    /// leaves no room beside it.
     /// </para>
     /// </remarks>
     private void UpdateCentre()
@@ -260,7 +293,7 @@ public sealed class StatusMedallion : Control
             return;
         }
 
-        bool showCount = Size == MedallionSize.Compact && SatelliteCount is int;
+        bool showCount = CentreShowsCount && SatelliteCount is int;
 
         count.Text = SatelliteCount is int satellites
             ? satellites.ToString(System.Globalization.CultureInfo.CurrentCulture)
@@ -283,9 +316,18 @@ public sealed class StatusMedallion : Control
     /// Rebuilds the ring geometry. Called on every fast poll, which is once a second.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// The geometry is constructed and assigned outright rather than animated between states —
     /// P0-18 requires that no <c>Storyboard</c> targets it. Sixty short line segments in one
     /// <see cref="PathGeometry"/> is cheap enough to do at 1 Hz without any of that.
+    /// </para>
+    /// <para>
+    /// <b>The sparkline belongs to the 96 and 160 px sizes; at 64 px the ring is uniform</b>
+    /// (§9.10.2, #307). That small, sixty marks of differing length make the circle look
+    /// misshapen, and the circle is the one shape §9.7 relies on the eye finding without focusing.
+    /// So compact draws one mark length in every slot, always — a full circle from the first
+    /// second, whatever has or has not been heard — and carries the state's colour and nothing else.
+    /// </para>
     /// </remarks>
     private void Redraw()
     {
@@ -313,41 +355,47 @@ public sealed class StatusMedallion : Control
         double centre = diameter / 2;
         double band = diameter * BandFraction;
         double midRadius = centre - (band / 2) - 1;
-
-        IReadOnlyList<double?> samples = Samples ?? [];
         int slots = ReceiverStateStoreWindow;
-        double halfRange = MedallionRingMath.HalfRange(samples);
 
         PathGeometry geometry = new();
 
-        // Oldest sample at the top, running clockwise, so the newest is the mark just anticlockwise
-        // of twelve o'clock. A fixed slot per position means the ring does not shuffle as the window
-        // fills — a moving baseline would read as motion in the data.
-        for (int i = 0; i < samples.Count && i < slots; i++)
+        if (Size == MedallionSize.Compact)
         {
-            double? fraction = MedallionRingMath.Fraction(samples[i], halfRange);
-            if (fraction is not double value)
+            (double inner, double outer) = MedallionRingMath.UniformMark(midRadius, band);
+
+            for (int i = 0; i < slots; i++)
             {
-                continue;
+                geometry.Figures.Add(Segment(centre, SlotAngle(i, slots), inner, outer, band));
             }
+        }
+        else
+        {
+            IReadOnlyList<double?> samples = Samples ?? [];
+            double halfRange = MedallionRingMath.HalfRange(samples);
 
-            double angle = ((i / (double)slots) * 2 * Math.PI) - (Math.PI / 2);
-            double inner = midRadius;
-            double outer = midRadius + (value * band / 2);
-
-            // A reading of exactly zero still deserves a mark, or a perfect loop would look like a
-            // dead one. The minimum tick is what distinguishes "on target" from "no data".
-            if (Math.Abs(outer - inner) < 1)
+            // Oldest sample at the top, running clockwise, so the newest is the mark just
+            // anticlockwise of twelve o'clock. A fixed slot per position means the ring does not
+            // shuffle as the window fills — a moving baseline would read as motion in the data.
+            for (int i = 0; i < samples.Count && i < slots; i++)
             {
-                outer = inner + Math.Sign(value == 0 ? 1 : value);
-            }
+                double? fraction = MedallionRingMath.Fraction(samples[i], halfRange);
+                if (fraction is not double value)
+                {
+                    continue;
+                }
 
-            geometry.Figures.Add(Segment(centre, angle, inner, outer, band));
+                (double inner, double outer) = MedallionRingMath.SparklineMark(value, midRadius, band);
+                geometry.Figures.Add(Segment(centre, SlotAngle(i, slots), inner, outer, band));
+            }
         }
 
         ring.Data = geometry;
         ring.StrokeThickness = Math.Max(1, (2 * Math.PI * midRadius / slots) * BarDutyCycle);
     }
+
+    /// <summary>The angle of a slot: the first at twelve o'clock, then clockwise.</summary>
+    private static double SlotAngle(int index, int slots) =>
+        ((index / (double)slots) * 2 * Math.PI) - (Math.PI / 2);
 
     /// <summary>One radial tick, as a line figure from the baseline outward or inward.</summary>
     private static PathFigure Segment(double centre, double angle, double inner, double outer, double band)
