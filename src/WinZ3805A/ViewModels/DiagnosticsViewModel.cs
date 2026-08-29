@@ -55,6 +55,28 @@ public sealed class DiagnosticsViewModel : INotifyPropertyChanged
         : _selfTestResult;
 
     /// <summary>
+    /// Re-reads <c>:DIAG:TEST:RES?</c> after a test has run (#53).
+    /// </summary>
+    /// <returns>The raw reply, or null when it could not be read.</returns>
+    /// <remarks>
+    /// Separate from <see cref="RefreshAsync"/>, which also pulls the whole diagnostic log. After a
+    /// self-test the log is not what changed, and re-reading it would add seconds of wire time to
+    /// an operation the user is already waiting on.
+    /// </remarks>
+    public async Task<string?> ReadSelfTestResultAsync(CancellationToken cancellationToken = default)
+    {
+        if (!CanRead)
+        {
+            return null;
+        }
+
+        _selfTestResult = await ReadTextAsync(":DIAG:TEST:RES?", cancellationToken).ConfigureAwait(true);
+        RaiseAll();
+
+        return _selfTestResult;
+    }
+
+    /// <summary>
     /// Drops the log this page is holding, after the receiver has been told to clear its own.
     /// </summary>
     /// <remarks>

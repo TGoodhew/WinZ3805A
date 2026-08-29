@@ -477,8 +477,27 @@ All queries plus non-disruptive actions.
 | `:STAT:*:ENABle` / `:NTRansition` / `:PTRansition` setters | "Change status register mask?" |
 | `:STAT:QUES:COND:USER <SET\|CLEar>`<br>`:STAT:QUES:EVEN:USER <PTR\|NTR>` | "Change user-defined questionable status bit?" |
 | `*ESE` / `*SRE` setters | "Change event/service-request enable mask?" |
-| `*TST?` | "Run receiver self-test? This takes up to 30 seconds and may briefly interrupt normal operation." |
-| `:DIAG:TEST? <subsystem>` | "Run *subsystem* diagnostic? This may briefly interrupt normal operation." |
+| `*TST?` | "Run the receiver's full self-test? **The receiver will drop out of lock and re-acquire**, so the 1 PPS output is degraded for several minutes. The test itself takes up to 30 seconds." |
+| `:DIAG:TEST? <subsystem>` | "Run the *subsystem* diagnostic? **The receiver will drop out of lock and re-acquire**, so the 1 PPS output is degraded for several minutes. The test itself takes up to 30 seconds." |
+
+> **⚠ Amended 28 Aug 2026 (#53).** Both lines previously said the test *"may briefly interrupt normal
+> operation"*. Measured against the live Z3805A, that materially understates it:
+>
+> ```
+> 18:20:39  LOCK, TFOM 3, 9 satellites     <- before
+>    ... the twelve subsystem tests ...
+> 18:24:38  POW,  TFOM 9, 8 satellites     <- after
+> ```
+>
+> The receiver left lock entirely and returned to **power-up with TFOM 9**, then re-acquired over
+> several minutes. On an instrument whose entire purpose is a disciplined 1 PPS, that is the
+> difference between a shrug and a real outage, and §8's tier C exists precisely so the user is told
+> **before** they commit rather than discovering it afterwards. The old wording would have been read
+> as "a second or two".
+>
+> The 30 second figure is retained and confirmed: individual subsystems returned in 2.4–5.4 s, `ALL`
+> in 12.4 s, and `GPS` reached **24.0 s** — inside §7.2's 30 000 ms class with six seconds to spare,
+> so a shorter timeout would fail a healthy receiver.
 
 **Dialog construction, button roles, styling and focus behaviour are specified in §9.7.4**, which is the authority for them. The rule that stood here previously — destructive action on the *secondary* button, styled `AccentButtonStyle` — was superseded by §9.7.4 and is removed rather than left 450 lines from its own correction (#84). It mattered: §9.7.4 puts the destructive action on the **PrimaryButton** styled `WzDestructiveButtonStyle` with Cancel as the `CloseButton` and `DefaultButton`, precisely because *accent means the safe thing to do next*. Anyone reading §8 in order and implementing from it would have built the opposite.
 

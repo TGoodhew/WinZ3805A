@@ -4,6 +4,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:WinZ3805A.Controls"
+    xmlns:viewmodels="using:WinZ3805A.ViewModels"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:models="using:WinZ3805A.Device.Models"
@@ -46,15 +47,95 @@
                      Title="Could not read from the receiver" />
 
             <!-- ================================ Self test ============================== -->
+
+            <!--
+                P1-5 (#53). The subsystem keywords were probed against the live receiver rather than
+                taken from §10.9 on trust - neither manual documents :DIAG:TEST?'s parameter at all.
+                All twelve were accepted; an invalid one returns -224 immediately.
+
+                A row shows "—" until that subsystem has actually been tested in this session. The
+                wireframe's eleven simultaneous ticks are not obtainable: :DIAG:TEST:RES? reports one
+                <code>,<subsystem> pair for whichever test ran last, so filling the other ten in from
+                an ALL run would assert results the receiver never sent.
+            -->
             <Border Style="{ThemeResource WzCardStyle}">
-                <StackPanel Spacing="{ThemeResource WzSpaceXs}">
+                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
                     <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Self test" />
-                    <TextBlock x:Name="SelfTestText" Style="{ThemeResource WzMonoTextStyle}" TextWrapping="Wrap" />
-                    <TextBlock Style="{ThemeResource WzCaptionTextStyle}"
-                               Foreground="{ThemeResource WzTextTertiaryBrush}"
+
+                    <Grid ColumnSpacing="{ThemeResource WzSpaceMd}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <ComboBox x:Name="SubsystemPicker"
+                                  Grid.Column="0"
+                                  MinWidth="200"
+                                  Header="Subsystem"
+                                  AutomationProperties.Name="Subsystem to test"
+                                  SelectionChanged="OnSubsystemChanged"
+                                  DisplayMemberPath="DisplayName" />
+
+                        <!--
+                            The label names the subsystem rather than saying "Run test", because the
+                            action costs the receiver its lock for several minutes. A button that
+                            does not say what it is about to do is the wrong affordance for that.
+                        -->
+                        <Button x:Name="RunTestButton"
+                                Grid.Column="2"
+                                VerticalAlignment="Bottom"
+                                Click="OnRunTestClicked" />
+                    </Grid>
+
+                    <controls:CommandOutcomeBar x:Name="SelfTestOutcome" />
+
+                    <TextBlock x:Name="SelfTestSummary"
+                               Style="{ThemeResource WzBodyTextStyle}"
+                               Foreground="{ThemeResource WzTextSecondaryBrush}"
                                TextWrapping="Wrap"
-                               MaxWidth="{ThemeResource WzProseMaxWidth}"
-                               Text="This is the result of the last test the receiver ran. Running a new one interrupts normal operation and needs a confirmation dialog, which arrives with §15 step 10." />
+                               MaxWidth="{ThemeResource WzProseMaxWidth}" />
+
+                    <ItemsControl x:Name="SelfTestRows">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="viewmodels:SelfTestRow">
+                                <Grid ColumnSpacing="{ThemeResource WzSpaceMd}"
+                                      Padding="{ThemeResource WzSpaceXxsThickness}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="180" />
+                                        <ColumnDefinition Width="160" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock Grid.Column="0"
+                                               Style="{ThemeResource WzBodyTextStyle}"
+                                               VerticalAlignment="Center"
+                                               Text="{x:Bind Name}" />
+
+                                    <!--
+                                        SeverityPill, not a coloured mark: §9.13 item 10 and §9.4.3
+                                        require colour PLUS shape PLUS text, and "Code 65536" is the
+                                        part a reader can act on.
+                                    -->
+                                    <controls:SeverityPill Grid.Column="1"
+                                                           Severity="{x:Bind Severity}"
+                                                           Text="{x:Bind StatusText}" />
+
+                                    <TextBlock Grid.Column="2"
+                                               Style="{ThemeResource WzCaptionTextStyle}"
+                                               Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                               VerticalAlignment="Center"
+                                               Text="{x:Bind RanAtText}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBlock x:Name="LastReadText"
+                               Style="{ThemeResource WzCaptionTextStyle}"
+                               Foreground="{ThemeResource WzTextSecondaryBrush}"
+                               TextWrapping="Wrap"
+                               MaxWidth="{ThemeResource WzProseMaxWidth}" />
                 </StackPanel>
             </Border>
 
