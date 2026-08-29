@@ -21,6 +21,7 @@ also shipped beside the font as `Assets/Fonts/CascadiaMono-OFL.txt`.
 | Windows App SDK / WinUI 3 | MIT | Framework package, resolved at install |
 | CommunityToolkit.Mvvm | MIT | Assembly in the package |
 | CommunityToolkit.WinUI.Controls.SettingsControls | MIT | Assembly in the package |
+| Markdig | BSD 2-Clause | Assembly in the package |
 | Microsoft.Data.Sqlite (with SQLite) | MIT (SQLite itself is public domain) | Assembly in the package |
 | Microsoft.Extensions.DependencyInjection | MIT | Assembly in the package |
 | Microsoft.Extensions.Hosting | MIT | Assembly in the package |
