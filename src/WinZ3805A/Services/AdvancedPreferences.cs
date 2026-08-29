@@ -38,6 +38,33 @@ public sealed record AdvancedPreferences
     /// </remarks>
     public bool AreLockNotificationsEnabled { get; init; } = true;
 
+    /// <summary>Whether closing the window leaves the application running (#280).</summary>
+    /// <remarks>
+    /// <b>On by default</b>, for the reason §9.1 gives the whole application: this is left docked on
+    /// a second monitor for weeks, and a close button that stops the polling stops it exactly when
+    /// the user was trying to get the window out of the way. With it off, the tray icon and P1-9's
+    /// notifications only work while a window is open somewhere, which is the case they are least
+    /// needed for.
+    /// </remarks>
+    public bool KeepRunningWhenClosed { get; init; } = true;
+
+    /// <summary>Whether the application starts with no window, in the notification area (#280).</summary>
+    /// <remarks>
+    /// Off by default. An application that starts with no window is indistinguishable from one that
+    /// failed to start, so this is something a user asks for rather than meets.
+    /// </remarks>
+    public bool StartMinimised { get; init; }
+
+    /// <summary>Whether the user has been told once that closing does not exit (#280).</summary>
+    /// <remarks>
+    /// <b>Not a preference the user sets; a fact the application remembers.</b> It lives here
+    /// because this is the file that survives a restart, and the alternative — telling them every
+    /// time — is the behaviour the acceptance criterion forbids. Silently changing what the close
+    /// button does is the well-known way to annoy people; saying so once is the cure, and saying so
+    /// twice is the disease.
+    /// </remarks>
+    public bool HasSeenCloseToTrayNotice { get; init; }
+
     /// <summary>A fresh install's preferences.</summary>
     public static AdvancedPreferences Default { get; } = new();
 }

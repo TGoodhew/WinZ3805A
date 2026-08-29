@@ -1644,6 +1644,42 @@ Two behavioural principles remain here because they are functional rather than v
 - Compact mode toggles on double-click of the medallion or `Ctrl+Shift+M`. Type sizes, targets, and focus visuals are unchanged (§9.6.3).
 - Opening Details runs a `ConnectedAnimation` on the medallion into the Overview page medallion (§9.8.2).
 
+#### 10.3.1 Closing, and staying alive (#280)
+
+**Closing the window does not exit the application by default.** It hides, and the receiver keeps
+being polled: the trend keeps filling, P1-9's notifications keep arriving and P1-10's icon stays
+accurate. Before this, closing ended the process, so both of those features worked only while a
+window was open somewhere — the case they are least needed for, and a direct contradiction of §9.1's
+user who leaves this docked beside a spectrum analyser for weeks.
+
+| Behaviour | Default | Where |
+|---|---|---|
+| Close hides rather than exits | **On** | Settings → Advanced, *Keep running when I close the window* |
+| Start with no window | Off | Settings → Advanced, *Start in the notification area* |
+| Exit | — | Settings → Advanced, and the notification icon's right-click menu |
+
+**The user is told once.** Silently turning close into hide is the well-known way to annoy people,
+so the first close shows a dialog naming what happened and offering the exit they may have meant.
+It is shown **while the window is still visible** and the window hides afterwards; a notice put up
+over a window that has already gone is a notice nobody reads, which spends the single chance and
+leaves the user just as surprised.
+
+> **The application must be quittable from its own surface, not only from the notification area.**
+> The tray menu is the obvious place for *Exit* and it is there — but **Windows 11 does not promote
+> a newly registered notification icon.** It goes to the hidden overflow, and a user who has not
+> dragged it out cannot right-click what they cannot see. An application whose only exit is an
+> invisible icon is quittable in principle and by Task Manager in practice, which is what §13's
+> acceptance forbids. So Settings → Advanced carries an **Exit** button that depends on no shell
+> behaviour.
+
+**No confirmation on exit.** Polling is not a transaction and `trend.db` commits as it goes, so
+there is nothing to lose by stopping. A prompt would be the second interruption in a job whose first
+one already asked a question.
+
+**The tray menu holds *Open* and *Exit* and nothing else.** Anything that touches the receiver
+reaches it through §8's tiers with §8.3's consequence text, and a shell context menu is not a place
+any of that can be shown.
+
 ### 10.4 Receiver Details — Overview page
 
 ```
@@ -2530,6 +2566,7 @@ something might later branch on.
 | P1-9 | Windows notification on holdover entry / lock loss |
 | P1-10 | System tray icon reflecting lock state |
 | P1-13 | Taskbar overlay badge reflecting lock state (§9.4.3.1) |
+| P1-14 | Close-to-tray, start minimised, and an exit that does not need the tray (§10.3.1) |
 
 ### P2 — designed for, not built
 

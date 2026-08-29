@@ -72,6 +72,13 @@ public sealed class TrayIconService : IDisposable
         remove => _icon.Activated -= value;
     }
 
+    /// <summary>Raised when Exit is chosen from the tray menu (#280).</summary>
+    public event EventHandler? ExitRequested
+    {
+        add => _icon.ExitRequested += value;
+        remove => _icon.ExitRequested -= value;
+    }
+
     /// <summary>
     /// The mode the tray should be showing.
     /// </summary>
