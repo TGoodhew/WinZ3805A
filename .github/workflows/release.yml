@@ -1,0 +1,197 @@
+# ---------------------------------------------------------------------------
+# Publishing a release.
+#
+# Push a tag and this builds the thing a person with no Visual Studio can
+# install, then attaches it to a GitHub release:
+#
+#     git tag v1.0.1 && git push origin v1.0.1
+#
+# THE TAG DOES NOT SET THE VERSION. Package.appxmanifest does, and this workflow
+# refuses to build when the two disagree rather than rewriting either to match.
+# §6.3 makes package identity effectively permanent and the manifest is where it
+# is decided; a tag that could silently restamp it would move that decision into
+# a git command nobody reviews. Bump the manifest in a pull request, merge it,
+# then tag the merge.
+#
+# WHY THE SDK'S MSBUILD. ci.yml records the reason and it applies here: the
+# Visual Studio MSBuild on a hosted runner is an older major version that cannot
+# load net10.0 projects. New-SideloadPackage.ps1 takes -UseSdkMSBuild so the
+# packaging arguments live in one file rather than being restated here, where
+# they would drift from the script people run locally.
+#
+# WHAT THE SECRETS ARE. The package is signed with a self-signed certificate
+# (README's "Installing" explains what that does and does not mean for the
+# person installing). It is not a certificate authority key, but anyone holding
+# it can sign a package that installs under the trust a user has already
+# granted, so it is a secret in the way that matters:
+#
+#     SIGNING_PFX_BASE64    - base64 of build\devcert.pfx
+#     SIGNING_PFX_PASSWORD  - its password
+#
+# Regenerate both with build\New-SigningSecrets.ps1, which prints the exact
+# gh commands.
+# ---------------------------------------------------------------------------
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+  # A dry run builds and uploads the zip as a workflow artifact without
+  # creating a release, so the packaging path can be exercised before a tag
+  # exists. There is no undoing a published release cleanly, and a tag is the
+  # worst place to discover that signing was misconfigured.
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Build and attach the zip as an artifact, but publish no release'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build, sign and publish
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      # ---------------------------------------------------------------------
+      # The manifest is the authority; the tag has to agree with it.
+      # ---------------------------------------------------------------------
+      - name: The tag and the manifest agree on the version
+        id: version
+        shell: pwsh
+        run: |
+          [xml]$manifest = Get-Content 'src/WinZ3805A/Package.appxmanifest'
+          $manifestVersion = $manifest.Package.Identity.Version
+          "manifest=$manifestVersion" >> $env:GITHUB_OUTPUT
+
+          if ($env:GITHUB_REF_TYPE -ne 'tag') {
+            Write-Host "Dry run at manifest version $manifestVersion; no tag to check."
+            "tag=" >> $env:GITHUB_OUTPUT
+            exit 0
+          }
+
+          $tag = $env:GITHUB_REF_NAME
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+
+          # v1.0.1 means 1.0.1.0. An MSIX version is always four parts and the
+          # revision is reserved (the Store requires it to be 0), so the tag
+          # carries the three that a human chooses.
+          if ($tag -notmatch '^v(\d+)\.(\d+)\.(\d+)$') {
+            throw "Tag '$tag' is not vMAJOR.MINOR.PATCH, so there is no version to check the manifest against."
+          }
+
+          $expected = "$($Matches[1]).$($Matches[2]).$($Matches[3]).0"
+
+          if ($manifestVersion -ne $expected) {
+            throw ("Tag '$tag' expects Package.appxmanifest to declare $expected, and it declares " +
+                   "$manifestVersion. The manifest decides the version (§6.3); bump it in a pull " +
+                   'request, merge, and tag the merge.')
+          }
+
+          Write-Host "Tag $tag matches manifest $manifestVersion."
+
+      # ---------------------------------------------------------------------
+      # Do not ship a red build. These are the same jobs ci.yml runs, and they
+      # are repeated rather than depended on because a tag can point at any
+      # commit - including one whose CI run predates a change to a gate.
+      # ---------------------------------------------------------------------
+      - name: Gates
+        shell: pwsh
+        run: |
+          $gates = Get-ChildItem 'build/Test-*.ps1' | Sort-Object Name
+          foreach ($gate in $gates) {
+            Write-Host "--- $($gate.Name)"
+            & $gate.FullName
+            if ($LASTEXITCODE -ne 0) { throw "$($gate.Name) failed." }
+          }
+          ./build/Capture-Fixtures.ps1 -SelfTest
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Test
+        run: dotnet test tests/WinZ3805A.Tests/WinZ3805A.Tests.csproj -c Release
+
+      # ---------------------------------------------------------------------
+      # Sign and package.
+      # ---------------------------------------------------------------------
+      - name: Restore the signing certificate
+        shell: pwsh
+        env:
+          PFX_BASE64: ${{ secrets.SIGNING_PFX_BASE64 }}
+        run: |
+          if (-not $env:PFX_BASE64) {
+            throw ('The SIGNING_PFX_BASE64 secret is not set, so nothing can be signed and an ' +
+                   'unsigned MSIX installs nowhere. build/New-SigningSecrets.ps1 prints the commands.')
+          }
+
+          [IO.File]::WriteAllBytes('build/devcert.pfx', [Convert]::FromBase64String($env:PFX_BASE64))
+
+      - name: Build the sideload package
+        shell: pwsh
+        env:
+          PFX_PASSWORD: ${{ secrets.SIGNING_PFX_PASSWORD }}
+        run: |
+          ./build/New-SideloadPackage.ps1 `
+            -UseSdkMSBuild `
+            -CertificatePassword $env:PFX_PASSWORD
+
+      # The private key never belongs in an artifact or a release. Removed
+      # explicitly rather than trusted to the runner being discarded, because
+      # the two steps below walk the tree.
+      - name: Remove the signing key from the workspace
+        if: always()
+        shell: pwsh
+        run: Remove-Item 'build/devcert.pfx' -Force -ErrorAction SilentlyContinue
+
+      - name: What was built
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem 'dist/*.zip' | Select-Object -First 1
+          $bundle = Get-ChildItem 'src/WinZ3805A/AppPackages' -Recurse -Filter '*.msixbundle' |
+            Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          $signature = Get-AuthenticodeSignature $bundle.FullName
+
+          Write-Host "zip         $($zip.Name)  ($([math]::Round($zip.Length / 1MB)) MB)"
+          Write-Host "signed by   $($signature.SignerCertificate.Subject)"
+          Write-Host "timestamped $($signature.TimeStamperCertificate.Subject)"
+
+      - name: Upload the zip as an artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: WinZ3805A-${{ steps.version.outputs.manifest }}-x64
+          path: dist/*.zip
+          if-no-files-found: error
+
+      # ---------------------------------------------------------------------
+      # Publish. Tag runs only; a dry run stops at the artifact above.
+      # ---------------------------------------------------------------------
+      - name: Publish the release
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $zip = (Get-ChildItem 'dist/*.zip' | Select-Object -First 1).FullName
+
+          # The certificate thumbprint and the zip's SHA-256 are read off what
+          # actually shipped rather than written into the template, so the notes
+          # cannot describe a different file than the one attached.
+          $notes = ./build/New-ReleaseNotes.ps1 -ZipPath $zip | Select-Object -Last 1
+
+          gh release create $env:GITHUB_REF_NAME $zip `
+            --title "WinZ3805A $env:GITHUB_REF_NAME" `
+            --notes-file $notes `
+            --generate-notes `
+            --verify-tag

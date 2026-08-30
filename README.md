@@ -32,7 +32,8 @@ Two ideas shape this replacement:
 ## Status
 
 Feature-complete against the specification's P0 set and in daily use against a
-bench Z3805A; **there is no Store release yet**. The transport, parser, command
+bench Z3805A; **it is sideloaded rather than published to the Store**
+([latest release](https://github.com/TGoodhew/WinZ3805A/releases/latest)). The transport, parser, command
 model, design system and every view are implemented, with the test suite and
 eleven CI gates green. Progress is tracked in the
 [issue backlog](https://github.com/TGoodhew/WinZ3805A/issues), whose `§`
@@ -114,25 +115,59 @@ Sources: [Windows App SDK and supported Windows releases](https://learn.microsof
 
 ## Installing
 
-The application is installed by sideloading. No package is published yet, so
-the install is built from source:
-[`build/New-SideloadPackage.ps1`](build/New-SideloadPackage.ps1) builds the
-MSIX, signs it, and wraps it — with the x64 Windows App Runtime, an
-`Install.cmd` and a plain-language [README](build/sideload/README.txt) — into
-`dist\WinZ3805A-<version>-x64.zip`, which a machine with neither Visual Studio
-nor an internet connection can install from. Deployment of the Windows App SDK
-is framework-dependent rather than self-contained (§6.3), which is why the
-runtime travels in the zip.
+**[Download the latest release](https://github.com/TGoodhew/WinZ3805A/releases/latest)**,
+unblock the zip, extract it, and double-click `Install.cmd`. There is no Store
+listing; this is sideloaded.
 
-The package is signed with a self-signed certificate (`build/devcert.pfx`,
+> Unblock before extracting — right-click the **zip** → *Properties* →
+> *Unblock*. Windows marks anything downloaded from the internet and the mark
+> survives extraction, where it makes the install fail without mentioning why.
+
+The zip carries the signed package, its certificate and the x64 Windows App
+Runtime, so a bench machine with neither Visual Studio nor an internet
+connection can install from it. Deployment of the Windows App SDK is
+framework-dependent rather than self-contained (§6.3), which is why the runtime
+travels in the zip rather than being fetched.
+
+The package is signed with a **self-signed certificate** (`build/devcert.pfx`,
 generated from the manifest on first use so its subject cannot drift from the
 declared publisher), so the person installing trusts it once: `Install.cmd`
 asks for administrator permission for exactly that step — adding the
-certificate to *Trusted People* and nothing wider — and the README in the zip
-explains what that does and does not grant before asking. Uninstall from
-*Settings › Apps*, or with
+certificate to *Trusted People* and nothing wider — and the
+[README in the zip](build/sideload/README.txt) explains what that does and does
+not grant before asking. Every release publishes the certificate thumbprint and
+the zip's SHA-256 so both can be checked against what Windows shows you.
+
+Uninstall from *Settings › Apps*, or with
 [`build/Uninstall-Sideload.ps1`](build/Uninstall-Sideload.ps1), which also
 removes the certificate and is what puts a test machine back to clean.
+
+To build the installer yourself instead,
+[`build/New-SideloadPackage.ps1`](build/New-SideloadPackage.ps1) produces the
+same `dist\WinZ3805A-<version>-x64.zip` from a clone.
+
+### Publishing a release
+
+Releases are built by [`.github/workflows/release.yml`](.github/workflows/release.yml)
+on a `v*` tag — it runs the gates and the tests, builds and signs, then attaches
+the zip with its thumbprint and checksum.
+
+**The tag does not set the version.** `Package.appxmanifest` does, and the
+workflow refuses to build when the two disagree rather than restamping either:
+§6.3 makes package identity effectively permanent, and a tag that could silently
+change it would move that decision into a git command nobody reviews. Bump the
+manifest in a pull request, merge, then tag the merge:
+
+```powershell
+# after the version bump is on main
+git tag v1.0.1 && git push origin v1.0.1
+```
+
+Signing on the runner needs `SIGNING_PFX_BASE64` and `SIGNING_PFX_PASSWORD` as
+repository secrets; [`build/New-SigningSecrets.ps1`](build/New-SigningSecrets.ps1)
+sets both from the local PFX and explains what rotating the key costs. Use the
+workflow's **Run workflow** button for a dry run — it builds and signs and
+attaches the zip as an artifact without publishing anything.
 
 ## Building from source
 

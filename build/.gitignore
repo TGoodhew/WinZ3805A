@@ -1,0 +1,15 @@
+# The signing key, and the one file in this repository that must never be in it.
+#
+# The root .gitignore already has *.pfx. This is deliberately the second rule
+# rather than a redundant one: the root file is long, general, and edited for
+# reasons that have nothing to do with signing, and it only takes one person
+# reorganising it to remove the only thing standing between a private key and a
+# public repository. This rule sits beside the key it protects, is four lines
+# long, and has exactly one reason to be edited.
+#
+# What the key is: a self-signed certificate, so nothing trusts it until a
+# person chooses to. But everyone who has installed a release HAS chosen to, and
+# anyone holding this PFX can sign a package that installs under that trust as an
+# upgrade. build\New-SigningSecrets.ps1 is how it reaches CI, and the rotation
+# note there says what replacing it costs.
+devcert.pfx
