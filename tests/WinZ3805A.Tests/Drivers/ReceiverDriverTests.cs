@@ -3,6 +3,7 @@ using Microsoft.Extensions.Time.Testing;
 using WinZ3805A.Controls;
 using WinZ3805A.Device.Commands;
 using WinZ3805A.Device.Drivers;
+using WinZ3805A.Device.Drivers.Nmea;
 using WinZ3805A.Device.Models;
 
 namespace WinZ3805A.Tests.Drivers;
@@ -30,11 +31,12 @@ public class ReceiverDriverTests
 
     private static SmartClockDriver Driver() => new(new FakeTimeProvider(Now));
 
-    /// <summary>Every driver the contract binds: the real family and the test-only second one.</summary>
+    /// <summary>Every driver the contract binds: the two real families and the test-only one.</summary>
     public static TheoryData<IReceiverDriver> AllDrivers => new()
     {
         new SmartClockDriver(new FakeTimeProvider(Now)),
         new FakeReceiverDriver(),
+        new NmeaDriver(new FakeTimeProvider(Now)),
     };
 
     [Fact]
@@ -157,13 +159,78 @@ public class ReceiverDriverTests
     /// <remarks>
     /// <c>CommandInvoker</c> reads <c>:SYST:ERR?</c> after every tier C command (§7.2) and throws
     /// if the driver cannot supply it, so this is a contract requirement rather than a SmartClock
-    /// habit. A family genuinely without an error queue is a family the invoker cannot serve yet —
-    /// #287's deferred item 5 territory — and this test is where that shows up first.
+    /// habit — <b>for a family that can be sent a tier C command at all.</b> #310's talker cannot
+    /// be sent anything: its link is broadcast, its catalog is reads only, and the invoker never
+    /// runs for it. The requirement therefore binds query/response families, which is what the
+    /// invoker serves; a broadcast family is exempt by construction rather than by exception.
     /// </remarks>
     [Theory]
     [MemberData(nameof(AllDrivers))]
-    public void TheErrorQueueQueryIsCatalogued(IReceiverDriver driver) =>
+    public void TheErrorQueueQueryIsCatalogued(IReceiverDriver driver)
+    {
+        if (driver.Link == LinkStyle.Broadcast)
+        {
+            Assert.DoesNotContain(driver.Commands, command => command.Tier == SafetyTier.Confirm);
+            return;
+        }
+
         Assert.NotNull(driver.Find(":SYST:ERR?"));
+    }
+
+    // ---- #310: the members a broadcast family adds -------------------------------------------
+
+    /// <summary>Hearing nothing claims nothing, for every driver.</summary>
+    [Theory]
+    [MemberData(nameof(AllDrivers))]
+    public void OverhearingNothingClaimsNothing(IReceiverDriver driver) =>
+        Assert.Null(driver.Overhear([]));
+
+    /// <summary>What a wrong baud rate sounds like must not throw, or claim.</summary>
+    [Theory]
+    [MemberData(nameof(AllDrivers))]
+    public void OverhearingNoiseNeverThrowsOrClaims(IReceiverDriver driver)
+    {
+        string[] noise = ["\0ÿþ$", "$", "$GP", "$GPGGA,*ZZ", "scpi > ", "SYMMETRICOM,Z3805A,3625A02931,1.01.03-A", "   ", "*IDN?"];
+
+        Assert.Null(driver.Overhear(noise));
+        foreach (string line in noise)
+        {
+            Assert.Null(driver.ClassifyLine(line));
+        }
+    }
+
+    /// <summary>A query/response family does not claim a talker — the SmartClock has no business with NMEA.</summary>
+    [Theory]
+    [MemberData(nameof(AllDrivers))]
+    public void AQueryResponseDriverHearsNoOne(IReceiverDriver driver)
+    {
+        if (driver.Link != LinkStyle.QueryResponse)
+        {
+            return;
+        }
+
+        Assert.Null(driver.Overhear(["$GPRMC,120000.00,A,4737.2300,N,12220.9580,W,0.0,0.0,290826,,*6C"]));
+        Assert.Null(driver.ClassifyLine("$GPRMC,120000.00,A,4737.2300,N,12220.9580,W,0.0,0.0,290826,,*6C"));
+    }
+
+    /// <summary>
+    /// A broadcast family's cycle boundary is its first fast-tier entry, and the whole-cycle key
+    /// must be catalogued if the plan names it, because the session's allowlist check does not
+    /// know it is special.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(AllDrivers))]
+    public void ABroadcastPlanIsShapedForTheListener(IReceiverDriver driver)
+    {
+        if (driver.Link != LinkStyle.Broadcast)
+        {
+            return;
+        }
+
+        Assert.NotEmpty(driver.Plan.FastTier);
+        Assert.Null(driver.Plan.RefusableIndex);
+        Assert.NotNull(driver.Find(driver.Plan.FullStatus));
+    }
 
     /// <summary>
     /// Every mnemonic the pages resolve at a click is in the SmartClock catalog.
