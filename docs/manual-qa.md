@@ -279,10 +279,50 @@ it. It rides on section 5's antenna pull.
 
 ---
 
+## 12. The published release installs on a machine that has never had it
+
+**Why.** Everything else here tests the application. This tests the *download* — and it is the only
+check with a stranger at the other end of it. The failure modes are all invisible from a developer
+machine, because a developer machine already has the runtime, already trusts the certificate, and
+never sees the mark Windows puts on a downloaded file.
+
+Do it on the artifact from the **release page**, not on `dist\` — downloading is half of what is
+being tested.
+
+| | |
+|---|---|
+| **Do** | On a machine with no Visual Studio and no Windows App SDK: download the zip from the release, right-click it → *Properties* → **Unblock**, extract, double-click `Install.cmd`. |
+| **Watch** | The certificate thumbprint in the UAC/trust prompt. |
+| **Pass** | The thumbprint matches the one in the release notes. One administrator prompt and no others. The app appears in Start and launches. |
+
+| | |
+|---|---|
+| **Do** | Repeat *without* unblocking the zip first. |
+| **Pass** | It fails, and the failure is readable — the window stays open and says something a
+non-developer can act on. This is expected to fail; the check is that it fails *legibly*, because it is the most common way an install goes wrong and the mark is never mentioned by Windows' own error. |
+
+| | |
+|---|---|
+| **Do** | `build\Uninstall-Sideload.ps1`, then `Get-AppxPackage -Name WinZ3805A` and `certlm.msc` → *Trusted People*. |
+| **Pass** | Neither the package nor the certificate is left behind. |
+
+> **When the publisher changes, this section is not optional.** `Identity/@Name` and
+> `Identity/@Publisher` together form the package family name, so a build signed by a different
+> publisher installs *alongside* the old one instead of upgrading it, and `Uninstall-Sideload.ps1`
+> — which finds the certificate by the manifest's *current* publisher — will not remove the old
+> certificate. It happened once, at v1.0.1, when the placeholder `CN=AppPublisher` was replaced.
+> Uninstall the older build by hand first.
+
+---
+
 ## Before a release
 
-Sections 1–4, 8, 9 and 11 in full. Section 5 only if the hardware is being moved, with sections 7
-and 10 alongside it since they need the same antenna; section 6 if survey behaviour has been touched.
+Sections 1–4, 8, 9 and 11 in full, then **12 on the published artifact** — which means the release
+exists before the last check passes. That is the right way round: a release nobody can install is
+worth catching after it is published rather than not at all, and the fix is another tag. Section 5
+only if the hardware is being moved, with sections 7 and 10 alongside it since they need the same
+antenna; section 6 if survey behaviour has been touched.
+
 Open a QA-run issue for the release and record each section's result there — every issue this
 checklist cites is closed, so there is no standing place otherwise — and if something fails, file it
 rather than fixing it silently: the log of what was checked is worth as much as the checking.
