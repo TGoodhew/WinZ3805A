@@ -587,8 +587,46 @@ public sealed partial class DetailsWindow : Window
         }
     }
 
-    private void SavePreferences() =>
+    /// <summary>
+    /// Persists §9.7.1's pane state — but only where that state is the user's to choose.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Expanded only.</b> §9.7.1 says the pane is user-collapsible and its state persisted, and
+    /// the word doing the work is <i>user</i>. In <c>LeftCompact</c> and <c>Minimal</c> the pane is
+    /// closed because the control has no room for it, and it reopens as a transient overlay — that
+    /// is the layout talking, not a preference, and saving it records a choice nobody made.
+    /// </para>
+    /// <para>
+    /// <b>The defect this fixes outlived a session</b> (#343). Any session that was ever narrow —
+    /// a dragged window, or high display scaling, where the same 1024 of content is fewer physical
+    /// pixels — wrote <c>IsPaneOpen: false</c>, and every later session then opened with a rail at
+    /// any width. Including the default: §9.6.2 chose 1024 × 720 precisely so the first thing a user
+    /// sees is the Medium breakpoint, and this quietly took that away from anyone who had once made
+    /// the window small.
+    /// </para>
+    /// <para>
+    /// Guarded here rather than in the two callers, because there are two — the pane's own event and
+    /// <c>Closed</c> — and a guard on one of them is a bug waiting for the other.
+    /// </para>
+    /// <para>
+    /// <b>The restore is deliberately left unguarded, and that was measured.</b> Deferring it until
+    /// the display mode settled — on <c>DisplayModeChanged</c>, applying only in <c>Expanded</c> —
+    /// looked tidier and silently stopped restoring anything: a pane the user collapsed at a wide
+    /// window came back open on the next launch. Whatever the control does with its display mode
+    /// during construction, that event did not deliver a usable moment to write into. Guarding the
+    /// write alone fixes the defect and leaves the working half alone.
+    /// </para>
+    /// </remarks>
+    private void SavePreferences()
+    {
+        if (Nav.DisplayMode != NavigationViewDisplayMode.Expanded)
+        {
+            return;
+        }
+
         _preferences.Save(new DetailsViewPreferences { IsPaneOpen = Nav.IsPaneOpen });
+    }
 
     private void OnSessionStatusChanged(object? sender, ConnectionStatusChanged e) =>
         DispatcherQueue.TryEnqueue(RenderConnection);
