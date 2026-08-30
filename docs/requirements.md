@@ -1484,7 +1484,7 @@ of data rather than data.
 
 Declared as `KeyboardAccelerator` on the command, with `KeyboardAcceleratorPlacementMode="Auto"` so the shortcut renders in the tooltip automatically. Icon-only buttons must show accelerator text in their tooltip.
 
-> **⚠ Amended 29 Aug 2026 (#316).** The accelerators are attached to the main window's content root (`Views/MainWindow.xaml.cs`, `AddAccelerators`) and to the Details window's `NavigationView` (`Views/DetailsWindow.xaml.cs`), not to the commands, and the code records why: `Window` has no accelerator collection of its own, and §9.6.2's compact mode collapses the footer that hosts the Connect button, so an accelerator attached to that button would vanish with it — precisely the state a keyboard-only user would need it in. `KeyboardAcceleratorPlacementMode="Auto"` therefore has nothing to render from, and the tooltips carry the key by hand (`ToolTipFor`). The requirement on the tooltip is unchanged; the mechanism differs. Revert or keep is #320's call.
+> **⚠ Amended 29 Aug 2026 (#316).** The accelerators are attached to the main window's content root (`Views/MainWindow.xaml.cs`, `AddAccelerators`) and to the Details window's `NavigationView` (`Views/DetailsWindow.xaml.cs`), not to the commands, and the code records why: `Window` has no accelerator collection of its own, and §9.6.2's compact mode collapses the footer that hosts the Connect button, so an accelerator attached to that button would vanish with it — precisely the state a keyboard-only user would need it in. `KeyboardAcceleratorPlacementMode="Auto"` therefore has nothing to render from, and the tooltips carry the key by hand (`ToolTipFor`). The requirement on the tooltip is unchanged; the mechanism differs. **Kept — confirmed by Tony 30 Aug 2026 (#320).**
 
 ### 9.8 Motion
 
@@ -1512,7 +1512,7 @@ Declared as `KeyboardAccelerator` on the command, with `KeyboardAcceleratorPlace
 | Moment | Animation | Duration | Easing | Reduced-motion fallback |
 |---|---|---|---|---|
 | Nav page change | `SlideNavigationTransitionInfo` with `FromBottom` — **one direction, always** | stock, not settable | stock, not settable | `SuppressNavigationTransitionInfo` |
-| Main → Details window | **None.** Amended 29 Aug 2026 (#316) from *`ConnectedAnimation` on the medallion → Overview medallion*: `ConnectedAnimationService` is per-view and §10.2 makes Main and Details separate top-level windows, so the animation is impossible across them and the reduced-motion fallback is what is built — `Views/OverviewPage.xaml` records why. Revert or keep is #320's call. | — | — | Details opens directly |
+| Main → Details window | **None.** Amended 29 Aug 2026 (#316) from *`ConnectedAnimation` on the medallion → Overview medallion*: `ConnectedAnimationService` is per-view and §10.2 makes Main and Details separate top-level windows, so the animation is impossible across them and the reduced-motion fallback is what is built — `Views/OverviewPage.xaml` records why. **Kept — confirmed by Tony 30 Aug 2026 (#320).** | — | — | Details opens directly |
 | Card enter on page load | Implicit show, opacity + 8 px translate up, 30 ms stagger, max 4 cards. **Built** 30 Aug 2026 (#320) — `Controls/CardEntrance.cs`, an attached property on each page's card panel so that adding a card joins the sequence rather than needing anyone to remember | `Normal` | `WzEaseDecelerate` | Opacity only, no stagger, no translate |
 | `Expander` toggle | Stock expand/collapse. **Built** 30 Aug 2026 (#320) by the `SettingsExpander` on §10.13, which is an `Expander` underneath and brings the stock transition with it — nothing here had to be written | `Normal` | `WzEaseStandard` | Instant height change |
 | `InfoBar` appear / dismiss | Height + opacity | `Normal` | `WzEaseDecelerate` / `WzEaseAccelerate` | Instant |
@@ -1597,7 +1597,7 @@ Construction rules:
 | Context | Size |
 |---|---|
 | Inline with body text, table cells | 16 |
-| `NavigationView` items, buttons | 16 — amended 29 Aug 2026 (#316) from 20, to the code: every `FontIcon` in the application is 16 px, deliberately. `Themes/Controls.xaml` records why for the destructive button: the glyph is set inline with the button's label rather than being the button's icon, and 20 px beside a 14 px label reads as a mismatch; `DetailsWindow` sizes its title-bar and nav glyphs the same way. Revert or keep is #320's call. |
+| `NavigationView` items, buttons | 16 — amended 29 Aug 2026 (#316) from 20, to the code: every `FontIcon` in the application is 16 px, deliberately. `Themes/Controls.xaml` records why for the destructive button: the glyph is set inline with the button's label rather than being the button's icon, and 20 px beside a 14 px label reads as a mismatch; `DetailsWindow` sizes its title-bar and nav glyphs the same way. **Kept — confirmed by Tony 30 Aug 2026 (#320).** |
 | Card headers, `InfoBar` | 24 |
 | Empty state | 32 |
 | Medallion centre glyph | Diameter × 56⁄160 (`MedallionRingMath.GlyphSize`): **22 at 64 px** (compact), **34 at 96 px** (`MedallionSize.Standard`, beside a page heading), **56 at 160 px** (the main window's full layout). Corrected 29 Aug 2026 (#316): this read "40 (compact) / 56 (standard)", where *standard* meant 160 while §9.10.2 and the code use *Standard* for 96 — one name per size from here on. |
@@ -1617,7 +1617,7 @@ Construction rules:
 | Settings-style rows | `SettingsCard`, `SettingsExpander` (WinUI Community Toolkit) — Timing, Holdover, Settings pages. **Built 30 Aug 2026 (#320) on the Settings page**; Timing and Holdover still do not use them, which is the divergence §9.10's note already records. See below |
 | Tables | `ListView` for selectable tables — the three satellite tables (`SatellitesPage.xaml`), with `WzDenseListItemStyle`, which §9.10.2's #307 row-height amendment depends on; `ItemsRepeater` for read-only lists (the Overview health items, the manage dialog's PRN grid). Corrected 29 Aug 2026 (#316) from "`ItemsRepeater` inside `ScrollViewer` with a sticky header row". **Not `DataGrid`** — the Community Toolkit `DataGrid` is heavier than needed and its default styling is hard to bring in line with these tokens for a ≤ 32-row table. |
 | Status messaging | `InfoBar`, `TeachingTip`, `ContentDialog` — selection rules in §9.11 |
-| Inputs | `NumberBox` (all numeric entry, `SpinButtonPlacementMode="Inline"` — **amended 30 Aug 2026 (#345) from `Compact`, which overlays its neighbour**: Compact draws its spin buttons as a popup *outside* the control when the field takes focus, so clicking the §10.8 duration limit put them across the gap and over the Apply button beside it. §9.7.4 requires the Apply button inline with the value it affects, so the two rules collide wherever they meet — and they meet at all twelve numeric fields in this application, including §10.6's side-by-side latitude, longitude and height. Inline keeps the buttons inside the control's own width, where nothing can be underneath them, `ValidationMode="Disabled"` — amended 29 Aug 2026 (#316) from `InvalidInputOverwritten`, to the code: `Controls/NumberFieldValidator.cs` records that `InvalidInputOverwritten` silently reverts an out-of-range entry to the last good value, which cannot coexist with §9.11's error text — there is nothing left to put a message under — so the bounds are enforced by refusing to *send*; revert or keep is #320's call), `ComboBox`, `ToggleSwitch`, `Slider` (elevation mask only — **built 30 Aug 2026 (#320)**, the last row of the audit's list. §10.5's wireframe draws the box and the track on one line and that is worth keeping: the mask is an *angle*, and 10° against a 0–90 range is a fact a track shows and a number does not. **Two controls over one value, not two values** — the slider binds two-way to the `NumberBox`, so the validator, the Apply button's enabled state and the command all keep reading the one field they always did. Its bounds come from the same catalog entry the validator uses rather than being restated in XAML, and because a slider cannot physically leave its range the error text below it is for typed entry alone), `CheckBox` |
+| Inputs | `NumberBox` (all numeric entry, `SpinButtonPlacementMode="Inline"` — **amended 30 Aug 2026 (#345) from `Compact`, which overlays its neighbour**: Compact draws its spin buttons as a popup *outside* the control when the field takes focus, so clicking the §10.8 duration limit put them across the gap and over the Apply button beside it. §9.7.4 requires the Apply button inline with the value it affects, so the two rules collide wherever they meet — and they meet at all twelve numeric fields in this application, including §10.6's side-by-side latitude, longitude and height. Inline keeps the buttons inside the control's own width, where nothing can be underneath them, `ValidationMode="Disabled"` — amended 29 Aug 2026 (#316) from `InvalidInputOverwritten`, to the code: `Controls/NumberFieldValidator.cs` records that `InvalidInputOverwritten` silently reverts an out-of-range entry to the last good value, which cannot coexist with §9.11's error text — there is nothing left to put a message under — so the bounds are enforced by refusing to *send*; **kept — confirmed by Tony 30 Aug 2026 (#320)**), `ComboBox`, `ToggleSwitch`, `Slider` (elevation mask only — **built 30 Aug 2026 (#320)**, the last row of the audit's list. §10.5's wireframe draws the box and the track on one line and that is worth keeping: the mask is an *angle*, and 10° against a 0–90 range is a fact a track shows and a number does not. **Two controls over one value, not two values** — the slider binds two-way to the `NumberBox`, so the validator, the Apply button's enabled state and the command all keep reading the one field they always did. Its bounds come from the same catalog entry the validator uses rather than being restated in XAML, and because a slider cannot physically leave its range the error text below it is for typed entry alone), `CheckBox` |
 | Progress | `ProgressRing` (indeterminate), `ProgressBar` (survey percentage — determinate and meaningful) |
 | Commands | `Button`; `HyperlinkButton`, `DropDownButton`, `MenuFlyout`. `MenuFlyout` **built 30 Aug 2026 (#320)** with §9.7.4's right-click menus; `HyperlinkButton` and `DropDownButton` still do not appear |
 
@@ -1965,7 +1965,7 @@ Two behavioural principles remain here because they are functional rather than v
 - Footer staleness per §9.11: `WzTextTertiaryBrush` normally, `WzCautionBrush` past 15 s, `WzCriticalBrush` past 60 s, always with the elapsed time in words.
 - Always-on-top toggle; size, position, and compact state persist across launches — and so does the standard layout's size while the window is compact, so a launch straight into compact still knows what to leave to (#307).
 - Compact mode toggles on double-click of the medallion or `Ctrl+Shift+M`. Type sizes, targets, and focus visuals are unchanged (§9.6.3). **Entering compact resizes the window to §9.6.2's compact minimum, and leaving it restores the standard-layout size the window had** *(amended 29 Aug 2026, #307: the toggle changed the content and left the frame, so compact arrived without the smallness that is its point)*.
-- Opening Details runs no `ConnectedAnimation` into the Overview page medallion — amended 29 Aug 2026 (#316) to the code: the two are separate top-level windows and `ConnectedAnimationService` is per-view, so §9.8.2's reduced-motion fallback is the only achievable path (`Views/OverviewPage.xaml` records why). Revert or keep is #320's call.
+- Opening Details runs no `ConnectedAnimation` into the Overview page medallion — amended 29 Aug 2026 (#316) to the code: the two are separate top-level windows and `ConnectedAnimationService` is per-view, so §9.8.2's reduced-motion fallback is the only achievable path (`Views/OverviewPage.xaml` records why). **Kept — confirmed by Tony 30 Aug 2026 (#320).**
 
 #### 10.3.1 Closing, and staying alive (#280)
 
@@ -2176,7 +2176,7 @@ Health items come from the parsed HEALTH MONITOR block of `:SYST:STAT?`, in the 
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
-> **⚠ Amended 29 Aug 2026 (#316).** The survey line read *"Estimated 51 min remaining · needs ≥ 4 satellites"*. No remaining-time estimate is shown, and `ViewModels/PositionViewModel.cs` records why: the receiver reports a percentage and nothing else — there is no rate on the wire — so a remaining time computed from a single percentage would be a guess presented as a measurement. What the line carries instead is the suspension reason, which the receiver does report (§11.3). Revert or keep is #320's call.
+> **⚠ Amended 29 Aug 2026 (#316).** The survey line read *"Estimated 51 min remaining · needs ≥ 4 satellites"*. No remaining-time estimate is shown, and `ViewModels/PositionViewModel.cs` records why: the receiver reports a percentage and nothing else — there is no rate on the wire — so a remaining time computed from a single percentage would be a guess presented as a measurement. What the line carries instead is the suspension reason, which the receiver does report (§11.3). **Kept — confirmed by Tony 30 Aug 2026 (#320).**
 >
 > The *Set position manually* card also carries **Fill from the receiver** (`Views/PositionPage.xaml`; added here 29 Aug 2026 from the code, #316), which copies the position the receiver is holding into the fields — enabled only while it holds one — so a user adjusting a surveyed position starts from the receiver's own figures rather than retyping them.
 
@@ -2305,7 +2305,7 @@ Cable presets, delay per metre. The 58503A/B guide's cable table (p. 2-12) gives
 | LMR-400 | 3.93 | §10.7, velocity factor 0.85 |
 | Custom (enter velocity factor) | `3.3356 / VF` ns/m | — |
 
-**The CSV export is not a button on the card.** It is the Details title bar's *Export* (`Ctrl+E`, §9.7.4), which asks the current page for its rows through `ICsvExportSource`; `TimingPage` implements it for the trend series. The wireframe's `[ Export CSV… ]` is kept as the intent and the title-bar command is how it is met — amended 29 Aug 2026 (#316); revert or keep is #320's call.
+**The CSV export is not a button on the card.** It is the Details title bar's *Export* (`Ctrl+E`, §9.7.4), which asks the current page for its rows through `ICsvExportSource`; `TimingPage` implements it for the trend series. The wireframe's `[ Export CSV… ]` is kept as the intent and the title-bar command is how it is met — amended 29 Aug 2026 (#316); **kept — confirmed by Tony 30 Aug 2026 (#320)**.
 
 #### 10.7.1 The trends and the drift advisory
 
@@ -2551,6 +2551,12 @@ The *Waiting reason* row shows the status screen's own mode detail, not an answe
 The old behaviour ran every test and then showed twelve dashes, which looks like the run failed; Tony found it annoying in use, which is how it was caught.
 
 **What is still not claimed is attribution on a failure.** A non-zero sweep says something in the set did not pass and does not say which, so the rows carry the only figure the receiver gave and the card's summary names the sweep — the number is never presentable as eleven separate findings. A user who needs attribution runs the subsystems individually, and that result overwrites the sweep's for that row.
+
+**Confirmed against the receiver on 30 Aug 2026.** The sweep was run on the live Z3805A with Tony's
+authorisation — it is a destructive test and not something to spend unasked. `:DIAG:TEST? ALL`
+answered in about 11 seconds, all twelve rows were credited *Passed* against the single run
+timestamp, and the receiver dropped to `POW`/TFOM 9 for the duration exactly as §8.3's confirmation
+warns. The card's own footnote, which reads `:DIAG:TEST:RES?` separately, showed `+0,ALL`.
 
 **Individually is not the default, and the manual says why:** "Manual operation of internal self-test diagnostics will affect normal Receiver operation… When invoked manually, any of these diagnostics should be considered to be destructive tests." One sweep is one disruption, measured at 12.4 s; eleven separate runs would be eleven disruptions of a disciplined oscillator. The twelve subsystem keywords were probed against the live receiver rather than taken on trust (`Views/DiagnosticsPage.xaml`, #53).
 
@@ -3221,6 +3227,45 @@ listed them as bare queries. `:SENSe:TSTamp<channel>:EDGE`, which selects the po
 timestamps, was never in that inventory at all.
 
 **Note on the Z3805A specifically:** no Z3805A-specific programming manual was published. The command set is inherited from the 58503A/B SmartClock firmware family, which is why the 58503B guide is the reference. Where behaviour diverges — dual 10 MHz and dual 1 PPS outputs, 9600-8-N-1 default rather than the Z3801A's 19200-7-O-1 — this document calls it out explicitly. (**"Port 2 being TOD-only" was removed from this list on 28 Aug 2026**: the Z3805A has one serial port, `:SYST:COMM:SER2:BAUD?` answers `-113,"Undefined header"`, and the claim is corrected in §8.6 under #62.) Any command whose Z3805A behaviour is unverified should be probed at connect and disabled if it errors, rather than assumed present.
+
+---
+
+## Appendix C — The #316 audit's decision list, closed 30 Aug 2026 (#320)
+
+The #316 documentation audit read sixteen documents against the code and produced roughly forty rows
+where this specification and the application disagreed. Each was recorded in place, dated, and left
+for a decision rather than resolved silently. **That list is now closed**, and this appendix records
+how — because "the specification is the authority" only means something if the record of overruling
+it is as visible as the requirement.
+
+**Every row where the specification was merely unbuilt was built.** Tony's answer on all of them was
+*build it*, so the requirement stood and the code caught up: P0-1's identity card, §11.2's parse
+warnings, §10.9's Lifetime, §9.11's staleness renderer and dimming, §9.7.1's label weight, §10.8's
+duration-limit readback, §9.7.4's right-click layer, §9.10.1's settings rows, §9.9's icon set,
+§10.5's status column, §9.8.2's motion, §9.11's loading ladder, §9.6.1's margin and content grid, and
+§9.10.1's elevation-mask slider.
+
+**Seven rows went the other way, and were confirmed on 30 Aug 2026** — each an amendment to what the
+code already did, each carrying the reason the code had. They are marked in place. In summary: the
+accelerators sit on the window content root because `Window` has no accelerator collection and
+§9.6.2's compact mode collapses the footer; the medallion `ConnectedAnimation` is impossible rather
+than unbuilt, `ConnectedAnimationService` being per-view across two top-level windows; nav glyphs are
+16 px because every glyph in the application is; `ValidationMode` is `Disabled` because
+`InvalidInputOverwritten` leaves §9.11's error text nothing to sit under; the survey line shows no
+remaining time because the receiver reports a percentage and no rate; and the CSV export is the title
+bar's one command rather than a button per card.
+
+**Two rows are open and neither is a decision.** §10.8's power-up log half is deferred against a
+fixture capture — the guard would key a safety decision on a string nobody has seen the receiver
+print. §10.3's `:SYNC:HOLD:WAIT?` is amended to the code, the status screen carrying the same
+sentence at no extra wire cost.
+
+**What the exercise was actually worth.** Three of the rows were wrong in a way review had not caught
+and only hardware settled: `:DIAG:LIF:COUN?` was recorded as not existing and the requirement was
+nearly struck — it exists, and the receiver reports 36 750 hours; §10.8's editor opened on a
+hard-coded `1` where the receiver held 86 400; and §10.9's self-test card was reading
+`:DIAG:TEST:RES?` when `:DIAGnostic:TEST?`'s own reply is the verdict over the set. A specification
+audited only against itself would have kept all three.
 
 ---
 
