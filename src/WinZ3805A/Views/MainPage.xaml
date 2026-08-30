@@ -332,7 +332,7 @@
                 </ToggleButton>
 
                 <Button x:Name="ConnectButton"
-                        Style="{StaticResource AccentButtonStyle}"
+                        Style="{ThemeResource WzAccentButtonStyle}"
                         Click="OnConnectClicked" />
             </StackPanel>
         </Grid>
@@ -376,7 +376,7 @@
                            TextAlignment="Center"
                            TextWrapping="Wrap" />
                 <Button x:Name="FirstRunAction"
-                        Style="{ThemeResource AccentButtonStyle}"
+                        Style="{ThemeResource WzAccentButtonStyle}"
                         HorizontalAlignment="Center"
                         Click="OnFirstRunActionClicked" />
             </StackPanel>

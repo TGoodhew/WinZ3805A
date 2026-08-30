@@ -14,7 +14,8 @@
         §15 step 10 has to build alongside the dialog.
     -->
     <ScrollViewer HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
-        <StackPanel Padding="{ThemeResource WzPageMarginThickness}"
+        <StackPanel controls:CardEntrance.IsEnabled="True"
+                    Padding="{ThemeResource WzPageMarginThickness}"
                     MaxWidth="{ThemeResource WzContentMaxWidth}"
                     HorizontalAlignment="Left"
                     Spacing="{ThemeResource WzSpaceXl}">

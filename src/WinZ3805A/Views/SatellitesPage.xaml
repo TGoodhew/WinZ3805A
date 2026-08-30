@@ -26,7 +26,8 @@
         closing the dialog sends nothing.
     -->
     <ScrollViewer HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
-        <StackPanel Padding="{ThemeResource WzPageMarginThickness}"
+        <StackPanel controls:CardEntrance.IsEnabled="True"
+                    Padding="{ThemeResource WzPageMarginThickness}"
                     MaxWidth="{ThemeResource WzContentMaxWidth}"
                     HorizontalAlignment="Left"
                     Spacing="{ThemeResource WzSpaceXl}">
@@ -159,6 +160,26 @@
                               ItemContainerStyle="{ThemeResource WzDenseListItemStyle}"
                               AutomationProperties.Name="Satellites, list view"
                               SelectionChanged="OnSkyRowSelectionChanged">
+                        <ListView.ItemContainerTransitions>
+                            <TransitionCollection>
+                                <!--
+                                    §9.8.2's satellite row reorder (#320). The row names
+                                    ItemsRepeater; §9.10.1 specifies these tables as ListView, and a
+                                    ListView already offers exactly the animation the row asks for -
+                                    offset only, no fade, no size change - through its own container
+                                    transitions. Switching control to obtain a behaviour the current
+                                    one has would be a rewrite in exchange for nothing.
+
+                                    REPOSITION ALONE, deliberately. An AddDeleteThemeTransition would
+                                    also fire on the first fill and on every reconnect, and a table
+                                    that flies its rows in each time the link comes back is motion on
+                                    a window meant to sit still for weeks. What is worth animating is
+                                    a satellite CHANGING PLACE as the sky turns, because that is the
+                                    one movement that means something.
+                                -->
+                                <RepositionThemeTransition IsStaggeringEnabled="False" />
+                            </TransitionCollection>
+                        </ListView.ItemContainerTransitions>
                         <ListView.ItemTemplate>
                             <DataTemplate x:DataType="controls:SkyPlotSatellite">
                                 <Grid ColumnSpacing="{ThemeResource WzSpaceMd}"
@@ -249,6 +270,26 @@
                               ItemContainerStyle="{ThemeResource WzDenseListItemStyle}"
                               AutomationProperties.Name="Tracked satellites"
                               SelectionChanged="OnTrackedSelectionChanged">
+                        <ListView.ItemContainerTransitions>
+                            <TransitionCollection>
+                                <!--
+                                    §9.8.2's satellite row reorder (#320). The row names
+                                    ItemsRepeater; §9.10.1 specifies these tables as ListView, and a
+                                    ListView already offers exactly the animation the row asks for -
+                                    offset only, no fade, no size change - through its own container
+                                    transitions. Switching control to obtain a behaviour the current
+                                    one has would be a rewrite in exchange for nothing.
+
+                                    REPOSITION ALONE, deliberately. An AddDeleteThemeTransition would
+                                    also fire on the first fill and on every reconnect, and a table
+                                    that flies its rows in each time the link comes back is motion on
+                                    a window meant to sit still for weeks. What is worth animating is
+                                    a satellite CHANGING PLACE as the sky turns, because that is the
+                                    one movement that means something.
+                                -->
+                                <RepositionThemeTransition IsStaggeringEnabled="False" />
+                            </TransitionCollection>
+                        </ListView.ItemContainerTransitions>
                         <ListView.ItemTemplate>
                             <DataTemplate x:DataType="vm:TrackedSatelliteRow">
                                 <Grid ColumnSpacing="{ThemeResource WzSpaceMd}"
@@ -309,6 +350,26 @@
                               ItemContainerStyle="{ThemeResource WzDenseListItemStyle}"
                               AutomationProperties.Name="Satellites not being tracked"
                               SelectionChanged="OnNotTrackedSelectionChanged">
+                        <ListView.ItemContainerTransitions>
+                            <TransitionCollection>
+                                <!--
+                                    §9.8.2's satellite row reorder (#320). The row names
+                                    ItemsRepeater; §9.10.1 specifies these tables as ListView, and a
+                                    ListView already offers exactly the animation the row asks for -
+                                    offset only, no fade, no size change - through its own container
+                                    transitions. Switching control to obtain a behaviour the current
+                                    one has would be a rewrite in exchange for nothing.
+
+                                    REPOSITION ALONE, deliberately. An AddDeleteThemeTransition would
+                                    also fire on the first fill and on every reconnect, and a table
+                                    that flies its rows in each time the link comes back is motion on
+                                    a window meant to sit still for weeks. What is worth animating is
+                                    a satellite CHANGING PLACE as the sky turns, because that is the
+                                    one movement that means something.
+                                -->
+                                <RepositionThemeTransition IsStaggeringEnabled="False" />
+                            </TransitionCollection>
+                        </ListView.ItemContainerTransitions>
                         <ListView.ItemTemplate>
                             <DataTemplate x:DataType="vm:PredictedSatelliteRow">
                                 <Grid ColumnSpacing="{ThemeResource WzSpaceMd}"

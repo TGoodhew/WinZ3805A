@@ -6,6 +6,7 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:tk="using:CommunityToolkit.WinUI.Controls"
+    xmlns:controls="using:WinZ3805A.Controls"
     mc:Ignorable="d">
 
     <!--
@@ -35,7 +36,8 @@
         WzSettingsCardStyle, which paints these the same surface as every other card here.
     -->
     <ScrollViewer HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
-        <StackPanel Padding="{ThemeResource WzPageMarginThickness}"
+        <StackPanel controls:CardEntrance.IsEnabled="True"
+                    Padding="{ThemeResource WzPageMarginThickness}"
                     MaxWidth="{ThemeResource WzContentMaxWidth}"
                     HorizontalAlignment="Left"
                     Spacing="{ThemeResource WzSpaceXl}">

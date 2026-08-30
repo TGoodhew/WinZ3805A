@@ -18,7 +18,8 @@
         :PTIM:LEAP:ACC? and fills AccumulatedText from the answer (#149, closed 20 Aug 2026).
     -->
     <ScrollViewer HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
-        <StackPanel Padding="{ThemeResource WzPageMarginThickness}"
+        <StackPanel controls:CardEntrance.IsEnabled="True"
+                    Padding="{ThemeResource WzPageMarginThickness}"
                     MaxWidth="{ThemeResource WzContentMaxWidth}"
                     HorizontalAlignment="Left"
                     Spacing="{ThemeResource WzSpaceXl}">

@@ -40,12 +40,29 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
     private IReadOnlyList<ExperimentalQueryRow> _experimental = [];
 
     /// <summary>Creates the page.</summary>
+    /// <summary>
+    /// Drives §9.11's loading ladder, which is a function of elapsed time and so needs a clock.
+    /// </summary>
+    /// <remarks>
+    /// A ticking timer rather than two one-shots, because <c>LoadingIndicators.For</c> takes the
+    /// elapsed time and returns the whole answer: one tick asks it again and applies whatever comes
+    /// back. Two one-shot timers would encode the same thresholds a second time, in the place most
+    /// likely to drift from them.
+    /// </remarks>
+    private readonly DispatcherTimer _loadingTimer = new() { Interval = TimeSpan.FromMilliseconds(100) };
+
+    /// <summary>When the read in flight started, for the ladder above.</summary>
+    private DateTimeOffset? _readingSince;
+
     public DiagnosticsPage()
     {
         InitializeComponent();
 
+        _loadingTimer.Tick += (_, _) => ApplyLoadingIndicator();
+
         Unloaded += (_, _) =>
         {
+            _loadingTimer.Stop();
             _reading?.Cancel();
             _reading?.Dispose();
             _reading = null;
@@ -61,6 +78,30 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
     }
 
     /// <summary>Keeps the parse-warnings card following the sweeps while the page is open.</summary>
+    /// <summary>
+    /// Puts §9.11's loading ladder on screen: nothing, then the ring, then the ring and skeleton.
+    /// </summary>
+    /// <remarks>
+    /// <b>Nothing under 500 ms is the half that is easy to skip.</b> The ring used to be bound
+    /// straight to <c>IsReading</c>, so a read that finished quickly — which is most of them — put a
+    /// spinner on screen and took it away inside a fifth of a second. That reads as a glitch rather
+    /// than as progress, and it draws the eye to a card with nothing to say.
+    /// </remarks>
+    private void ApplyLoadingIndicator()
+    {
+        bool reading = _model?.IsReading == true;
+        TimeSpan elapsed = reading && _readingSince is DateTimeOffset since
+            ? (_device?.TimeProvider.GetUtcNow() ?? DateTimeOffset.UtcNow) - since
+            : TimeSpan.Zero;
+
+        LoadingIndicator indicator = LoadingIndicators.For(reading, elapsed);
+
+        ReadingRing.IsActive = indicator is LoadingIndicator.Ring or LoadingIndicator.Skeleton;
+        LogSkeleton.Visibility = indicator == LoadingIndicator.Skeleton
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+    }
+
     private void OnStoreChanged(object? sender, PropertyChangedEventArgs e) =>
         DispatcherQueue.TryEnqueue(() =>
         {
@@ -294,7 +335,20 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
         ErrorSummaryText.Text = model.ErrorSummaryText;
         ErrorRows.ItemsSource = model.Errors;
 
-        ReadingRing.IsActive = model.IsReading;
+        // §9.11's loading ladder. Render is called on property changes and nothing changes at the
+        // 500 ms or 2 s marks, so the timer below is what makes those thresholds exist at all.
+        if (model.IsReading)
+        {
+            _readingSince ??= _device?.TimeProvider.GetUtcNow() ?? DateTimeOffset.UtcNow;
+            _loadingTimer.Start();
+        }
+        else
+        {
+            _readingSince = null;
+            _loadingTimer.Stop();
+        }
+
+        ApplyLoadingIndicator();
         RefreshButton.IsEnabled = model.CanRead;
         ReadErrorsButton.IsEnabled = model.CanRead;
         ClearLogButton.IsEnabled = model.CanRead;

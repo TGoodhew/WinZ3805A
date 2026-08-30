@@ -15,7 +15,8 @@
         The calculator is the part a user cannot do in their head, and P0-11 is the arithmetic.
     -->
     <ScrollViewer HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
-        <StackPanel Padding="{ThemeResource WzPageMarginThickness}"
+        <StackPanel controls:CardEntrance.IsEnabled="True"
+                    Padding="{ThemeResource WzPageMarginThickness}"
                     MaxWidth="{ThemeResource WzContentMaxWidth}"
                     HorizontalAlignment="Left"
                     Spacing="{ThemeResource WzSpaceXl}">
