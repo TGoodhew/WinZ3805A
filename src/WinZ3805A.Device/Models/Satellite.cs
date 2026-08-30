@@ -6,7 +6,7 @@ namespace WinZ3805A.Device.Models;
 /// </summary>
 /// <remarks>
 /// Elevation, azimuth, and signal strength have no individual SCPI query — they exist only inside
-/// <c>:SYST:STAT?</c> — which is why §11.1 makes the status screen the sole source for the
+/// <c>:SYST:STAT?</c> — which is why §7.3 makes the status screen the sole source for the
 /// Satellites page. Every field except <see cref="Prn"/> is nullable because §11.1 forbids the
 /// parser from throwing: a firmware revision that widens a column or prints a dash must degrade to
 /// a missing value rather than a crash.

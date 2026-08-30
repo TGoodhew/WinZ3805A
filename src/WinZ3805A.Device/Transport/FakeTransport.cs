@@ -44,7 +44,8 @@ public sealed class FakeTransport : ITransport
 
     /// <summary>
     /// Creates a transport that answers each command with <paramref name="responder"/>'s return
-    /// value, or with the prompt alone when it returns null — which is what §7.2 says a setter does.
+    /// value, or with the prompt alone when it returns null — the shape §7.2 gives a rejected
+    /// command, and the shape a setter has whether it worked or not.
     /// </summary>
     public FakeTransport(Func<string, string?> responder)
     {
@@ -56,8 +57,9 @@ public sealed class FakeTransport : ITransport
     public static FakeTransport Answering(string response) => new(_ => response);
 
     /// <summary>
-    /// Whether the device echoes what it is sent. True by default because the receiver ships
-    /// <c>FDUPlex ON</c> (§7.2); set false to prove the protocol survives someone turning it off.
+    /// Whether the device echoes what it is sent. True by default because the manual's default is
+    /// <c>FDUPlex ON</c> (§7.2) — the bench Z3805A echoes nothing, so both settings occur; set
+    /// false to prove the protocol survives either.
     /// </summary>
     public bool EchoCommands { get; init; } = true;
 
@@ -65,8 +67,9 @@ public sealed class FakeTransport : ITransport
     public bool EmitPrompt { get; init; } = true;
 
     /// <summary>
-    /// The prompt text. The default is what a Z3805A running firmware 1.01.03-A actually emits,
-    /// which is not the spelling §7.2 gives — the space before the bracket is real.
+    /// The prompt text. The default is what a Z3805A running firmware 1.01.03-A actually emits, and
+    /// the spelling §7.2 has given since its 21 Aug 2026 correction — the space before the bracket
+    /// is real.
     /// </summary>
     public string Prompt { get; init; } = "scpi > ";
 

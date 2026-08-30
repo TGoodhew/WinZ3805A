@@ -13,9 +13,10 @@ namespace WinZ3805A.Services;
 /// <remarks>
 /// <para>
 /// Deliberately the same shape as <see cref="TrayIconService"/>, watching the same two sources and
-/// deriving the mode through the same <see cref="ShellMode.For"/> — so the badge, the notification
-/// area and the window cannot disagree. Restating the derivation in a third place is how they would
-/// drift apart within a week.
+/// deriving the mode through the same <see cref="ShellMode.For"/> — so the badge and the
+/// notification area cannot disagree. The window does not call it: <c>MainViewModel.Mode</c>
+/// restates the same expression, a known duplication (#316), and a third restatement here is how
+/// the three would drift apart within a week.
 /// </para>
 /// <para>
 /// <b>Everything is marshalled to the dispatcher.</b> <c>ITaskbarList3</c> is apartment-threaded and
@@ -120,10 +121,11 @@ public sealed class TaskbarOverlayService : IDisposable
 /// The mode a shell surface should be showing.
 /// </summary>
 /// <remarks>
-/// One expression, in one place, because three surfaces now depend on it — the notification area,
-/// the taskbar badge and the window — and the invariant that matters is that they agree. A mode is
-/// a claim about <i>now</i>, and a link that has dropped no longer justifies the last one the store
-/// happened to hold.
+/// One expression, in one place, because two shell surfaces call it — the notification area and
+/// the taskbar badge — and the invariant that matters is that they agree with each other and with
+/// the window, whose <c>MainViewModel.Mode</c> restates this expression rather than calling it (a
+/// known duplication, #316). A mode is a claim about <i>now</i>, and a link that has dropped no
+/// longer justifies the last one the store happened to hold.
 /// </remarks>
 public static class ShellMode
 {

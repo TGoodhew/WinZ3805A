@@ -3,20 +3,24 @@
 namespace WinZ3805A.Device.Commands;
 
 /// <summary>
-/// Every SCPI command the application is permitted to send (§8.1).
+/// Every SCPI command the application is permitted to send to a SmartClock-family receiver
+/// (§8.1).
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>This is an allowlist.</b> Every string the application emits originates here, and there is
-/// no code path that builds one from arbitrary user input. The commands §8.4 excludes are not in
-/// this catalog at all — not as entries carrying a flag, not as data of any kind. That is what
-/// makes them unreachable rather than merely discouraged, which is goal G4.
+/// <b>This is an allowlist — the SmartClock family's.</b> Since #287 each driver carries its own,
+/// and this one is reached only through <c>SmartClockDriver</c>; the session checks the current
+/// driver's allowlist at the point of send, so every string the application emits to one of these
+/// receivers originates here, and there is no code path that builds one from arbitrary user input.
+/// The commands §8.4 excludes are not in this catalog at all — not as entries carrying a flag, not
+/// as data of any kind. That is what makes them unreachable rather than merely discouraged, which
+/// is goal G4.
 /// </para>
 /// <para>
-/// Built once at type initialisation into <see cref="FrozenDictionary{TKey,TValue}"/> and
-/// <see cref="FrozenSet{T}"/> per §6.4. The point is not only lookup speed on a collection read
-/// constantly and written never: freezing makes the allowlist's immutability structural rather
-/// than a convention someone can quietly break.
+/// Built once at type initialisation into a <see cref="FrozenDictionary{TKey,TValue}"/> per §6.4.
+/// The point is not only lookup speed on a collection read constantly and written never: freezing
+/// makes the allowlist's immutability structural rather than a convention someone can quietly
+/// break.
 /// </para>
 /// <para>
 /// Mnemonics are spelled exactly as §8.2 and §8.3 spell them. Where those sections distinguish two
@@ -552,10 +556,13 @@ public static class CommandCatalog
     /// about what a valid latitude is.
     /// </para>
     /// <para>
-    /// <b>Height is above mean sea level, not the WGS-84 ellipsoid.</b> The manual is explicit and
-    /// the two differ by tens of metres in most of the world. The position itself <i>is</i> WGS-84;
-    /// it is only the height that is not, which is exactly the sort of detail a label gets wrong.
-    /// See #114.
+    /// <b>Height asserts no datum of its own.</b> The manual is not consistent with itself about
+    /// this command: its syntax line takes the height above mean sea level while its prose puts the
+    /// position on the WGS-84 datum, and the two differ by the geoid separation — tens of metres
+    /// across most of the inhabited world. §10.6's #114 correction therefore has the field state
+    /// the datum the receiver itself reported (<c>ReceiverStatus.HeightDatum</c>) and ask for the
+    /// value on that one, rather than pick a side. The parameter below is still named for mean sea
+    /// level; renaming it is a code follow-up from the #316 audit.
     /// </para>
     /// </remarks>
     private static IReadOnlyList<ParameterSpec> Position() =>

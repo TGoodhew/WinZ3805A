@@ -14,8 +14,8 @@
         for the data - §7.4's week rollover, §11.2's time fields, #95's display zone - and the gap
         was filed as #111. §10.14 adopted that reading and settled the three questions #111 raised.
 
-        The leap-second card is not finished. §10.14 requires the accumulated GPS-UTC offset, which
-        this does not show; #149 carries it.
+        The leap-second card shows §10.14's accumulated GPS-UTC offset: the code-behind asks
+        :PTIM:LEAP:ACC? and fills AccumulatedText from the answer (#149, closed 20 Aug 2026).
     -->
     <ScrollViewer HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
         <StackPanel Padding="{ThemeResource WzPageMarginThickness}"

@@ -312,9 +312,12 @@ public sealed partial class DetailsWindow : Window
     }
 
     /// <remarks>
-    /// §9.7.5's accelerators. <c>Ctrl+1</c>-<c>Ctrl+8</c> is built from the destination list rather
-    /// than typed out, so the numbering cannot drift from the pane order - and a ninth destination
-    /// is refused by <see cref="DetailsDestinations"/>, not silently left unreachable here.
+    /// §9.7.5's accelerators. <c>Ctrl+1</c>-<c>Ctrl+9</c> is built from the destination list rather
+    /// than typed out, so the numbering cannot drift from the pane order. The cap is
+    /// <see cref="DetailsDestinations.MaxAccelerated"/>, not the destination count: a tenth
+    /// destination would get no accelerator and its tooltip would claim none, and the tests assert
+    /// that every destination existing today is still inside the accelerated range rather than
+    /// leaving that to be discovered here.
     /// </remarks>
     private void AddAccelerators()
     {

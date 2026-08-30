@@ -17,10 +17,10 @@ namespace WinZ3805A.Services;
 /// come from the device tree under <c>HKLM\SYSTEM\CurrentControlSet\Enum</c>.
 /// </para>
 /// <para>
-/// <b>Registry rather than WMI.</b> P0-1 allows either, with WMI as the best-effort path. The
+/// <b>Registry rather than WMI.</b> §6.3 allows either, with WMI as the best-effort path. The
 /// registry supplies the same <c>FriendlyName</c> that <c>Win32_PnPEntity</c> would report, without
 /// a <c>System.Management</c> dependency and without WMI's first-query cost, which on a cold service
-/// is seconds rather than milliseconds — the exact thing P0-1 says must never block the UI. If a
+/// is seconds rather than milliseconds — the exact thing §6.3 says must never block the UI. If a
 /// field report ever shows a device whose name only WMI knows, add it as a second enrichment pass;
 /// the merge in <see cref="SerialPortInfo.Merge"/> already takes descriptions from any source.
 /// </para>
@@ -54,6 +54,13 @@ public sealed class SerialPortEnumerator : ISerialPortSource
     }
 
     /// <summary>The copy for an empty list, which on ARM64 usually means a missing driver (§6.1).</summary>
+    /// <remarks>
+    /// <b>The ARM64 copy is unreachable as written</b> (#316 audit finding). §6.1 ships x64 only,
+    /// and Windows on ARM runs that package under emulation, where
+    /// <c>RuntimeInformation.ProcessArchitecture</c> reports <c>X64</c> — the emulated process's
+    /// architecture, not the machine's. <c>RuntimeInformation.OSArchitecture</c> is the reading
+    /// that would select it. Left as found: the fix is a code change, not a comment.
+    /// </remarks>
     public string EmptyMessage =>
         SerialPortInfo.NoPortsMessage(RuntimeInformation.ProcessArchitecture);
 

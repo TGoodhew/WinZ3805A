@@ -10,11 +10,11 @@ namespace WinZ3805A.Device.Drivers;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>This is the worked example <c>docs/adding-a-receiver.md</c> describes.</b> Every piece it implements
-/// already existed and was static; the driver is where "which receiver" stopped being implied and
-/// started being named. Nothing here changes behaviour — the acceptance criterion for #122 is that
-/// the existing tests pass unmodified, because a refactor whose tests had to be rewritten has not
-/// preserved anything.
+/// <b>One of the two shipped drivers <c>docs/adding-a-receiver.md</c> points at — the worked example
+/// is <c>docs/tutorial-nmea-driver.md</c>.</b> Every piece this one implements already existed and
+/// was static; the driver is where "which receiver" stopped being implied and started being named.
+/// Nothing here changes behaviour — the acceptance criterion for #122 is that the existing tests
+/// pass unmodified, because a refactor whose tests had to be rewritten has not preserved anything.
 /// </para>
 /// <para>
 /// It is one driver for the whole family rather than one per model. The models differ in hardware

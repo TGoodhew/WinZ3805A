@@ -20,7 +20,8 @@ namespace WinZ3805A.Services;
 /// comparison. MSIX redirects writes there into the package's own writable location, so it is
 /// per-package and removed on uninstall exactly as <c>LocalSettings</c> would have been, and it
 /// works unpackaged as well. This paragraph is why <see cref="JsonPreferenceFile{T}"/> exists and
-/// why every store in this folder goes through it.
+/// why every preference store in this folder goes through it — every one but
+/// <see cref="LocalWindowPlacementStore"/>, which still carries its own copy of the file handling.
 /// </para>
 /// <para>
 /// Every access is guarded and every failure is silent. Losing a remembered port is a smaller harm

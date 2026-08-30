@@ -6,12 +6,13 @@ namespace WinZ3805A.Services;
 /// </summary>
 /// <remarks>
 /// <para>
-/// §10.3 asks only that size, position and compact state persist, which on its own is two lines in
-/// the window. The reason this is a separate, tested class is the case the two lines get wrong: the
-/// app is meant to be left open on a second monitor for weeks (§1), so the monitor it was left on
-/// is precisely the one likely to be missing, moved or re-scaled by the next launch. Restoring the
-/// saved rectangle verbatim then opens the window somewhere the user cannot see or reach it, and
-/// the only remedy is to know where the file is.
+/// §10.3 asks that size, position, compact state and always-on-top persist, and since #307 the
+/// standard layout's size while the window is compact — which on its own is a few lines in the
+/// window. The reason this is a separate, tested class is the case those lines get wrong: the app
+/// is meant to be left open on a second monitor for weeks (§9.1, G1), so the monitor it was left
+/// on is precisely the one likely to be missing, moved or re-scaled by the next launch. Restoring
+/// the saved rectangle verbatim then opens the window somewhere the user cannot see or reach it,
+/// and the only remedy is to know where the file is.
 /// </para>
 /// <para>
 /// Pure functions over plain rectangles, so the display topologies that matter — one monitor, a

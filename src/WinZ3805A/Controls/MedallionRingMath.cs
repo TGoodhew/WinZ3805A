@@ -11,9 +11,11 @@ namespace WinZ3805A.Controls;
 /// </para>
 /// <para>
 /// The ring is <b>qualitative by design</b>. It answers "is the loop calm or is it hunting" at a
-/// glance and must never be read for values — the figure itself is always set beside it in
-/// <c>WzReadoutMedium</c>. That is why the scale adapts: absolute nanoseconds would make a
-/// well-behaved receiver draw a flat line forever and a poor one clip.
+/// glance and must never be read for values — the figure itself is set beside it in a
+/// <c>WzReadout*</c> style wherever the readout row is on screen (Large on the main window, Medium
+/// on Overview), and in the collapsed layouts the count takes the centre (#279). That is why the
+/// scale adapts: absolute nanoseconds would make a well-behaved receiver draw a flat line forever
+/// and a poor one clip.
 /// </para>
 /// </remarks>
 public static class MedallionRingMath
@@ -143,10 +145,10 @@ public static class MedallionRingMath
     /// <para>
     /// At 64 px the sparkline's sixty marks of differing length make the circle read as lumpy rather
     /// than as a circle with a trace on it — and the circle being the one shape the eye finds without
-    /// focusing is the whole reason §9.7 reserves it for the medallion. So compact gives the trace
+    /// focusing is the whole reason §9.3 reserves it for the medallion. So compact gives the trace
     /// up: every mark is the same length, centred on the baseline, and the ring says "this is the
     /// medallion, in this state's colour" and nothing more. The reading is not lost; the figure
-    /// itself is a Details page away, and §9.7 says the ring must never be read for values anyway.
+    /// itself is a Details page away, and §9.1 says the ring must never be read for values anyway.
     /// </para>
     /// <para>
     /// Half the band, symmetric: long enough to read as a dotted ring rather than a hairline, short
@@ -166,9 +168,10 @@ public static class MedallionRingMath
     /// </para>
     /// <para>
     /// In Light that was easy to miss, because the dotted ring carries the state and the glyph only
-    /// confirms it. Under high contrast §9.2 collapses the ring to a plain stroke carrying no state,
-    /// which leaves the glyph as the <b>only</b> non-textual carrier of severity — measured at 31
-    /// ink pixels inside a 186 px circle, 2.3 % of what the same medallion draws in Light (#48).
+    /// confirms it. Under high contrast §9.10.2 collapses the ring to a plain stroke carrying no
+    /// state, which leaves the glyph as the <b>only</b> non-textual carrier of severity — measured
+    /// at 31 ink pixels inside a 186 px circle, 2.3 % of what the same medallion draws in Light
+    /// (#48).
     /// </para>
     /// <para>
     /// A ratio rather than the literal 56, so the 64 and 96 px sizes §9.10.2 lists scale with it and

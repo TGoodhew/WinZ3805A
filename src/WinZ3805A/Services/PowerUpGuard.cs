@@ -36,9 +36,10 @@ public enum PowerUpSafety
 /// exact figure, and only that can say "too soon".
 /// </para>
 /// <para>
-/// §10.8 names the diagnostic log's power-on entries as the other source. That is deferred: the
-/// entry's wording is not in any captured fixture (#4) and the guard would be keying a safety
-/// decision on a string nobody has seen the receiver print. Until a capture exists it degrades to
+/// §10.8 names the diagnostic log's power-on entries as the other source. That is deferred: no
+/// captured power-on log entry exists yet — every fixture is a status screen, and the fixtures
+/// README lists what is still missing — so the guard would be keying a safety decision on a string
+/// nobody has seen the receiver print. Until a capture exists it degrades to
 /// <see cref="PowerUpSafety.Unknown"/>, which is the behaviour §10.8 specifies for exactly this
 /// case, so nothing is silently weakened by the gap.
 /// </para>

@@ -15,12 +15,15 @@ namespace WinZ3805A.Device.Commands;
 /// was written for shipped as a picker with no free-text path — see the predicate's remarks.)
 /// </para>
 /// <para>
-/// <b>The collection is deliberately not public.</b> §8.4 names it
-/// <c>CommandCatalog.BlockedPatterns</c> and then requires in the same paragraph that it "must not
-/// be enumerable through any public API that a view binds to". Those two cannot both be taken
-/// literally, so the requirement wins over the name: the patterns are private, and the only way
-/// out of this assembly is <see cref="CommandCatalog.IsBlocked"/>, which answers one bool about
-/// one candidate. Nothing can bind to it, enumerate it, or render it into a list.
+/// <b>The collection is deliberately not public.</b> §8.4 once named it
+/// <c>CommandCatalog.BlockedPatterns</c> while requiring in the same sentence that it "must not
+/// be enumerable through any public API that a view binds to"; a public member of that name is
+/// enumerable by definition, and §8.4's 21 Aug 2026 correction (#85) let the requirement win over
+/// the name. So the patterns are private, and what leaves this assembly is a verdict, by either of
+/// two routes: <see cref="CommandCatalog.IsBlocked"/>, which answers one bool about one candidate,
+/// and <c>IReceiverDriver.IsBlocked</c>, through which <c>SmartClockDriver</c> gives the same
+/// answer for whichever driver the session currently holds. Nothing can bind to the patterns,
+/// enumerate them, or render them into a list.
 /// </para>
 /// <para>
 /// <c>build/Test-NoBlockedCommands.ps1</c> enforces that this file is the sole occurrence, the way

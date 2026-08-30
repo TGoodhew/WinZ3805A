@@ -29,10 +29,12 @@ public sealed record ModelProfile(
     /// "(59551A Only)". Every row below follows from that one list.
     /// </para>
     /// <para>
-    /// <b>The Z3805A row is measured, not inferred.</b> <c>:SYST:COMM:SER2:BAUD?</c> answers
-    /// <c>-113,"Undefined header"</c> on the live unit and it has one serial connector (#62), which
-    /// is why that model's row is the only one here resting on evidence rather than on the
-    /// specification's own table.
+    /// <b>Only the SER2 cell of the Z3805A row is measured.</b> <c>:SYST:COMM:SER2:BAUD?</c>
+    /// answers <c>-113,"Undefined header"</c> on the live unit and it has one serial connector
+    /// (#62), which is why that cell rests on evidence rather than on the specification's own
+    /// table. The row's other three cells follow from §16.1 — its bench probes (the PPS edge
+    /// answers the same error; the pulse subsystem is only half accepted) and its connector
+    /// inspection (one BNC output, no Time Tag inputs) — rather than from the table alone.
     /// </para>
     /// </remarks>
     private static readonly Dictionary<ReceiverModel, ModelProfile> Profiles = new()
@@ -71,8 +73,8 @@ public sealed record ModelProfile(
     /// <para>
     /// §8.6 says these are "hidden entirely" on a model that lacks them. Today that holds
     /// <b>vacuously</b> — none of them is in <c>CommandCatalog</c>, so there is nothing to hide, and
-    /// #154 tracks them as unbuilt. This exists so that adding one later cannot quietly offer it on
-    /// hardware without the feature.
+    /// §16.1 records why each stays out (#154's inventory, closed 29 Aug 2026). This exists so that
+    /// adding one later cannot quietly offer it on hardware without the feature.
     /// </para>
     /// <para>
     /// Node-prefix matching, because SCPI abbreviations are legal and the catalog spells some
@@ -107,8 +109,9 @@ public sealed record ModelProfile(
     /// Whether a header begins with a node path, allowing either side to be the abbreviation.
     /// </summary>
     /// <remarks>
-    /// The same rule #154's inventory uses, and for the same reason: a mechanical short form is
-    /// wrong in both directions because the manuals' own capitalisation is inconsistent.
+    /// The same rule the §16.1 inventory (#154, now closed) used, and for the same reason: a
+    /// mechanical short form is wrong in both directions because the manuals' own capitalisation is
+    /// inconsistent.
     /// </remarks>
     private static bool StartsWithNode(string header, string path)
     {

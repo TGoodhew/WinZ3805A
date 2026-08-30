@@ -93,13 +93,13 @@ public sealed class SkyPlotControl : Control
     /// in the sky and cannot be moved to make room — the same "essential position" case WCAG 2.5.8
     /// carves out — so past a point, enlarging the target stops helping and starts stealing a
     /// neighbouring satellite's clicks, which is worse than a small target because it silently
-    /// selects the wrong one. 24 px roughly doubles the usable area without reaching a neighbour
-    /// under 6 degrees away. The compliant paths to every satellite are the keyboard model and the
-    /// list alternate on the same card, which is what §9.10.2 requires the alternate view for — its
-    /// rows are full-width and clear <b>both</b> of A11Y-5's floors, the 40 px touch one included,
-    /// which is what makes them an alternate rather than a second exception. That was not true when
-    /// this comment was first written: the rows measured 26 px (#25). Recorded as #117 rather than
-    /// left as an oversight.
+    /// selects the wrong one. 24 px gives about four times the disc's own clickable area without
+    /// reaching a neighbour under 6 degrees away, which is the figure §9.10.2 gives. The compliant
+    /// paths to every satellite are the keyboard model and the list alternate on the same card,
+    /// which is what §9.10.2 requires the alternate view for — its rows are full-width and clear
+    /// <b>both</b> of A11Y-5's floors, the 40 px touch one included, which is what makes them an
+    /// alternate rather than a second exception. That was not true when this comment was first
+    /// written: the rows measured 26 px (#25). Recorded as #117 rather than left as an oversight.
     /// </para>
     /// </remarks>
     private const double MarkerHitSize = 24;
@@ -158,9 +158,9 @@ public sealed class SkyPlotControl : Control
     }
 
     /// <summary>
-    /// The largest the plot will draw itself, whatever room it is given. §10.5 caps it at 360 px at
-    /// the Compact breakpoint, and there is nothing to gain above that: the plot carries twelve
-    /// markers and a circle, and a metre of ultrawide spent on it is a metre not spent on the table.
+    /// The largest the plot will draw itself, whatever room it is given. §9.6.1's Compact row caps
+    /// it at 360 px, and there is nothing to gain above that: the plot carries twelve markers and a
+    /// circle, and a metre of ultrawide spent on it is a metre not spent on the table.
     /// </summary>
     public double MaxPlotSize
     {

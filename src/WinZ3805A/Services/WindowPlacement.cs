@@ -4,7 +4,8 @@ namespace WinZ3805A.Services;
 
 /// <summary>
 /// A rectangle in the coordinate space <c>AppWindow</c> works in — physical pixels, with the
-/// origin at the top-left of the primary display and secondary displays at negative coordinates.
+/// origin at the top-left of the primary display, so a secondary display to its left or above it
+/// sits at negative coordinates.
 /// </summary>
 /// <remarks>
 /// <c>Windows.Graphics.RectInt32</c> says exactly this, but it is a WinRT projection, and

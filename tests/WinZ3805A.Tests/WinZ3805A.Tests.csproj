@@ -75,7 +75,7 @@
          cannot come in, but the rule deciding which ramp was actually applied is a boolean pair. It
          is tested here because the case that matters - the Windows accent chosen and the read
          failing - cannot be produced by running the application, which is how the defect survived
-         review for months. -->
+         from the log line's arrival on 21 Aug 2026 (#165) to its fix on 29 Aug (#290). -->
     <Compile Include="..\..\src\WinZ3805A\Services\AccentSource.cs"
              Link="Services\AccentSource.cs" />
     <Compile Include="..\..\src\WinZ3805A\Controls\ReadoutFormatter.cs"

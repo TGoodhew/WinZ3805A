@@ -10,8 +10,8 @@ namespace WinZ3805A.Tests.Services;
 /// <b>These exist because the failing case cannot be produced by running the application.</b> When
 /// the Windows accent reads successfully the preference and the outcome agree, so a log line
 /// reporting either is indistinguishable. Only a read that fails separates them, and a read cannot
-/// be made to fail on demand — which is exactly why the defect survived review for months, and why
-/// asserting it here is the only way the fix stays fixed.
+/// be made to fail on demand — which is exactly why the defect survived review from 21 Aug 2026
+/// (#165) until 29 Aug (#290), and why asserting it here is the only way the fix stays fixed.
 /// </para>
 /// <para>
 /// The defect was not a missing log line but a <b>false</b> one: a user who had chosen the Windows

@@ -178,7 +178,8 @@ public class SurveyWatchTests
     // -------------------------------------------------------------------------------------
 
     /// <remarks>
-    /// Two hours at one poll a second, stalling twice on satellite count the way #185 expects. The
+    /// Two hours of the ten-second full sweep that carries the survey figure (§7.3), stalling twice
+    /// on satellite count the way #185 expects. The
     /// assertion is not on the exact figure but on the order of magnitude: a log a person will read
     /// at a bench, not a transcript.
     /// </remarks>

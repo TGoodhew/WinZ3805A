@@ -9,9 +9,9 @@ namespace WinZ3805A.Services;
 /// reflection serialiser, which every record in this folder is.</typeparam>
 /// <remarks>
 /// <para>
-/// <see cref="DetailsViewPreferences"/> left a note asking for this: <i>"the third store in this
-/// shape, and the last that should be written by hand: the next one wants the file handling
-/// factored out."</i> #60 is the next one, so here it is. What was duplicated three times was not
+/// <see cref="LocalDetailsViewPreferenceStore"/> was the third store written in this shape, and it
+/// carried a note saying the next one should factor the file handling out. #60 was the next one,
+/// so here it is. What was duplicated three times was not
 /// the interesting part of any of those stores — it was <c>File.Exists</c>, a
 /// <c>Directory.CreateDirectory</c>, and a five-clause exception filter that has to be identical
 /// everywhere or the odd one out crashes the application.

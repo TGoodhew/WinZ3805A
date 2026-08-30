@@ -7,15 +7,17 @@ using WinZ3805A.Device.Transport;
 namespace WinZ3805A.Device.Drivers.Nmea;
 
 /// <summary>
-/// A driver for any NMEA 0183 GNSS talker — a u-blox module, the GPS half of a BG7TBL, a marine
-/// receiver — and the worked example of adding a receiver family (#310).
+/// A driver for any NMEA 0183 GNSS talker — a u-blox module, a marine receiver, anything that
+/// sends the standard sentences — and the worked example of adding a receiver family (#310).
 /// </summary>
 /// <remarks>
 /// <para>
 /// <b>Read it beside <c>docs/tutorial-nmea-driver.md</c></b>, which walks the eleven steps of
 /// <c>docs/adding-a-receiver.md</c> with this file as the result. This folder is the whole
 /// driver: the sentence codec, the cycle parser and this class. Nothing in it depends on the
-/// simulator under <c>tools/</c>; the simulator depends on the codec.
+/// simulator under <c>tools/</c>; the simulator depends on the codec. The family is proven against
+/// that simulator, <c>tools/NmeaSimulator</c>, and against no real talker yet — the bench unit that
+/// was to be one carried no NMEA on its port (#309, deferred).
 /// </para>
 /// <para>
 /// <b>The family is the opposite shape to the SmartClock</b>, which is why it was chosen. A talker

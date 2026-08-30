@@ -15,8 +15,8 @@ namespace WinZ3805A.Device.Transport;
 /// </para>
 /// <para>
 /// Distinct from <see cref="Transaction.PromptStatus"/>, which is the <c>E-nnn&gt;</c> token the
-/// prompt itself carries. That token says only <i>that</i> the last command was rejected; this says
-/// which error and in what words.
+/// prompt itself carries. That token says only that the error queue was not empty at the end of
+/// the transaction; this says which error and in what words.
 /// </para>
 /// </remarks>
 /// <param name="Code">

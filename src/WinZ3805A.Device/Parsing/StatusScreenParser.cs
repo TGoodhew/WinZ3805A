@@ -898,31 +898,6 @@ public sealed partial class StatusScreenParser(TimeProvider timeProvider)
     }
 
     /// <summary>
-    /// Reads the position qualifier if the screen states one, in either form the family uses.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// A held position prints no qualifier on this receiver, so
-    /// <see cref="PositionQualifier.Unknown"/> stays the ordinary result rather than a failure.
-    /// </para>
-    /// <para>
-    /// <b>Two forms, because the parenthesised one is not what the Z3805A prints.</b> The
-    /// documented form qualifies the value — <c>(Average)</c>, <c>(Init)</c>, <c>(Held)</c> — and is
-    /// kept for the models that use it. The SmartClock screens captured on 27 Aug 2026 qualify the
-    /// <i>label</i> instead, and only while a survey is running:
-    /// </para>
-    /// <code>
-    /// holding:    LAT      N  47:31:18.822
-    /// surveying:  AVG LAT  N  47:31:18.640
-    /// </code>
-    /// <para>
-    /// <c>AVG</c> does not match <c>Aver\w*</c>, so both surveying fixtures in the corpus read as
-    /// having no qualifier at all — the one distinction this method exists to draw, lost on the only
-    /// screens that draw it. The remark above used to say every captured screen was a held one,
-    /// which is how it went unnoticed until there were screens that were not.
-    /// </para>
-    /// </remarks>
-    /// <summary>
     /// Reads how long the receiver has been degraded, or null if the screen does not say.
     /// </summary>
     /// <remarks>
@@ -964,6 +939,31 @@ public sealed partial class StatusScreenParser(TimeProvider timeProvider)
         return null;
     }
 
+    /// <summary>
+    /// Reads the position qualifier if the screen states one, in either form the family uses.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A held position prints no qualifier on this receiver, so
+    /// <see cref="PositionQualifier.Unknown"/> stays the ordinary result rather than a failure.
+    /// </para>
+    /// <para>
+    /// <b>Two forms, because the parenthesised one is not what the Z3805A prints.</b> The
+    /// documented form qualifies the value — <c>(Average)</c>, <c>(Init)</c>, <c>(Held)</c> — and is
+    /// kept for the models that use it. The SmartClock screens captured on 27 Aug 2026 qualify the
+    /// <i>label</i> instead, and only while a survey is running:
+    /// </para>
+    /// <code>
+    /// holding:    LAT      N  47:31:18.822
+    /// surveying:  AVG LAT  N  47:31:18.640
+    /// </code>
+    /// <para>
+    /// <c>AVG</c> does not match <c>Aver\w*</c>, so both surveying fixtures in the corpus read as
+    /// having no qualifier at all — the one distinction this method exists to draw, lost on the only
+    /// screens that draw it. The remark above used to say every captured screen was a held one,
+    /// which is how it went unnoticed until there were screens that were not.
+    /// </para>
+    /// </remarks>
     private static PositionQualifier ParsePositionQualifier(string[] lines)
     {
         foreach (string line in lines)

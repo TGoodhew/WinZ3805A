@@ -20,6 +20,10 @@ public sealed class MotionPolicyTests
     public void MovingDownThePaneRisesFromTheBottom(int from, int to) =>
         Assert.Equal(NavigationMotion.FromBottom, MotionPolicy.ForNavigation(true, from, to));
 
+    /// <remarks>
+    /// The policy's answer, not the screen's: since §9.8.2's #120 correction the window draws this
+    /// slide <c>FromBottom</c> as well, so this asserts the decision rather than the drawing.
+    /// </remarks>
     [Theory]
     [InlineData(1, 0)]
     [InlineData(8, 0)]

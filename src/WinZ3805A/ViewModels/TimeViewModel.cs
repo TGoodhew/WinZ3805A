@@ -23,9 +23,11 @@ namespace WinZ3805A.ViewModels;
 /// page called Time is for, and what a user checking a suspect date needs.
 /// </para>
 /// <para>
-/// <b>The leap-second card is not finished.</b> §10.14 requires the accumulated GPS−UTC offset from
-/// <c>:PTIM:LEAP:ACC?</c>, which this shows nothing of; it carries only the status screen's pending
-/// flag. Filed as #149, with the receiver's own answers to all four queries recorded in §10.14.
+/// <b>The leap-second card's accumulated offset does not pass through here.</b> §10.14's GPS−UTC
+/// offset from <c>:PTIM:LEAP:ACC?</c> is a query rather than a status-screen field, so
+/// <c>TimePage</c>'s code-behind asks for it and fills <c>AccumulatedText</c> itself (#149, closed
+/// 20 Aug 2026); this view model carries only the status screen's pending flag. The receiver's own
+/// answers to all four queries are recorded in §10.14.
 /// </para>
 /// </remarks>
 public sealed class TimeViewModel : INotifyPropertyChanged

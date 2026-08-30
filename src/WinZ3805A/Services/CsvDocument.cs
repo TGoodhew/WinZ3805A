@@ -8,9 +8,9 @@ namespace WinZ3805A.Services;
 /// </summary>
 /// <remarks>
 /// <para>
-/// P0-13 requires the diagnostic log to export as UTF-8 CSV, and P1-1 will want the same for trend
-/// data. Building the text here rather than in a page keeps the escaping — which is the only part
-/// with rules — testable without a window.
+/// P0-13 requires the diagnostic log to export as UTF-8 CSV, and P1-1's trend export (#49) does
+/// the same. Building the text here rather than in a page keeps the escaping — which is the only
+/// part with rules — testable without a window.
 /// </para>
 /// <para>
 /// <b>This is data leaving the application, not a readout.</b> §9.5.3's typesetting rules do not

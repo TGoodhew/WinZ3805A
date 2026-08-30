@@ -75,11 +75,13 @@ public static class WindowSizing
     /// 144 effective pixels, and the count — which §9.6.2 requires — was the part pushed out.
     /// </para>
     /// <para>
-    /// Only part of the floor is text. §10.3 builds the compact wireframe from a <b>32 px title
-    /// bar</b> and a <b>64 px medallion</b>, both fixed by construction, leaving <b>48 px</b> for
-    /// the mode line, the satellite count and their padding. So the fixed 96 stays fixed and the
-    /// 48 scales, which returns exactly 144 at 100 % — the specification's own number, not an
-    /// approximation of it.
+    /// Only part of the floor can give. §9.6.2 decomposes 144 as a <b>32 px title bar</b>, 24 px of
+    /// margin, the <b>64 px medallion</b> and 24 px more of margin. The title bar and the medallion
+    /// are fixed by construction; the <b>48 px</b> that remains is the two margins, not a text
+    /// row — the mode text sits beside the medallion, and the satellite count has been in its
+    /// centre since #279. So the fixed 96 stays fixed and the 48 scales, which is where the mode
+    /// text finds its room, and which returns exactly 144 at 100 % — the specification's own
+    /// number, not an approximation of it.
     /// </para>
     /// <para>
     /// Display scaling is <i>not</i> applied here. These are effective pixels;
@@ -95,7 +97,7 @@ public static class WindowSizing
     public static int CompactMinimumHeight(double textScale)
     {
         const int Fixed = 96;      // 32 px title bar + 64 px medallion (§10.3)
-        const int Scaling = 48;    // mode line, satellite count and padding (§9.6.2's remainder)
+        const int Scaling = 48;    // the two 24 px margins (§9.6.2: 32 + 24 + 64 + 24)
 
         double scale = double.IsNaN(textScale) || textScale < 1.0 ? 1.0 : textScale;
 
@@ -117,10 +119,11 @@ public static class WindowSizing
     /// </para>
     /// <para>
     /// Capping gives up the breakpoint rather than the window. Above roughly 190% scaling on a
-    /// 1920-wide display the content falls below §9.6.1's 640 px Compact floor and
-    /// <c>NavigationView</c> shows the Minimal pane — a layout §9.6.1 does not describe, which is
-    /// the open half of #101. A pane behind a hamburger is a worse layout; a window that cannot be
-    /// moved is not a layout at all.
+    /// 1920-wide display the content falls below §9.6.1's 1024 px Expanded threshold and
+    /// <c>NavigationView</c> shows the <c>LeftCompact</c> icon rail; near 300% it falls below the
+    /// 640 px Compact floor and shows the Minimal pane, the state §9.6.1's Minimal row was added to
+    /// describe (A11Y-7; #101 is closed). A pane behind a hamburger is a worse layout; a window
+    /// that cannot be moved is not a layout at all.
     /// </para>
     /// </remarks>
     /// <param name="width">The wanted window width in physical pixels.</param>
@@ -146,11 +149,11 @@ public static class WindowSizing
     /// <remarks>
     /// <para>
     /// Compact is entered by shrinking the window to §9.6.2's compact floor, so leaving it has to
-    /// put the size back — otherwise the user gets a 160 px medallion in a 380 × 144 frame, which
-    /// is the standard layout's floor holding a window it was never given. The remembered
-    /// standard-layout size wins when there is one; a launch straight into compact from a stored
-    /// compact state may have none, and then the standard floor is the honest answer — a "nice"
-    /// size invented here would be a size the user never chose.
+    /// put the size back — otherwise the user gets a 160 px medallion in a 380 × 144 frame: the
+    /// standard layout, whose own floor is 380 × 240, in a window it was never given. The
+    /// remembered standard-layout size wins when there is one; a launch straight into compact from
+    /// a stored compact state may have none, and then the standard floor is the honest answer — a
+    /// "nice" size invented here would be a size the user never chose.
     /// </para>
     /// <para>
     /// Each axis is decided on its own, floored at the minimum — a size remembered before the

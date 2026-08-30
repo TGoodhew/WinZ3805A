@@ -3,7 +3,8 @@ using System.Collections.Frozen;
 namespace WinZ3805A.Device.Transport;
 
 /// <summary>
-/// The three transaction timeout classes of §7.2, and the mapping from a command to its class.
+/// The transaction timeout classes — §7.2's three and the three measured since (the auto-detect
+/// probe, the diagnostic log, #256's position commit) — and the mapping from a command to its class.
 /// </summary>
 /// <remarks>
 /// The figures are wire time plus device latency, not guesses: the status screen is ~1900 bytes,
@@ -49,7 +50,12 @@ public static class TransactionTimeouts
     /// </remarks>
     public static TimeSpan DiagnosticLog { get; } = TimeSpan.FromMilliseconds(60000);
 
-    /// <summary>2000 ms — one identity probe during auto-detect (§10.12), where eight of these must fit inside 20 s.</summary>
+    /// <summary>
+    /// 2000 ms — one transaction of the connect sequence during auto-detect, §10.12's figure. The
+    /// synchronise listen, the <c>*CLS</c> it sends (twice when the first is not answered) and the
+    /// identity probe each spend one, so a combination at the wrong baud rate costs about 8 s, and
+    /// the walk — every registered driver's settings, ten as shipped — well over a minute.
+    /// </summary>
     public static TimeSpan AutoDetectProbe { get; } = TimeSpan.FromMilliseconds(2000);
 
     /// <summary>

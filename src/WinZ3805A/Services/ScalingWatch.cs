@@ -7,8 +7,9 @@ namespace WinZ3805A.Services;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Both windows derive their §9.6.2 minimum size from <c>XamlRoot.RasterizationScale</c>, and both
-/// have to recompute it when the user drags the window to a display at a different setting or
+/// All three windows — main, Details and the Help window that joined them on 29 Aug 2026 — derive
+/// a minimum size from <c>XamlRoot.RasterizationScale</c> (§9.6.2's, for the first two), and each
+/// has to recompute it when the user drags the window to a display at a different setting or
 /// changes the setting under it. <c>XamlRoot.Changed</c> is the event that carries that, but it
 /// also fires on every size change and on host visibility, so subscribing to it directly would
 /// rebuild the floor — and call into <c>DisplayArea</c> — on every frame of a resize drag.

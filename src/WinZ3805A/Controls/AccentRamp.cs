@@ -11,7 +11,7 @@ public readonly record struct Rgb(byte R, byte G, byte B)
 }
 
 /// <summary>
-/// The seven rungs §9.4.1 gives the accent, from darkest to lightest.
+/// The seven rungs §9.4.2 gives the accent, from darkest to lightest.
 /// </summary>
 /// <param name="Dark3">The darkest rung.</param>
 /// <param name="Dark2">Darker.</param>
@@ -21,7 +21,7 @@ public readonly record struct Rgb(byte R, byte G, byte B)
 /// <param name="Light2">Lighter.</param>
 /// <param name="Light3">The lightest rung.</param>
 /// <remarks>
-/// Windows publishes a ramp of exactly this shape, which is why §9.4.1's has seven rungs rather
+/// Windows publishes a ramp of exactly this shape, which is why §9.4.2's has seven rungs rather
 /// than a number chosen for its own sake — substituting one for the other is then a rung-for-rung
 /// swap with nothing to interpolate and nothing to guess.
 /// </remarks>
@@ -80,7 +80,7 @@ public readonly record struct AccentRamp(
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The interaction brushes are not the same rung in both themes and cannot be: §9.4.1 puts the
+    /// The interaction brushes are not the same rung in both themes and cannot be: §9.4.2 puts the
     /// fill on <c>Dark1</c> against a light ground and <c>Light2</c> against a dark one, because a
     /// fill has to be darker than what is behind it in one case and lighter in the other. A single
     /// mapping would leave one theme with a button that barely separates from the card under it.
@@ -108,7 +108,7 @@ public readonly record struct AccentRamp(
         new("WzAccentFillHoverBrush", isLightTheme ? Dark2 : Light1),
         new("WzAccentFillPressedBrush", isLightTheme ? Dark3 : Light3),
 
-        // §9.4.1 draws the informational severity from the accent, unlike caution and critical.
+        // §9.4.3 draws the informational severity from the accent, unlike caution and critical.
         // It follows the accent precisely because "informational" is not an alarm - it is the one
         // severity that may safely look like the rest of the application.
         new("WzInfoBrush", isLightTheme ? Dark1 : Light2),

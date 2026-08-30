@@ -31,10 +31,12 @@ public enum MedallionSize
 /// loop is hunting, and that is visible before any figure of merit changes.
 /// </para>
 /// <para>
-/// <b>The ring is qualitative and must never be read for values.</b> The figure itself is always
-/// set beside it in <c>WzReadoutMedium</c>. That is why the scale adapts (§9.10.2): absolute
-/// nanoseconds would make a good receiver draw a flat line forever and a poor one clip. The
-/// arithmetic is in <see cref="MedallionRingMath"/>, which is tested.
+/// <b>The ring is qualitative and must never be read for values.</b> The figure itself is set
+/// beside it in a <c>WzReadout*</c> style wherever the readout row is on screen (Large on the main
+/// window, Medium on Overview); in the collapsed layouts the count takes the centre (#279). That is
+/// why the scale adapts (§9.10.2): absolute nanoseconds would make a good receiver draw a flat line
+/// forever and a poor one clip. The arithmetic is in <see cref="MedallionRingMath"/>, which is
+/// tested.
 /// </para>
 /// <para>
 /// <b>Nothing here animates.</b> §9.8.2 gives the ring redraw <c>WzDurationInstant</c> and §9.13
@@ -324,7 +326,7 @@ public sealed class StatusMedallion : Control
     /// <para>
     /// <b>The sparkline belongs to the 96 and 160 px sizes; at 64 px the ring is uniform</b>
     /// (§9.10.2, #307). That small, sixty marks of differing length make the circle look
-    /// misshapen, and the circle is the one shape §9.7 relies on the eye finding without focusing.
+    /// misshapen, and the circle is the one shape §9.3 relies on the eye finding without focusing.
     /// So compact draws one mark length in every slot, always — a full circle from the first
     /// second, whatever has or has not been heard — and carries the state's colour and nothing else.
     /// </para>

@@ -79,8 +79,9 @@ public static class DiagnosticLogCsv
     /// <summary>The file name offered in the save dialog.</summary>
     /// <remarks>
     /// Dated so that a user exporting a log a week apart does not overwrite the first one, and
-    /// sortable so a folder of them reads in order. The clock is passed in rather than read here,
-    /// because §12 forbids <c>DateTime.Now</c> in code this project tests.
+    /// sortable so a folder of them reads in order. The clock is passed in rather than read here:
+    /// §12 forbids <c>DateTime.Now</c> in the Device library, and the app follows the same rule by
+    /// choice wherever a test needs to pin the clock.
     /// </remarks>
     public static string SuggestedFileName(TimeProvider timeProvider)
     {

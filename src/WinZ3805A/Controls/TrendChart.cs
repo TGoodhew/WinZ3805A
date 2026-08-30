@@ -80,7 +80,6 @@ public sealed class TrendChart : Control
         typeof(TrendChart),
         new PropertyMetadata(50.0, OnChartChanged));
 
-    /// <summary>Identifies the <see cref="States"/> dependency property.</summary>
     /// <summary>Identifies the <see cref="Anchoring"/> dependency property.</summary>
     public static readonly DependencyProperty AnchoringProperty = DependencyProperty.Register(
         nameof(Anchoring),
@@ -102,6 +101,7 @@ public sealed class TrendChart : Control
         typeof(TrendChart),
         new PropertyMetadata(0, OnChartChanged));
 
+    /// <summary>Identifies the <see cref="States"/> dependency property.</summary>
     public static readonly DependencyProperty StatesProperty = DependencyProperty.Register(
         nameof(States),
         typeof(IReadOnlyList<TrendSample>),
@@ -126,7 +126,7 @@ public sealed class TrendChart : Control
     }
 
     /// <summary>
-    /// The receiver's state over the same window, for §49's background shading.
+    /// The receiver's state over the same window, for #49's background shading.
     /// </summary>
     /// <remarks>
     /// <c>Value</c> carries a <see cref="ReceiverMode"/> cast to a double. Shading is drawn only
@@ -479,7 +479,7 @@ public sealed class TrendChart : Control
         // falls back to 1 for anything not positive and finite, so the first draw is unsnapped
         // rather than snapped to nonsense. Read per draw rather than cached: moving a window to a
         // display with different scaling raises no event this control listens for, and it redraws
-        // every second anyway (§9.8.2).
+        // every second anyway (§7.3).
         double centre = TrendDecimation.SnapStrokeCentre(zeroY, MidLineThickness, RasterizationScale);
 
         surface.Children.Add(new Line
@@ -571,7 +571,7 @@ public sealed class TrendChart : Control
 
     /// <summary>The gap between the axis labels and the plot, in DIPs.</summary>
     /// <remarks>
-    /// §9.6's XS step. A gutter that touches the trace has moved the overlap rather than removed
+    /// §9.6's XXS step. A gutter that touches the trace has moved the overlap rather than removed
     /// it: a label needs to be separated from the plot, not merely outside it.
     /// </remarks>
     private const double AxisGap = 4;

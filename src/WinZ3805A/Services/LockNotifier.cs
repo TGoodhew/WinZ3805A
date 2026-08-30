@@ -30,8 +30,9 @@ public interface IToastSink
 /// <b>Nothing it does may cost the application anything.</b> A notification that fails is a
 /// notification not shown; the poll loop and the window carry on. This project has twice been killed
 /// outright by a WinRT call that looked harmless — <c>ApplicationData.Current</c> and
-/// <c>DisplayArea.FindAll</c> — so registration and every send are guarded, and a sink that throws
-/// on construction leaves the feature off rather than the process dead.
+/// <c>DisplayArea.FindAll</c> — so every send is guarded, and a sink that throws on construction
+/// leaves the feature off rather than the process dead. There has been no registration step to
+/// guard since the 29 Aug 2026 move to the shell API; see <see cref="AppNotificationSink"/>.
 /// </para>
 /// </remarks>
 public sealed class LockNotifier : IDisposable
@@ -201,9 +202,9 @@ public sealed class AppNotificationSink : IToastSink
 
     /// <inheritdoc />
     /// <remarks>
-    /// <c>ToastText02</c> is one bold heading over one wrapping body, which is the shape §10.3 asks
-    /// for. The API takes XML because it predates the builder pattern; that is the whole of the
-    /// cost of not using the newer one.
+    /// <c>ToastText02</c> is one bold heading over one wrapping body — the shape chosen here for a
+    /// title and a sentence; §10.3 and P1-9 specify no shape. The API takes XML because it predates
+    /// the builder pattern; that is the whole of the cost of not using the newer one.
     /// </remarks>
     public void Show(string title, string body)
     {

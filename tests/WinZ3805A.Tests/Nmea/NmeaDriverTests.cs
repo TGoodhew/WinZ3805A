@@ -13,9 +13,10 @@ namespace WinZ3805A.Tests.Nmea;
 /// the full parse, and the never-throw rule.
 /// </summary>
 /// <remarks>
-/// The simulator stands in for a capture here because no real talker has been captured yet;
-/// #309's capture of the BG7TBL is what these expectations get compared against, and whatever
-/// disagrees is folded back into both.
+/// The simulator stands in for a capture here because no real talker has been captured — #309,
+/// the BG7TBL, was deferred when its bench unit's port turned out to carry no NMEA. When one is,
+/// its capture is what these expectations get compared against, and whatever disagrees is folded
+/// back into both.
 /// </remarks>
 public sealed class NmeaDriverTests
 {

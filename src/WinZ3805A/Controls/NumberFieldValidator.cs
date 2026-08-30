@@ -20,7 +20,10 @@ namespace WinZ3805A.Controls;
 /// field.
 /// </para>
 /// <para>
-/// <b><c>ValidationMode</c> is set to <c>Disabled</c> deliberately.</b> <c>NumberBox</c>'s own
+/// <b><c>ValidationMode</c> is set to <c>Disabled</c> deliberately, and that is a departure from
+/// §9.10.1</b>, whose stock-control table specifies
+/// <c>ValidationMode="InvalidInputOverwritten"</c> for every <c>NumberBox</c>. It is recorded here
+/// rather than resolved silently because the two sections conflict: <c>NumberBox</c>'s own
 /// <c>InvalidInputOverwritten</c> silently reverts an out-of-range entry to the last good value,
 /// which cannot coexist with §9.11: there is nothing left to put an error message under, and the
 /// user is told nothing about the number they just typed. The bounds are still enforced — they are

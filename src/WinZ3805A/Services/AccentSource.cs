@@ -6,8 +6,8 @@ namespace WinZ3805A.Services;
 /// <remarks>
 /// The distinction that matters is between this and <c>AppearancePreferences.UseSystemAccent</c>,
 /// which records what the user <i>asked</i> for. They differ whenever the Windows accent cannot be
-/// read — and the startup log reported the preference for months while its message said
-/// <c>source</c>.
+/// read — and from 21 Aug 2026 (#165) until 29 Aug (#290) the startup log reported the preference
+/// while its message said <c>source</c>.
 /// </remarks>
 public enum AccentSource
 {

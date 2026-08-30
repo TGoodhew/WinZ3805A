@@ -36,8 +36,9 @@ public sealed class CommandInvoker
     /// A property over the session's driver, not a field (#287): the driver is re-selected at every
     /// connect, and a stale field would drain the queue with another family's spelling. The throw
     /// stays because <c>:SYST:ERR?</c> is IEEE 488.2's own error query and the driver contract
-    /// tests require every catalog to carry it — a driver without one is a bug to surface, not a
-    /// device condition to tolerate.
+    /// tests require every query/response catalog to carry it — a broadcast family is exempt since
+    /// #310, having no tier C entry for this path to run, so a query/response driver without one
+    /// is a bug to surface, not a device condition to tolerate.
     /// </remarks>
     private ScpiCommand NextError =>
         _session.Driver.Find(":SYST:ERR?")

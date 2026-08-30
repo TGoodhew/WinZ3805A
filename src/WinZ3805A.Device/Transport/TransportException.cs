@@ -1,10 +1,10 @@
 namespace WinZ3805A.Device.Transport;
 
 /// <summary>
-/// A serial-port failure, classified. Thrown only by <see cref="ITransport.OpenAsync"/> and
-/// <see cref="ITransport.WriteAsync"/>; the read path reports faults through
-/// <see cref="Transaction.Outcome"/> instead, because a transaction that dies mid-read still has a
-/// result to report.
+/// A serial-port failure, classified. Thrown by <see cref="ITransport.OpenAsync"/>,
+/// <see cref="ITransport.WriteAsync"/>, and <see cref="ITransport.Input"/> on a transport that is
+/// not open; the read path otherwise reports faults through <see cref="Transaction.Outcome"/>,
+/// because a transaction that dies mid-read still has a result to report.
 /// </summary>
 public sealed class TransportException : Exception
 {

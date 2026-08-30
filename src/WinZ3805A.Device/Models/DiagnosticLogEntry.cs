@@ -24,9 +24,10 @@ public sealed record DiagnosticLogEntry
     /// When the entry was recorded, or <see langword="null"/> if the timestamp did not parse.
     /// </summary>
     /// <remarks>
-    /// <b>On the receiver's own time scale, whichever §7 has it set to</b> — UTC or GPS — and with
-    /// no offset attached, because the log does not carry one. It is also subject to the §7.4 week
-    /// rollover, so an entry from a receiver that has not been corrected may be 1024 weeks adrift.
+    /// <b>On the receiver's own time scale, whichever it is set to</b> — the GPS or UTC that
+    /// §11.2's <c>ReceiverStatus.TimeScale</c> reports — and with no offset attached, because the
+    /// log does not carry one. It is also subject to the §7.4 week rollover, so an entry from a
+    /// receiver that has not been corrected may be 1024 weeks adrift.
     /// </remarks>
     public DateTime? Timestamp { get; init; }
 

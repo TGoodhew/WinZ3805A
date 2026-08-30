@@ -6,8 +6,10 @@ namespace WinZ3805A.Services;
 /// <remarks>
 /// An enum rather than a <c>NavigationTransitionInfo</c> because the decision and the animation are
 /// different things, and only the decision has rules worth asserting. The members are the outcomes
-/// §9.8.2's "Nav page change" row allows, which is not the same list as the ones WinUI can draw —
-/// see <c>DetailsWindow.TransitionTo</c>.
+/// §9.8.2's "Nav page change" row originally allowed; since its #120 correction the row reads
+/// "<c>FromBottom</c> — one direction, always", and <c>DetailsWindow.TransitionTo</c> draws both
+/// directions as <c>FromBottom</c>. What the window consumes is slide-or-not; the direction is
+/// computed and unused (#316 audit finding).
 /// </remarks>
 public enum NavigationMotion
 {
@@ -22,7 +24,11 @@ public enum NavigationMotion
     /// <summary>The new page rises into place: travel <i>down</i> the §9.7.1 pane.</summary>
     FromBottom,
 
-    /// <summary>The new page drops into place: travel <i>up</i> the §9.7.1 pane.</summary>
+    /// <summary>Travel <i>up</i> the §9.7.1 pane.</summary>
+    /// <remarks>
+    /// Distinguished here, not on screen: the window draws this as <c>FromBottom</c> too, per
+    /// §9.8.2's #120 correction — there is no <c>FromTop</c> slide effect to draw it with.
+    /// </remarks>
     FromTop,
 }
 
@@ -40,7 +46,9 @@ public enum NavigationMotion
 /// §9.8.2's "Directional consistency" paragraph is the reason the direction is taken from the pane
 /// index rather than from a navigation stack. The pane is a vertical list and the transition says
 /// where in that list the user just went; a back stack would say something about history instead,
-/// which is not what the user is looking at.
+/// which is not what the user is looking at. Since #120 the window draws every slide
+/// <c>FromBottom</c> regardless, so the direction computed here decides nothing visible; only
+/// slide-or-none reaches the screen (#316 audit finding).
 /// </para>
 /// </remarks>
 public static class MotionPolicy

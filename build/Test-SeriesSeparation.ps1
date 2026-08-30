@@ -47,11 +47,11 @@
 .PARAMETER MinSeparation
     The dE00 floor for a pair. Default 8.0.
 
-    WHY 8 AND NOT THE MEASURED 10.5. The palette measures 10.5 at its worst, so the floor sits
-    below what shipped on purpose. A gate pinned to the current value fails on a one-step
-    refinement of an entry and teaches everyone to edit the threshold, which is how a gate
-    stops meaning anything. 8 is comfortably above the 3-5 that #87 called a collapse, and
-    leaves room to tune a colour without an argument.
+    WHY 8 AND NOT THE MEASURED 10.4. The palette measures 10.8 in Light and 10.4 in Dark at its
+    worst, so the floor sits below what shipped on purpose. A gate pinned to the current value
+    fails on a one-step refinement of an entry and teaches everyone to edit the threshold, which
+    is how a gate stops meaning anything. 8 is comfortably above the 3-5 that #87 called a
+    collapse, and leaves room to tune a colour without an argument.
 
 .EXAMPLE
     pwsh build/Test-SeriesSeparation.ps1

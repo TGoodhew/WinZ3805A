@@ -273,9 +273,10 @@ public sealed class WindowSizingTests
     /// </summary>
     /// <remarks>
     /// <b>This is what #215 was.</b> A fixed 144 cannot hold constant content across text scales,
-    /// and at 200 % the satellite count — which §9.6.2 requires — was the part pushed out of it.
-    /// Scaling the whole floor would be wrong in the other direction: §10.3's 32 px title bar and
-    /// §9.6.2's 64 px medallion are fixed by construction and do not grow with text.
+    /// and at 200 % the satellite count — which §9.6.2 requires, and which has since moved into the
+    /// medallion's centre (#279) — was the part pushed out of it. Scaling the whole floor would be
+    /// wrong in the other direction: §9.6.2 decomposes 144 as 32 + 24 + 64 + 24, and the 32 px
+    /// title bar and 64 px medallion are fixed by construction; only the two 24 px margins grow.
     /// </remarks>
     [Theory]
     [InlineData(1.25, 156)]

@@ -10,7 +10,9 @@
     opportunistic and never more likely than during a move.
 
     So this watches rather than asks. Start it before touching anything, do the move, stop it
-    afterwards. Every time the receiver's state changes it writes one fixture file.
+    afterwards. It writes one fixture file per state signature it has not seen before - the seen
+    set is seeded from the files already on disk, so a restart is safe (#236) - and a return to a
+    state it has seen writes nothing. Each file gets a provenance line appended to capture-log.md.
 
     THREE THINGS IT DELIBERATELY DOES:
 
@@ -38,8 +40,12 @@
 
 .PARAMETER OutputDirectory
     Where fixtures land. Defaults to the Fixtures/captured/ folder, which is inside the tree
-    .gitattributes already marks -text. Promoting one means moving it up a level and adding a
-    row to Fixtures/README.md.
+    .gitattributes already marks -text. Promoting one means adding a row to Fixtures/README.md
+    and pointing a test at it; the file stays where it is.
+
+.PARAMETER BaudRate
+    Serial speed. Defaults to 9600, which is what the SmartClock family talks at; the port is
+    always opened 8-N-1.
 
 .PARAMETER IntervalSeconds
     Seconds between screens once connected. Default 3. The screen is about 1,900 bytes, which
@@ -657,6 +663,6 @@ finally {
     Write-Host ''
     Write-Host ("Captured {0} new state(s) into {1}" -f $script:written, $OutputDirectory) -ForegroundColor Cyan
     if ($script:written -gt 0) {
-        Write-Host 'Promote one by moving it up a level into Fixtures/ and adding a row to its README.' -ForegroundColor DarkGray
+        Write-Host 'Promote one by adding a row to Fixtures/README.md and pointing a test at it; the file stays where it is.' -ForegroundColor DarkGray
     }
 }

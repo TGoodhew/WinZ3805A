@@ -188,9 +188,11 @@ public sealed class OverviewViewModel : INotifyPropertyChanged
                 return "Not in holdover";
             }
 
-            // §11.1: HoldoverDuration has no known screen label and is unparsed pending #4, so the
-            // present-uncertainty figure is what there is. It says how bad holdover has become,
-            // which is what the duration was being read for anyway.
+            // ReceiverStatus.HoldoverDuration has been parsed since 28 Aug 2026 (the holdover
+            // fixtures gave it a screen label), but this readout still shows the present-uncertainty
+            // figure; binding it to the duration is an open follow-up from the #316 audit. The
+            // uncertainty says how bad holdover has become, which is what the duration was being
+            // read for anyway.
             (string value, string unit) = ReadoutFormatter.Seconds(Status?.HoldoverPresentSeconds);
             return unit.Length == 0 ? value : $"{value}{ReadoutFormatter.HairSpace}{unit}";
         }
