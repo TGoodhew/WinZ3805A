@@ -45,6 +45,10 @@ public sealed partial class SettingsPage : Page
         // carried the literal "Exit WinZ3805A" until #319 — the one place in the application that
         // had it, which is exactly how a rename would have shipped a window whose title said one
         // thing and whose Exit button said another.
+        // §6.3: the product name is read at runtime and never hard-coded in XAML. Both the card's
+        // header and the button carry it, so the row still names what it quits when the pane is
+        // narrow enough for SettingsCard to stack the control under its header.
+        ExitCard.Header = $"Exit {Package.Current.DisplayName}";
         ExitButton.Content = $"Exit {Package.Current.DisplayName}";
     }
 

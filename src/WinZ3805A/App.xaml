@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Application
     x:Class="WinZ3805A.App"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -13,6 +13,23 @@
                     anything references them.
                 -->
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+
+                <!--
+                    The Community Toolkit's settings rows (§9.10.1, adopted #320), merged before the
+                    token layer because Themes/Controls.xaml bases its §9 restyle on the keys these
+                    declare.
+
+                    MERGING THEM IS NOT OPTIONAL AND ITS ABSENCE IS SILENT. The controls' implicit
+                    styles arrive on their own through the assembly's Generic.xbf, so a SettingsCard
+                    renders without this — but DefaultSettingsCardStyle is a NAMED key and lives in
+                    these dictionaries alone. Without them the BasedOn in Controls.xaml fails to
+                    resolve, which fails the whole SettingsPage parse, and the frame simply does not
+                    navigate: no exception surfaced, nothing in the application log, and the nav item
+                    highlighting correctly over the page the user was already on. Found exactly that
+                    way on 30 Aug 2026.
+                -->
+                <ResourceDictionary Source="ms-appx:///CommunityToolkit.WinUI.Controls.SettingsControls/SettingsCard/SettingsCard.xaml" />
+                <ResourceDictionary Source="ms-appx:///CommunityToolkit.WinUI.Controls.SettingsControls/SettingsExpander/SettingsExpander.xaml" />
 
                 <!--
                     §9 design tokens. Order matters below this line: Colors, Spacing and

@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <!--
     Assembly metadata. Absent until 29 Aug 2026, which left the file properties of a
     shipped binary reading as the project name and nothing else.
@@ -116,13 +116,20 @@
                                                ServiceProvider directly and never
                                                a host.
 
-      CommunityToolkit.WinUI.Controls.SettingsControls also has zero usages and
-      is KEPT. §9.10's component inventory specifies SettingsCard and
-      SettingsExpander by name for the Settings page, which is a required §10.2
-      destination and still a placeholder, and the whole package measures 0.31 MB
-      of the bundle (15.70 against 15.39). Removing it to re-add it with the page
-      would trade that for churn. Sqlite went because 1.89 MB of *native* code is
-      a different order of cost, not because the two cases differ in principle.
+      CommunityToolkit.WinUI.Controls.SettingsControls is IN USE as of 30 Aug 2026
+      (#320): SettingsPage is built out of SettingsCard and SettingsExpander, as
+      §9.10's component inventory named it from the start. It was kept through
+      three audits on the argument that it was 0.31 MB of the bundle against the
+      churn of removing and re-adding it, and that argument has now been settled
+      by using it rather than by re-making it.
+
+      ITS DICTIONARIES MUST BE MERGED IN App.xaml. The implicit styles arrive on
+      their own through the assembly's Generic.xbf, so the controls render without
+      it — but DefaultSettingsCardStyle is a NAMED key, and §9's restyle in
+      Themes/Controls.xaml is BasedOn it. Without the merge that reference fails to
+      resolve, which fails the whole page parse, and the frame silently does not
+      navigate: no exception, nothing in the application log, and the nav item
+      highlighting over the page the user was already on.
 
       Note §9.10 also lists those controls for the Timing and Holdover pages,
       which are built and do not use them. That divergence is real and is a
