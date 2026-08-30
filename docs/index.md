@@ -26,6 +26,8 @@ where a link into the source resolves:
   — `docs/requirements.md`, the authority on behaviour
 - [Adding a receiver](https://github.com/TGoodhew/WinZ3805A/blob/main/docs/adding-a-receiver.md)
   — the driver author's guide
+- [The NMEA 0183 tutorial](https://github.com/TGoodhew/WinZ3805A/blob/main/docs/tutorial-nmea-driver.md)
+  — that guide followed to the end for a second family, with a simulator
 - [Manual QA checklist](https://github.com/TGoodhew/WinZ3805A/blob/main/docs/manual-qa.md)
   — the release checks that need a person, a receiver, or a machine setting
 - [Against Lady Heather](https://github.com/TGoodhew/WinZ3805A/blob/main/docs/lady-heather-comparison.md)

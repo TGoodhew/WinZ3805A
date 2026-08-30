@@ -49,8 +49,13 @@ Heather, the tool most people run on these receivers today, is in
 | HP/Symmetricom 58503A/B | — |
 | Symmetricom 59551A | — |
 | Symmetricom Z3816A | — |
+| **Any NMEA 0183 GNSS talker** — a u-blox module, the GPS half of a BG7TBL GPSDO, a marine receiver | 4800-8-N-1 (the standard), commonly 9600 |
 
-These units share the 58503A/B SmartClock command set. Because the defaults
+The SmartClock units share the 58503A/B command set. The NMEA family is the
+second driver ([docs/tutorial-nmea-driver.md](docs/tutorial-nmea-driver.md)): it
+gets the monitoring core — fix state, satellites, position and time — and is
+never written to; a talker has no disciplined oscillator, so the timing pages
+show dashes. Because the defaults
 differ between siblings, every serial parameter is user-settable — baud, data
 bits, parity, and stop bits — and the connection dialog offers an auto-detect
 that walks the most likely combinations sending `*IDN?` until a valid identity
@@ -258,7 +263,11 @@ contract member by member, the §8 safety obligations that bind third-party
 drivers, the development process in order, the testing story (a fictional
 second family in the test project runs the real connect and poll paths), and an
 honest map of what a driver gets you today versus what is still written in the
-SmartClock dialect.
+SmartClock dialect. [docs/tutorial-nmea-driver.md](docs/tutorial-nmea-driver.md)
+is the walkthrough followed to the end for the second family that ships, an
+NMEA 0183 talker — the opposite shape to the SmartClock, which is why it was
+chosen — with a simulator under `tools/` so it can be followed with nothing on
+the desk.
 
 ## Documentation
 
@@ -277,6 +286,9 @@ The rest of `docs/`, and the other documents worth knowing about:
   notification area, with screenshots from the running application.
 - [docs/adding-a-receiver.md](docs/adding-a-receiver.md) — the driver author's
   guide, summarised in [Adding a receiver](#adding-a-receiver) above.
+- [docs/tutorial-nmea-driver.md](docs/tutorial-nmea-driver.md) — that guide
+  followed to the end for a real family, an NMEA 0183 talker, with the
+  simulator that stands in for one and every finding along the way.
 - [docs/manual-qa.md](docs/manual-qa.md) — the manual QA checklist: the checks
   that need a person, a receiver, or a machine setting.
 - [docs/lady-heather-comparison.md](docs/lady-heather-comparison.md) — where the
