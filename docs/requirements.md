@@ -2214,9 +2214,10 @@ Rules the implementation records and this section makes normative:
 │  │   Waiting reason                 —                                 │  │
 │  └────────────────────────────────────────────────────────────────────┘  │
 │                                                                          │
-│  ┌─ Threshold ────────────────────────────────────────────────────────┐  │
-│  │  Enter holdover when 1 PPS TI exceeds  [ 1.000 ] µs                │  │  ← code takes seconds, see below
-│  │  Currently exceeded:  No                        [ Apply ]          │  │
+│  ┌─ Thresholds ───────────────────────────────────────────────────────┐  │
+│  │  Uncertainty threshold      1.000 µs            (read only)        │  │
+│  │  Currently exceeded:  No                                           │  │
+│  │  Holdover duration limit  [ 600 ] seconds       [ Apply ]          │  │
 │  └────────────────────────────────────────────────────────────────────┘  │
 │                                                                          │
 │  ┌─ Manual control ───────────────────────────────────────────────────┐  │
@@ -2234,7 +2235,27 @@ The "time since power-up" guard is computed from app-observed uptime plus `:DIAG
 
 The *Waiting reason* row shows the status screen's own mode detail, not an answer to `:SYNC:HOLD:WAIT?`, which nothing sends — see §10.3 (**Not built** for the query; #316, #320).
 
-The threshold field: **Code disagrees** — noted 29 Aug 2026 (#316): `Views/HoldoverPage.xaml` takes *New threshold (seconds)* in a `NumberBox`, where this wireframe takes microseconds. Decision on #320.
+> **⚠ Amended 30 Aug 2026 (#320).** This card described **one** threshold and the page offered
+> **two**, labelled as though they were the same one. #316 recorded it as a unit disagreement —
+> the wireframe in microseconds, the editor in seconds — which was the symptom rather than the
+> fault. Settled against the 58503A guide (Command Reference, *Operating in Holdover*):
+>
+> - **The uncertainty threshold** is the status screen's `HOLD THR`, in microseconds, sitting in
+>   the *Holdover Uncertainty* block beside `Predict` and `Present`. It is what the predicted 24 h
+>   uncertainty is compared against, and it is **read only**: the guide lists exactly one threshold
+>   command and this is not it.
+> - **The holdover duration limit** is `:SYNChronization:HOLDover:DURation:THReshold <seconds>` —
+>   *"the duration (in seconds) which represents a limit against which the elapsed time of holdover
+>   is compared"*, resolution one second. That is what the editor sends, and its 1 and 60 spin steps
+>   are right for it.
+>
+> The wireframe's old line named a third quantity again — the **1 PPS TI** — which is neither. So a
+> user could adjust the editor, watch the reading above it never move, and be right to be confused:
+> they are two settings, one of which cannot be set at all.
+>
+> **Still to build:** the editor has no readback, because nothing reads `:SYNC:HOLD:DUR:THR?` —
+> the query sits in the catalog unused, and the box defaults to a hard-coded 1. Showing the
+> receiver's current duration limit belongs with the rest of #320's Holdover work.
 
 ### 10.9 Diagnostics page
 
