@@ -475,7 +475,7 @@
                                            MinWidth="220"
                                            Header="New mask (degrees)"
                                            SmallChange="1"
-                                           SpinButtonPlacementMode="Compact" />
+                                           SpinButtonPlacementMode="Inline" />
                                 <controls:FieldErrorText x:Name="MaskError" />
                             </StackPanel>
 

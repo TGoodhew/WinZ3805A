@@ -114,7 +114,7 @@
                                        Header="Delay (nanoseconds)"
                                        SmallChange="1"
                                        LargeChange="100"
-                                       SpinButtonPlacementMode="Compact"
+                                       SpinButtonPlacementMode="Inline"
                                        ValueChanged="OnDirectDelayChanged" />
                             <controls:FieldErrorText x:Name="DirectDelayError" />
                         </StackPanel>
@@ -167,7 +167,7 @@
                                        Header="Velocity factor"
                                        SmallChange="0.01"
                                        IsEnabled="False"
-                                       SpinButtonPlacementMode="Compact"
+                                       SpinButtonPlacementMode="Inline"
                                        ValueChanged="OnVelocityFactorChanged" />
                             <controls:FieldErrorText x:Name="VelocityFactorError"
                                                      Margin="32,0,0,0" />
@@ -179,7 +179,7 @@
                                        HorizontalAlignment="Left"
                                        Header="Cable length (metres)"
                                        SmallChange="1"
-                                       SpinButtonPlacementMode="Compact"
+                                       SpinButtonPlacementMode="Inline"
                                        ValueChanged="OnLengthChanged" />
                             <controls:FieldErrorText x:Name="LengthError" />
                         </StackPanel>
