@@ -1986,7 +1986,21 @@ Health items come from the parsed HEALTH MONITOR block of `:SYST:STAT?`, in the 
 
   > **⚠ Corrected 21 Aug 2026 (#116).** This line previously read "colour green ≥ 40, amber 35–39, red < 35". That is the semantic triple — `WzSuccessBrush` / `WzCautionBrush` / `WzCriticalBrush` — and §9.4.4 forbids reusing semantic tokens for charting in its opening sentence, with the reason: *a trace coloured `WzCriticalBrush` implies an alarm that is not being asserted*. A C/N of 34 is an ordinary satellite low in the sky; painting it the red the medallion uses for a lost lock asserts a fault nobody raised. §9.10.2 already specified the sequential ramp for this control, so two sections agreed against one, and both of those gave a reason. Appendix A records §10 being "reconciled" when §9 was added; this reads as a line missed in that pass.
 - Data comes exclusively from `:SYST:STAT?` parsing (§11) — there is no per-satellite query.
-- The not-tracked table's status column: only *below mask* is derived (elevation under the mask in force, `SatellitesViewModel`), because the wire carries no status column at all. *Acquiring*, *ignored* and the `✱` *trying* marker are **Not built** — `PredictedSatellite.AttemptingToTrack` is parsed from the screen's asterisk (#4) but read by nothing in the application; noted 29 Aug 2026 (#316). **To build** — decided 30 Aug 2026 (#320). In full, including *ignored*, which needs the receiver's exclusion list read alongside the sweep.
+- The not-tracked table's status column, **built in full 30 Aug 2026 (#320)**. Three sources, tried most-authoritative first:
+
+  | Status | Where it comes from |
+  |---|---|
+  | *ignored* | `:GPS:SAT:TRAC:IGN?`, read alongside the sweep. A decision the operator made, so it explains the row whatever else is true of it |
+  | *acquiring* | The asterisk the status screen prints before the PRN, whose meaning the screen's own legend gives as `*attempting to track` (`PredictedSatellite.AttemptingToTrack`, parsed since #4 and read by nothing until now). The receiver's own claim about what it is doing |
+  | *below mask* | Derived from elevation against the mask in force. Last, because it is the only one of the three this application could be wrong about |
+
+  Empty when none applies, which is honest: the satellite is up, eligible, not excluded, and the receiver has not said why it is not tracking it.
+
+  **The wireframe's *acquiring* and `✱` *trying* are one state, not two.** The receiver's legend settles it — they are the same fact shown as a word in the table and as a marker on the plot. `SkyPlotMarkerKind` gained `Acquiring` and `Ignored`, and `PredictedSatelliteRow.Marker` and `.StatusText` share one precedence expression so the plot and the table can never disagree about a satellite (#60).
+
+  **The plot legend now has five entries and they differ in shape, not only in hue** (§9.4.3): filled, hollow, hollow-and-heavy for acquiring, hollow-and-dimmed for below mask, and hollow-dimmed-**dashed** for ignored. The dash exists because excluded and below-mask are both "not a candidate" and were drawn as the same pixels — a dashed ring is the conventional mark for not participating, and it survives greyscale and every dichromacy. It is switched through a `MarkerStates` group in `WzSkyPlotMarkerStyle` rather than by a second style, the alternative being forty duplicated lines of template differing in one attribute.
+
+  **The exclusion list is read on navigation, on reconnect, and after the Manage dialog — never on the sweep.** It changes only when someone changes it, and a second query on the 1 s cadence to catch an event that happens twice a year would be paying wire time for nothing (§7.3). A read that fails leaves the set empty, so no row claims to be ignored: §11.1's rule is that what could not be read says nothing, and a satellite wrongly marked excluded sends someone looking for a setting they never made.
 - **Manage…** opens a dialog listing PRN 1–32 with include/ignore toggles, backed by `:GPS:SAT:TRAC:IGNore` / `:INCLude`. All writes are tier C.
 - **Save image** writes the sky card — plot, heading, and the selection line — to a PNG the user names.
 

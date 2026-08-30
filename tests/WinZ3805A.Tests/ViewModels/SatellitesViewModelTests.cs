@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Time.Testing;
+﻿using Microsoft.Extensions.Time.Testing;
 
 using WinZ3805A.Controls;
 using WinZ3805A.Device.Models;
@@ -143,9 +143,9 @@ public sealed class SatellitesViewModelTests
     }
 
     /// <remarks>
-    /// Derived, not reported. The receiver's Not Tracking table prints only PRN, elevation and
-    /// azimuth — §10.5's wireframe shows a status column that is not on the wire. Below-mask is the
-    /// one of its three values that follows from what is printed; the others are not invented.
+    /// Derived rather than reported: the receiver's Not Tracking table prints only PRN, elevation
+    /// and azimuth. It is the weakest of the three answers and the last one tried — see the
+    /// precedence tests below (#320).
     /// </remarks>
     [Fact]
     public void BelowMaskIsDerivedFromTheElevationMask()
@@ -480,5 +480,131 @@ public sealed class SatellitesViewModelTests
             tracked: [new() { Prn = 8, ElevationDegrees = null, AzimuthDegrees = null, SignalStrength = 44 }]));
 
         Assert.Contains("none can be placed", model.SkyPlotEmptyMessage!, StringComparison.Ordinal);
+    }
+
+    // -------------------------------------------------------------------------------------
+    // §10.5's status column in full (#320)
+    // -------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// The asterisk the receiver prints becomes the word "acquiring".
+    /// </summary>
+    /// <remarks>
+    /// Not a derivation — the screen's own legend reads <c>*attempting to track</c>. §10.5's
+    /// wireframe lists <i>acquiring</i> and <i>✱ trying</i> as though they were two states; they are
+    /// one, shown as a word in the table and as a marker on the plot.
+    /// </remarks>
+    [Fact]
+    public void TheReceiversAsteriskBecomesAcquiring()
+    {
+        SatellitesViewModel model = Connected(Screen(
+            notTracked: [new() { Prn = 4, ElevationDegrees = 61, AzimuthDegrees = 109, AttemptingToTrack = true }],
+            mask: 10));
+
+        Assert.Equal("acquiring", model.NotTracked[0].StatusText);
+        Assert.Equal(SkyPlotMarkerKind.Acquiring, model.NotTracked[0].Marker);
+        Assert.Contains("trying to acquire", model.NotTracked[0].Description, StringComparison.Ordinal);
+    }
+
+    /// <remarks>
+    /// The exclusion list is not on the status screen at all — from the screen's point of view an
+    /// excluded satellite is simply one that is not being tracked, which is the confusion this
+    /// column removes. It arrives from <c>:GPS:SAT:TRAC:IGN?</c>, set by the page.
+    /// </remarks>
+    [Fact]
+    public void TheExclusionListBecomesIgnored()
+    {
+        SatellitesViewModel model = Connected(Screen(
+            notTracked:
+            [
+                new() { Prn = 21, ElevationDegrees = 17, AzimuthDegrees = 319 },
+                new() { Prn = 4, ElevationDegrees = 61, AzimuthDegrees = 109 },
+            ],
+            mask: 10));
+
+        model.ExcludedPrns = new HashSet<int> { 21 };
+
+        Assert.Equal("ignored", model.NotTracked[0].StatusText);
+        Assert.Equal(SkyPlotMarkerKind.Ignored, model.NotTracked[0].Marker);
+        Assert.Equal(string.Empty, model.NotTracked[1].StatusText);
+    }
+
+    /// <summary>
+    /// Most authoritative answer first, when more than one is true.
+    /// </summary>
+    /// <remarks>
+    /// <i>Ignored</i> is a decision the operator made and explains the row whatever else holds.
+    /// <i>Acquiring</i> is the receiver's own statement about what it is doing. <i>Below mask</i> is
+    /// this application's inference from two numbers, and comes last because it is the only one of
+    /// the three that could be wrong.
+    /// </remarks>
+    [Fact]
+    public void IgnoredOutranksAcquiringWhichOutranksBelowMask()
+    {
+        SatellitesViewModel model = Connected(Screen(
+            notTracked:
+            [
+                new() { Prn = 1, ElevationDegrees = 2, AzimuthDegrees = 10, AttemptingToTrack = true },
+                new() { Prn = 2, ElevationDegrees = 2, AzimuthDegrees = 20 },
+                new() { Prn = 3, ElevationDegrees = 61, AzimuthDegrees = 30, AttemptingToTrack = true },
+            ],
+            mask: 10));
+
+        model.ExcludedPrns = new HashSet<int> { 3 };
+
+        // Acquiring and below the mask at once: the receiver's claim wins over the inference.
+        Assert.Equal("acquiring", model.NotTracked[0].StatusText);
+
+        // Only below the mask.
+        Assert.Equal("below mask", model.NotTracked[1].StatusText);
+
+        // Excluded and starred at once: the operator's decision wins over both.
+        Assert.Equal("ignored", model.NotTracked[2].StatusText);
+    }
+
+    /// <remarks>
+    /// The plot and the table are two views of one set (#60), so they must never disagree about a
+    /// satellite — which is why <c>Marker</c> and <c>StatusText</c> share one precedence rather than
+    /// being written out twice.
+    /// </remarks>
+    [Fact]
+    public void ThePlotAndTheTableAgreeAboutEverySatellite()
+    {
+        SatellitesViewModel model = Connected(Screen(
+            notTracked:
+            [
+                new() { Prn = 1, ElevationDegrees = 2, AzimuthDegrees = 10 },
+                new() { Prn = 2, ElevationDegrees = 61, AzimuthDegrees = 20, AttemptingToTrack = true },
+                new() { Prn = 3, ElevationDegrees = 61, AzimuthDegrees = 30 },
+                new() { Prn = 4, ElevationDegrees = 61, AzimuthDegrees = 40 },
+            ],
+            mask: 10));
+
+        model.ExcludedPrns = new HashSet<int> { 4 };
+
+        foreach (PredictedSatelliteRow row in model.NotTracked)
+        {
+            SkyPlotSatellite plotted = model.SkyPlotSatellites.Single(satellite => satellite.Prn == row.Prn);
+            Assert.Equal(row.Marker, plotted.Marker);
+        }
+    }
+
+    /// <remarks>
+    /// A failed read must leave the set empty rather than stale: §11.1's rule is that what could not
+    /// be read says nothing, and a satellite wrongly marked excluded sends someone looking for a
+    /// setting they never made.
+    /// </remarks>
+    [Fact]
+    public void ClearingTheExclusionListClearsTheStatus()
+    {
+        SatellitesViewModel model = Connected(Screen(
+            notTracked: [new() { Prn = 21, ElevationDegrees = 61, AzimuthDegrees = 319 }],
+            mask: 10));
+
+        model.ExcludedPrns = new HashSet<int> { 21 };
+        Assert.Equal("ignored", model.NotTracked[0].StatusText);
+
+        model.ExcludedPrns = new HashSet<int>();
+        Assert.Equal(string.Empty, model.NotTracked[0].StatusText);
     }
 }
