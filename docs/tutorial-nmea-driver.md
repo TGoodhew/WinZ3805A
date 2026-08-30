@@ -258,16 +258,21 @@ Made here, because the issue said to make the contract changes here or file them
 | 4800 and 38400 baud | `Transport/SerialSettings.cs`, §7.1 | The standard's rate was not offered |
 | The error-queue contract test binds query/response families | `ReceiverDriverTests` | Finding 4 |
 
-Left open. The first two are [#304](https://github.com/TGoodhew/WinZ3805A/issues/304)'s items 3
-and 1, which this family makes concrete; the other three are recorded only here:
+Left open when this was written. The first two were
+[#304](https://github.com/TGoodhew/WinZ3805A/issues/304)'s items 3 and 1, which this family made
+concrete, and **both shipped on 30 Aug 2026**; the other three are recorded only here:
 
-- **The mode mapping is still app-side.** `Controls/ReceiverMode.cs` maps the SmartClock's tokens,
-  so the driver speaks them: `LOCK` for a fix, `POW` for none — a receiver with a GPS fix is locked
-  to GPS in the only sense it has, and one without is where a receiver is at power-up. A
-  driver-supplied mapping would let it say *"3D fix"* on the medallion instead.
-- **The pages assume their commands exist.** Position, Timing, Holdover and the rest talk through
-  the driver and find nothing; they show dashes, and their tier C buttons resolve to commands the
-  catalog does not have. Capability-gating is #304's first item.
+- ~~**The mode mapping is still app-side.**~~ **Closed by #304.** `IReceiverDriver.InterpretSyncState`
+  is the mapping now, and this driver supplies its own. It still says `LOCK` for a fix and `POW` for
+  none, because a receiver with a GPS fix is locked to GPS in the only sense it has and one without
+  is where a receiver is at power-up — but it says so itself rather than borrowing the SmartClock's
+  table, and the token is what `trend.db` stores, so changing the words later would split the
+  history. What the seam bought is the family that *cannot* fit those words: it names a
+  `ReceiverMode` directly instead of rendering as *Disconnected*.
+- ~~**The pages assume their commands exist.**~~ **Closed by #304.** Position, Timing, Holdover and
+  the rest still find nothing and show dashes — that part is honest — but their tier C controls are
+  now disabled with a sentence naming the family, rather than resolving to a command the catalog
+  does not have.
 - **The console says *"Will send"* over a link that sends nothing.** Picking `$--GGA` shows the
   latest GGA, which is right; the label is a query/response word.
 - **The synchronise step writes `*CLS`** before it knows what it is talking to. A talker ignores
