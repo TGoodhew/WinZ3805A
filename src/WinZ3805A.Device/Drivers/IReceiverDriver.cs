@@ -35,12 +35,28 @@ public readonly record struct PollCadence(TimeSpan Fast, TimeSpan Full);
 /// </param>
 /// <param name="FullStatus">
 /// The query whose answer <see cref="IReceiverDriver.Parse"/> reads — the full status screen, for
-/// receivers that have one. Must be in <see cref="IReceiverDriver.Commands"/>.
+/// receivers that have one. Must be in <see cref="IReceiverDriver.Commands"/>. A
+/// <see cref="LinkStyle.Broadcast"/> driver may name <see cref="PollPlan.WholeCycle"/> here, in
+/// which case <see cref="IReceiverDriver.Parse"/> receives every line of the last complete cycle.
 /// </param>
 public sealed record PollPlan(
     IReadOnlyList<string> FastTier,
     int? RefusableIndex,
-    string FullStatus);
+    string FullStatus)
+{
+    /// <summary>
+    /// The key that answers with the whole of the last complete broadcast cycle rather than one
+    /// kind of line (#310).
+    /// </summary>
+    /// <remarks>
+    /// A talker's status is spread across its sentences — position in one, satellites in several,
+    /// time in another — and <see cref="IReceiverDriver.Parse"/> takes one response. Naming this as
+    /// the plan's full-status query hands it the cycle entire. It has to be in the driver's catalog
+    /// like any other plan entry, so the session's point-of-send allowlist check and the console
+    /// picker see it as the read it is.
+    /// </remarks>
+    public const string WholeCycle = "*";
+}
 
 /// <summary>
 /// One fast sweep's answers, read into the common currency's fields (#287).
@@ -198,4 +214,44 @@ public interface IReceiverDriver
     /// </para>
     /// </remarks>
     SweepInterpretation InterpretSweep(IReadOnlyList<string?> answers);
+
+    // ---- Added by #310, when the second family turned out not to speak when spoken to ----------
+    //
+    // The three members below have defaults, so a query/response driver written before them is
+    // still complete: the SmartClock and the test project's fictional family implement none of
+    // them. A broadcast driver implements all three.
+
+    /// <summary>How this family's link carries answers (#310). Query/response unless the driver says otherwise.</summary>
+    LinkStyle Link => LinkStyle.QueryResponse;
+
+    /// <summary>
+    /// The receiver spoke before it was asked anything: is it one of yours, and which one? (#310)
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The connect sequence listens before it probes (§7.2's synchronise step), and hands every
+    /// driver what it heard. A talker announces itself by talking, so this is where a broadcast
+    /// family is recognised — <c>*IDN?</c> is never sent to a receiver a driver has claimed here.
+    /// Return an identity to claim the receiver, <see langword="null"/> to pass. The same caution
+    /// as <see cref="Recognises"/> applies: claim only what your figures were measured against.
+    /// </para>
+    /// <para>
+    /// <b>Never throw</b>; the session guards it as it guards <see cref="Recognises"/>, but a
+    /// driver that throws here is a driver that failed to connect for no reason it logged.
+    /// </para>
+    /// </remarks>
+    DeviceIdentity? Overhear(IReadOnlyList<string> lines) => null;
+
+    /// <summary>
+    /// For a <see cref="LinkStyle.Broadcast"/> family: the plan key a heard line belongs to, or
+    /// <see langword="null"/> for a line that is not one of yours (#310).
+    /// </summary>
+    /// <remarks>
+    /// The session's listener sorts every line the talker sends by this key and answers a plan
+    /// entry with the latest lines of that key. A key must be one of <see cref="Plan"/>'s entries
+    /// or a name the driver's <see cref="Parse"/> reads out of <see cref="PollPlan.WholeCycle"/>;
+    /// the first entry of the fast tier is the <b>cycle boundary</b> — its arrival starts a new
+    /// cycle — so it must be a line the talker sends exactly once per cycle. Never throw.
+    /// </remarks>
+    string? ClassifyLine(string line) => null;
 }

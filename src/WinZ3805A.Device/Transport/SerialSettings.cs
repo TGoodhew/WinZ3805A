@@ -30,7 +30,12 @@ public sealed record SerialSettings
     public static SerialSettings Default { get; } = new();
 
     /// <summary>The baud rates offered by the connection dialog (§7.1).</summary>
-    public static IReadOnlyList<int> SupportedBaudRates { get; } = [1200, 2400, 9600, 19200];
+    /// <remarks>
+    /// 4800 and 38400 joined the list with #310: NMEA 0183 specifies 4800 and its high-speed
+    /// variant 38400, and a talker at the standard's own rate could not be connected to by hand
+    /// while the dialog offered only the SmartClock family's four.
+    /// </remarks>
+    public static IReadOnlyList<int> SupportedBaudRates { get; } = [1200, 2400, 4800, 9600, 19200, 38400];
 
     /// <summary>The data-bit counts offered by the connection dialog (§7.1).</summary>
     public static IReadOnlyList<int> SupportedDataBits { get; } = [7, 8];
