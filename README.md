@@ -5,7 +5,7 @@ SmartClock GPS-disciplined oscillators over RS-232.
 
 | | |
 |---|---|
-| **Receivers** | the HP/Symmetricom **Z3805A**, and its SmartClock siblings — Z3801A, 58503A/B, 59551A, Z3816A |
+| **Receivers** | the HP/Symmetricom **Z3805A** and its SmartClock siblings — Z3801A, 58503A/B, 59551A, Z3816A; and, for monitoring only, any NMEA 0183 GNSS talker |
 | **Platform** | Windows 10 (1809 or later) and Windows 11, x64 — see [Supported platforms](#supported-platforms) |
 | **Stack** | WinUI 3 (Windows App SDK) on .NET 10, packaged as MSIX |
 | **Extensible** | every receiver-specific fact sits behind one interface, `IReceiverDriver`; another GPS-disciplined oscillator is a driver plus one registration line, not a fork — see [Adding a receiver](#adding-a-receiver) |
@@ -45,21 +45,22 @@ Heather, the tool most people run on these receivers today, is in
 | Receiver | Serial default |
 |---|---|
 | HP/Symmetricom **Z3805A** (reference device) | 9600-8-N-1 |
-| Symmetricom Z3801A | commonly 19200-7-E-1 |
+| Symmetricom Z3801A | 19200-7-O-1 from the factory; some units in the field 19200-7-E-1 |
 | HP/Symmetricom 58503A/B | — |
 | Symmetricom 59551A | — |
 | Symmetricom Z3816A | — |
-| **Any NMEA 0183 GNSS talker** — a u-blox module, the GPS half of a BG7TBL GPSDO, a marine receiver | 4800-8-N-1 (the standard), commonly 9600 |
+| **Any NMEA 0183 GNSS talker** — a u-blox module, a marine receiver; proven against the simulator under `tools/`, not yet against hardware | 4800-8-N-1 (the standard), commonly 9600 |
 
 The SmartClock units share the 58503A/B command set. The NMEA family is the
 second driver ([docs/tutorial-nmea-driver.md](docs/tutorial-nmea-driver.md)): it
 gets the monitoring core — fix state, satellites, position and time — and is
-never written to; a talker has no disciplined oscillator, so the timing pages
-show dashes. Because the defaults
+never written to once recognised; a talker has no disciplined oscillator, so the
+timing pages show dashes. Because the defaults
 differ between siblings, every serial parameter is user-settable — baud, data
 bits, parity, and stop bits — and the connection dialog offers an auto-detect
-that walks the most likely combinations sending `*IDN?` until a valid identity
-returns. Handshaking is always off; DTR and RTS are asserted on open. §7.1 of the
+that walks every registered driver's likely combinations, listening first for a
+receiver that talks unprompted and then sending `*IDN?`, until one is recognised.
+Handshaking is always off; DTR and RTS are asserted on open. §7.1 of the
 specification gives the full parameter ranges.
 
 > **On ARM64 machines:** the application is built for x64 only and runs on
@@ -99,17 +100,20 @@ the second is the API surface it compiles against.
 one number for the whole SDK; it varies by component. The refactored
 `Microsoft.Windows.AI.MachineLearning` package supports Windows 10 v1903 and
 later, and Microsoft's guidance is to keep using `Microsoft.WindowsAppSDK.ML` if
-1809 support is needed. **This project references
-`Microsoft.WindowsAppSDK.ML`**, which is the path that retains the 1809 floor —
-see the comment in the csproj, which explains that the reference is there because
-a framework-dependent build refuses to restore without it.
+1809 support is needed. **This project keeps
+`Microsoft.WindowsAppSDK.ML`**, which arrives transitively with the 2.3.1 meta-package
+and is the path that retains the 1809 floor: the csproj references the refactored
+`Microsoft.Windows.AI.MachineLearning` directly only to exclude its runtime and native
+assets, and its comment explains why `.ML` itself cannot be excluded — a
+framework-dependent build refuses to restore without it.
 
 Microsoft's published support matrix currently documents releases up to 1.8 and
 does not yet list 2.x, so the 1809 floor for **2.3.1 specifically** rests on the
-component guidance above plus the SDK packages themselves: nothing in the
-restored 2.3.1 package tree enforces a `TargetPlatformMinVersion` above 17763,
-and `Microsoft.WindowsAppSDK.Base` still special-cases `10.0.17763.0` in its
-self-contained targets. §6.1 asks for exactly this check and it has now been
+component guidance above plus the SDK packages themselves: the one package in the
+restored 2.3.1 tree that carries a check above 17763 — `Microsoft.Windows.AI.MachineLearning`,
+at 18362 — has that check switched off by `Microsoft.WindowsAppSDK.ML`'s props, nothing
+else enforces a higher floor, and `Microsoft.WindowsAppSDK.Base` still special-cases
+`10.0.17763.0` in its self-contained targets. §6.1 asks for exactly this check and it has now been
 made to that depth. **It has not been confirmed by running the application on
 Windows 10** — there is no such machine on this project.
 
@@ -143,7 +147,8 @@ removes the certificate and is what puts a test machine back to clean.
 ### Prerequisites
 
 - **.NET 10 SDK (LTS)** — the exact version is pinned in
-  [global.json](global.json); `rollForward: latestFeature` accepts a newer patch.
+  [global.json](global.json); `rollForward: latestFeature` accepts a newer patch or
+  feature band.
 - **Visual Studio 2026** with the *.NET desktop development* workload and the
   Windows App SDK extension. Windows App SDK 2.3.1 itself is restored from NuGet
   rather than installed separately.
@@ -221,8 +226,10 @@ the release checklist.
 Eleven acceptance criteria — design-system, accessibility and safety — are
 enforced by script rather than by review. All are dependency-free and answer in
 seconds, which makes them the fastest local check available;
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs every one before any
-restore, so a regression fails in seconds instead of after a full build. The list, with what each guards and why it exists, is in
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs every one in its own
+dependency-free job alongside the build, so a regression fails in seconds instead of
+after a full build (a twelfth script there checks the fixture-capture harness rather
+than the source). The list, with what each guards and why it exists, is in
 [CLAUDE.md](CLAUDE.md); the two below are the ones to know first:
 
 ```powershell
@@ -240,8 +247,9 @@ docs/                         the other project documents — listed under Docum
 src/WinZ3805A/                WinUI 3 app, single-project MSIX
 src/WinZ3805A.Device/         class library — no UI references
 tests/WinZ3805A.Tests/        xUnit, with Fixtures/ for captured status screens
-build/                        the CI gate scripts, the fixture-capture harness, and the sideload and WACK packaging scripts
-.github/workflows/ci.yml      the gates first, then Debug and Release x64 builds and the tests
+tools/NmeaSimulator/          the NMEA 0183 talker the tests and the tutorial run against
+build/                        the CI gate scripts and their inputs (palette/, fluent-stock-colours.txt), the fixture-capture harness, the asset generator, and the sideload and WACK packaging scripts
+.github/workflows/ci.yml      the gates in their own jobs, alongside the Debug and Release x64 builds and the tests
 ```
 
 The `Device` library has zero dependency on `Microsoft.UI.*`. All parsing,
@@ -253,8 +261,9 @@ highest-risk logic testable without a UI.
 WinZ3805A talks to the HP/Symmetricom SmartClock family, but every piece of
 device-specific knowledge sits behind one interface — `IReceiverDriver` — so
 supporting another GPS-disciplined oscillator means writing a driver, not
-modifying the application. The receiver's own `*IDN?` answer chooses the driver
-at every connect, the poller sweeps whatever the driver's plan says to sweep,
+modifying the application. What the receiver says — its `*IDN?` answer, or for a
+talker the sentences it sends unprompted — chooses the driver at every connect,
+the poller sweeps whatever the driver's plan says to sweep,
 and a registered driver is one line in the composition root.
 
 **The complete walkthrough is
@@ -299,7 +308,8 @@ The rest of `docs/`, and the other documents worth knowing about:
   Store submission asks for that is a decision rather than a file.
 - [docs/index.md](docs/index.md) — the front page of the GitHub Pages site,
   which exists to give the Store listing a privacy-policy URL and is not enabled
-  until submission needs it; it publishes the policy and nothing else.
+  until submission needs it; it publishes the policy and the user's guide, and
+  nothing else.
 - [tests/WinZ3805A.Tests/Fixtures/README.md](tests/WinZ3805A.Tests/Fixtures/README.md)
   — provenance of the captured status screens the parser is tested against.
 - [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) — the third-party components

@@ -1,6 +1,7 @@
 WinZ3805A
 Monitoring and control for HP/Symmetricom SmartClock GPS-disciplined
-oscillators - the Z3805A and its siblings - over RS-232.
+oscillators - the Z3805A and its siblings - over RS-232, and monitoring
+for any GPS receiver that speaks NMEA 0183.
 
 
 TO INSTALL
@@ -45,9 +46,9 @@ TO REMOVE IT
   Settings > Apps > Installed apps > WinZ3805A > Uninstall.
 
   Uninstalling deletes what the application has stored: your remembered
-  connection, your settings, and the recorded trend history. If you want to
-  keep those - to reinstall a newer version, say - uninstall from PowerShell
-  instead:
+  connection, your settings, the recorded trend history, and the application
+  log. If you want to keep those - to reinstall a newer version, say -
+  uninstall from PowerShell instead:
 
     Get-AppxPackage WinZ3805A | Remove-AppxPackage -PreserveApplicationData
 

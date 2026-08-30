@@ -158,7 +158,10 @@ $runtime = Get-ChildItem $runtimeSource -Filter '*.msix' -ErrorAction SilentlyCo
     Select-Object -First 1
 
 if (-not $runtime) {
-    Write-Warning "No Windows App Runtime found under $runtimeSource. The zip will assume the target machine has it."
+    # A throw, not a warning: README.txt in the zip promises that the runtime comes from the
+    # folder and nothing is downloaded, and a zip built without it would ship that promise
+    # anyway. Stage the x64 dependency (a Release package build puts it there) and re-run.
+    throw "No Windows App Runtime found under $runtimeSource. The zip's README promises the runtime travels with it, so it cannot be built without one."
 }
 
 # ---------------------------------------------------------------------------
