@@ -1,5 +1,7 @@
 using System.IO.Pipelines;
 using System.Text;
+using System.Threading.Channels;
+
 using WinZ3805A.Device.Transport;
 
 namespace WinZ3805A.Tests.Services;
@@ -41,6 +43,7 @@ public sealed class ControllableTransport : ITransport
     private readonly Pipe _pipe = new();
     private readonly StringBuilder _partial = new();
     private readonly List<string> _written = [];
+    private readonly Channel<string> _writes = Channel.CreateUnbounded<string>();
 
     private bool _open;
     private bool _disposed;
@@ -54,6 +57,27 @@ public sealed class ControllableTransport : ITransport
 
     /// <summary>What the transport does with the next command. Changeable at any time.</summary>
     public TransportBehaviour Behaviour { get; set; } = TransportBehaviour.Answering;
+
+    /// <summary>
+    /// Waits until the next command reaches the wire, and returns it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// "The command is in flight" is the state several tests need before doing something to the
+    /// session underneath it — tearing it down, ending it, disconnecting. They approximated it with
+    /// <c>await Task.Delay(50)</c>, which is a guess about how long the pump takes rather than a
+    /// statement about where the command got to (#326).
+    /// </para>
+    /// <para>
+    /// Every write is queued, so a caller that asks after the write has already happened is handed
+    /// it rather than left waiting for the next one — the ordering is recorded, not raced for.
+    /// </para>
+    /// </remarks>
+    public async Task<string> NextWriteAsync(TimeSpan timeout)
+    {
+        using CancellationTokenSource giveUp = new(timeout);
+        return await _writes.Reader.ReadAsync(giveUp.Token);
+    }
 
     /// <summary>The prompt this device ends a transaction with. The real unit sends "scpi &gt; ".</summary>
     public string Prompt { get; init; } = "scpi > ";
@@ -129,6 +153,7 @@ public sealed class ControllableTransport : ITransport
         while (TryTakeLine(out string? command))
         {
             _written.Add(command);
+            _writes.Writer.TryWrite(command);
 
             if (Behaviour == TransportBehaviour.Silent)
             {

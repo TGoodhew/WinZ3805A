@@ -89,6 +89,7 @@ public sealed class DeviceSessionService : IAsyncDisposable
 
     /// <summary>Wakes the backoff wait when Retry now or Stop retrying is pressed (#248).</summary>
     private volatile CancellationTokenSource? _retryNow;
+    private DateTimeOffset? _nextRetryAt;
     private int _consecutiveTimeouts;
     private bool _disposed;
 
@@ -244,7 +245,42 @@ public sealed class DeviceSessionService : IAsyncDisposable
     /// rather than the remaining seconds so the caller can tick it against its own clock without
     /// this class raising an event per second (#248).
     /// </remarks>
-    public DateTimeOffset? NextRetryAt { get; private set; }
+    public DateTimeOffset? NextRetryAt
+    {
+        get => _nextRetryAt;
+        private set
+        {
+            if (_nextRetryAt == value)
+            {
+                return;
+            }
+
+            _nextRetryAt = value;
+            RetryScheduleChanged?.Invoke();
+        }
+    }
+
+    /// <summary>
+    /// Raised when <see cref="NextRetryAt"/> changes: published when the loop schedules an attempt,
+    /// cleared when the wait ends. A test seam, and deliberately not part of the public surface.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Nothing in the application wants this. §9.11's banner reads the instant and ticks against
+    /// its own clock, which is the whole reason the schedule is a property rather than an event
+    /// (#248) — adding a public event to serve tests would undo that decision.
+    /// </para>
+    /// <para>
+    /// <b>What it is for (#326).</b> The reconnect loop is fire-and-forget, so a test had no way to
+    /// know it had reached its wait, and three tests sampled <see cref="NextRetryAt"/> in a
+    /// <c>Task.Delay(10)</c> loop with a wall-clock budget instead. That is a deadline, not an
+    /// ordering: on a busy machine the loop simply had not got there inside the budget, and the
+    /// assertion failed for a reason that had nothing to do with the property under test. Every
+    /// flake this repository has had is that shape, and widening the budget only moves it to a
+    /// busier machine — CI is a busier machine.
+    /// </para>
+    /// </remarks>
+    internal event Action? RetryScheduleChanged;
 
     /// <summary>Tries again now instead of waiting out the backoff (§9.11's <b>Retry now</b>).</summary>
     /// <remarks>
