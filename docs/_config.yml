@@ -29,6 +29,7 @@ theme: jekyll-theme-minimal
 exclude:
   - requirements.md
   - adding-a-receiver.md
+  - tutorial-nmea-driver.md
   - lady-heather-comparison.md
   - manual-qa.md
   - store-listing.md

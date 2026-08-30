@@ -1,13 +1,16 @@
 ﻿# Adding a receiver to WinZ3805A
 
-WinZ3805A ships speaking to one family of hardware — the HP/Symmetricom
-SmartClock GPS-disciplined oscillators — but every piece of device-specific
-knowledge sits behind one interface, `IReceiverDriver`, so that supporting
-another GPS-disciplined oscillator means **writing a driver, not modifying the
-application**. This document is the complete walkthrough: the architecture, the
-contract member by member, the safety obligations, the development process in
-order, and — because a promise like that is only worth what it excludes — an
-honest account of where the boundary currently sits.
+WinZ3805A ships speaking to two families of hardware — the HP/Symmetricom
+SmartClock GPS-disciplined oscillators it was written for, and any NMEA 0183
+GNSS talker — because every piece of device-specific knowledge sits behind one
+interface, `IReceiverDriver`, so that supporting another receiver means
+**writing a driver, not modifying the application**. This document is the
+complete walkthrough: the architecture, the contract member by member, the
+safety obligations, the development process in order, and — because a promise
+like that is only worth what it excludes — an honest account of where the
+boundary currently sits. [`tutorial-nmea-driver.md`](tutorial-nmea-driver.md)
+is this process followed to the end for the second family, with the files that
+resulted and every finding along the way; read the two together.
 
 It replaces the shorter walkthrough that used to live in the README, and it is
 written for a developer who has the repository building and a receiver on the
@@ -69,16 +72,20 @@ it.
 
 The interface is
 [`src/WinZ3805A.Device/Drivers/IReceiverDriver.cs`](../src/WinZ3805A.Device/Drivers/IReceiverDriver.cs);
-the worked example is
+the shipped implementations are
 [`SmartClockDriver.cs`](../src/WinZ3805A.Device/Drivers/SmartClockDriver.cs)
-beside it, and the second implementation — fictional, test-only, and useful
-precisely because it shares nothing with the first — is
+beside it and [`Nmea/NmeaDriver.cs`](../src/WinZ3805A.Device/Drivers/Nmea/NmeaDriver.cs)
+under it — one that answers questions and one that talks, which between them
+exercise every member — and a third, fictional and test-only, is
 [`tests/WinZ3805A.Tests/Drivers/FakeReceiverDriver.cs`](../tests/WinZ3805A.Tests/Drivers/FakeReceiverDriver.cs).
 
 | Member | What it decides | Authority |
 |---|---|---|
-| `Family` | A short name for logs and diagnostics — `"SmartClock"` | — |
-| `Recognises(identity)` | Whether this driver serves the receiver that answered `*IDN?` | §12 |
+| `Family` | A short name for logs and diagnostics — `"SmartClock"`, `"NMEA 0183"` | — |
+| `Link` | Whether this family answers what it is asked (`QueryResponse`, the default) or talks unprompted and is never written to (`Broadcast`) | §12, #310 |
+| `Recognises(identity)` | Whether this driver serves the receiver whose identity was read — by `*IDN?`, or by `Overhear` | §12 |
+| `Overhear(lines)` | Whether the lines the receiver sent *before being asked anything* are this family's, and who it is. Defaults to "no"; a talker is recognised here and `*IDN?` is never sent to it | §12, #310 |
+| `ClassifyLine(line)` | For a broadcast family, which plan key a heard line belongs to; `null` for a line that is not yours. Defaults to `null` | §12, #310 |
 | `Commands` | The **allowlist** of everything this receiver may be sent | §8.1 |
 | `Find(mnemonic)` | One command by name, or `null` if this receiver has none | §8.1 |
 | `IsBlocked(header)` | Whether a header is one of this receiver's §8.4 exclusions — a verdict, never a list | §8.4 |
@@ -101,6 +108,17 @@ Notes that do not fit in a table:
   the plan names must resolve through your own `Find`; a contract test holds
   you to that, because a plan the catalog does not back polls nothing while
   looking configured.
+- **On a broadcast link a plan entry is a key, not a query.** The session's
+  `BroadcastListener` sorts every line your `ClassifyLine` claims into cycles
+  delimited by `Plan.FastTier[0]` — so that entry must be a line the talker
+  sends exactly once per cycle — and answers each key from the last *complete*
+  cycle, which is what keeps a paged sentence from being read half-arrived.
+  `PollPlan.WholeCycle` (`*`) as the full-status query hands `Parse` the cycle
+  entire; it goes in your catalog like any other entry, because the session's
+  allowlist check does not know it is special. A talker that has gone quiet
+  for longer than `TimeoutFor` answers as a timeout, and the reconnect logic
+  applies unchanged. `RefusableIndex` is `null` for a broadcast family — there
+  is nothing to refuse.
 - **`Plan.RefusableIndex`** marks the one query your receiver may legitimately
   refuse in some states, or `null`. §7.3.1 records why this exists: the
   SmartClock answers `:SYNC:TINT?` with an error while unlocked, and a refused
@@ -116,10 +134,17 @@ Notes that do not fit in a table:
   currency's documented ranges, so your driver owns *"is this mine?"* and the
   app owns *"is this possible?"*.
 - **`Recognises(null)` must return `false`.** The identity probe belongs to no
-  driver — the session sends a bare `*IDN?` itself and only then consults the
-  drivers — so claiming `null` would be claiming every receiver whose identity
-  could not be read. (This inverted when driver selection was built; the
-  contract tests pin the new rule.)
+  driver — the session listens, then sends a bare `*IDN?` itself, and only then
+  consults the drivers — so claiming `null` would be claiming every receiver
+  whose identity could not be read. (This inverted when driver selection was
+  built; the contract tests pin the new rule.)
+- **`Overhear` claims on evidence, not silence.** It is handed whatever the
+  synchronise step heard, which for a SmartClock is a banner and for a talker
+  is a second or two of sentences. Claim on something that cannot be noise — a
+  sentence whose checksum matches, say — and never on an empty list; a contract
+  test holds every driver to `Overhear([]) == null`. The identity you return
+  should round-trip through `DeviceIdentity.Parse` (four comma-separated
+  fields) so the rest of the application sees a familiar shape.
 
 ---
 
@@ -148,13 +173,20 @@ making the probe belong to no driver:
 2. **Probe.** Auto-detect walks the **union** of every registered driver's
    `AutoDetectSequence`, in registration order, first appearance winning — so
    adding a driver can only append probes, never reorder the walk §10.12 fixes
-   for the family already shipped. At each candidate setting the session sends
-   a neutral `*IDN?` on its own timeout and applies IEEE 488.2's four-field
-   shape test to the answer.
+   for the family already shipped. At each candidate setting the session first
+   **listens** for the probe timeout (§7.2's synchronise step, which absorbs
+   the SmartClock's banner) and hands whatever it heard to every driver's
+   `Overhear`; a family that talks is claimed here, and nothing is sent to it.
+   Only when nobody claims the lines does the session send a neutral `*IDN?`
+   on its own timeout and apply IEEE 488.2's four-field shape test to the
+   answer (#310).
 
-3. **Selection.** The parsed identity is put to each driver's `Recognises` in
-   registration order (a `Recognises` that throws is read as "does not claim",
-   with a warning); the first claimant serves the connection. No claimant → the
+3. **Selection.** The identity — overheard or answered — is put to each
+   driver's `Recognises` in registration order (a `Recognises` or `Overhear`
+   that throws is read as "does not claim", with a warning); the first claimant
+   serves the connection. A `Broadcast` claimant gets a listener started over
+   the transport before the command pump runs, so its first poll already has a
+   cycle to read. No claimant → the
    first-registered driver serves it anyway — with a logged warning when more
    than one driver is registered; a single-driver build stays silent, since the
    fallback is the driver that would have served it regardless. Refusing to
@@ -205,13 +237,18 @@ best decided against a real second receiver rather than in the abstract:
 | Time page | `:PTIM:LEAP:*`, HP time-code formats | Queries fail politely (null lookups), features show em dashes |
 | Diagnostics page | `:DIAG:*` self-test keywords, HP log-entry grammar | Same |
 | Timing page | Antenna-cable presets, EFC hardware-condition bit meanings | Same |
-| Line protocol | An `scpi >` prompt grammar, `E-` error tokens, `*CLS` on connect | A receiver with different framing — or a **binary protocol** (TSIP, UBX…) — cannot be driven at all yet; `Parse(string)` is that assumption surfacing in the contract (item 5) |
+| Line protocol | Two link styles now (#310): an `scpi >` prompt grammar with `E-` error tokens for a family that answers, and a line-oriented listener for one that talks | A **binary protocol** (TSIP, UBX…) still cannot be driven — `Parse(string)` and `ClassifyLine(string)` are that assumption surfacing in the contract (item 5). A text protocol with a *different prompt* is nearer than it was: the listener shows how a second framing is served, but the prompt grammar itself is still `LineProtocol`'s |
+| The connect sequence | Listens, then sends `*CLS`, then asks `*IDN?` | A talker is recognised from what it says and never asked — but the `*CLS` still goes out before the session knows what it is talking to. Harmless to every talker met so far; the end-to-end test pins that it is the *only* write |
+| Mode vocabulary | `LOCK`, `REC`, `WAIT`, `HOLD`, `POW`, `OFF` | A broadcast family speaks the vocabulary in its own terms — the NMEA driver says `LOCK` for a fix and `POW` for none — until the mapping is driver-supplied ([#304](https://github.com/TGoodhew/WinZ3805A/issues/304)) |
+| Advanced Console | *"Will send"*, then the transcript's `>` line | Over a broadcast link nothing is sent: picking a key shows the latest of what was heard, and the label is a query/response word |
+| Capture harness | `Capture-Fixtures.ps1` sends `:SYST:STAT?` and strips echo and prompt; `FixtureCorpusTests` assumes every `*.txt` under `Fixtures/` is a status screen | A talker's capture is a timed listen, and belongs beside its tests rather than in the corpus folder until the corpus test can tell families apart |
 | Transport | Serial only | A network transport is item 7, sketched in [`lady-heather-comparison.md`](lady-heather-comparison.md) |
 | The specification | §7, §8, §11 describe the SmartClock as *the* behaviour | Raise amendments; never absorb the divergence silently — see [What to raise rather than absorb](#what-to-raise-rather-than-absorb) |
 
-If your family is a SCPI-speaking GPSDO with a prompt, you can ship the
-monitoring core today. If it is not, start by raising the items above that
-block you — the seam was built to make those conversations concrete.
+If your family is a SCPI-speaking GPSDO with a prompt, or a text talker like
+an NMEA receiver, you can ship the monitoring core today. If it is not, start
+by raising the items above that block you — the seam was built to make those
+conversations concrete, and the tutorial shows what one of them looked like.
 
 ---
 
@@ -309,6 +346,14 @@ argument later.
 Save the bytes verbatim. Do not tidy whitespace: column positions carry
 meaning, and trailing spaces are often significant. The fixtures directory is
 marked `-text` in `.gitattributes` so line endings survive.
+
+**A talker is captured by listening**, not by asking: open the port at the
+rate you believe in and save a minute of what arrives. Keep the file beside
+your driver's tests rather than under `Fixtures/` — `FixtureCorpusTests`
+asserts every `*.txt` there is a status screen. With no hardware,
+`tools/NmeaSimulator --stdout` gives a capture in the shape a real talker's
+will take, and the tutorial's tests are written against it while they wait
+for a real one.
 
 ### Step 2 — decide what `ReceiverStatus` can hold
 
@@ -419,6 +464,17 @@ every figure in your driver to hardware it was not measured on.
 Extend `AutoDetectSequence` with your family's factory settings, most likely
 first. Entries duplicated across drivers cost nothing (the walk deduplicates);
 entries unique to you are appended after earlier-registered drivers' probes.
+If your rate is not in `SerialSettings.SupportedBaudRates`, add it there too
+and amend §7.1 — the connection dialog offers only that list.
+
+**A family that talks is recognised by `Overhear`**, not `Recognises`. The
+synchronise step already listens before the probe; implement `Overhear` to
+claim the receiver on evidence in those lines — one sentence whose checksum
+matches is enough for a talker, since a wrong baud rate never produces one —
+and return the identity you want the application to show. Set
+`Link => LinkStyle.Broadcast`, and `*IDN?` is never sent to your receiver.
+`Recognises` should then claim the identity `Overhear` reported and nothing
+else, so a reconnect re-selects you the same way.
 
 ### Step 9 — register it
 
