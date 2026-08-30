@@ -31,6 +31,9 @@ public sealed class FakeTransport : ITransport
     private readonly Func<string, string?>? _responder;
     private readonly StringBuilder _partialCommand = new();
 
+    /// <summary>Guards the lazy construction of <see cref="Pipe"/>, which two threads race for (#324).</summary>
+    private readonly Lock _pipeGate = new();
+
     private Pipe? _pipe;
     private Task _pump = Task.CompletedTask;
     private bool _open;
@@ -212,9 +215,33 @@ public sealed class FakeTransport : ITransport
     /// <see cref="WaitForReaderToConsume"/> is an init-only property and so is not known until
     /// after the field initialisers have run.
     /// </summary>
-    private Pipe Pipe => _pipe ??= new Pipe(WaitForReaderToConsume
-        ? new PipeOptions(pauseWriterThreshold: 1, resumeWriterThreshold: 1)
-        : new PipeOptions());
+    /// <remarks>
+    /// <b>Under a lock, because the first use comes from two threads at once (#324).</b> This was
+    /// <c>_pipe ??= new Pipe(…)</c>, which is not atomic: a reader on one thread and a writer on
+    /// another can both find the field null and each construct a pipe, and each then goes on using
+    /// <i>its own</i> — the writer writing into a pipe nobody reads, the reader waiting on a pipe
+    /// nobody writes to. <see cref="BroadcastListener"/> does exactly that, taking
+    /// <see cref="Input"/> on the loop it starts on the thread pool while the test writes from its
+    /// own thread, so the two calls are genuinely concurrent.
+    /// <para>
+    /// With <see cref="WaitForReaderToConsume"/> set, losing that race deadlocks: the writer pauses
+    /// at the one-byte threshold and is never drained. Without it the write simply vanishes and the
+    /// assertion fails instead. Measured at three hangs in fifteen runs before this lock and none
+    /// in fifteen after, which matches the roughly one-in-six the full test suite was showing.
+    /// </para>
+    /// </remarks>
+    private Pipe Pipe
+    {
+        get
+        {
+            lock (_pipeGate)
+            {
+                return _pipe ??= new Pipe(WaitForReaderToConsume
+                    ? new PipeOptions(pauseWriterThreshold: 1, resumeWriterThreshold: 1)
+                    : new PipeOptions());
+            }
+        }
+    }
 
     private void EnsureOpen()
     {
