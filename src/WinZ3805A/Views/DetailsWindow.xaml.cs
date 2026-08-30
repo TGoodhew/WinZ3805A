@@ -4,6 +4,7 @@ using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Automation;
+using Microsoft.UI.Xaml.Markup;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
@@ -294,12 +295,44 @@ public sealed partial class DetailsWindow : Window
         {
             Content = new TextBlock { Text = destination.Label, Style = LabelStyle(selected: false) },
             Tag = destination.Tag,
-            Icon = new FontIcon { Glyph = destination.Glyph },
+            Icon = IconFor(destination),
         };
 
         AutomationProperties.SetName(item, destination.Label);
         ToolTipService.SetToolTip(item, ToolTipFor(destination));
         return item;
+    }
+
+    /// <summary>
+    /// §9.9's custom icon for a destination where one exists, and the stock glyph otherwise.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A <c>PathIcon</c> and not a <c>Path</c> in a <c>Viewbox</c>, which is what a stroked drawing
+    /// would need: <c>NavigationViewItem.Icon</c> takes an <c>IconElement</c>, and a Viewbox is not
+    /// one. That constraint is why the geometries in <c>Themes/Shapes.xaml</c> are authored as
+    /// filled bands rather than as strokes.
+    /// </para>
+    /// <para>
+    /// The stock glyph is the fallback and not a redundancy. §9.9 makes the Fluent font the baseline
+    /// and the custom set the exception, so a key that does not resolve — a typo, a dictionary not
+    /// merged — leaves the pane looking as it did last week rather than with a blank where an icon
+    /// should be. Looked up with <c>TryGetValue</c> for the reason <see cref="LabelStyle"/> gives.
+    /// </para>
+    /// </remarks>
+    private static IconElement IconFor(DetailsDestination destination)
+    {
+        if (destination.IconGeometryKey is string key &&
+            Application.Current.Resources.TryGetValue(key, out object? found) &&
+            found is string data)
+        {
+            return new PathIcon
+            {
+                Data = (Geometry)XamlBindingHelper.ConvertValue(typeof(Geometry), data),
+            };
+        }
+
+        return new FontIcon { Glyph = destination.Glyph };
     }
 
     /// <summary>

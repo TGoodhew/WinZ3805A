@@ -1,9 +1,13 @@
-using System.Globalization;
+﻿using System.Globalization;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Markup;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
+
+// System.IO.Path arrives through the implicit usings and collides with the shape.
+using Path = Microsoft.UI.Xaml.Shapes.Path;
 
 namespace WinZ3805A.Controls;
 
@@ -54,6 +58,7 @@ public sealed class StatusMedallion : Control
     private const string RingPart = "PART_Ring";
     private const string PlainRingPart = "PART_PlainRing";
     private const string GlyphPart = "Glyph";
+    private const string GlyphPathPart = "GlyphPath";
     private const string CountPart = "Count";
 
 
@@ -247,6 +252,14 @@ public sealed class StatusMedallion : Control
             glyph.FontSize = MedallionRingMath.GlyphSize(diameter);
         }
 
+        // The custom icon is a shape and not a font, so it takes the same figure as a box rather
+        // than as a point size — §9.9's geometries are drawn on a 16 px grid and stretched here.
+        if (GetTemplateChild(GlyphPathPart) is Path customGlyph)
+        {
+            customGlyph.Width = MedallionRingMath.GlyphSize(diameter);
+            customGlyph.Height = MedallionRingMath.GlyphSize(diameter);
+        }
+
         if (GetTemplateChild(CountPart) is TextBlock count)
         {
             count.FontSize = MedallionRingMath.CountSize(diameter);
@@ -301,8 +314,37 @@ public sealed class StatusMedallion : Control
             ? satellites.ToString(System.Globalization.CultureInfo.CurrentCulture)
             : string.Empty;
 
+        // §9.9's custom icon where the mode has one, the stock glyph otherwise (#320). Decided here
+        // rather than in a visual state because the line below sets Glyph.Visibility as a LOCAL
+        // value, and a local value beats a VisualState setter — a state trying to hide the font
+        // glyph would be overruled the moment the centre next updated.
+        Path? customGlyph = GetTemplateChild(GlyphPathPart) as Path;
+        bool custom = !showCount
+            && customGlyph is not null
+            && ReceiverModes.GeometryKeyOf(Mode) is string key
+            && Application.Current.Resources.TryGetValue(key, out object? found)
+            && found is string data
+            && Assign(customGlyph, data);
+
         count.Visibility = showCount ? Visibility.Visible : Visibility.Collapsed;
-        glyph.Visibility = showCount ? Visibility.Collapsed : Visibility.Visible;
+        glyph.Visibility = showCount || custom ? Visibility.Collapsed : Visibility.Visible;
+
+        if (customGlyph is { } path)
+        {
+            path.Visibility = custom ? Visibility.Visible : Visibility.Collapsed;
+        }
+    }
+
+    /// <summary>Parses a §9.9 geometry onto the custom-glyph part, reporting whether it took.</summary>
+    /// <remarks>
+    /// A failed parse leaves <c>custom</c> false, so the stock glyph stays on screen. §9.9 makes the
+    /// Fluent font the baseline and the custom set the exception; a bad key must cost the icon its
+    /// upgrade and not the medallion its centre.
+    /// </remarks>
+    private static bool Assign(Path target, string data)
+    {
+        target.Data = (Geometry)XamlBindingHelper.ConvertValue(typeof(Geometry), data);
+        return target.Data is not null;
     }
 
 

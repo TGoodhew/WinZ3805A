@@ -1,4 +1,4 @@
-namespace WinZ3805A.ViewModels;
+﻿namespace WinZ3805A.ViewModels;
 
 /// <summary>
 /// One entry in the §9.7.1 navigation pane.
@@ -17,7 +17,23 @@ public sealed record DetailsDestination
     public required string Label { get; init; }
 
     /// <summary>A Segoe Fluent Icons code point.</summary>
+    /// <remarks>
+    /// Still required where <see cref="IconGeometryKey"/> is set. §9.9's baseline is the stock font
+    /// and the custom set is the exception, so a destination always has a stock glyph to fall back
+    /// to — and a geometry key that does not resolve leaves an item with a label and no icon rather
+    /// than one that cannot be drawn.
+    /// </remarks>
     public required string Glyph { get; init; }
+
+    /// <summary>
+    /// The <c>Themes/Shapes.xaml</c> key for §9.9's custom icon, where this concept has one.
+    /// </summary>
+    /// <remarks>
+    /// A resource key rather than a <c>Geometry</c>, because this record is compiled into the
+    /// headless test assembly where no XAML type exists — the same reason <c>Severity</c> names
+    /// <c>SeverityPill</c> in prose rather than with a cref.
+    /// </remarks>
+    public string? IconGeometryKey { get; init; }
 
     /// <summary>One line naming what the page will hold, shown while it is a placeholder.</summary>
     public required string Summary { get; init; }
@@ -79,7 +95,8 @@ public static class DetailsDestinations
         {
             Tag = "satellites",
             Label = "Satellites",
-            Glyph = "\uE774", // Globe
+            Glyph = "\uE774", // Globe, the fallback behind §9.9's custom satellite
+            IconGeometryKey = "WzIconSatellite",
             Summary = "Sky plot, the tracked-satellite table, and the elevation mask (§10.5).",
         },
         new()
@@ -100,7 +117,8 @@ public static class DetailsDestinations
         {
             Tag = "holdover",
             Label = "Holdover",
-            Glyph = "\uE769", // Pause
+            Glyph = "\uE769", // Pause, the fallback behind §9.9's custom holdover
+            IconGeometryKey = "WzIconHoldover",
             Summary = "Holdover state, duration, uncertainty, and the recovery thresholds (§10.8).",
         },
         new()

@@ -1,4 +1,4 @@
-using WinZ3805A.Controls;
+﻿using WinZ3805A.Controls;
 
 namespace WinZ3805A.Tests.Controls;
 
@@ -293,4 +293,38 @@ public class MedallionRingMathTests
         Assert.True(uniformOuter <= fullOuter);
         Assert.True(uniformInner >= fullInner);
     }
+
+    // -------------------------------------------------------------------------------------
+    // §9.9's custom icon set (#320)
+    // -------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Holdover, and only holdover, has a custom icon.
+    /// </summary>
+    /// <remarks>
+    /// It is the reason the set was authored. The medallion had been drawing a generic Warning
+    /// glyph for it, which says <i>something is wrong</i> — and that is not what holdover means:
+    /// the receiver is still producing a disciplined 10 MHz, from the oscillator's memory rather
+    /// than from GPS. Every other mode keeps the stock glyph §10.3 chose for it, and asserting the
+    /// nulls is what stops the custom set quietly spreading to modes that never asked for one.
+    /// </remarks>
+    [Theory]
+    [InlineData(ReceiverMode.Holdover, "WzIconHoldover")]
+    [InlineData(ReceiverMode.Locked, null)]
+    [InlineData(ReceiverMode.Recovering, null)]
+    [InlineData(ReceiverMode.Waiting, null)]
+    [InlineData(ReceiverMode.PowerUp, null)]
+    [InlineData(ReceiverMode.Off, null)]
+    [InlineData(ReceiverMode.Disconnected, null)]
+    public void OnlyHoldoverCarriesACustomGeometry(ReceiverMode mode, string? expected) =>
+        Assert.Equal(expected, ReceiverModes.GeometryKeyOf(mode));
+
+    /// <remarks>
+    /// The stock glyph stays even where a custom one exists. §9.9 makes the Fluent font the baseline
+    /// and the custom set the exception, so a key that fails to resolve leaves the medallion drawing
+    /// what it drew last week rather than an empty centre.
+    /// </remarks>
+    [Fact]
+    public void HoldoverKeepsItsFallbackGlyph() =>
+        Assert.False(string.IsNullOrWhiteSpace(ReceiverModes.GlyphOf(ReceiverMode.Holdover)));
 }

@@ -232,8 +232,16 @@
                         zero: 0 ns is the receiver on time, and 0 % is the oscillator at the middle
                         of its range. Overlaying them would make one of the two colour scales lie.
                     -->
-                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}"
-                               Text="Oscillator control (EFC)" />
+                    <StackPanel Orientation="Horizontal" Spacing="{ThemeResource WzSpaceXs}">
+                        <PathIcon Data="{StaticResource WzIconOscillator}"
+                                  Width="16" Height="16"
+                                  VerticalAlignment="Center"
+                                  Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                  AutomationProperties.AccessibilityView="Raw" />
+                        <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}"
+                                   VerticalAlignment="Center"
+                                   Text="Oscillator control (EFC)" />
+                    </StackPanel>
 
                     <!--
                         Framed on the data, not on zero (#183). Zero-anchored, a receiver parked at
