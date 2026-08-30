@@ -15,10 +15,9 @@
     -->
     <ScrollViewer HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
         <StackPanel x:Name="PageRoot"
-                    controls:CardEntrance.IsEnabled="True"
                     Padding="{ThemeResource WzPageMarginThickness}"
                     MaxWidth="{ThemeResource WzContentMaxWidth}"
-                    HorizontalAlignment="Left"
+                    HorizontalAlignment="Stretch"
                     Spacing="{ThemeResource WzSpaceXl}">
                 <VisualStateManager.VisualStateGroups>
                     <!--
@@ -63,246 +62,260 @@
 
             <TextBlock Style="{ThemeResource WzTitleTextStyle}" Text="Position" />
 
-            <!-- ================================ Position =============================== -->
-            <Border Style="{ThemeResource WzCardStyle}">
-                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
+            <!--
+                §9.6.1's content grid (#345). The cards flow into as many columns as the width
+                holds, each going to whichever column is currently SHORTEST - so a tall card sits
+                alone while two short ones stack beside it, rather than alternating into a ragged
+                pair. Every page was a single StackPanel before this, which meant §9.6.1's Compact
+                arrangement at every width and half of a wide window empty.
 
-                        <controls:SeverityPill x:Name="ModePill" Grid.Column="0" />
+                The page heading stays outside it: a title is not a card, and it belongs across the
+                top rather than in whichever column happened to be shorter.
+            -->
+            <controls:CardColumns controls:CardEntrance.IsEnabled="True"
+                                  ColumnSpacing="{ThemeResource WzSpaceXl}"
+                                  RowSpacing="{ThemeResource WzSpaceXl}">
+                <!-- ================================ Position =============================== -->
+                <Border Style="{ThemeResource WzCardStyle}">
+                    <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
 
-                        <Button x:Name="CopyButton"
-                                Grid.Column="1"
-                                Content="Copy"
-                                Click="OnCopyClicked"
-                                ToolTipService.ToolTip="Copy the position as decimal degrees" />
-                    </Grid>
+                            <controls:SeverityPill x:Name="ModePill" Grid.Column="0" />
 
-                    <Grid RowSpacing="{ThemeResource WzSpaceXs}" ColumnSpacing="{ThemeResource WzSpaceXl}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" MinWidth="120" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
+                            <Button x:Name="CopyButton"
+                                    Grid.Column="1"
+                                    Content="Copy"
+                                    Click="OnCopyClicked"
+                                    ToolTipService.ToolTip="Copy the position as decimal degrees" />
+                        </Grid>
 
-                        <TextBlock Grid.Row="0" Grid.Column="0"
-                                   Style="{ThemeResource WzBodyTextStyle}"
-                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
-                                   Text="Latitude" />
-                        <TextBlock x:Name="LatitudeText" Grid.Row="0" Grid.Column="1"
-                                   Style="{ThemeResource WzMonoTextStyle}" IsTextSelectionEnabled="True" />
+                        <Grid RowSpacing="{ThemeResource WzSpaceXs}" ColumnSpacing="{ThemeResource WzSpaceXl}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" MinWidth="120" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
 
-                        <TextBlock Grid.Row="1" Grid.Column="0"
-                                   Style="{ThemeResource WzBodyTextStyle}"
-                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
-                                   Text="Longitude" />
-                        <TextBlock x:Name="LongitudeText" Grid.Row="1" Grid.Column="1"
-                                   Style="{ThemeResource WzMonoTextStyle}" IsTextSelectionEnabled="True" />
+                            <TextBlock Grid.Row="0" Grid.Column="0"
+                                       Style="{ThemeResource WzBodyTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                       Text="Latitude" />
+                            <TextBlock x:Name="LatitudeText" Grid.Row="0" Grid.Column="1"
+                                       Style="{ThemeResource WzMonoTextStyle}" IsTextSelectionEnabled="True" />
 
-                        <TextBlock Grid.Row="2" Grid.Column="0"
-                                   Style="{ThemeResource WzBodyTextStyle}"
-                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
-                                   Text="Height" />
-                        <TextBlock x:Name="HeightText" Grid.Row="2" Grid.Column="1"
-                                   Style="{ThemeResource WzMonoTextStyle}" IsTextSelectionEnabled="True" />
-                    </Grid>
-                </StackPanel>
-            </Border>
+                            <TextBlock Grid.Row="1" Grid.Column="0"
+                                       Style="{ThemeResource WzBodyTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                       Text="Longitude" />
+                            <TextBlock x:Name="LongitudeText" Grid.Row="1" Grid.Column="1"
+                                       Style="{ThemeResource WzMonoTextStyle}" IsTextSelectionEnabled="True" />
 
-            <!-- ================================= Survey ================================ -->
-            <Border Style="{ThemeResource WzCardStyle}">
-                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
-                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Survey" />
-
-                    <!--
-                        Determinate only while a survey is running. An indeterminate bar on a
-                        receiver that is holding a position would animate for weeks in the corner
-                        of a lab (§9.8.2, §9.13 item 7).
-                    -->
-                    <ProgressBar x:Name="SurveyProgress"
-                                 Minimum="0"
-                                 Maximum="100"
-                                 Visibility="Collapsed"
-                                 AutomationProperties.Name="Survey progress" />
-
-                    <TextBlock x:Name="SurveyPercentText"
-                               controls:CopyMenu.IsCopyable="True" Style="{ThemeResource WzMonoTextStyle}" />
-
-                    <controls:SeverityPill x:Name="SurveyPill" Visibility="Collapsed" />
-
-                    <TextBlock x:Name="SurveyStatusText"
-                               Style="{ThemeResource WzBodyTextStyle}"
-                               Foreground="{ThemeResource WzTextSecondaryBrush}"
-                               TextWrapping="Wrap"
-                               MaxWidth="{ThemeResource WzProseMaxWidth}" />
-
-                    <!-- §10.6's button row, in its order. All three are §8.3 tier C. -->
-                    <StackPanel Orientation="Horizontal" Spacing="{ThemeResource WzSpaceXs}">
-                        <Button x:Name="StartSurveyButton"
-                                Content="Start survey"
-                                Style="{ThemeResource WzDestructiveButtonStyle}"
-                                IsEnabled="False"
-                                ToolTipService.ToolTip="Compute the antenna position by averaging, over about two hours"
-                                Click="OnStartSurveyClicked" />
-
-                        <Button x:Name="AdoptSurveyButton"
-                                Content="Adopt computed position"
-                                Style="{ThemeResource WzDestructiveButtonStyle}"
-                                IsEnabled="False"
-                                ToolTipService.ToolTip="Stop surveying and hold the position it has computed"
-                                Click="OnAdoptSurveyClicked" />
-
-                        <Button x:Name="CancelSurveyButton"
-                                Content="Cancel survey"
-                                Style="{ThemeResource WzDestructiveButtonStyle}"
-                                IsEnabled="False"
-                                ToolTipService.ToolTip="Abandon the survey and go back to the last held position"
-                                Click="OnCancelSurveyClicked" />
+                            <TextBlock Grid.Row="2" Grid.Column="0"
+                                       Style="{ThemeResource WzBodyTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                       Text="Height" />
+                            <TextBlock x:Name="HeightText" Grid.Row="2" Grid.Column="1"
+                                       Style="{ThemeResource WzMonoTextStyle}" IsTextSelectionEnabled="True" />
+                        </Grid>
                     </StackPanel>
+                </Border>
 
-                    <!--
-                        A tri-state box: indeterminate until the receiver has been asked. §9.11
-                        would rather show unknown than a cleared box, which looks like a definite
-                        "off" and is the answer a user would act on.
-                    -->
-                    <CheckBox x:Name="PowerUpSurveyCheck"
-                              Content="Survey on power-up"
-                              IsThreeState="True"
-                              IsEnabled="False"
-                              Click="OnPowerUpSurveyClicked" />
+                <!-- ================================= Survey ================================ -->
+                <Border Style="{ThemeResource WzCardStyle}">
+                    <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                        <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Survey" />
 
-                    <controls:CommandOutcomeBar x:Name="SurveyOutcome" />
-                </StackPanel>
-            </Border>
+                        <!--
+                            Determinate only while a survey is running. An indeterminate bar on a
+                            receiver that is holding a position would animate for weeks in the corner
+                            of a lab (§9.8.2, §9.13 item 7).
+                        -->
+                        <ProgressBar x:Name="SurveyProgress"
+                                     Minimum="0"
+                                     Maximum="100"
+                                     Visibility="Collapsed"
+                                     AutomationProperties.Name="Survey progress" />
 
-            <!-- ========================= Set position manually ========================== -->
-            <Border Style="{ThemeResource WzCardStyle}">
-                <StackPanel Spacing="{ThemeResource WzSpaceMd}">
-                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Set position manually" />
+                        <TextBlock x:Name="SurveyPercentText"
+                                   controls:CopyMenu.IsCopyable="True" Style="{ThemeResource WzMonoTextStyle}" />
 
-                    <!--
-                        §10.6's own field layout: hemisphere, then degrees, minutes and seconds.
-                        Degrees-minutes-seconds rather than decimal degrees because that is what the
-                        receiver takes and what its own screen prints. Converting in the UI would
-                        put a rounding step between what a user types and what they read back, on
-                        the one page where a few metres matter.
-                    -->
-                    <Grid RowSpacing="{ThemeResource WzSpaceSm}" ColumnSpacing="{ThemeResource WzSpaceXs}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" MinWidth="72" />
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
+                        <controls:SeverityPill x:Name="SurveyPill" Visibility="Collapsed" />
 
-                        <TextBlock Grid.Row="0" Grid.Column="0"
+                        <TextBlock x:Name="SurveyStatusText"
                                    Style="{ThemeResource WzBodyTextStyle}"
                                    Foreground="{ThemeResource WzTextSecondaryBrush}"
-                                   VerticalAlignment="Bottom"
-                                   Margin="0,0,0,4"
-                                   Text="Latitude" />
-                        <ComboBox x:Name="LatitudeSign" Grid.Row="0" Grid.Column="1"
-                                  MinWidth="72"
-                                  VerticalAlignment="Bottom"
-                                  AutomationProperties.Name="Latitude hemisphere" />
-                        <NumberBox x:Name="LatitudeDegrees" Grid.Row="0" Grid.Column="2"
-                                   MinWidth="104" Header="Degrees" SmallChange="1"
-                                   SpinButtonPlacementMode="Compact" />
-                        <NumberBox x:Name="LatitudeMinutes" Grid.Row="0" Grid.Column="3"
-                                   MinWidth="104" Header="Minutes" SmallChange="1"
-                                   SpinButtonPlacementMode="Compact" />
-                        <NumberBox x:Name="LatitudeSeconds" Grid.Row="0" Grid.Column="4"
-                                   MinWidth="128" Header="Seconds" SmallChange="0.001"
-                                   SpinButtonPlacementMode="Compact" />
-
-                        <StackPanel Grid.Row="1" Grid.ColumnSpan="5" Spacing="{ThemeResource WzSpaceXxs}">
-                            <controls:FieldErrorText x:Name="LatitudeDegreesError" />
-                            <controls:FieldErrorText x:Name="LatitudeMinutesError" />
-                            <controls:FieldErrorText x:Name="LatitudeSecondsError" />
-                        </StackPanel>
-
-                        <TextBlock Grid.Row="2" Grid.Column="0"
-                                   Style="{ThemeResource WzBodyTextStyle}"
-                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
-                                   VerticalAlignment="Bottom"
-                                   Margin="0,0,0,4"
-                                   Text="Longitude" />
-                        <ComboBox x:Name="LongitudeSign" Grid.Row="2" Grid.Column="1"
-                                  MinWidth="72"
-                                  VerticalAlignment="Bottom"
-                                  AutomationProperties.Name="Longitude hemisphere" />
-                        <NumberBox x:Name="LongitudeDegrees" Grid.Row="2" Grid.Column="2"
-                                   MinWidth="104" Header="Degrees" SmallChange="1"
-                                   SpinButtonPlacementMode="Compact" />
-                        <NumberBox x:Name="LongitudeMinutes" Grid.Row="2" Grid.Column="3"
-                                   MinWidth="104" Header="Minutes" SmallChange="1"
-                                   SpinButtonPlacementMode="Compact" />
-                        <NumberBox x:Name="LongitudeSeconds" Grid.Row="2" Grid.Column="4"
-                                   MinWidth="128" Header="Seconds" SmallChange="0.001"
-                                   SpinButtonPlacementMode="Compact" />
-
-                        <StackPanel Grid.Row="3" Grid.ColumnSpan="5" Spacing="{ThemeResource WzSpaceXxs}">
-                            <controls:FieldErrorText x:Name="LongitudeDegreesError" />
-                            <controls:FieldErrorText x:Name="LongitudeMinutesError" />
-                            <controls:FieldErrorText x:Name="LongitudeSecondsError" />
-                        </StackPanel>
-                    </Grid>
-
-                    <StackPanel Orientation="Horizontal" Spacing="{ThemeResource WzSpaceMd}">
-                        <StackPanel Spacing="{ThemeResource WzSpaceXxs}">
-                            <NumberBox x:Name="HeightBox"
-                                       MinWidth="176"
-                                       Header="Height (metres)"
-                                       SmallChange="0.01"
-                                       SpinButtonPlacementMode="Compact" />
-                            <controls:FieldErrorText x:Name="HeightError" />
-                        </StackPanel>
-
-                        <TextBlock x:Name="HeightDatumText"
-                                   Style="{ThemeResource WzCaptionTextStyle}"
-                                   Foreground="{ThemeResource WzTextTertiaryBrush}"
-                                   VerticalAlignment="Bottom"
-                                   Margin="0,0,0,4"
                                    TextWrapping="Wrap"
-                                   MaxWidth="360" />
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}" />
+
+                        <!-- §10.6's button row, in its order. All three are §8.3 tier C. -->
+                        <StackPanel Orientation="Horizontal" Spacing="{ThemeResource WzSpaceXs}">
+                            <Button x:Name="StartSurveyButton"
+                                    Content="Start survey"
+                                    Style="{ThemeResource WzDestructiveButtonStyle}"
+                                    IsEnabled="False"
+                                    ToolTipService.ToolTip="Compute the antenna position by averaging, over about two hours"
+                                    Click="OnStartSurveyClicked" />
+
+                            <Button x:Name="AdoptSurveyButton"
+                                    Content="Adopt computed position"
+                                    Style="{ThemeResource WzDestructiveButtonStyle}"
+                                    IsEnabled="False"
+                                    ToolTipService.ToolTip="Stop surveying and hold the position it has computed"
+                                    Click="OnAdoptSurveyClicked" />
+
+                            <Button x:Name="CancelSurveyButton"
+                                    Content="Cancel survey"
+                                    Style="{ThemeResource WzDestructiveButtonStyle}"
+                                    IsEnabled="False"
+                                    ToolTipService.ToolTip="Abandon the survey and go back to the last held position"
+                                    Click="OnCancelSurveyClicked" />
+                        </StackPanel>
+
+                        <!--
+                            A tri-state box: indeterminate until the receiver has been asked. §9.11
+                            would rather show unknown than a cleared box, which looks like a definite
+                            "off" and is the answer a user would act on.
+                        -->
+                        <CheckBox x:Name="PowerUpSurveyCheck"
+                                  Content="Survey on power-up"
+                                  IsThreeState="True"
+                                  IsEnabled="False"
+                                  Click="OnPowerUpSurveyClicked" />
+
+                        <controls:CommandOutcomeBar x:Name="SurveyOutcome" />
                     </StackPanel>
+                </Border>
 
-                    <Button x:Name="FillFromReceiverButton"
-                            HorizontalAlignment="Left"
-                            Content="Fill from the receiver"
-                            IsEnabled="False"
-                            ToolTipService.ToolTip="Copy the position the receiver is holding into these fields"
-                            Click="OnFillFromReceiverClicked" />
+                <!-- ========================= Set position manually ========================== -->
+                <Border Style="{ThemeResource WzCardStyle}">
+                    <StackPanel Spacing="{ThemeResource WzSpaceMd}">
+                        <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Set position manually" />
 
-                    <controls:CommandOutcomeBar x:Name="PositionOutcome" />
+                        <!--
+                            §10.6's own field layout: hemisphere, then degrees, minutes and seconds.
+                            Degrees-minutes-seconds rather than decimal degrees because that is what the
+                            receiver takes and what its own screen prints. Converting in the UI would
+                            put a rounding step between what a user types and what they read back, on
+                            the one page where a few metres matter.
+                        -->
+                        <Grid RowSpacing="{ThemeResource WzSpaceSm}" ColumnSpacing="{ThemeResource WzSpaceXs}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" MinWidth="72" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
 
-                    <Button x:Name="ApplyPositionButton"
-                            HorizontalAlignment="Right"
-                            Content="Apply position"
-                            Style="{ThemeResource WzDestructiveButtonStyle}"
-                            IsEnabled="False"
-                            ToolTipService.ToolTip="Send these coordinates to the receiver"
-                            Click="OnApplyPositionClicked" />
-                </StackPanel>
-            </Border>
+                            <TextBlock Grid.Row="0" Grid.Column="0"
+                                       Style="{ThemeResource WzBodyTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                       VerticalAlignment="Bottom"
+                                       Margin="0,0,0,4"
+                                       Text="Latitude" />
+                            <ComboBox x:Name="LatitudeSign" Grid.Row="0" Grid.Column="1"
+                                      MinWidth="72"
+                                      VerticalAlignment="Bottom"
+                                      AutomationProperties.Name="Latitude hemisphere" />
+                            <NumberBox x:Name="LatitudeDegrees" Grid.Row="0" Grid.Column="2"
+                                       MinWidth="104" Header="Degrees" SmallChange="1"
+                                       SpinButtonPlacementMode="Compact" />
+                            <NumberBox x:Name="LatitudeMinutes" Grid.Row="0" Grid.Column="3"
+                                       MinWidth="104" Header="Minutes" SmallChange="1"
+                                       SpinButtonPlacementMode="Compact" />
+                            <NumberBox x:Name="LatitudeSeconds" Grid.Row="0" Grid.Column="4"
+                                       MinWidth="128" Header="Seconds" SmallChange="0.001"
+                                       SpinButtonPlacementMode="Compact" />
 
-            <TextBlock x:Name="FooterText"
-                       Style="{ThemeResource WzCaptionTextStyle}"
-                       Foreground="{ThemeResource WzTextTertiaryBrush}" />
+                            <StackPanel Grid.Row="1" Grid.ColumnSpan="5" Spacing="{ThemeResource WzSpaceXxs}">
+                                <controls:FieldErrorText x:Name="LatitudeDegreesError" />
+                                <controls:FieldErrorText x:Name="LatitudeMinutesError" />
+                                <controls:FieldErrorText x:Name="LatitudeSecondsError" />
+                            </StackPanel>
+
+                            <TextBlock Grid.Row="2" Grid.Column="0"
+                                       Style="{ThemeResource WzBodyTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                       VerticalAlignment="Bottom"
+                                       Margin="0,0,0,4"
+                                       Text="Longitude" />
+                            <ComboBox x:Name="LongitudeSign" Grid.Row="2" Grid.Column="1"
+                                      MinWidth="72"
+                                      VerticalAlignment="Bottom"
+                                      AutomationProperties.Name="Longitude hemisphere" />
+                            <NumberBox x:Name="LongitudeDegrees" Grid.Row="2" Grid.Column="2"
+                                       MinWidth="104" Header="Degrees" SmallChange="1"
+                                       SpinButtonPlacementMode="Compact" />
+                            <NumberBox x:Name="LongitudeMinutes" Grid.Row="2" Grid.Column="3"
+                                       MinWidth="104" Header="Minutes" SmallChange="1"
+                                       SpinButtonPlacementMode="Compact" />
+                            <NumberBox x:Name="LongitudeSeconds" Grid.Row="2" Grid.Column="4"
+                                       MinWidth="128" Header="Seconds" SmallChange="0.001"
+                                       SpinButtonPlacementMode="Compact" />
+
+                            <StackPanel Grid.Row="3" Grid.ColumnSpan="5" Spacing="{ThemeResource WzSpaceXxs}">
+                                <controls:FieldErrorText x:Name="LongitudeDegreesError" />
+                                <controls:FieldErrorText x:Name="LongitudeMinutesError" />
+                                <controls:FieldErrorText x:Name="LongitudeSecondsError" />
+                            </StackPanel>
+                        </Grid>
+
+                        <StackPanel Orientation="Horizontal" Spacing="{ThemeResource WzSpaceMd}">
+                            <StackPanel Spacing="{ThemeResource WzSpaceXxs}">
+                                <NumberBox x:Name="HeightBox"
+                                           MinWidth="176"
+                                           Header="Height (metres)"
+                                           SmallChange="0.01"
+                                           SpinButtonPlacementMode="Compact" />
+                                <controls:FieldErrorText x:Name="HeightError" />
+                            </StackPanel>
+
+                            <TextBlock x:Name="HeightDatumText"
+                                       Style="{ThemeResource WzCaptionTextStyle}"
+                                       Foreground="{ThemeResource WzTextTertiaryBrush}"
+                                       VerticalAlignment="Bottom"
+                                       Margin="0,0,0,4"
+                                       TextWrapping="Wrap"
+                                       MaxWidth="360" />
+                        </StackPanel>
+
+                        <Button x:Name="FillFromReceiverButton"
+                                HorizontalAlignment="Left"
+                                Content="Fill from the receiver"
+                                IsEnabled="False"
+                                ToolTipService.ToolTip="Copy the position the receiver is holding into these fields"
+                                Click="OnFillFromReceiverClicked" />
+
+                        <controls:CommandOutcomeBar x:Name="PositionOutcome" />
+
+                        <Button x:Name="ApplyPositionButton"
+                                HorizontalAlignment="Right"
+                                Content="Apply position"
+                                Style="{ThemeResource WzDestructiveButtonStyle}"
+                                IsEnabled="False"
+                                ToolTipService.ToolTip="Send these coordinates to the receiver"
+                                Click="OnApplyPositionClicked" />
+                    </StackPanel>
+                </Border>
+
+                <TextBlock x:Name="FooterText"
+                           Style="{ThemeResource WzCaptionTextStyle}"
+                           Foreground="{ThemeResource WzTextTertiaryBrush}" />
+            </controls:CardColumns>
         </StackPanel>
     </ScrollViewer>
 </Page>

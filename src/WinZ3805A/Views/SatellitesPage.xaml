@@ -27,10 +27,9 @@
     -->
     <ScrollViewer HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
         <StackPanel x:Name="PageRoot"
-                    controls:CardEntrance.IsEnabled="True"
                     Padding="{ThemeResource WzPageMarginThickness}"
                     MaxWidth="{ThemeResource WzContentMaxWidth}"
-                    HorizontalAlignment="Left"
+                    HorizontalAlignment="Stretch"
                     Spacing="{ThemeResource WzSpaceXl}">
                 <VisualStateManager.VisualStateGroups>
                     <!--
@@ -87,430 +86,444 @@
                            VerticalAlignment="Bottom" />
             </Grid>
 
-            <!-- ================================ Sky plot =============================== -->
-
             <!--
-                Named because it is the unit #47 exports. The capture is this Border and everything
-                inside it, which is why the card carries an opaque Background from WzCardStyle - a
-                PNG of a transparent subtree is legible in whichever viewer happens to composite it
-                over the right colour, and unreadable in the rest.
+                §9.6.1's content grid (#345). The cards flow into as many columns as the width
+                holds, each going to whichever column is currently SHORTEST - so a tall card sits
+                alone while two short ones stack beside it, rather than alternating into a ragged
+                pair. Every page was a single StackPanel before this, which meant §9.6.1's Compact
+                arrangement at every width and half of a wide window empty.
+
+                The page heading stays outside it: a title is not a card, and it belongs across the
+                top rather than in whichever column happened to be shorter.
             -->
-            <Border x:Name="SkyCard" Style="{ThemeResource WzCardStyle}">
-                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
+            <controls:CardColumns controls:CardEntrance.IsEnabled="True"
+                                  ColumnSpacing="{ThemeResource WzSpaceXl}"
+                                  RowSpacing="{ThemeResource WzSpaceXl}">
+                <!-- ================================ Sky plot =============================== -->
 
-                        <!--
-                            §9.9's custom sky-plot icon (#320): the polar grid itself, which is the
-                            drawing SkyPlotControl below actually makes and which no Fluent glyph
-                            has. Raw to assistive technology - the heading beside it already says
-                            what the card is, and an icon repeating it aloud is noise.
-
-                            The heading keeps its name and its column; the StackPanel around it is
-                            what moved, because SatellitesPage.xaml.cs sets SkyCardHeading.Text as
-                            the view toggle changes.
-                        -->
-                        <StackPanel Grid.Column="0"
-                                    Orientation="Horizontal"
-                                    Spacing="{ThemeResource WzSpaceXs}"
-                                    VerticalAlignment="Center">
-                            <PathIcon Data="{StaticResource WzIconSkyPlot}"
-                                      Width="16" Height="16"
-                                      VerticalAlignment="Center"
-                                      Foreground="{ThemeResource WzTextSecondaryBrush}"
-                                      AutomationProperties.AccessibilityView="Raw" />
-                            <TextBlock x:Name="SkyCardHeading"
-                                       Style="{ThemeResource WzBodyStrongTextStyle}"
-                                       VerticalAlignment="Center"
-                                       Text="Sky plot" />
-                        </StackPanel>
-
-                        <!--
-                            RadioButtons rather than a ToggleSwitch, matching the Timing page's range
-                            selector: two mutually exclusive views, both worth seeing named, and the
-                            current one legible without opening anything. It sits before the plot in
-                            tab order, which is what #60's "discoverable by keyboard" asks for - a
-                            control a keyboard user meets on the way in rather than one they have to
-                            already know about.
-                        -->
-                        <StackPanel Grid.Column="1"
-                                    Orientation="Horizontal"
-                                    Spacing="{ThemeResource WzSpaceMd}"
-                                    AutomationProperties.Name="Sky view">
-                            <RadioButton x:Name="PlotViewChoice"
-                                         GroupName="SkyView"
-                                         Content="Plot"
-                                         Checked="OnSkyViewChanged" />
-                            <RadioButton x:Name="ListViewChoice"
-                                         GroupName="SkyView"
-                                         Content="List"
-                                         Checked="OnSkyViewChanged" />
+                <!--
+                    Named because it is the unit #47 exports. The capture is this Border and everything
+                    inside it, which is why the card carries an opaque Background from WzCardStyle - a
+                    PNG of a transparent subtree is legible in whichever viewer happens to composite it
+                    over the right colour, and unreadable in the rest.
+                -->
+                <Border x:Name="SkyCard" Style="{ThemeResource WzCardStyle}">
+                    <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
 
                             <!--
-                                Text rather than an icon. §9.9's icon-only rule would be satisfied by
-                                a name and a tooltip, but "export" has no glyph a user reads without
-                                hovering, and this sits beside two labelled radio buttons where a
-                                lone symbol would look like a third view rather than an action.
+                                §9.9's custom sky-plot icon (#320): the polar grid itself, which is the
+                                drawing SkyPlotControl below actually makes and which no Fluent glyph
+                                has. Raw to assistive technology - the heading beside it already says
+                                what the card is, and an icon repeating it aloud is noise.
+
+                                The heading keeps its name and its column; the StackPanel around it is
+                                what moved, because SatellitesPage.xaml.cs sets SkyCardHeading.Text as
+                                the view toggle changes.
                             -->
-                            <Button x:Name="ExportImageButton"
-                                    Content="Save image"
-                                    Click="OnExportImageClicked" />
-                        </StackPanel>
-                    </Grid>
+                            <StackPanel Grid.Column="0"
+                                        Orientation="Horizontal"
+                                        Spacing="{ThemeResource WzSpaceXs}"
+                                        VerticalAlignment="Center">
+                                <PathIcon Data="{StaticResource WzIconSkyPlot}"
+                                          Width="16" Height="16"
+                                          VerticalAlignment="Center"
+                                          Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                          AutomationProperties.AccessibilityView="Raw" />
+                                <TextBlock x:Name="SkyCardHeading"
+                                           Style="{ThemeResource WzBodyStrongTextStyle}"
+                                           VerticalAlignment="Center"
+                                           Text="Sky plot" />
+                            </StackPanel>
 
-                    <controls:SkyPlotControl x:Name="SkyPlot"
-                                             MaxPlotSize="360"
-                                             AutomationProperties.Name="Sky plot. Arrow keys move between satellites, Enter selects."
-                                             SatelliteInvoked="OnSkyPlotSatelliteInvoked" />
+                            <!--
+                                RadioButtons rather than a ToggleSwitch, matching the Timing page's range
+                                selector: two mutually exclusive views, both worth seeing named, and the
+                                current one legible without opening anything. It sits before the plot in
+                                tab order, which is what #60's "discoverable by keyboard" asks for - a
+                                control a keyboard user meets on the way in rather than one they have to
+                                already know about.
+                            -->
+                            <StackPanel Grid.Column="1"
+                                        Orientation="Horizontal"
+                                        Spacing="{ThemeResource WzSpaceMd}"
+                                        AutomationProperties.Name="Sky view">
+                                <RadioButton x:Name="PlotViewChoice"
+                                             GroupName="SkyView"
+                                             Content="Plot"
+                                             Checked="OnSkyViewChanged" />
+                                <RadioButton x:Name="ListViewChoice"
+                                             GroupName="SkyView"
+                                             Content="List"
+                                             Checked="OnSkyViewChanged" />
 
-                    <!--
-                        A11Y-11's non-spatial alternate. Bound to the same collection the plot draws
-                        from, so the two cannot drift apart: every column here is a field of the
-                        record the marker was placed from.
-                    -->
-                    <Grid x:Name="SkyListHeader"
-                          ColumnSpacing="{ThemeResource WzSpaceMd}"
-                          Visibility="Collapsed">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="56" />
-                            <ColumnDefinition Width="64" />
-                            <ColumnDefinition Width="64" />
-                            <ColumnDefinition Width="180" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
+                                <!--
+                                    Text rather than an icon. §9.9's icon-only rule would be satisfied by
+                                    a name and a tooltip, but "export" has no glyph a user reads without
+                                    hovering, and this sits beside two labelled radio buttons where a
+                                    lone symbol would look like a third view rather than an action.
+                                -->
+                                <Button x:Name="ExportImageButton"
+                                        Content="Save image"
+                                        Click="OnExportImageClicked" />
+                            </StackPanel>
+                        </Grid>
 
-                        <TextBlock Grid.Column="0" Style="{ThemeResource WzCaptionTextStyle}"
-                                   Foreground="{ThemeResource WzTextSecondaryBrush}" Text="PRN" />
-                        <TextBlock Grid.Column="1" Style="{ThemeResource WzCaptionTextStyle}"
-                                   Foreground="{ThemeResource WzTextSecondaryBrush}" Text="El" />
-                        <TextBlock Grid.Column="2" Style="{ThemeResource WzCaptionTextStyle}"
-                                   Foreground="{ThemeResource WzTextSecondaryBrush}" Text="Az" />
-                        <TextBlock x:Name="SkyListStrengthHeader" Grid.Column="3"
+                        <controls:SkyPlotControl x:Name="SkyPlot"
+                                                 MaxPlotSize="360"
+                                                 AutomationProperties.Name="Sky plot. Arrow keys move between satellites, Enter selects."
+                                                 SatelliteInvoked="OnSkyPlotSatelliteInvoked" />
+
+                        <!--
+                            A11Y-11's non-spatial alternate. Bound to the same collection the plot draws
+                            from, so the two cannot drift apart: every column here is a field of the
+                            record the marker was placed from.
+                        -->
+                        <Grid x:Name="SkyListHeader"
+                              ColumnSpacing="{ThemeResource WzSpaceMd}"
+                              Visibility="Collapsed">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="56" />
+                                <ColumnDefinition Width="64" />
+                                <ColumnDefinition Width="64" />
+                                <ColumnDefinition Width="180" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Grid.Column="0" Style="{ThemeResource WzCaptionTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}" Text="PRN" />
+                            <TextBlock Grid.Column="1" Style="{ThemeResource WzCaptionTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}" Text="El" />
+                            <TextBlock Grid.Column="2" Style="{ThemeResource WzCaptionTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}" Text="Az" />
+                            <TextBlock x:Name="SkyListStrengthHeader" Grid.Column="3"
+                                       Style="{ThemeResource WzCaptionTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}" />
+                            <TextBlock Grid.Column="4" Style="{ThemeResource WzCaptionTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}" Text="State" />
+                        </Grid>
+
+                        <ListView x:Name="SkyRows"
+                                  SelectionMode="Single"
+                                  Visibility="Collapsed"
+                                  ItemContainerStyle="{ThemeResource WzDenseListItemStyle}"
+                                  AutomationProperties.Name="Satellites, list view"
+                                  SelectionChanged="OnSkyRowSelectionChanged">
+                            <ListView.ItemContainerTransitions>
+                                <TransitionCollection>
+                                    <!--
+                                        §9.8.2's satellite row reorder (#320). The row names
+                                        ItemsRepeater; §9.10.1 specifies these tables as ListView, and a
+                                        ListView already offers exactly the animation the row asks for -
+                                        offset only, no fade, no size change - through its own container
+                                        transitions. Switching control to obtain a behaviour the current
+                                        one has would be a rewrite in exchange for nothing.
+
+                                        REPOSITION ALONE, deliberately. An AddDeleteThemeTransition would
+                                        also fire on the first fill and on every reconnect, and a table
+                                        that flies its rows in each time the link comes back is motion on
+                                        a window meant to sit still for weeks. What is worth animating is
+                                        a satellite CHANGING PLACE as the sky turns, because that is the
+                                        one movement that means something.
+                                    -->
+                                    <RepositionThemeTransition IsStaggeringEnabled="False" />
+                                </TransitionCollection>
+                            </ListView.ItemContainerTransitions>
+                            <ListView.ItemTemplate>
+                                <DataTemplate x:DataType="controls:SkyPlotSatellite">
+                                    <Grid ColumnSpacing="{ThemeResource WzSpaceMd}"
+                                          AutomationProperties.Name="{x:Bind Description}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="56" />
+                                            <ColumnDefinition Width="64" />
+                                            <ColumnDefinition Width="64" />
+                                            <ColumnDefinition Width="180" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <TextBlock Grid.Column="0" Style="{ThemeResource WzMonoTextStyle}"
+                                                   Text="{x:Bind PrnText}" />
+                                        <TextBlock Grid.Column="1" Style="{ThemeResource WzMonoTextStyle}"
+                                                   Text="{x:Bind ElevationText}" />
+                                        <TextBlock Grid.Column="2" Style="{ThemeResource WzMonoTextStyle}"
+                                                   Text="{x:Bind AzimuthText}" />
+                                        <controls:SatelliteStrengthBar Grid.Column="3"
+                                                                       Strength="{x:Bind SignalStrength}"
+                                                                       Kind="{x:Bind Kind}" />
+                                        <TextBlock Grid.Column="4" Style="{ThemeResource WzBodyTextStyle}"
+                                                   Text="{x:Bind StateText}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+
+                        <TextBlock x:Name="SkyPlotEmptyText"
+                                   Style="{ThemeResource WzBodyTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   TextWrapping="Wrap"
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}"
+                                   Visibility="Collapsed" />
+
+                        <TextBlock x:Name="SkyPlotSelectionText"
                                    Style="{ThemeResource WzCaptionTextStyle}"
-                                   Foreground="{ThemeResource WzTextSecondaryBrush}" />
-                        <TextBlock Grid.Column="4" Style="{ThemeResource WzCaptionTextStyle}"
-                                   Foreground="{ThemeResource WzTextSecondaryBrush}" Text="State" />
-                    </Grid>
+                                   Foreground="{ThemeResource WzTextTertiaryBrush}"
+                                   TextWrapping="Wrap"
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}" />
 
-                    <ListView x:Name="SkyRows"
-                              SelectionMode="Single"
-                              Visibility="Collapsed"
-                              ItemContainerStyle="{ThemeResource WzDenseListItemStyle}"
-                              AutomationProperties.Name="Satellites, list view"
-                              SelectionChanged="OnSkyRowSelectionChanged">
-                        <ListView.ItemContainerTransitions>
-                            <TransitionCollection>
-                                <!--
-                                    §9.8.2's satellite row reorder (#320). The row names
-                                    ItemsRepeater; §9.10.1 specifies these tables as ListView, and a
-                                    ListView already offers exactly the animation the row asks for -
-                                    offset only, no fade, no size change - through its own container
-                                    transitions. Switching control to obtain a behaviour the current
-                                    one has would be a rewrite in exchange for nothing.
+                        <!--
+                            Present in the export and nowhere else. It is made visible for the duration
+                            of the render and collapsed again immediately, because a picture filed as a
+                            calibration record has to say when it was taken and under what mask, and the
+                            screen does not - the page footer already carries the age, and repeating it
+                            permanently inside the card would be a second staleness readout disagreeing
+                            with the first one.
 
-                                    REPOSITION ALONE, deliberately. An AddDeleteThemeTransition would
-                                    also fire on the first fill and on every reconnect, and a table
-                                    that flies its rows in each time the link comes back is motion on
-                                    a window meant to sit still for weeks. What is worth animating is
-                                    a satellite CHANGING PLACE as the sky turns, because that is the
-                                    one movement that means something.
-                                -->
-                                <RepositionThemeTransition IsStaggeringEnabled="False" />
-                            </TransitionCollection>
-                        </ListView.ItemContainerTransitions>
-                        <ListView.ItemTemplate>
-                            <DataTemplate x:DataType="controls:SkyPlotSatellite">
-                                <Grid ColumnSpacing="{ThemeResource WzSpaceMd}"
-                                      AutomationProperties.Name="{x:Bind Description}">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="56" />
-                                        <ColumnDefinition Width="64" />
-                                        <ColumnDefinition Width="64" />
-                                        <ColumnDefinition Width="180" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-
-                                    <TextBlock Grid.Column="0" Style="{ThemeResource WzMonoTextStyle}"
-                                               Text="{x:Bind PrnText}" />
-                                    <TextBlock Grid.Column="1" Style="{ThemeResource WzMonoTextStyle}"
-                                               Text="{x:Bind ElevationText}" />
-                                    <TextBlock Grid.Column="2" Style="{ThemeResource WzMonoTextStyle}"
-                                               Text="{x:Bind AzimuthText}" />
-                                    <controls:SatelliteStrengthBar Grid.Column="3"
-                                                                   Strength="{x:Bind SignalStrength}"
-                                                                   Kind="{x:Bind Kind}" />
-                                    <TextBlock Grid.Column="4" Style="{ThemeResource WzBodyTextStyle}"
-                                               Text="{x:Bind StateText}" />
-                                </Grid>
-                            </DataTemplate>
-                        </ListView.ItemTemplate>
-                    </ListView>
-
-                    <TextBlock x:Name="SkyPlotEmptyText"
-                               Style="{ThemeResource WzBodyTextStyle}"
-                               Foreground="{ThemeResource WzTextSecondaryBrush}"
-                               TextWrapping="Wrap"
-                               MaxWidth="{ThemeResource WzProseMaxWidth}"
-                               Visibility="Collapsed" />
-
-                    <TextBlock x:Name="SkyPlotSelectionText"
-                               Style="{ThemeResource WzCaptionTextStyle}"
-                               Foreground="{ThemeResource WzTextTertiaryBrush}"
-                               TextWrapping="Wrap"
-                               MaxWidth="{ThemeResource WzProseMaxWidth}" />
-
-                    <!--
-                        Present in the export and nowhere else. It is made visible for the duration
-                        of the render and collapsed again immediately, because a picture filed as a
-                        calibration record has to say when it was taken and under what mask, and the
-                        screen does not - the page footer already carries the age, and repeating it
-                        permanently inside the card would be a second staleness readout disagreeing
-                        with the first one.
-
-                        WzTextSecondaryBrush rather than tertiary: tertiary measured 3.28:1 in Light
-                        (#176) and this line is the part of the image a reader is most likely to be
-                        squinting at in a printout.
-                    -->
-                    <TextBlock x:Name="SkyPlotCaptionText"
-                               Style="{ThemeResource WzCaptionTextStyle}"
-                               Foreground="{ThemeResource WzTextSecondaryBrush}"
-                               TextWrapping="Wrap"
-                               Visibility="Collapsed" />
-                </StackPanel>
-            </Border>
-
-            <!-- ================================ Tracked ================================ -->
-            <Border Style="{ThemeResource WzCardStyle}">
-                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
-                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Tracked" />
-
-                    <Grid ColumnSpacing="{ThemeResource WzSpaceMd}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="56" />
-                            <ColumnDefinition Width="64" />
-                            <ColumnDefinition Width="64" />
-                            <ColumnDefinition Width="180" />
-                        </Grid.ColumnDefinitions>
-
-                        <TextBlock Grid.Column="0" Style="{ThemeResource WzCaptionTextStyle}"
-                                   Foreground="{ThemeResource WzTextSecondaryBrush}" Text="PRN" />
-                        <TextBlock Grid.Column="1" Style="{ThemeResource WzCaptionTextStyle}"
-                                   Foreground="{ThemeResource WzTextSecondaryBrush}" Text="El" />
-                        <TextBlock Grid.Column="2" Style="{ThemeResource WzCaptionTextStyle}"
-                                   Foreground="{ThemeResource WzTextSecondaryBrush}" Text="Az" />
-                        <TextBlock x:Name="StrengthHeader" Grid.Column="3"
+                            WzTextSecondaryBrush rather than tertiary: tertiary measured 3.28:1 in Light
+                            (#176) and this line is the part of the image a reader is most likely to be
+                            squinting at in a printout.
+                        -->
+                        <TextBlock x:Name="SkyPlotCaptionText"
                                    Style="{ThemeResource WzCaptionTextStyle}"
-                                   Foreground="{ThemeResource WzTextSecondaryBrush}" />
-                    </Grid>
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   TextWrapping="Wrap"
+                                   Visibility="Collapsed" />
+                    </StackPanel>
+                </Border>
 
-                    <ListView x:Name="TrackedRows"
-                              SelectionMode="Single"
-                              ItemContainerStyle="{ThemeResource WzDenseListItemStyle}"
-                              AutomationProperties.Name="Tracked satellites"
-                              SelectionChanged="OnTrackedSelectionChanged">
-                        <ListView.ItemContainerTransitions>
-                            <TransitionCollection>
-                                <!--
-                                    §9.8.2's satellite row reorder (#320). The row names
-                                    ItemsRepeater; §9.10.1 specifies these tables as ListView, and a
-                                    ListView already offers exactly the animation the row asks for -
-                                    offset only, no fade, no size change - through its own container
-                                    transitions. Switching control to obtain a behaviour the current
-                                    one has would be a rewrite in exchange for nothing.
+                <!-- ================================ Tracked ================================ -->
+                <Border Style="{ThemeResource WzCardStyle}">
+                    <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                        <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Tracked" />
 
-                                    REPOSITION ALONE, deliberately. An AddDeleteThemeTransition would
-                                    also fire on the first fill and on every reconnect, and a table
-                                    that flies its rows in each time the link comes back is motion on
-                                    a window meant to sit still for weeks. What is worth animating is
-                                    a satellite CHANGING PLACE as the sky turns, because that is the
-                                    one movement that means something.
-                                -->
-                                <RepositionThemeTransition IsStaggeringEnabled="False" />
-                            </TransitionCollection>
-                        </ListView.ItemContainerTransitions>
-                        <ListView.ItemTemplate>
-                            <DataTemplate x:DataType="vm:TrackedSatelliteRow">
-                                <Grid ColumnSpacing="{ThemeResource WzSpaceMd}"
-                                      AutomationProperties.Name="{x:Bind Description}">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="56" />
-                                        <ColumnDefinition Width="64" />
-                                        <ColumnDefinition Width="64" />
-                                        <ColumnDefinition Width="180" />
-                                    </Grid.ColumnDefinitions>
+                        <Grid ColumnSpacing="{ThemeResource WzSpaceMd}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="56" />
+                                <ColumnDefinition Width="64" />
+                                <ColumnDefinition Width="64" />
+                                <ColumnDefinition Width="180" />
+                            </Grid.ColumnDefinitions>
 
-                                    <TextBlock Grid.Column="0" Style="{ThemeResource WzMonoTextStyle}"
-                                               Text="{x:Bind PrnText}" />
-                                    <TextBlock Grid.Column="1" Style="{ThemeResource WzMonoTextStyle}"
-                                               Text="{x:Bind ElevationText}" />
-                                    <TextBlock Grid.Column="2" Style="{ThemeResource WzMonoTextStyle}"
-                                               Text="{x:Bind AzimuthText}" />
-                                    <controls:SatelliteStrengthBar Grid.Column="3"
-                                                                   Strength="{x:Bind SignalStrength}"
-                                                                   Kind="{x:Bind Kind}" />
-                                </Grid>
-                            </DataTemplate>
-                        </ListView.ItemTemplate>
-                    </ListView>
+                            <TextBlock Grid.Column="0" Style="{ThemeResource WzCaptionTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}" Text="PRN" />
+                            <TextBlock Grid.Column="1" Style="{ThemeResource WzCaptionTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}" Text="El" />
+                            <TextBlock Grid.Column="2" Style="{ThemeResource WzCaptionTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}" Text="Az" />
+                            <TextBlock x:Name="StrengthHeader" Grid.Column="3"
+                                       Style="{ThemeResource WzCaptionTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}" />
+                        </Grid>
 
-                    <TextBlock x:Name="TrackedEmptyText"
-                               Style="{ThemeResource WzBodyTextStyle}"
-                               Foreground="{ThemeResource WzTextSecondaryBrush}"
-                               TextWrapping="Wrap"
-                               MaxWidth="{ThemeResource WzProseMaxWidth}"
-                               Visibility="Collapsed" />
-                </StackPanel>
-            </Border>
+                        <ListView x:Name="TrackedRows"
+                                  SelectionMode="Single"
+                                  ItemContainerStyle="{ThemeResource WzDenseListItemStyle}"
+                                  AutomationProperties.Name="Tracked satellites"
+                                  SelectionChanged="OnTrackedSelectionChanged">
+                            <ListView.ItemContainerTransitions>
+                                <TransitionCollection>
+                                    <!--
+                                        §9.8.2's satellite row reorder (#320). The row names
+                                        ItemsRepeater; §9.10.1 specifies these tables as ListView, and a
+                                        ListView already offers exactly the animation the row asks for -
+                                        offset only, no fade, no size change - through its own container
+                                        transitions. Switching control to obtain a behaviour the current
+                                        one has would be a rewrite in exchange for nothing.
 
-            <!-- ============================== Not tracked ============================== -->
-            <Border Style="{ThemeResource WzCardStyle}">
-                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
-                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Not tracked" />
+                                        REPOSITION ALONE, deliberately. An AddDeleteThemeTransition would
+                                        also fire on the first fill and on every reconnect, and a table
+                                        that flies its rows in each time the link comes back is motion on
+                                        a window meant to sit still for weeks. What is worth animating is
+                                        a satellite CHANGING PLACE as the sky turns, because that is the
+                                        one movement that means something.
+                                    -->
+                                    <RepositionThemeTransition IsStaggeringEnabled="False" />
+                                </TransitionCollection>
+                            </ListView.ItemContainerTransitions>
+                            <ListView.ItemTemplate>
+                                <DataTemplate x:DataType="vm:TrackedSatelliteRow">
+                                    <Grid ColumnSpacing="{ThemeResource WzSpaceMd}"
+                                          AutomationProperties.Name="{x:Bind Description}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="56" />
+                                            <ColumnDefinition Width="64" />
+                                            <ColumnDefinition Width="64" />
+                                            <ColumnDefinition Width="180" />
+                                        </Grid.ColumnDefinitions>
 
-                    <Grid ColumnSpacing="{ThemeResource WzSpaceMd}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="56" />
-                            <ColumnDefinition Width="64" />
-                            <ColumnDefinition Width="64" />
-                            <ColumnDefinition Width="180" />
-                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Style="{ThemeResource WzMonoTextStyle}"
+                                                   Text="{x:Bind PrnText}" />
+                                        <TextBlock Grid.Column="1" Style="{ThemeResource WzMonoTextStyle}"
+                                                   Text="{x:Bind ElevationText}" />
+                                        <TextBlock Grid.Column="2" Style="{ThemeResource WzMonoTextStyle}"
+                                                   Text="{x:Bind AzimuthText}" />
+                                        <controls:SatelliteStrengthBar Grid.Column="3"
+                                                                       Strength="{x:Bind SignalStrength}"
+                                                                       Kind="{x:Bind Kind}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
 
-                        <TextBlock Grid.Column="0" Style="{ThemeResource WzCaptionTextStyle}"
-                                   Foreground="{ThemeResource WzTextSecondaryBrush}" Text="PRN" />
-                        <TextBlock Grid.Column="1" Style="{ThemeResource WzCaptionTextStyle}"
-                                   Foreground="{ThemeResource WzTextSecondaryBrush}" Text="El" />
-                        <TextBlock Grid.Column="2" Style="{ThemeResource WzCaptionTextStyle}"
-                                   Foreground="{ThemeResource WzTextSecondaryBrush}" Text="Az" />
-                    </Grid>
+                        <TextBlock x:Name="TrackedEmptyText"
+                                   Style="{ThemeResource WzBodyTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   TextWrapping="Wrap"
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}"
+                                   Visibility="Collapsed" />
+                    </StackPanel>
+                </Border>
 
-                    <ListView x:Name="NotTrackedRows"
-                              SelectionMode="Single"
-                              ItemContainerStyle="{ThemeResource WzDenseListItemStyle}"
-                              AutomationProperties.Name="Satellites not being tracked"
-                              SelectionChanged="OnNotTrackedSelectionChanged">
-                        <ListView.ItemContainerTransitions>
-                            <TransitionCollection>
-                                <!--
-                                    §9.8.2's satellite row reorder (#320). The row names
-                                    ItemsRepeater; §9.10.1 specifies these tables as ListView, and a
-                                    ListView already offers exactly the animation the row asks for -
-                                    offset only, no fade, no size change - through its own container
-                                    transitions. Switching control to obtain a behaviour the current
-                                    one has would be a rewrite in exchange for nothing.
+                <!-- ============================== Not tracked ============================== -->
+                <Border Style="{ThemeResource WzCardStyle}">
+                    <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                        <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Not tracked" />
 
-                                    REPOSITION ALONE, deliberately. An AddDeleteThemeTransition would
-                                    also fire on the first fill and on every reconnect, and a table
-                                    that flies its rows in each time the link comes back is motion on
-                                    a window meant to sit still for weeks. What is worth animating is
-                                    a satellite CHANGING PLACE as the sky turns, because that is the
-                                    one movement that means something.
-                                -->
-                                <RepositionThemeTransition IsStaggeringEnabled="False" />
-                            </TransitionCollection>
-                        </ListView.ItemContainerTransitions>
-                        <ListView.ItemTemplate>
-                            <DataTemplate x:DataType="vm:PredictedSatelliteRow">
-                                <Grid ColumnSpacing="{ThemeResource WzSpaceMd}"
-                                      AutomationProperties.Name="{x:Bind Description}">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="56" />
-                                        <ColumnDefinition Width="64" />
-                                        <ColumnDefinition Width="64" />
-                                        <ColumnDefinition Width="180" />
-                                    </Grid.ColumnDefinitions>
+                        <Grid ColumnSpacing="{ThemeResource WzSpaceMd}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="56" />
+                                <ColumnDefinition Width="64" />
+                                <ColumnDefinition Width="64" />
+                                <ColumnDefinition Width="180" />
+                            </Grid.ColumnDefinitions>
 
-                                    <TextBlock Grid.Column="0" Style="{ThemeResource WzMonoTextStyle}"
-                                               Text="{x:Bind PrnText}" />
-                                    <TextBlock Grid.Column="1" Style="{ThemeResource WzMonoTextStyle}"
-                                               Text="{x:Bind ElevationText}" />
-                                    <TextBlock Grid.Column="2" Style="{ThemeResource WzMonoTextStyle}"
-                                               Text="{x:Bind AzimuthText}" />
-                                    <TextBlock Grid.Column="3" Style="{ThemeResource WzCaptionTextStyle}"
-                                               Foreground="{ThemeResource WzTextTertiaryBrush}"
-                                               VerticalAlignment="Center"
-                                               Text="{x:Bind StatusText}" />
-                                </Grid>
-                            </DataTemplate>
-                        </ListView.ItemTemplate>
-                    </ListView>
+                            <TextBlock Grid.Column="0" Style="{ThemeResource WzCaptionTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}" Text="PRN" />
+                            <TextBlock Grid.Column="1" Style="{ThemeResource WzCaptionTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}" Text="El" />
+                            <TextBlock Grid.Column="2" Style="{ThemeResource WzCaptionTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}" Text="Az" />
+                        </Grid>
 
-                    <TextBlock x:Name="NotTrackedEmptyText"
-                               Style="{ThemeResource WzBodyTextStyle}"
-                               Foreground="{ThemeResource WzTextSecondaryBrush}"
-                               TextWrapping="Wrap"
-                               MaxWidth="{ThemeResource WzProseMaxWidth}"
-                               Visibility="Collapsed" />
-                </StackPanel>
-            </Border>
+                        <ListView x:Name="NotTrackedRows"
+                                  SelectionMode="Single"
+                                  ItemContainerStyle="{ThemeResource WzDenseListItemStyle}"
+                                  AutomationProperties.Name="Satellites not being tracked"
+                                  SelectionChanged="OnNotTrackedSelectionChanged">
+                            <ListView.ItemContainerTransitions>
+                                <TransitionCollection>
+                                    <!--
+                                        §9.8.2's satellite row reorder (#320). The row names
+                                        ItemsRepeater; §9.10.1 specifies these tables as ListView, and a
+                                        ListView already offers exactly the animation the row asks for -
+                                        offset only, no fade, no size change - through its own container
+                                        transitions. Switching control to obtain a behaviour the current
+                                        one has would be a rewrite in exchange for nothing.
 
-            <!-- ============================ Elevation mask ============================= -->
-            <Border Style="{ThemeResource WzCardStyle}">
-                <StackPanel Spacing="{ThemeResource WzSpaceXs}">
-                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Elevation mask" />
-                    <TextBlock x:Name="ElevationMaskText" Style="{ThemeResource WzBodyTextStyle}" />
+                                        REPOSITION ALONE, deliberately. An AddDeleteThemeTransition would
+                                        also fire on the first fill and on every reconnect, and a table
+                                        that flies its rows in each time the link comes back is motion on
+                                        a window meant to sit still for weeks. What is worth animating is
+                                        a satellite CHANGING PLACE as the sky turns, because that is the
+                                        one movement that means something.
+                                    -->
+                                    <RepositionThemeTransition IsStaggeringEnabled="False" />
+                                </TransitionCollection>
+                            </ListView.ItemContainerTransitions>
+                            <ListView.ItemTemplate>
+                                <DataTemplate x:DataType="vm:PredictedSatelliteRow">
+                                    <Grid ColumnSpacing="{ThemeResource WzSpaceMd}"
+                                          AutomationProperties.Name="{x:Bind Description}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="56" />
+                                            <ColumnDefinition Width="64" />
+                                            <ColumnDefinition Width="64" />
+                                            <ColumnDefinition Width="180" />
+                                        </Grid.ColumnDefinitions>
 
-                    <Grid ColumnSpacing="{ThemeResource WzSpaceMd}" Margin="0,8,0,0">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Style="{ThemeResource WzMonoTextStyle}"
+                                                   Text="{x:Bind PrnText}" />
+                                        <TextBlock Grid.Column="1" Style="{ThemeResource WzMonoTextStyle}"
+                                                   Text="{x:Bind ElevationText}" />
+                                        <TextBlock Grid.Column="2" Style="{ThemeResource WzMonoTextStyle}"
+                                                   Text="{x:Bind AzimuthText}" />
+                                        <TextBlock Grid.Column="3" Style="{ThemeResource WzCaptionTextStyle}"
+                                                   Foreground="{ThemeResource WzTextTertiaryBrush}"
+                                                   VerticalAlignment="Center"
+                                                   Text="{x:Bind StatusText}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
 
-                        <StackPanel Grid.Column="0" Spacing="{ThemeResource WzSpaceXxs}">
-                            <NumberBox x:Name="MaskBox"
-                                       MinWidth="220"
-                                       Header="New mask (degrees)"
-                                       SmallChange="1"
-                                       SpinButtonPlacementMode="Compact" />
-                            <controls:FieldErrorText x:Name="MaskError" />
-                        </StackPanel>
+                        <TextBlock x:Name="NotTrackedEmptyText"
+                                   Style="{ThemeResource WzBodyTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   TextWrapping="Wrap"
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}"
+                                   Visibility="Collapsed" />
+                    </StackPanel>
+                </Border>
 
-                        <Button x:Name="ApplyMaskButton"
-                                Grid.Column="1"
-                                Content="Apply mask"
-                                Style="{ThemeResource WzDestructiveButtonStyle}"
-                                VerticalAlignment="Center"
-                                Margin="0,24,0,0"
-                                IsEnabled="False"
-                                ToolTipService.ToolTip="Send this elevation mask to the receiver"
-                                Click="OnApplyMaskClicked" />
-                    </Grid>
+                <!-- ============================ Elevation mask ============================= -->
+                <Border Style="{ThemeResource WzCardStyle}">
+                    <StackPanel Spacing="{ThemeResource WzSpaceXs}">
+                        <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Elevation mask" />
+                        <TextBlock x:Name="ElevationMaskText" Style="{ThemeResource WzBodyTextStyle}" />
 
-                    <controls:CommandOutcomeBar x:Name="MaskOutcome" />
+                        <Grid ColumnSpacing="{ThemeResource WzSpaceMd}" Margin="0,8,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
 
-                    <TextBlock Style="{ThemeResource WzCaptionTextStyle}"
-                               Foreground="{ThemeResource WzTextTertiaryBrush}"
-                               TextWrapping="Wrap"
-                               MaxWidth="{ThemeResource WzProseMaxWidth}"
-                               Text="The elevation mask applies to every satellite. Choosing individual ones is Manage, below." />
-                </StackPanel>
-            </Border>
+                            <StackPanel Grid.Column="0" Spacing="{ThemeResource WzSpaceXxs}">
+                                <NumberBox x:Name="MaskBox"
+                                           MinWidth="220"
+                                           Header="New mask (degrees)"
+                                           SmallChange="1"
+                                           SpinButtonPlacementMode="Compact" />
+                                <controls:FieldErrorText x:Name="MaskError" />
+                            </StackPanel>
 
-            <!-- ================================= Manage ================================ -->
-            <Border Style="{ThemeResource WzCardStyle}">
-                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
-                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Which satellites" />
+                            <Button x:Name="ApplyMaskButton"
+                                    Grid.Column="1"
+                                    Content="Apply mask"
+                                    Style="{ThemeResource WzDestructiveButtonStyle}"
+                                    VerticalAlignment="Center"
+                                    Margin="0,24,0,0"
+                                    IsEnabled="False"
+                                    ToolTipService.ToolTip="Send this elevation mask to the receiver"
+                                    Click="OnApplyMaskClicked" />
+                        </Grid>
 
-                    <TextBlock Style="{ThemeResource WzBodyTextStyle}"
-                               Foreground="{ThemeResource WzTextSecondaryBrush}"
-                               TextWrapping="Wrap"
-                               MaxWidth="{ThemeResource WzProseMaxWidth}"
-                               Text="The receiver keeps an inclusion list and an exclusion list. Manage reads both from the receiver and offers the commands that change them, each behind its own confirmation." />
+                        <controls:CommandOutcomeBar x:Name="MaskOutcome" />
 
-                    <Button x:Name="ManageButton"
-                            Content="Manage…"
-                            HorizontalAlignment="Left"
-                            Click="OnManageClicked" />
+                        <TextBlock Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextTertiaryBrush}"
+                                   TextWrapping="Wrap"
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}"
+                                   Text="The elevation mask applies to every satellite. Choosing individual ones is Manage, below." />
+                    </StackPanel>
+                </Border>
 
-                    <controls:CommandOutcomeBar x:Name="ManageOutcome" />
-                </StackPanel>
-            </Border>
+                <!-- ================================= Manage ================================ -->
+                <Border Style="{ThemeResource WzCardStyle}">
+                    <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                        <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Which satellites" />
 
-            <TextBlock x:Name="FooterText"
-                       Style="{ThemeResource WzCaptionTextStyle}"
-                       Foreground="{ThemeResource WzTextTertiaryBrush}" />
+                        <TextBlock Style="{ThemeResource WzBodyTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   TextWrapping="Wrap"
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}"
+                                   Text="The receiver keeps an inclusion list and an exclusion list. Manage reads both from the receiver and offers the commands that change them, each behind its own confirmation." />
+
+                        <Button x:Name="ManageButton"
+                                Content="Manage…"
+                                HorizontalAlignment="Left"
+                                Click="OnManageClicked" />
+
+                        <controls:CommandOutcomeBar x:Name="ManageOutcome" />
+                    </StackPanel>
+                </Border>
+
+                <TextBlock x:Name="FooterText"
+                           Style="{ThemeResource WzCaptionTextStyle}"
+                           Foreground="{ThemeResource WzTextTertiaryBrush}" />
+            </controls:CardColumns>
         </StackPanel>
     </ScrollViewer>
 </Page>

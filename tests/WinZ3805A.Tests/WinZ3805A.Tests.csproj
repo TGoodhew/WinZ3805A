@@ -206,6 +206,8 @@
              Link="ViewModels\Staleness.cs" />
     <Compile Include="..\..\src\WinZ3805A\ViewModels\LoadingIndicator.cs"
              Link="ViewModels\LoadingIndicator.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Controls\CardColumnMath.cs"
+             Link="Controls\CardColumnMath.cs" />
 
     <!-- §10.7's sigma. A deviation is exactly the kind of figure that looks plausible while being
          wrong by a factor of the sample count, and the caption naming its window is a §9.11 honesty

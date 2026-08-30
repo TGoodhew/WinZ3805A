@@ -1214,11 +1214,24 @@ Each step also exists as a `Thickness` token (`WzSpaceXxsThickness` … `WzSpace
 >   alternate carries a fifth — *State*, one word wide — and a per-row expander to hide one word
 >   costs a tap and a control to save nothing.
 >
-> **What this leaves for Tony.** The two-column Medium and Wide layout is a real and unbuilt piece of
-> §9.6.1, and it is the opposite of what #316 filed. It is not built here because it is a design
-> decision rather than a gap: it means giving the sky plot more than 360 px, or leaving it at 360 and
-> putting the tables beside it, and those are different pages. The page margin above **is** built,
-> being unambiguous.
+> **Settled and built 30 Aug 2026 (#345 item 8).** Tony's call was neither of the two options put to
+> him: the columns follow the **width** rather than a breakpoint. `Controls/CardColumns.cs` flows the
+> cards into as many columns as the space holds, and each card goes to whichever column is currently
+> **shortest** — so a tall card sits alone while two short ones stack beside it, which is the
+> arrangement he described. Round-robin was the obvious alternative and is wrong: it puts the third
+> card under the first however tall the first is, leaving one column running off the page beside a
+> stub.
+>
+> The sky plot keeps its 360 px cap and the tables go beside it, so §9.6.1's *Sky plot beside table*
+> is finally true — and it is true at every width that has room rather than only in a named
+> breakpoint. `MaxColumns` defaults to 2, which keeps §9.6's content cap honest, and `MinColumnWidth`
+> is 420 because below that the label-value rows start wrapping and §9.5.3's readouts lose their
+> alignment.
+>
+> **The page heading stays outside the grid**: a title is not a card, and it belongs across the top
+> rather than in whichever column happened to be shorter. And the root panel is `Stretch` now rather
+> than `Left`, which is what gives the grid the width to divide — and incidentally makes §9.6's
+> *"beyond 1320 the content region centres"* true, which left-alignment had quietly never honoured.
 >
 > **Compact cannot be entered by dragging, and that is the application's floor rather than the
 > display's.** Corrected 30 Aug 2026: an earlier version of this note said the state "cannot be

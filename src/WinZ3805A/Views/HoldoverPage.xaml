@@ -15,10 +15,9 @@
     -->
     <ScrollViewer HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
         <StackPanel x:Name="PageRoot"
-                    controls:CardEntrance.IsEnabled="True"
                     Padding="{ThemeResource WzPageMarginThickness}"
                     MaxWidth="{ThemeResource WzContentMaxWidth}"
-                    HorizontalAlignment="Left"
+                    HorizontalAlignment="Stretch"
                     Spacing="{ThemeResource WzSpaceXl}">
                 <VisualStateManager.VisualStateGroups>
                     <!--
@@ -63,243 +62,257 @@
 
             <TextBlock Style="{ThemeResource WzTitleTextStyle}" Text="Holdover" />
 
-            <!-- ================================= State ================================= -->
-            <Border Style="{ThemeResource WzCardStyle}">
-                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
-                    <controls:SeverityPill x:Name="StatePill" />
+            <!--
+                §9.6.1's content grid (#345). The cards flow into as many columns as the width
+                holds, each going to whichever column is currently SHORTEST - so a tall card sits
+                alone while two short ones stack beside it, rather than alternating into a ragged
+                pair. Every page was a single StackPanel before this, which meant §9.6.1's Compact
+                arrangement at every width and half of a wide window empty.
 
-                    <Grid RowSpacing="{ThemeResource WzSpaceXs}" ColumnSpacing="{ThemeResource WzSpaceXl}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" MinWidth="220" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
+                The page heading stays outside it: a title is not a card, and it belongs across the
+                top rather than in whichever column happened to be shorter.
+            -->
+            <controls:CardColumns controls:CardEntrance.IsEnabled="True"
+                                  ColumnSpacing="{ThemeResource WzSpaceXl}"
+                                  RowSpacing="{ThemeResource WzSpaceXl}">
+                <!-- ================================= State ================================= -->
+                <Border Style="{ThemeResource WzCardStyle}">
+                    <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                        <controls:SeverityPill x:Name="StatePill" />
 
-                        <TextBlock Grid.Row="0" Grid.Column="0"
-                                   Style="{ThemeResource WzBodyTextStyle}"
-                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
-                                   Text="Predicted 24 h uncertainty" />
-                        <TextBlock x:Name="PredictedText"
-                                   controls:CopyMenu.IsCopyable="True" Grid.Row="0" Grid.Column="1"
-                                   Style="{ThemeResource WzMonoTextStyle}" />
+                        <Grid RowSpacing="{ThemeResource WzSpaceXs}" ColumnSpacing="{ThemeResource WzSpaceXl}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" MinWidth="220" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
 
-                        <TextBlock Grid.Row="1" Grid.Column="0"
-                                   Style="{ThemeResource WzBodyTextStyle}"
-                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
-                                   Text="Present time error" />
-                        <TextBlock x:Name="PresentErrorText"
-                                   controls:CopyMenu.IsCopyable="True" Grid.Row="1" Grid.Column="1"
-                                   Style="{ThemeResource WzMonoTextStyle}" />
+                            <TextBlock Grid.Row="0" Grid.Column="0"
+                                       Style="{ThemeResource WzBodyTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                       Text="Predicted 24 h uncertainty" />
+                            <TextBlock x:Name="PredictedText"
+                                       controls:CopyMenu.IsCopyable="True" Grid.Row="0" Grid.Column="1"
+                                       Style="{ThemeResource WzMonoTextStyle}" />
 
-                        <TextBlock Grid.Row="2" Grid.Column="0"
-                                   Style="{ThemeResource WzBodyTextStyle}"
-                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
-                                   Text="Duration" />
-                        <TextBlock x:Name="DurationText" Grid.Row="2" Grid.Column="1"
-                                   Style="{ThemeResource WzBodyTextStyle}" />
+                            <TextBlock Grid.Row="1" Grid.Column="0"
+                                       Style="{ThemeResource WzBodyTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                       Text="Present time error" />
+                            <TextBlock x:Name="PresentErrorText"
+                                       controls:CopyMenu.IsCopyable="True" Grid.Row="1" Grid.Column="1"
+                                       Style="{ThemeResource WzMonoTextStyle}" />
 
-                        <TextBlock Grid.Row="3" Grid.Column="0"
-                                   Style="{ThemeResource WzBodyTextStyle}"
-                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
-                                   Text="Waiting reason" />
-                        <TextBlock x:Name="WaitingReasonText" Grid.Row="3" Grid.Column="1"
-                                   Style="{ThemeResource WzBodyTextStyle}"
-                                   TextWrapping="Wrap" />
-                    </Grid>
-                </StackPanel>
-            </Border>
+                            <TextBlock Grid.Row="2" Grid.Column="0"
+                                       Style="{ThemeResource WzBodyTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                       Text="Duration" />
+                            <TextBlock x:Name="DurationText" Grid.Row="2" Grid.Column="1"
+                                       Style="{ThemeResource WzBodyTextStyle}" />
 
-            <!-- =============================== Threshold =============================== -->
-            <Border Style="{ThemeResource WzCardStyle}">
-                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
-                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Thresholds" />
+                            <TextBlock Grid.Row="3" Grid.Column="0"
+                                       Style="{ThemeResource WzBodyTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                       Text="Waiting reason" />
+                            <TextBlock x:Name="WaitingReasonText" Grid.Row="3" Grid.Column="1"
+                                       Style="{ThemeResource WzBodyTextStyle}"
+                                       TextWrapping="Wrap" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
 
-                    <Grid RowSpacing="{ThemeResource WzSpaceXs}" ColumnSpacing="{ThemeResource WzSpaceXl}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" MinWidth="220" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
+                <!-- =============================== Threshold =============================== -->
+                <Border Style="{ThemeResource WzCardStyle}">
+                    <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                        <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Thresholds" />
+
+                        <Grid RowSpacing="{ThemeResource WzSpaceXs}" ColumnSpacing="{ThemeResource WzSpaceXl}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" MinWidth="220" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <!--
+                                Two different receiver settings live on this card, and until #320 they
+                                were labelled as though they were one. This row is the receiver's
+                                *uncertainty* threshold - the screen's HOLD THR, in microseconds, which
+                                the predicted 24 h uncertainty below is compared against. There is no
+                                command to set it: the 58503A guide has exactly one threshold command,
+                                and it sets the duration limit the editor below sends.
+                            -->
+                            <TextBlock Grid.Row="0" Grid.Column="0"
+                                       Style="{ThemeResource WzBodyTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                       Text="Uncertainty threshold" />
+                            <TextBlock x:Name="ThresholdText"
+                                       controls:CopyMenu.IsCopyable="True" Grid.Row="0" Grid.Column="1"
+                                       Style="{ThemeResource WzMonoTextStyle}" />
+
+                            <TextBlock Grid.Row="1" Grid.Column="0"
+                                       Style="{ThemeResource WzBodyTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                       Text="Currently exceeded" />
+                            <controls:SeverityPill x:Name="ThresholdPill" Grid.Row="1" Grid.Column="1" />
+                        </Grid>
 
                         <!--
-                            Two different receiver settings live on this card, and until #320 they
-                            were labelled as though they were one. This row is the receiver's
-                            *uncertainty* threshold - the screen's HOLD THR, in microseconds, which
-                            the predicted 24 h uncertainty below is compared against. There is no
-                            command to set it: the 58503A guide has exactly one threshold command,
-                            and it sets the duration limit the editor below sends.
+                            §9.11's voice rule applied to a row that was legible and unexplained (#345):
+                            two numbers and a Yes, with nothing saying what is being compared or what
+                            follows from the answer. Under the row rather than in the tooltip alone,
+                            because a tooltip is for the pointer and this is the sentence that makes the
+                            card readable at a glance.
                         -->
-                        <TextBlock Grid.Row="0" Grid.Column="0"
-                                   Style="{ThemeResource WzBodyTextStyle}"
+                        <TextBlock x:Name="ThresholdExplanationText"
+                                   Style="{ThemeResource WzCaptionTextStyle}"
                                    Foreground="{ThemeResource WzTextSecondaryBrush}"
-                                   Text="Uncertainty threshold" />
-                        <TextBlock x:Name="ThresholdText"
-                                   controls:CopyMenu.IsCopyable="True" Grid.Row="0" Grid.Column="1"
-                                   Style="{ThemeResource WzMonoTextStyle}" />
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}"
+                                   HorizontalAlignment="Left"
+                                   TextWrapping="Wrap" />
 
-                        <TextBlock Grid.Row="1" Grid.Column="0"
-                                   Style="{ThemeResource WzBodyTextStyle}"
+                        <!-- §9.7.4 puts Apply inline with the value it affects. -->
+                        <Grid ColumnSpacing="{ThemeResource WzSpaceMd}" VerticalAlignment="Bottom">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" Spacing="{ThemeResource WzSpaceXxs}">
+                                <!--
+                                    This sets :SYNC:HOLD:DUR:THReshold, which the 58503A guide defines
+                                    as "the duration (in seconds) which represents a limit against which
+                                    the elapsed time of holdover is compared", resolution one second -
+                                    hence the 1 and 60 steps. It is NOT the uncertainty threshold shown
+                                    above, and its header said only "New threshold (seconds)" until
+                                    #320, so adjusting it and watching that reading never move was the
+                                    obvious thing to do and told you nothing.
+                                -->
+                                <!--
+                                    MinHeight is stated because the box carries a tooltip (#345), which
+                                    makes it a pointer target under A11Y-5 - and the gate requires the
+                                    floor DECLARED rather than inherited, on the reasoning that a floor
+                                    holding only while a stock style happens to supply it is a
+                                    coincidence and not a floor.
+                                -->
+                                <NumberBox x:Name="ThresholdBox"
+                                           MinWidth="240"
+                                           MinHeight="32"
+                                           Header="Holdover duration limit (seconds)"
+                                           SmallChange="1"
+                                           LargeChange="60"
+                                           SpinButtonPlacementMode="Compact" />
+                                <controls:FieldErrorText x:Name="ThresholdError" />
+                            </StackPanel>
+
+                            <!--
+                                "Apply duration limit" and not "Apply threshold" (#345). §9.11's voice
+                                rule is that a verb keeps its identity end to end, and this button sat
+                                beside the DURATION LIMIT while naming the THRESHOLD above it - two
+                                different receiver settings, only one of which can be set at all. Tony
+                                read the card and could not tell which one the button would send.
+                            -->
+                            <Button x:Name="ApplyDurationLimitButton"
+                                    Grid.Column="1"
+                                    Content="Apply duration limit"
+                                    Style="{ThemeResource WzDestructiveButtonStyle}"
+                                    VerticalAlignment="Center"
+                                    Margin="0,24,0,0"
+                                    IsEnabled="False"
+                                    ToolTipService.ToolTip="Send this holdover duration limit to the receiver"
+                                    Click="OnApplyThresholdClicked" />
+                        </Grid>
+
+                        <TextBlock x:Name="DurationLimitExplanationText"
+                                   Style="{ThemeResource WzCaptionTextStyle}"
                                    Foreground="{ThemeResource WzTextSecondaryBrush}"
-                                   Text="Currently exceeded" />
-                        <controls:SeverityPill x:Name="ThresholdPill" Grid.Row="1" Grid.Column="1" />
-                    </Grid>
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}"
+                                   HorizontalAlignment="Left"
+                                   TextWrapping="Wrap" />
 
-                    <!--
-                        §9.11's voice rule applied to a row that was legible and unexplained (#345):
-                        two numbers and a Yes, with nothing saying what is being compared or what
-                        follows from the answer. Under the row rather than in the tooltip alone,
-                        because a tooltip is for the pointer and this is the sentence that makes the
-                        card readable at a glance.
-                    -->
-                    <TextBlock x:Name="ThresholdExplanationText"
-                               Style="{ThemeResource WzCaptionTextStyle}"
-                               Foreground="{ThemeResource WzTextSecondaryBrush}"
-                               MaxWidth="{ThemeResource WzProseMaxWidth}"
-                               HorizontalAlignment="Left"
-                               TextWrapping="Wrap" />
+                        <controls:CommandOutcomeBar x:Name="ThresholdOutcome" />
+                    </StackPanel>
+                </Border>
 
-                    <!-- §9.7.4 puts Apply inline with the value it affects. -->
-                    <Grid ColumnSpacing="{ThemeResource WzSpaceMd}" VerticalAlignment="Bottom">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
+                <!-- ============================ Manual control ============================= -->
+                <Border Style="{ThemeResource WzCardStyle}">
+                    <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                        <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Manual control" />
 
-                        <StackPanel Grid.Column="0" Spacing="{ThemeResource WzSpaceXxs}">
-                            <!--
-                                This sets :SYNC:HOLD:DUR:THReshold, which the 58503A guide defines
-                                as "the duration (in seconds) which represents a limit against which
-                                the elapsed time of holdover is compared", resolution one second -
-                                hence the 1 and 60 steps. It is NOT the uncertainty threshold shown
-                                above, and its header said only "New threshold (seconds)" until
-                                #320, so adjusting it and watching that reading never move was the
-                                obvious thing to do and told you nothing.
-                            -->
-                            <!--
-                                MinHeight is stated because the box carries a tooltip (#345), which
-                                makes it a pointer target under A11Y-5 - and the gate requires the
-                                floor DECLARED rather than inherited, on the reasoning that a floor
-                                holding only while a stock style happens to supply it is a
-                                coincidence and not a floor.
-                            -->
-                            <NumberBox x:Name="ThresholdBox"
-                                       MinWidth="240"
-                                       MinHeight="32"
-                                       Header="Holdover duration limit (seconds)"
-                                       SmallChange="1"
-                                       LargeChange="60"
-                                       SpinButtonPlacementMode="Compact" />
-                            <controls:FieldErrorText x:Name="ThresholdError" />
+                        <!--
+                            §10.8's warning, kept in full. This is the one place in the application
+                            where an action is harmful without being destructive - nothing is lost, but
+                            the oscillator's learning is corrupted and takes days to rebuild.
+                        -->
+                        <InfoBar IsOpen="True"
+                                 IsClosable="False"
+                                 Severity="Warning"
+                                 Title="Before forcing holdover"
+                                 Message="Do not force holdover within 24 hours of power-up. Doing so corrupts the SmartClock oscillator learning process, which then takes days to rebuild." />
+
+                        <!--
+                            The guard §10.8 puts under that warning. The verdict is a pill rather than
+                            a coloured word, so it carries shape and text as well as colour (§9.4.3) -
+                            "Unverified" is a third state and not a quieter "Too soon".
+                        -->
+                        <Grid ColumnSpacing="{ThemeResource WzSpaceMd}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Grid.Column="0"
+                                       Style="{ThemeResource WzBodyTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                       VerticalAlignment="Center"
+                                       Text="Time since power-up" />
+
+                            <TextBlock x:Name="PowerUpText"
+                                       Grid.Column="1"
+                                       Style="{ThemeResource WzBodyStrongTextStyle}"
+                                       VerticalAlignment="Center" />
+
+                            <controls:SeverityPill x:Name="PowerUpPill" Grid.Column="2" />
+                        </Grid>
+
+                        <!-- §9.7.4's card-scoped commands. The row §10.8 draws, in its order. -->
+                        <StackPanel Orientation="Horizontal" Spacing="{ThemeResource WzSpaceXs}">
+                            <Button x:Name="ForceHoldoverButton"
+                                    Content="Force holdover"
+                                    Style="{ThemeResource WzDestructiveButtonStyle}"
+                                    IsEnabled="False"
+                                    ToolTipService.ToolTip="Stop disciplining to GPS until you recover manually"
+                                    Click="OnForceHoldoverClicked" />
+
+                            <Button x:Name="RecoverButton"
+                                    Content="Recover now"
+                                    IsEnabled="False"
+                                    ToolTipService.ToolTip="Start recovery and return the receiver toward lock"
+                                    Click="OnRecoverClicked" />
+
+                            <Button x:Name="IgnoreLimitButton"
+                                    Content="Ignore recovery limit"
+                                    IsEnabled="False"
+                                    ToolTipService.ToolTip="Continue recovery past the point it would normally stop"
+                                    Click="OnIgnoreLimitClicked" />
                         </StackPanel>
 
-                        <!--
-                            "Apply duration limit" and not "Apply threshold" (#345). §9.11's voice
-                            rule is that a verb keeps its identity end to end, and this button sat
-                            beside the DURATION LIMIT while naming the THRESHOLD above it - two
-                            different receiver settings, only one of which can be set at all. Tony
-                            read the card and could not tell which one the button would send.
-                        -->
-                        <Button x:Name="ApplyDurationLimitButton"
-                                Grid.Column="1"
-                                Content="Apply duration limit"
-                                Style="{ThemeResource WzDestructiveButtonStyle}"
-                                VerticalAlignment="Center"
-                                Margin="0,24,0,0"
-                                IsEnabled="False"
-                                ToolTipService.ToolTip="Send this holdover duration limit to the receiver"
-                                Click="OnApplyThresholdClicked" />
-                    </Grid>
-
-                    <TextBlock x:Name="DurationLimitExplanationText"
-                               Style="{ThemeResource WzCaptionTextStyle}"
-                               Foreground="{ThemeResource WzTextSecondaryBrush}"
-                               MaxWidth="{ThemeResource WzProseMaxWidth}"
-                               HorizontalAlignment="Left"
-                               TextWrapping="Wrap" />
-
-                    <controls:CommandOutcomeBar x:Name="ThresholdOutcome" />
-                </StackPanel>
-            </Border>
-
-            <!-- ============================ Manual control ============================= -->
-            <Border Style="{ThemeResource WzCardStyle}">
-                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
-                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Manual control" />
-
-                    <!--
-                        §10.8's warning, kept in full. This is the one place in the application
-                        where an action is harmful without being destructive - nothing is lost, but
-                        the oscillator's learning is corrupted and takes days to rebuild.
-                    -->
-                    <InfoBar IsOpen="True"
-                             IsClosable="False"
-                             Severity="Warning"
-                             Title="Before forcing holdover"
-                             Message="Do not force holdover within 24 hours of power-up. Doing so corrupts the SmartClock oscillator learning process, which then takes days to rebuild." />
-
-                    <!--
-                        The guard §10.8 puts under that warning. The verdict is a pill rather than
-                        a coloured word, so it carries shape and text as well as colour (§9.4.3) -
-                        "Unverified" is a third state and not a quieter "Too soon".
-                    -->
-                    <Grid ColumnSpacing="{ThemeResource WzSpaceMd}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-
-                        <TextBlock Grid.Column="0"
-                                   Style="{ThemeResource WzBodyTextStyle}"
-                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
-                                   VerticalAlignment="Center"
-                                   Text="Time since power-up" />
-
-                        <TextBlock x:Name="PowerUpText"
-                                   Grid.Column="1"
-                                   Style="{ThemeResource WzBodyStrongTextStyle}"
-                                   VerticalAlignment="Center" />
-
-                        <controls:SeverityPill x:Name="PowerUpPill" Grid.Column="2" />
-                    </Grid>
-
-                    <!-- §9.7.4's card-scoped commands. The row §10.8 draws, in its order. -->
-                    <StackPanel Orientation="Horizontal" Spacing="{ThemeResource WzSpaceXs}">
-                        <Button x:Name="ForceHoldoverButton"
-                                Content="Force holdover"
-                                Style="{ThemeResource WzDestructiveButtonStyle}"
-                                IsEnabled="False"
-                                ToolTipService.ToolTip="Stop disciplining to GPS until you recover manually"
-                                Click="OnForceHoldoverClicked" />
-
-                        <Button x:Name="RecoverButton"
-                                Content="Recover now"
-                                IsEnabled="False"
-                                ToolTipService.ToolTip="Start recovery and return the receiver toward lock"
-                                Click="OnRecoverClicked" />
-
-                        <Button x:Name="IgnoreLimitButton"
-                                Content="Ignore recovery limit"
-                                IsEnabled="False"
-                                ToolTipService.ToolTip="Continue recovery past the point it would normally stop"
-                                Click="OnIgnoreLimitClicked" />
+                        <controls:CommandOutcomeBar x:Name="ManualOutcome" />
                     </StackPanel>
+                </Border>
 
-                    <controls:CommandOutcomeBar x:Name="ManualOutcome" />
-                </StackPanel>
-            </Border>
-
-            <TextBlock x:Name="FooterText"
-                       Style="{ThemeResource WzCaptionTextStyle}"
-                       Foreground="{ThemeResource WzTextTertiaryBrush}" />
+                <TextBlock x:Name="FooterText"
+                           Style="{ThemeResource WzCaptionTextStyle}"
+                           Foreground="{ThemeResource WzTextTertiaryBrush}" />
+            </controls:CardColumns>
         </StackPanel>
     </ScrollViewer>
 </Page>

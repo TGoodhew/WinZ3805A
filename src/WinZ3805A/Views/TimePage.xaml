@@ -19,10 +19,9 @@
     -->
     <ScrollViewer HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
         <StackPanel x:Name="PageRoot"
-                    controls:CardEntrance.IsEnabled="True"
                     Padding="{ThemeResource WzPageMarginThickness}"
                     MaxWidth="{ThemeResource WzContentMaxWidth}"
-                    HorizontalAlignment="Left"
+                    HorizontalAlignment="Stretch"
                     Spacing="{ThemeResource WzSpaceXl}">
                 <VisualStateManager.VisualStateGroups>
                     <!--
@@ -67,198 +66,212 @@
 
             <TextBlock Style="{ThemeResource WzTitleTextStyle}" Text="Time" />
 
-            <!-- ================================== Clock ================================ -->
-            <Border Style="{ThemeResource WzCardStyle}">
-                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
-                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Receiver clock" />
-
-                    <TextBlock x:Name="ShownTimeText"
-                               Style="{ThemeResource WzReadoutMediumTextStyle}"
-                               IsTextSelectionEnabled="True" />
-
-                    <ComboBox x:Name="ZonePicker"
-                              MinWidth="320"
-                              HorizontalAlignment="Left"
-                              Header="Show times in"
-                              SelectionChanged="OnZoneSelected" />
-
-                    <Grid RowSpacing="{ThemeResource WzSpaceXs}" ColumnSpacing="{ThemeResource WzSpaceXl}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" MinWidth="180" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
-
-                        <TextBlock Grid.Row="0" Grid.Column="0"
-                                   Style="{ThemeResource WzBodyTextStyle}"
-                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
-                                   Text="Time scale" />
-                        <TextBlock x:Name="TimeScaleText" Grid.Row="0" Grid.Column="1"
-                                   Style="{ThemeResource WzBodyTextStyle}" />
-
-                        <TextBlock Grid.Row="1" Grid.Column="0"
-                                   Style="{ThemeResource WzBodyTextStyle}"
-                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
-                                   Text="Reported by the receiver" />
-                        <TextBlock x:Name="DeviceTimeText" Grid.Row="1" Grid.Column="1"
-                                   Style="{ThemeResource WzMonoTextStyle}" IsTextSelectionEnabled="True" />
-                    </Grid>
-
-                    <TextBlock x:Name="TimeScaleNoteText"
-                               Style="{ThemeResource WzCaptionTextStyle}"
-                               Foreground="{ThemeResource WzTextTertiaryBrush}"
-                               TextWrapping="Wrap"
-                               MaxWidth="{ThemeResource WzProseMaxWidth}"
-                               Visibility="Collapsed" />
-                </StackPanel>
-            </Border>
-
-            <!-- =============================== Week rollover =========================== -->
-            <Border Style="{ThemeResource WzCardStyle}">
-                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
-                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Week rollover correction" />
-                    <controls:SeverityPill x:Name="RolloverPill" />
-                    <TextBlock x:Name="RolloverText"
-                               Style="{ThemeResource WzBodyTextStyle}"
-                               Foreground="{ThemeResource WzTextSecondaryBrush}"
-                               TextWrapping="Wrap"
-                               MaxWidth="{ThemeResource WzProseMaxWidth}" />
-                </StackPanel>
-            </Border>
-
-            <!-- ============================ Provisional time =========================== -->
-
             <!--
-                Its own card rather than a line inside the rollover one, because the two caveats are
-                independent and can both be in force - which is exactly the power-up state (#245).
-                Folding them together would read as one explanation with two halves, when they are
-                two different reasons the clock may not be what it appears.
+                §9.6.1's content grid (#345). The cards flow into as many columns as the width
+                holds, each going to whichever column is currently SHORTEST - so a tall card sits
+                alone while two short ones stack beside it, rather than alternating into a ragged
+                pair. Every page was a single StackPanel before this, which meant §9.6.1's Compact
+                arrangement at every width and half of a wide window empty.
 
-                Collapsed entirely when the marker is absent: a card saying "not provisional" on
-                every ordinary screen is noise that teaches the reader to stop looking at this
-                corner of the page.
+                The page heading stays outside it: a title is not a card, and it belongs across the
+                top rather than in whichever column happened to be shorter.
             -->
-            <Border x:Name="ProvisionalCard" Style="{ThemeResource WzCardStyle}" Visibility="Collapsed">
-                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
-                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Power-up time" />
-                    <controls:SeverityPill x:Name="ProvisionalPill" />
-                    <TextBlock x:Name="ProvisionalText"
-                               Style="{ThemeResource WzBodyTextStyle}"
-                               Foreground="{ThemeResource WzTextSecondaryBrush}"
-                               TextWrapping="Wrap"
-                               MaxWidth="{ThemeResource WzProseMaxWidth}" />
-                </StackPanel>
-            </Border>
+            <controls:CardColumns controls:CardEntrance.IsEnabled="True"
+                                  ColumnSpacing="{ThemeResource WzSpaceXl}"
+                                  RowSpacing="{ThemeResource WzSpaceXl}">
+                <!-- ================================== Clock ================================ -->
+                <Border Style="{ThemeResource WzCardStyle}">
+                    <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                        <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Receiver clock" />
 
-            <!-- ================================ Leap second ============================ -->
-            <Border Style="{ThemeResource WzCardStyle}">
-                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
-                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Leap second" />
-                    <controls:SeverityPill x:Name="LeapPill" />
+                        <TextBlock x:Name="ShownTimeText"
+                                   Style="{ThemeResource WzReadoutMediumTextStyle}"
+                                   IsTextSelectionEnabled="True" />
 
-                    <!--
-                        §10.14's accumulated offset. Always shown, because it is the one figure on
-                        this card that is available on a day when nothing is announced - and it is
-                        the number anyone comparing GPS time to UTC actually needs.
-                    -->
-                    <Grid ColumnSpacing="{ThemeResource WzSpaceMd}" RowSpacing="{ThemeResource WzSpaceXxs}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="200" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
+                        <ComboBox x:Name="ZonePicker"
+                                  MinWidth="320"
+                                  HorizontalAlignment="Left"
+                                  Header="Show times in"
+                                  SelectionChanged="OnZoneSelected" />
 
-                        <TextBlock Grid.Row="0" Grid.Column="0"
-                                   Style="{ThemeResource WzBodyTextStyle}"
-                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
-                                   Text="GPS − UTC" />
-                        <TextBlock x:Name="AccumulatedText"
-                                   controls:CopyMenu.IsCopyable="True" Grid.Row="0" Grid.Column="1"
-                                   Style="{ThemeResource WzMonoTextStyle}" />
+                        <Grid RowSpacing="{ThemeResource WzSpaceXs}" ColumnSpacing="{ThemeResource WzSpaceXl}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" MinWidth="180" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
 
-                        <TextBlock x:Name="AnnouncedLabel" Grid.Row="1" Grid.Column="0"
-                                   Style="{ThemeResource WzBodyTextStyle}"
-                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
-                                   Visibility="Collapsed"
-                                   Text="Announced for" />
-                        <TextBlock x:Name="AnnouncedDateText"
-                                   controls:CopyMenu.IsCopyable="True" Grid.Row="1" Grid.Column="1"
-                                   Style="{ThemeResource WzMonoTextStyle}"
+                            <TextBlock Grid.Row="0" Grid.Column="0"
+                                       Style="{ThemeResource WzBodyTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                       Text="Time scale" />
+                            <TextBlock x:Name="TimeScaleText" Grid.Row="0" Grid.Column="1"
+                                       Style="{ThemeResource WzBodyTextStyle}" />
+
+                            <TextBlock Grid.Row="1" Grid.Column="0"
+                                       Style="{ThemeResource WzBodyTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                       Text="Reported by the receiver" />
+                            <TextBlock x:Name="DeviceTimeText" Grid.Row="1" Grid.Column="1"
+                                       Style="{ThemeResource WzMonoTextStyle}" IsTextSelectionEnabled="True" />
+                        </Grid>
+
+                        <TextBlock x:Name="TimeScaleNoteText"
+                                   Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextTertiaryBrush}"
+                                   TextWrapping="Wrap"
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}"
                                    Visibility="Collapsed" />
-                    </Grid>
+                    </StackPanel>
+                </Border>
 
-                    <TextBlock x:Name="LeapErrorText"
-                               Style="{ThemeResource WzCaptionTextStyle}"
-                               Foreground="{ThemeResource WzTextTertiaryBrush}"
-                               TextWrapping="Wrap"
-                               MaxWidth="{ThemeResource WzProseMaxWidth}"
-                               Visibility="Collapsed" />
-
-                    <TextBlock Style="{ThemeResource WzCaptionTextStyle}"
-                               Foreground="{ThemeResource WzTextTertiaryBrush}"
-                               TextWrapping="Wrap"
-                               MaxWidth="{ThemeResource WzProseMaxWidth}"
-                               Text="The accumulated offset is how far GPS time has run ahead of UTC since 1980. An announced leap second is a step the 1 PPS will take, which anything downstream counting seconds needs to expect." />
-                </StackPanel>
-            </Border>
-
-            <!-- ================================ Time code ============================== -->
-            <Border Style="{ThemeResource WzCardStyle}">
-                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
-                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Time code output" />
-
-                    <!--
-                        The format only, never the time code itself. :PTIM:TCOD? answers on the
-                        receiver's own 1 Hz cadence rather than on demand, so reading it blocks for
-                        up to a second - see #37. The format is the part that does not change, and
-                        the part without which the message cannot be read at all.
-                    -->
-                    <Grid ColumnSpacing="{ThemeResource WzSpaceMd}" RowSpacing="{ThemeResource WzSpaceXxs}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="200" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-
-                        <TextBlock Grid.Column="0"
+                <!-- =============================== Week rollover =========================== -->
+                <Border Style="{ThemeResource WzCardStyle}">
+                    <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                        <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Week rollover correction" />
+                        <controls:SeverityPill x:Name="RolloverPill" />
+                        <TextBlock x:Name="RolloverText"
                                    Style="{ThemeResource WzBodyTextStyle}"
                                    Foreground="{ThemeResource WzTextSecondaryBrush}"
-                                   Text="Format" />
-                        <TextBlock x:Name="TimeCodeFormatText"
-                                   controls:CopyMenu.IsCopyable="True" Grid.Column="1"
-                                   Style="{ThemeResource WzMonoTextStyle}" />
-                    </Grid>
+                                   TextWrapping="Wrap"
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}" />
+                    </StackPanel>
+                </Border>
 
-                    <TextBlock x:Name="TimeCodeContentText"
-                               Style="{ThemeResource WzCaptionTextStyle}"
-                               Foreground="{ThemeResource WzTextTertiaryBrush}"
-                               TextWrapping="Wrap"
-                               MaxWidth="{ThemeResource WzProseMaxWidth}"
-                               Visibility="Collapsed" />
+                <!-- ============================ Provisional time =========================== -->
 
-                    <TextBlock x:Name="TimeCodeErrorText"
-                               Style="{ThemeResource WzCaptionTextStyle}"
-                               Foreground="{ThemeResource WzTextTertiaryBrush}"
-                               TextWrapping="Wrap"
-                               MaxWidth="{ThemeResource WzProseMaxWidth}"
-                               Visibility="Collapsed" />
+                <!--
+                    Its own card rather than a line inside the rollover one, because the two caveats are
+                    independent and can both be in force - which is exactly the power-up state (#245).
+                    Folding them together would read as one explanation with two halves, when they are
+                    two different reasons the clock may not be what it appears.
 
-                    <TextBlock Style="{ThemeResource WzCaptionTextStyle}"
-                               Foreground="{ThemeResource WzTextTertiaryBrush}"
-                               TextWrapping="Wrap"
-                               MaxWidth="{ThemeResource WzProseMaxWidth}"
-                               Text="The time code is a message the receiver sends about 0.5 s before each 1 PPS, naming the time that pulse will carry. The two formats say the same thing in different notations, so anything decoding it has to be told which one this receiver is set to." />
-                </StackPanel>
-            </Border>
+                    Collapsed entirely when the marker is absent: a card saying "not provisional" on
+                    every ordinary screen is noise that teaches the reader to stop looking at this
+                    corner of the page.
+                -->
+                <Border x:Name="ProvisionalCard" Style="{ThemeResource WzCardStyle}" Visibility="Collapsed">
+                    <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                        <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Power-up time" />
+                        <controls:SeverityPill x:Name="ProvisionalPill" />
+                        <TextBlock x:Name="ProvisionalText"
+                                   Style="{ThemeResource WzBodyTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   TextWrapping="Wrap"
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}" />
+                    </StackPanel>
+                </Border>
 
-            <TextBlock x:Name="FooterText"
-                       Style="{ThemeResource WzCaptionTextStyle}"
-                       Foreground="{ThemeResource WzTextTertiaryBrush}" />
+                <!-- ================================ Leap second ============================ -->
+                <Border Style="{ThemeResource WzCardStyle}">
+                    <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                        <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Leap second" />
+                        <controls:SeverityPill x:Name="LeapPill" />
+
+                        <!--
+                            §10.14's accumulated offset. Always shown, because it is the one figure on
+                            this card that is available on a day when nothing is announced - and it is
+                            the number anyone comparing GPS time to UTC actually needs.
+                        -->
+                        <Grid ColumnSpacing="{ThemeResource WzSpaceMd}" RowSpacing="{ThemeResource WzSpaceXxs}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="200" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0"
+                                       Style="{ThemeResource WzBodyTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                       Text="GPS − UTC" />
+                            <TextBlock x:Name="AccumulatedText"
+                                       controls:CopyMenu.IsCopyable="True" Grid.Row="0" Grid.Column="1"
+                                       Style="{ThemeResource WzMonoTextStyle}" />
+
+                            <TextBlock x:Name="AnnouncedLabel" Grid.Row="1" Grid.Column="0"
+                                       Style="{ThemeResource WzBodyTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                       Visibility="Collapsed"
+                                       Text="Announced for" />
+                            <TextBlock x:Name="AnnouncedDateText"
+                                       controls:CopyMenu.IsCopyable="True" Grid.Row="1" Grid.Column="1"
+                                       Style="{ThemeResource WzMonoTextStyle}"
+                                       Visibility="Collapsed" />
+                        </Grid>
+
+                        <TextBlock x:Name="LeapErrorText"
+                                   Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextTertiaryBrush}"
+                                   TextWrapping="Wrap"
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}"
+                                   Visibility="Collapsed" />
+
+                        <TextBlock Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextTertiaryBrush}"
+                                   TextWrapping="Wrap"
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}"
+                                   Text="The accumulated offset is how far GPS time has run ahead of UTC since 1980. An announced leap second is a step the 1 PPS will take, which anything downstream counting seconds needs to expect." />
+                    </StackPanel>
+                </Border>
+
+                <!-- ================================ Time code ============================== -->
+                <Border Style="{ThemeResource WzCardStyle}">
+                    <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                        <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Time code output" />
+
+                        <!--
+                            The format only, never the time code itself. :PTIM:TCOD? answers on the
+                            receiver's own 1 Hz cadence rather than on demand, so reading it blocks for
+                            up to a second - see #37. The format is the part that does not change, and
+                            the part without which the message cannot be read at all.
+                        -->
+                        <Grid ColumnSpacing="{ThemeResource WzSpaceMd}" RowSpacing="{ThemeResource WzSpaceXxs}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="200" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Grid.Column="0"
+                                       Style="{ThemeResource WzBodyTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                       Text="Format" />
+                            <TextBlock x:Name="TimeCodeFormatText"
+                                       controls:CopyMenu.IsCopyable="True" Grid.Column="1"
+                                       Style="{ThemeResource WzMonoTextStyle}" />
+                        </Grid>
+
+                        <TextBlock x:Name="TimeCodeContentText"
+                                   Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextTertiaryBrush}"
+                                   TextWrapping="Wrap"
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}"
+                                   Visibility="Collapsed" />
+
+                        <TextBlock x:Name="TimeCodeErrorText"
+                                   Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextTertiaryBrush}"
+                                   TextWrapping="Wrap"
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}"
+                                   Visibility="Collapsed" />
+
+                        <TextBlock Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextTertiaryBrush}"
+                                   TextWrapping="Wrap"
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}"
+                                   Text="The time code is a message the receiver sends about 0.5 s before each 1 PPS, naming the time that pulse will carry. The two formats say the same thing in different notations, so anything decoding it has to be told which one this receiver is set to." />
+                    </StackPanel>
+                </Border>
+
+                <TextBlock x:Name="FooterText"
+                           Style="{ThemeResource WzCaptionTextStyle}"
+                           Foreground="{ThemeResource WzTextTertiaryBrush}" />
+            </controls:CardColumns>
         </StackPanel>
     </ScrollViewer>
 </Page>
