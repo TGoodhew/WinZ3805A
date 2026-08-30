@@ -1,8 +1,9 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
@@ -284,15 +285,73 @@ public sealed partial class DetailsWindow : Window
     /// </remarks>
     private static NavigationViewItem NavigationItem(DetailsDestination destination)
     {
+        // A TextBlock rather than the bare string §9.7.1's items used to carry, because the
+        // selected label takes WzBodyStrongTextStyle (§10.3) and a string has no style to set.
+        // The name is stated explicitly for the same reason: a NavigationViewItem derives its
+        // automation name from a string Content, and stops doing so the moment the content is an
+        // element — the pane would still read correctly today and would be one refactor from not.
         NavigationViewItem item = new()
         {
-            Content = destination.Label,
+            Content = new TextBlock { Text = destination.Label, Style = LabelStyle(selected: false) },
             Tag = destination.Tag,
             Icon = new FontIcon { Glyph = destination.Glyph },
         };
 
+        AutomationProperties.SetName(item, destination.Label);
         ToolTipService.SetToolTip(item, ToolTipFor(destination));
         return item;
+    }
+
+    /// <summary>
+    /// The §10.3 weight for a pane label, selected or not.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The two styles are 14 px on a 20 px line in the same family and differ only in weight, so
+    /// swapping one for the other moves nothing but the strokes — the pane does not reflow, and the
+    /// selected item does not change size as it is selected.
+    /// </para>
+    /// <para>
+    /// <b>Looked up with <c>TryGetValue</c> and never the indexer.</b> A missing key throws inside
+    /// XAML's own call stack, which WinUI turns into an uncatchable <c>0xc000027b</c> rather than an
+    /// exception anything can report; <c>TrendChart</c> took the process down exactly that way. A
+    /// null style here means the label keeps the stock nav font, which is the weight this method
+    /// existed to correct and nothing worse.
+    /// </para>
+    /// </remarks>
+    private static Style? LabelStyle(bool selected) =>
+        Application.Current.Resources.TryGetValue(
+            selected ? "WzBodyStrongTextStyle" : "WzBodyTextStyle",
+            out object? found)
+            ? found as Style
+            : null;
+
+    /// <summary>
+    /// Puts §9.4.3's second channel on the pane selection (§10.3).
+    /// </summary>
+    /// <remarks>
+    /// The stock indicator is a 3 px accent pill on the leading edge, and an accent pill is colour
+    /// and position — which is enough for most people and is exactly what §9.4.3 says not to rely on
+    /// alone. Weight is the second channel, and it survives every dichromacy and high contrast,
+    /// where the accent and the pane background can be the same two system colours.
+    ///
+    /// Applied to the footer items as well as the numbered ones: Settings and the Advanced Console
+    /// are destinations like any other, and a selection cue that stops at the fold is worse than
+    /// none, because it makes the footer look permanently unselected.
+    /// </remarks>
+    private void ApplySelectionWeight()
+    {
+        object? selected = Nav.SelectedItem;
+
+        foreach (NavigationViewItem item in Nav.MenuItems
+            .Concat(Nav.FooterMenuItems)
+            .OfType<NavigationViewItem>())
+        {
+            if (item.Content is TextBlock label)
+            {
+                label.Style = LabelStyle(ReferenceEquals(item, selected));
+            }
+        }
     }
 
     /// <summary>
@@ -380,6 +439,8 @@ public sealed partial class DetailsWindow : Window
         // A page that has been built takes the shared DeviceContext; one that has not shows what it
         // will hold. The mapping lives here rather than on the destination record because that
         // record is compiled into a headless test run, where no View type exists.
+        ApplySelectionWeight();
+
         int index = DetailsDestinations.IndexOf(destination.Tag);
         NavigationTransitionInfo transition = TransitionTo(index);
         _shownIndex = index;
