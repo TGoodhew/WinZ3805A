@@ -61,6 +61,12 @@ public sealed partial class SatelliteManagementDialog : ContentDialog
 
         // Resolved through the device's driver in the constructor (#287): unlike a page, the
         // dialog cannot exist without a device, so the commands can be readonly instance state.
+        //
+        // Require, and not Find, on purpose (#304). §10.5's Manage button is gated on this exact
+        // set of five, so a driver that reaches here without them is a gating bug rather than a
+        // receiver limitation - and a constructor is the one place in this flow where a throw has
+        // somewhere to go. Keep the two lists together: dropping a mnemonic here without dropping
+        // it from the gate turns "not offered" back into a crash.
         _includeList = CommandConfirmation.Require(device.Driver, ":GPS:SAT:TRAC:INCLude");
         _includeAll = CommandConfirmation.Require(device.Driver, ":GPS:SAT:TRAC:INCLude ALL");
         _includeNone = CommandConfirmation.Require(device.Driver, ":GPS:SAT:TRAC:INCLude NONE");
