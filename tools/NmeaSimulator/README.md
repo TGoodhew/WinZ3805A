@@ -8,15 +8,18 @@ the sky and time that advances. It is the tutorial's receiver on the bench (#310
 the desk.
 
 It is not a particular product. There are no proprietary sentences, no lock or holdover state —
-NMEA has none — and no serial quirks. A real unit's behaviour is captured and compared against
-this, which is the BG7TBL issue's job (#309).
+NMEA has none — and no serial quirks. When a real talker is captured, its behaviour is compared
+against this; none has been yet (#309, the BG7TBL, was deferred because that unit puts no NMEA on
+the port the application can reach).
 
 ## In-process
 
 The test project references this project and drives `NmeaTalkerSimulator` with a
-`FakeTimeProvider`, feeding `NextCycleText()` into a `FakeTransport` with `Silent = true`. That
-runs the real session, the real listener and the real driver with no port at all —
-`tests/WinZ3805A.Tests/Nmea/` is the worked example.
+`FakeTimeProvider`, feeding `NextCycleText()` into a `FakeTransport` with `Silent = true`,
+`EchoCommands = false`, `EmitPrompt = false` and `WaitForReaderToConsume = true` — the last is
+what keeps the emits from outpacing the listener (the tutorial's finding 8). That runs the real
+session, the real listener and the real driver with no port at all — `NmeaSessionTests.Bench`
+under `tests/WinZ3805A.Tests/Nmea/` is the bench to copy.
 
 ## Over a serial-port pair
 
@@ -37,7 +40,10 @@ dotnet run --project tools\NmeaSimulator -- --port COM7 --baud 4800
 
 and in the application choose the other port with **Auto-detect settings**, or **Manual** at
 4800-8-N-1. The application listens for the talker, recognises it by its sentences, and never
-sends it anything. Options:
+sends it a command — the connect sequence's one `*CLS` write, which a talker ignores, goes out
+before recognition. One of `--port` or `--stdout` is required (the program prints its usage and
+exits otherwise); in port mode a per-second phase / tracked / used line goes to standard error,
+which is useful for comparing with what the application shows. Options:
 
 | Option | Default | Meaning |
 |---|---|---|

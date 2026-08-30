@@ -15,13 +15,21 @@ committed as they land and sorted out afterwards.
 
 ## Adding one
 
-1. Leave the harness running through whatever is being done to the receiver. It writes one file
-   per state it has not seen and appends a line to `capture-log.md` — the mode line, the three
-   status brackets and the tracked count at the moment it was written, which is what tells you
-   whether two similar-looking captures are actually different states.
+1. Run `pwsh build/Capture-Fixtures.ps1 -SelfTest` first, exit the application — closing its
+   window only hides it, and it keeps the port — then leave `pwsh build/Capture-Fixtures.ps1
+   [-Port COMn]` running through whatever is being done to the receiver; the full procedure is
+   `docs/manual-qa.md` §5. It writes one file per state it has not seen and appends a line to
+   `capture-log.md` — the mode line, the three status brackets and the tracked count at the moment
+   it was written, which is what tells you whether two similar-looking captures are actually
+   different states. (One caveat: the survey-versus-hold distinction is in the harness's
+   signature but not yet in the line it writes, so two lines can agree in every fact while the
+   files differ — the filename carries it.)
 2. Add a row to `../README.md`: the file, the state, anything else it covers, and the tests that
    assert against it.
-3. Point a test at it. The file does not move.
+3. Point a test at it. The file does not move. Commit the capture and its log line together.
+
+The log also carries lines for files that are not here: the six `-2` entries from 27 August are
+restart duplicates, removed by hand before #236 taught the harness to seed its seen-set from disk.
 
 The harness will not take a second sample of a signature it has already seen. When a second
 sample of the same state is wanted — the deep-holdover screen exists to pin the minutes format
@@ -37,4 +45,6 @@ re-encoded or trimmed. `.gitattributes` marks this whole tree `-text`, so no end
 conversion happens in either direction.
 
 A capture verified against the delivered `locked-stabilizing.txt` matched it structurally:
-27 CRLF line endings, no bare LF or CR, same header row, same trailing CRLF.
+27 CRLF line endings, no bare LF or CR, same header row, same trailing CRLF. Nine of the ten files
+are that shape today; `power-up-gps-acquisition.txt` is 28 lines, the last a stray `*IDN?` answer
+the reconnect path let through — see its row in `../README.md`.

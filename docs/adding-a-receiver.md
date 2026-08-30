@@ -2,7 +2,9 @@
 
 WinZ3805A ships speaking to two families of hardware — the HP/Symmetricom
 SmartClock GPS-disciplined oscillators it was written for, and any NMEA 0183
-GNSS talker — because every piece of device-specific knowledge sits behind one
+GNSS talker (proven against the simulator under `tools/`; no real talker has
+been captured yet, #309 having been deferred) — because every piece of
+device-specific knowledge sits behind one
 interface, `IReceiverDriver`, so that supporting another receiver means
 **writing a driver, not modifying the application**. This document is the
 complete walkthrough: the architecture, the contract member by member, the
@@ -111,8 +113,13 @@ Notes that do not fit in a table:
 - **On a broadcast link a plan entry is a key, not a query.** The session's
   `BroadcastListener` sorts every line your `ClassifyLine` claims into cycles
   delimited by `Plan.FastTier[0]` — so that entry must be a line the talker
-  sends exactly once per cycle — and answers each key from the last *complete*
-  cycle, which is what keeps a paged sentence from being read half-arrived.
+  sends exactly once per cycle, *every* cycle; a cycle whose boundary never
+  arrives never closes and is never answered — and answers each key from the
+  last *complete* cycle, which is what keeps a paged sentence from being read
+  half-arrived. Two details an `InterpretSweep` author needs: the boundary key
+  itself answers with the newest boundary line, so `FastTier[0]` may be one
+  cycle ahead of the rest; and an answer is *every* line of that key in the
+  cycle, newline-joined, so GSV arrives as its pages.
   `PollPlan.WholeCycle` (`*`) as the full-status query hands `Parse` the cycle
   entire; it goes in your catalog like any other entry, because the session's
   allowlist check does not know it is special. A talker that has gone quiet
@@ -226,19 +233,24 @@ through your driver — every command lookup goes via `Find`, so nothing routes
 around your allowlist or exclusions — but they *require* commands and reply
 shapes your receiver may not have. This is deliberate, recorded in
 [#287](https://github.com/TGoodhew/WinZ3805A/issues/287)'s items 4–7 as work
-best decided against a real second receiver rather than in the abstract:
+best decided against a real second receiver rather than in the abstract. #287
+is closed now: what the NMEA family made concrete moved to
+[#304](https://github.com/TGoodhew/WinZ3805A/issues/304)'s items 1–4, and
+items 5 and 7 — a binary protocol and a network transport — are on no open
+issue until a family needs them:
 
 | Surface | SmartClock assumption | Where it bites a new family |
 |---|---|---|
 | Tier C page actions | The mnemonics in `ReceiverDriverTests.EveryMnemonicThePagesRequireIsCatalogued` | A driver lacking one fails loudly at the click (`CommandConfirmation.Require` throws). Capability-gating the pages is [#304](https://github.com/TGoodhew/WinZ3805A/issues/304) |
 | Mode-driven UI (medallion, tray, badge) | `:SYNC:STAT?`'s six tokens, mapped in `Controls/ReceiverMode.cs` | A foreign family's sync states render as *Disconnected* — your sweep is stored and trended, but the mode mapping is app-side today ([#304](https://github.com/TGoodhew/WinZ3805A/issues/304)) |
-| `ReceiverStatus` itself | `SmartClockMode`, `Tfom`, `Ffom`, `WeekRolloverEpochs` are HP concepts | Your receiver's own concepts have nowhere to go; leave the HP fields `null` and raise the §11.2 amendment for anything new |
+| `ReceiverStatus` itself | `SmartClockMode`, `Tfom`, `Ffom`, `WeekRolloverEpochs` are HP concepts | Your receiver's own concepts have nowhere to go; leave the first three `null` and `WeekRolloverEpochs` at `0` (it is a non-nullable `int`), and raise the §11.2 amendment for anything new |
 | Status Registers page | HP's `:STAT:` register maps and bit meanings | Renders HP's registers regardless of driver |
 | Time page | `:PTIM:LEAP:*`, HP time-code formats | Queries fail politely (null lookups), features show em dashes |
 | Diagnostics page | `:DIAG:*` self-test keywords, HP log-entry grammar | Same |
 | Timing page | Antenna-cable presets, EFC hardware-condition bit meanings | Same |
 | Line protocol | Two link styles now (#310): an `scpi >` prompt grammar with `E-` error tokens for a family that answers, and a line-oriented listener for one that talks | A **binary protocol** (TSIP, UBX…) still cannot be driven — `Parse(string)` and `ClassifyLine(string)` are that assumption surfacing in the contract (item 5). A text protocol with a *different prompt* is nearer than it was: the listener shows how a second framing is served, but the prompt grammar itself is still `LineProtocol`'s |
 | The connect sequence | Listens, then sends `*CLS`, then asks `*IDN?` | A talker is recognised from what it says and never asked — but the `*CLS` still goes out before the session knows what it is talking to. Harmless to every talker met so far; the end-to-end test pins that it is the *only* write |
+| Control lines on open | DTR and RTS asserted, unconditionally, by the transport (§7.1) | A receiver that uses a control line as an *input* has no way to say so — the BG7TBL went silent with DTR asserted (#309). Control-line policy on open is [#304](https://github.com/TGoodhew/WinZ3805A/issues/304)'s item 4 |
 | Mode vocabulary | `LOCK`, `REC`, `WAIT`, `HOLD`, `POW`, `OFF` | A broadcast family speaks the vocabulary in its own terms — the NMEA driver says `LOCK` for a fix and `POW` for none — until the mapping is driver-supplied ([#304](https://github.com/TGoodhew/WinZ3805A/issues/304)) |
 | Advanced Console | *"Will send"*, then the transcript's `>` line | Over a broadcast link nothing is sent: picking a key shows the latest of what was heard, and the label is a query/response word |
 | Capture harness | `Capture-Fixtures.ps1` sends `:SYST:STAT?` and strips echo and prompt; `FixtureCorpusTests` assumes every `*.txt` under `Fixtures/` is a status screen | A talker's capture is a timed listen, and belongs beside its tests rather than in the corpus folder until the corpus test can tell families apart |
@@ -284,8 +296,8 @@ re-acquire over minutes.
    conservative default. A command harmless on one receiver may be destructive
    on another, and the names need not even correspond.
    `ReceiverDriverTests.EachDriverAnswersForItsOwnExclusions` demonstrates the
-   two drivers in the repository giving opposite verdicts about the same
-   headers.
+   SmartClock driver and the test project's fictional one giving opposite
+   verdicts about the same headers.
 2. **Return a verdict, never the patterns.** `IsBlocked` returns `bool` by
    design: §8.4 requires that excluded commands do not exist as data any view
    can enumerate, bind to, or log wholesale.
@@ -351,9 +363,10 @@ marked `-text` in `.gitattributes` so line endings survive.
 rate you believe in and save a minute of what arrives. Keep the file beside
 your driver's tests rather than under `Fixtures/` — `FixtureCorpusTests`
 asserts every `*.txt` there is a status screen. With no hardware,
-`tools/NmeaSimulator --stdout` gives a capture in the shape a real talker's
-will take, and the tutorial's tests are written against it while they wait
-for a real one.
+`dotnet run --project tools\NmeaSimulator -- --stdout` gives a capture in the
+shape a real talker's will take; the tutorial's tests are written against it,
+and no real talker has been captured yet — #309 was deferred when the bench
+unit turned out to put no NMEA on the port the application can reach.
 
 ### Step 2 — decide what `ReceiverStatus` can hold
 
@@ -369,7 +382,9 @@ readout in the UI already renders `null` as an em dash. Do not invent a value
 to fill the shape, and in particular do not use zero.
 
 Some fields are HP's rather than general — `SmartClockMode`, `Tfom`, `Ffom`,
-`WeekRolloverEpochs` — and a new driver simply leaves them empty. If your
+`WeekRolloverEpochs` — and a new driver simply leaves the first three `null`
+and `WeekRolloverEpochs` at `0`, its only honest value for a receiver that
+handles its own rollover. If your
 receiver has a concept the record cannot express at all, add a nullable field
 rather than overloading an existing one, and raise the §11.2 amendment: the
 specification describes that record field by field.
@@ -417,9 +432,10 @@ Note that the catalog's construction helpers are private to the SmartClock
 catalog; your driver builds its own `ScpiCommand` instances (the fake driver
 shows the minimal form).
 
-One entry is a **contract requirement**: `:SYST:ERR?`, IEEE 488.2's error
-query, which `CommandInvoker` drains after every tier C command (§7.2). A
-contract test fails any driver without it.
+One entry is a **contract requirement** of every query/response family:
+`:SYST:ERR?`, IEEE 488.2's error query, which `CommandInvoker` drains after
+every tier C command (§7.2). A broadcast family must instead have no tier C
+entry at all, since the invoker never runs for it. Both are contract-tested.
 
 ### Step 5 — the exclusions
 
@@ -436,10 +452,13 @@ class, and its full status screen takes 3521 ms of wire time at 9600 baud,
 which is why `Cadence.Full` is not simply `Cadence.Fast` with more in it.
 
 Time your receiver's slowest command and set the class from that, with
-headroom. `TimeoutFor` must return a positive value for **every** input
-including an unknown mnemonic, and `Cadence.Full` must exceed `Cadence.Fast` —
-both contract-tested. The poller follows your cadence live (an explicit
-override exists for tests and §7.3's user-setting).
+headroom. For a broadcast family there is no slow command: `TimeoutFor` is how
+long silence means the talker has stopped — a small multiple of its cycle —
+and `Cadence.Fast` is the talker's own rate. `TimeoutFor` must return a
+positive value no longer than two minutes for **every** input including an
+unknown mnemonic, and `Cadence.Full` must exceed `Cadence.Fast` — all
+contract-tested. The poller follows your cadence live (an explicit override
+exists for tests).
 
 ### Step 7 — the poll plan
 
@@ -521,10 +540,11 @@ Adding a family means amending them so the document and the code do not drift
 apart — **raise the amendment rather than absorbing the divergence in code**.
 The same applies to anything on the [boundary
 table](#what-works-with-a-driver-alone--and-what-does-not-yet): capability-gated
-pages and mode mapping are
+pages, mode mapping and control-line policy are
 [#304](https://github.com/TGoodhew/WinZ3805A/issues/304); binary protocols and
-network transports are anchored at
-[#287](https://github.com/TGoodhew/WinZ3805A/issues/287)'s items 5 and 7.
+network transports were
+[#287](https://github.com/TGoodhew/WinZ3805A/issues/287)'s items 5 and 7, and
+with #287 closed they are on no open issue — file one when a family needs them.
 
 ---
 
@@ -533,12 +553,14 @@ network transports are anchored at
 Before opening the pull request:
 
 - [ ] Fixtures captured from real hardware, awkward states included, bytes
-      verbatim, provenance recorded in `capture-log.md`
+      verbatim, provenance recorded in `capture-log.md` (a talker's capture
+      goes beside its tests, per step 1)
 - [ ] `Parse` and `InterpretSweep` never throw, tested against garbage, empty,
       null and torn inputs
 - [ ] Absent fields are `null`, never zero or a guess
 - [ ] Catalog is an allowlist; tiers per §8.2/§8.3; confirmation texts state
-      measured consequences; `:SYST:ERR?` present
+      measured consequences; `:SYST:ERR?` present (query/response) or no tier
+      C entries (broadcast)
 - [ ] Exclusions: your own list, one `internal` file, verdict-only `IsBlocked`,
       no excluded name written anywhere — `Test-NoBlockedCommands.ps1` green
 - [ ] Timeouts and cadence measured on your hardware, not copied

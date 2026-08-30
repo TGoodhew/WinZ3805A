@@ -1,8 +1,8 @@
 # Adding a receiver, worked: an NMEA 0183 driver
 
 [`adding-a-receiver.md`](adding-a-receiver.md) says how to add a receiver family. This is that
-process followed to the end for a real one — **any NMEA 0183 GNSS talker**: a u-blox module, the
-GPS half of a BG7TBL GPSDO, a marine receiver — with the files that resulted and the things that
+process followed to the end for a real one — **any NMEA 0183 GNSS talker**: a u-blox module, a
+marine receiver — with the files that resulted and the things that
 had to change along the way. Read the guide first; this document assumes it and follows its
 step numbers.
 
@@ -51,13 +51,16 @@ for a minute, into a file, gives sixty cycles in the shape a real talker's captu
 tests do the same thing in-process: every expectation in
 [`NmeaDriverTests`](../tests/WinZ3805A.Tests/Nmea/NmeaDriverTests.cs) is asserted against a
 simulated cycle, and the file says so in its remarks, because a value asserted against your own
-simulator proves consistency and not truth. **#309's capture of the BG7TBL is what these get
-compared against**, and whatever disagrees is folded back into both.
+simulator proves consistency and not truth. **No real talker has been captured yet** — #309, the
+BG7TBL, was deferred when the bench unit turned out to put no NMEA on its RS-232 port — and when
+one is, its capture is what these get compared against, with whatever disagrees folded back into
+both.
 
 > **Finding 1 — the capture harness sends.** `build/Capture-Fixtures.ps1` asks for the status
 > screen, strips the echoed command and the prompt, and waits for a state it has not seen. A
 > talker needs none of that and cannot be asked: its capture is a timed raw listen. Nothing was
-> built for it here — `--stdout` covers the simulator — and #309 owns the real one.
+> built for it here — `--stdout` covers the simulator — and a real capture, when there is a talker
+> to take one from, is a timed raw listen with the port's control lines noted.
 >
 > **Finding 2 — `FixtureCorpusTests` assumes every `*.txt` under `Fixtures/` is a status
 > screen.** It globs the folder and asserts each file has a `SmartClock Mode` line. An NMEA capture
@@ -102,7 +105,10 @@ outside this repository, the GLL and GGA examples every reference quotes.
 
 > **Finding 3 — do not type checksums by hand.** Two of this tutorial's first test expectations
 > carried checksums computed in the author's head, and both were wrong. Every test line is now
-> built by the codec (`NmeaSentence.Format`), and the published examples are the only literals.
+> built by the codec (`NmeaSentence.Format`), and the only hand-typed literals are published ones
+> — the GLL and GGA examples, u-blox's `$PUBX` example and a `$GPTXT`. (#316's audit then found
+> one more, an RMC line in the contract tests with a wrong checksum that passes only because a
+> query/response driver never claims it — the same finding, one file over.)
 
 **[`NmeaStatusParser`](../src/WinZ3805A.Device/Drivers/Nmea/NmeaStatusParser.cs)** reads a whole
 cycle into the record per the table above. It follows the guide's rules exactly: never throws (a
@@ -201,7 +207,7 @@ style*, and serves any broadcast family.
 
 ## Step 10 — test it
 
-Four files under [`tests/WinZ3805A.Tests/Nmea/`](../tests/WinZ3805A.Tests/Nmea/):
+Five files under [`tests/WinZ3805A.Tests/Nmea/`](../tests/WinZ3805A.Tests/Nmea/):
 
 - `NmeaSentenceTests` — the codec, against the published examples.
 - `NmeaTalkerSimulatorTests` — the receiver on the bench: checksums, sentence order, GSV paging,
@@ -252,8 +258,8 @@ Made here, because the issue said to make the contract changes here or file them
 | 4800 and 38400 baud | `Transport/SerialSettings.cs`, §7.1 | The standard's rate was not offered |
 | The error-queue contract test binds query/response families | `ReceiverDriverTests` | Finding 4 |
 
-Left for [#304](https://github.com/TGoodhew/WinZ3805A/issues/304), which this family now makes
-concrete:
+Left open. The first two are [#304](https://github.com/TGoodhew/WinZ3805A/issues/304)'s items 3
+and 1, which this family makes concrete; the other three are recorded only here:
 
 - **The mode mapping is still app-side.** `Controls/ReceiverMode.cs` maps the SmartClock's tokens,
   so the driver speaks them: `LOCK` for a fix, `POW` for none — a receiver with a GPS fix is locked
@@ -295,6 +301,10 @@ and the application connected to the other with *Auto-detect settings*. What to 
 - Overview: *"No health data"*. Holdover: dashes. Diagnostics: no receiver log, no error queue.
 - Advanced Console: `$--RMC` and its siblings as reads; nothing to send.
 
-The BG7TBL is next ([#309](https://github.com/TGoodhew/WinZ3805A/issues/309)): capture what it
-actually says, compare it with the simulator, and fold every difference back into this tutorial
-and the guide.
+**No real talker is on the bench.** [#309](https://github.com/TGoodhew/WinZ3805A/issues/309) set
+out to capture a BG7TBL GPSDO and found its DB9 carries a ~10 kHz square wave gated by DTR and no
+NMEA at all, so it was closed as deferred with the bench evidence recorded on it. Resuming needs a
+receiver that emits NMEA 0183 at RS-232 levels — or the right pins and a TTL adapter — and a listen
+with DTR released first, then asserted: the application asserts DTR and RTS on open (§7.1), which
+that unit reacted to, and control-line policy on open is now #304's item 4. Then the capture,
+compared with the simulator, with every difference folded back into this tutorial and the guide.
