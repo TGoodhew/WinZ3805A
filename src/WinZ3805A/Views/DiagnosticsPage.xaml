@@ -235,14 +235,16 @@
                         is also the one whose layout is known before the data arrives, which is the
                         condition §9.11 puts on showing a skeleton at all.
 
-                        Eight bars because the card shows about eight rows before it scrolls: the
-                        rule is "at final layout dimensions", and a skeleton that is taller than the
-                        content it stands in for makes the card collapse as the answer lands.
+                        Fourteen bars in a 360 px box, because that is exactly what the loaded card
+                        shows (#345): the rule is "at final layout dimensions", and a skeleton of a
+                        different size makes the card jump as the answer lands. The number is tied to
+                        LogScroller's MaxHeight below - change one and the other is wrong.
 
                         The ProgressRing in the header carries 500 ms to 2 s and stays visible
                         behind this; the skeleton says how MUCH is coming, which a spinner cannot.
                     -->
                     <StackPanel x:Name="LogSkeleton"
+                                Height="360"
                                 Visibility="Collapsed"
                                 Spacing="{ThemeResource WzSpaceSm}"
                                 AutomationProperties.AccessibilityView="Raw">
@@ -254,9 +256,35 @@
                         <Border Style="{ThemeResource WzSkeletonBarStyle}" Width="400" />
                         <Border Style="{ThemeResource WzSkeletonBarStyle}" Width="340" />
                         <Border Style="{ThemeResource WzSkeletonBarStyle}" Width="410" />
+                        <Border Style="{ThemeResource WzSkeletonBarStyle}" Width="390" />
+                        <Border Style="{ThemeResource WzSkeletonBarStyle}" Width="430" />
+                        <Border Style="{ThemeResource WzSkeletonBarStyle}" Width="370" />
+                        <Border Style="{ThemeResource WzSkeletonBarStyle}" Width="420" />
+                        <Border Style="{ThemeResource WzSkeletonBarStyle}" Width="350" />
+                        <Border Style="{ThemeResource WzSkeletonBarStyle}" Width="400" />
                     </StackPanel>
 
-                    <ItemsControl x:Name="LogRows">
+                    <!--
+                        BOUNDED AND SCROLLED, not grown (#345). The receiver holds up to 222 entries
+                        and the card was as tall as all of them, so reaching the two cards below it
+                        meant scrolling past a screen and a half of log - and the filter box and the
+                        Export and Clear buttons scrolled away with it, which are the controls a
+                        person reading the log actually wants.
+
+                        360 px is about thirteen entries at the mono line height. The log alternates
+                        "GPS lock started" and "Holdover started" as the receiver cycles, so thirteen
+                        is roughly six events - enough to see a pattern without the card owning the
+                        page.
+
+                        MaxHeight and not Height: a receiver with four entries should show four, not
+                        four and a wall of empty card.
+                    -->
+                    <ScrollViewer x:Name="LogScroller"
+                                  MaxHeight="360"
+                                  VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollMode="Disabled"
+                                  HorizontalScrollBarVisibility="Disabled">
+                        <ItemsControl x:Name="LogRows">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="models:DiagnosticLogEntry">
                                 <TextBlock Style="{ThemeResource WzMonoTextStyle}"
@@ -265,8 +293,9 @@
                                            IsTextSelectionEnabled="True"
                                            Text="{x:Bind RawText}" />
                             </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
 
                     <TextBlock x:Name="LogEmptyText"
                                Style="{ThemeResource WzBodyTextStyle}"
