@@ -202,13 +202,23 @@
                                     holding only while a stock style happens to supply it is a
                                     coincidence and not a floor.
                                 -->
+                                <!--
+                                    INLINE AND NOT §9.10.1'S COMPACT, and the reason is that Compact
+                                    OVERLAYS ITS NEIGHBOUR. Its spin buttons are a popup drawn
+                                    outside the control when the box takes focus, so clicking this
+                                    field put them across the gap and over "Apply duration limit"
+                                    beside it. Tony hit it by clicking the card. §9.7.4 requires the
+                                    Apply button inline with the value it affects, so the two rules
+                                    collide wherever they meet - and they meet at every numeric
+                                    field in this application. §9.10.1 carries the amendment.
+                                -->
                                 <NumberBox x:Name="ThresholdBox"
                                            MinWidth="240"
                                            MinHeight="32"
                                            Header="Holdover duration limit (seconds)"
                                            SmallChange="1"
                                            LargeChange="60"
-                                           SpinButtonPlacementMode="Compact" />
+                                           SpinButtonPlacementMode="Inline" />
                                 <controls:FieldErrorText x:Name="ThresholdError" />
                             </StackPanel>
 
@@ -282,6 +292,21 @@
 
                             <controls:SeverityPill x:Name="PowerUpPill" Grid.Column="2" />
                         </Grid>
+
+                        <!--
+                            "Unverified" says nothing on its own (#345), and it is the state this
+                            receiver is usually in - the application can only bound the power-up
+                            time from below, because it knows when it started watching and not when
+                            the receiver started. A word meaning "I cannot tell" has to say so, or
+                            it reads as a diagnosis. Visible as well as in the tooltip, for the
+                            reason the threshold caption above gives.
+                        -->
+                        <TextBlock x:Name="PowerUpExplanationText"
+                                   Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}"
+                                   HorizontalAlignment="Left"
+                                   TextWrapping="Wrap" />
 
                         <!-- §9.7.4's card-scoped commands. The row §10.8 draws, in its order. -->
                         <StackPanel Orientation="Horizontal" Spacing="{ThemeResource WzSpaceXs}">

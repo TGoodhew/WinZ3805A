@@ -233,13 +233,13 @@
                                       AutomationProperties.Name="Latitude hemisphere" />
                             <NumberBox x:Name="LatitudeDegrees" Grid.Row="0" Grid.Column="2"
                                        MinWidth="104" Header="Degrees" SmallChange="1"
-                                       SpinButtonPlacementMode="Compact" />
+                                       SpinButtonPlacementMode="Inline" />
                             <NumberBox x:Name="LatitudeMinutes" Grid.Row="0" Grid.Column="3"
                                        MinWidth="104" Header="Minutes" SmallChange="1"
-                                       SpinButtonPlacementMode="Compact" />
+                                       SpinButtonPlacementMode="Inline" />
                             <NumberBox x:Name="LatitudeSeconds" Grid.Row="0" Grid.Column="4"
                                        MinWidth="128" Header="Seconds" SmallChange="0.001"
-                                       SpinButtonPlacementMode="Compact" />
+                                       SpinButtonPlacementMode="Inline" />
 
                             <StackPanel Grid.Row="1" Grid.ColumnSpan="5" Spacing="{ThemeResource WzSpaceXxs}">
                                 <controls:FieldErrorText x:Name="LatitudeDegreesError" />
@@ -259,13 +259,13 @@
                                       AutomationProperties.Name="Longitude hemisphere" />
                             <NumberBox x:Name="LongitudeDegrees" Grid.Row="2" Grid.Column="2"
                                        MinWidth="104" Header="Degrees" SmallChange="1"
-                                       SpinButtonPlacementMode="Compact" />
+                                       SpinButtonPlacementMode="Inline" />
                             <NumberBox x:Name="LongitudeMinutes" Grid.Row="2" Grid.Column="3"
                                        MinWidth="104" Header="Minutes" SmallChange="1"
-                                       SpinButtonPlacementMode="Compact" />
+                                       SpinButtonPlacementMode="Inline" />
                             <NumberBox x:Name="LongitudeSeconds" Grid.Row="2" Grid.Column="4"
                                        MinWidth="128" Header="Seconds" SmallChange="0.001"
-                                       SpinButtonPlacementMode="Compact" />
+                                       SpinButtonPlacementMode="Inline" />
 
                             <StackPanel Grid.Row="3" Grid.ColumnSpan="5" Spacing="{ThemeResource WzSpaceXxs}">
                                 <controls:FieldErrorText x:Name="LongitudeDegreesError" />
@@ -280,7 +280,7 @@
                                            MinWidth="176"
                                            Header="Height (metres)"
                                            SmallChange="0.01"
-                                           SpinButtonPlacementMode="Compact" />
+                                           SpinButtonPlacementMode="Inline" />
                                 <controls:FieldErrorText x:Name="HeightError" />
                             </StackPanel>
 

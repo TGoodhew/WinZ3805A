@@ -229,7 +229,24 @@ public sealed class HoldoverViewModel : INotifyPropertyChanged
     /// a red pill that gives no horizon reads as a fault rather than as a wait. Its answer is the
     /// same 24 hours §10.8's caution names, counted from power-up.
     /// </remarks>
-    public string PowerUpTooltip => PowerUpSafety switch
+    public string PowerUpExplanation => PowerUpTooltip;
+
+    /// <summary>
+    /// The power-up verdict in one sentence, for the pill's tooltip and the caption under it (#345).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The "too soon" case has to say when it stops being too soon</b>, which was Tony's point:
+    /// a red pill that gives no horizon reads as a fault rather than as a wait.
+    /// </para>
+    /// <para>
+    /// <b>And "Unverified" says nothing at all on its own</b> — his second point, and the sharper
+    /// one. It is the state this receiver is usually in, because the application can only bound the
+    /// power-up time from below: it knows when it started watching, not when the receiver started.
+    /// A word that means "I cannot tell" has to say so, or it reads as a diagnosis.
+    /// </para>
+    /// </remarks>
+    private string PowerUpTooltip => PowerUpSafety switch
     {
         Services.PowerUpSafety.Safe =>
             "The receiver has been powered up for more than 24 hours, so the SmartClock oscillator "
@@ -239,9 +256,12 @@ public sealed class HoldoverViewModel : INotifyPropertyChanged
             + "corrupts that learning, which then takes days to rebuild. This turns green once the "
             + "receiver has been powered up for 24 hours.",
         _ =>
-            "How long this receiver has been powered up could not be determined, so the 24-hour "
-            + "SmartClock learning period cannot be ruled out. It stays here until the receiver "
-            + "reports a power-up time this application has watched pass 24 hours.",
+            "Unverified means this application cannot tell how long the receiver has been powered "
+            + "up, so it cannot rule out the 24-hour SmartClock learning period. It only knows when "
+            + "it started watching — hence \"at least\" — and a receiver that was already running "
+            + "for a week reads the same as one switched on a minute ago. It clears once the "
+            + "application has watched 24 hours pass, or you can confirm the receiver's uptime "
+            + "yourself and treat forcing holdover as safe.",
     };
 
     /// <summary>How bad that is.</summary>

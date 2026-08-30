@@ -223,7 +223,8 @@ public sealed partial class HoldoverPage : Page
 
         // "Too soon" without a horizon reads as a fault rather than a wait (#345), so the tooltip
         // says when it stops being too soon.
-        ToolTipService.SetToolTip(PowerUpPill, model.PowerUpTooltip);
+        PowerUpExplanationText.Text = model.PowerUpExplanation;
+        ToolTipService.SetToolTip(PowerUpPill, model.PowerUpExplanation);
 
         ApplyDurationLimitButton.IsEnabled =
             !_busy && _threshold is { IsValid: true } && model.Connection == ConnectionStatus.Connected;
