@@ -188,13 +188,13 @@ public sealed class OverviewViewModel : INotifyPropertyChanged
                 return "Not in holdover";
             }
 
-            // ReceiverStatus.HoldoverDuration has been parsed since 28 Aug 2026 (the holdover
-            // fixtures gave it a screen label), but this readout still shows the present-uncertainty
-            // figure; binding it to the duration is an open follow-up from the #316 audit. The
-            // uncertainty says how bad holdover has become, which is what the duration was being
-            // read for anyway.
-            (string value, string unit) = ReadoutFormatter.Seconds(Status?.HoldoverPresentSeconds);
-            return unit.Length == 0 ? value : $"{value}{ReadoutFormatter.HairSpace}{unit}";
+            // The duration, not the present uncertainty. This showed the uncertainty until #319 —
+            // a time error in microseconds under a label reading "Duration", which is a different
+            // quantity in a different unit, and the Holdover page beside it showed the real one.
+            // Described the way the Holdover page describes it, so the two agree.
+            return Status?.HoldoverDuration is TimeSpan duration
+                ? Staleness.Describe(duration)
+                : ReadoutFormatter.NoValue;
         }
     }
 
