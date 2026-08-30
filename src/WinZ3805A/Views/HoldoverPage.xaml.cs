@@ -27,6 +27,24 @@ public sealed partial class HoldoverPage : Page
     /// </summary>
     private NumberFieldValidator? _threshold;
     private bool _busy;
+
+    /// <summary>Whether the value in the editor came from the user rather than from the receiver.</summary>
+    /// <remarks>
+    /// A reconnect re-reads the limit, and a re-read must not overwrite a number the user is part
+    /// way through typing. Cleared after a successful Apply, because at that point the user's value
+    /// <i>is</i> the receiver's and re-reading it confirms what the receiver actually took — which
+    /// can differ, the limit having one-second resolution.
+    /// </remarks>
+    private bool _thresholdEdited;
+
+    /// <summary>The last value the page itself wrote into the editor.</summary>
+    /// <remarks>
+    /// Compared against, rather than guarded with a flag around the assignment: whether
+    /// <c>ValueChanged</c> arrives inside the setter or after it is the control's business, and a
+    /// comparison does not depend on the answer. A user who types the receiver's own number by hand
+    /// is not counted as having edited it, which costs nothing — the value is the same either way.
+    /// </remarks>
+    private double _seededThreshold = double.NaN;
     private readonly DispatcherTimer _stalenessTicker = new() { Interval = TimeSpan.FromSeconds(1) };
 
     /// <summary>Creates the page.</summary>
@@ -34,9 +52,16 @@ public sealed partial class HoldoverPage : Page
     {
         InitializeComponent();
 
-        // Assigned here rather than in XAML: the parser reads a NumberBox.Value literal as a float
-        // and widens it, so a round number arrives with a tail of decimals.
-        ThresholdBox.Value = 1;
+        // Empty until the receiver says otherwise (§10.8, #320). This was a hard-coded 1, which
+        // looked like a readback and was not one: a user could open the page, read "1", and believe
+        // that was the limit the receiver was holding. An empty box says only that nothing has been
+        // read, which is true, and Apply is disabled while it is empty because there is nothing to
+        // apply.
+        //
+        // Assigned here rather than in XAML either way: the parser reads a NumberBox.Value literal
+        // as a float and widens it, so a round number arrives with a tail of decimals.
+        ThresholdBox.Value = double.NaN;
+        ThresholdBox.ValueChanged += OnThresholdEdited;
 
         _stalenessTicker.Tick += (_, _) => _model?.RaiseAll();
         Unloaded += (_, _) =>
@@ -79,6 +104,8 @@ public sealed partial class HoldoverPage : Page
 
         _stalenessTicker.Start();
         Render();
+
+        _ = ReadThresholdAsync();
     }
 
     private void OnStatusChanged(object? sender, ConnectionStatusChanged e) =>
@@ -88,7 +115,75 @@ public sealed partial class HoldoverPage : Page
             {
                 model.Connection = e.Status;
             }
+
+            if (e?.Status == ConnectionStatus.Connected)
+            {
+                _ = ReadThresholdAsync();
+            }
         });
+
+    /// <summary>Notes that the number in the editor is the user's and not the receiver's.</summary>
+    /// <remarks>
+    /// <c>double.Equals</c> and not <c>==</c>, so that the empty box — <c>NaN</c> on both sides —
+    /// compares equal to itself and an untouched field is never mistaken for an edited one.
+    /// </remarks>
+    private void OnThresholdEdited(NumberBox sender, NumberBoxValueChangedEventArgs args)
+    {
+        if (!(args?.NewValue ?? double.NaN).Equals(_seededThreshold))
+        {
+            _thresholdEdited = true;
+        }
+    }
+
+    /// <summary>
+    /// Reads the receiver's current holdover duration limit into the editor (§10.8, #320).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>:SYNC:HOLD:DUR:THR?</c> has sat in the catalog unused since it was written, and the editor
+    /// beside it opened at a hard-coded 1 — which is worse than an empty box, because it reads as
+    /// the receiver's answer. On this unit the limit is not 1.
+    /// </para>
+    /// <para>
+    /// Resolved through the driver's catalog like every other command (§8.1), so a driver without
+    /// the query — the NMEA one has no thresholds at all — leaves the box empty rather than
+    /// throwing. A read that fails leaves it empty too, for the same reason the default went: an
+    /// unread field must not show a number.
+    /// </para>
+    /// </remarks>
+    private async Task ReadThresholdAsync()
+    {
+        if (_device is not DeviceContext device ||
+            device.Session.Status != ConnectionStatus.Connected ||
+            _thresholdEdited ||
+            device.Driver.Find(":SYNC:HOLD:DUR:THR?") is not ScpiCommand query)
+        {
+            return;
+        }
+
+        Transaction reply = await device.Session.ExecuteAsync(query).ConfigureAwait(true);
+
+        // Responses carry a leading space (#78), and the receiver answers in its own invariant
+        // format whatever the operator's locale is.
+        if (!reply.Succeeded ||
+            reply.Lines.Count == 0 ||
+            !double.TryParse(reply.Lines[0].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out double seconds))
+        {
+            return;
+        }
+
+        // The user may have started typing during the round trip.
+        if (_thresholdEdited)
+        {
+            return;
+        }
+
+        _seededThreshold = seconds;
+        ThresholdBox.Value = seconds;
+
+        _threshold?.Revalidate();
+        Render();
+    }
 
     private void Render()
     {
@@ -166,6 +261,12 @@ public sealed partial class HoldoverPage : Page
             argument: seconds.ToString("0.###", CultureInfo.InvariantCulture),
             displayValue: seconds.ToString("0.###", CultureInfo.CurrentCulture)),
             ThresholdOutcome);
+
+        // Read back what the receiver actually took, which need not be what was sent: the limit has
+        // one-second resolution, so 90.4 becomes 90. The editor is the only place that figure is
+        // shown, so leaving the sent value in it would misreport the receiver.
+        _thresholdEdited = false;
+        await ReadThresholdAsync().ConfigureAwait(true);
     }
 
     private async void OnRecoverClicked(object sender, RoutedEventArgs e) => await RunSafeAsync(":SYNC:HOLD:REC:INIT");
