@@ -1220,11 +1220,21 @@ Each step also exists as a `Thickness` token (`WzSpaceXxsThickness` … `WzSpace
 > putting the tables beside it, and those are different pages. The page margin above **is** built,
 > being unambiguous.
 >
-> **Compact cannot be exercised on the hardware this project owns.** §9.6.2 sets the Details minimum
-> at 1024 as a *content* size clamped to the display work area, so on a wide monitor at 100 % scaling
-> the state is unreachable by dragging the window — it is for high display scaling, where the same
-> 1024 of content is fewer effective pixels. That is why the margin is declarative: a state that
-> cannot be entered on the machine to hand must at least be readable in the markup it governs.
+> **Compact cannot be entered by dragging, and that is the application's floor rather than the
+> display's.** Corrected 30 Aug 2026: an earlier version of this note said the state "cannot be
+> exercised on the hardware this project owns", which reads as though the monitor were too small. It
+> is the opposite. §9.6.2 sets the Details minimum at 1024 *content* pixels, and the work-area clamp
+> that could lower it only fires on a display narrower than that — so on the 5120 × 1440 monitor this
+> was built against the floor stands at its full 1024 and the window simply cannot be made narrower.
+> Compact is for high display scaling, where the same 1024 of content is fewer physical pixels.
+>
+> **It was exercised all the same, and it found a defect.** A temporary build with the minimum
+> lowered to 640, resized to 900 px: the margin and the `LeftCompact` rail both behaved — and
+> `NavigationViewItem`s that had carried a `TextBlock` since §9.7.1's weight was built measured
+> **40 × 200 px** in the rail, the label wrapping to one character per line, so five of eight
+> destinations filled the pane. Invisible at Medium and Wide, where the pane is 260 px and the label
+> fits. §9.7.1 now records the string-plus-`FontWeight` shape that replaced it. **A state no one can
+> reach by dragging still has to be entered deliberately at least once.**
 
 `NavigationView` is set to `Auto` display mode with these thresholds configured via `CompactModeThresholdWidth="640"` and `ExpandedModeThresholdWidth="1024"` — do not hand-roll breakpoint logic where the control already implements it. `Minimal` is what `Auto` selects below the compact threshold; the row above states what the app expects there rather than adding logic.
 
@@ -1323,7 +1333,11 @@ Pane is **user-collapsible**, state persisted. Selection is rendered with the Wi
 
 The stock indicator alone is colour and position, which is enough for most people and is exactly what §9.4.3 says not to rely on by itself. Weight is the second channel, and it survives every dichromacy and high contrast — where the accent and the pane background can be the same two system colours. It is applied to the footer items as well as the numbered ones, because a selection cue that stops at the fold makes Settings and the Advanced Console look permanently unselected.
 
-Two things the change had to get right. The items carry a `TextBlock` rather than a bare string now, since a string has no style to set — so the automation name is **stated** rather than derived, a `NavigationViewItem` deriving its name from `Content` only while that content is a string. And the style is looked up with `TryGetValue` and never the indexer: a missing key throws inside XAML's own stack, which WinUI turns into an uncatchable `0xc000027b` rather than anything reportable (§9.10.2's `TrendChart` note). The two styles are 14 px on a 20 px line in one family and differ only in weight, so nothing reflows as the selection moves.
+**The item keeps a bare string `Content`, and the weight is set on the item.** This was briefly a `TextBlock`, so the selected label could take the `Style` this section names — and **in `LeftCompact` the rail is 40 px wide, where an element content is still measured and wraps to one character per line**. Measured on 30 Aug 2026: `itm-satellites` came out **40 × 200 px**, and five of eight destinations filled the rail. Invisible at Medium and Wide, where the pane is 260 px and the label fits; found only by forcing the window below §9.6.2's minimum with a temporary build (see §9.6.1).
+
+A `FontWeight` carries the requirement intact. The two body styles are 14 px on a 20 px line in one family differing **only** in weight, so the weight *is* the difference — and a `NavigationViewItem` is a `ContentControl` whose string content renders through a `ContentPresenter`, which inherits it. Nothing reflows as the selection moves, and the rail keeps a content it knows how to hide.
+
+The automation name is **stated** rather than derived, which the `TextBlock` made necessary and which is kept: a `NavigationViewItem` derives its name from `Content` only while that content is a string, so stating it means a future change of shape cannot silently take the pane's names away.
 
 **Hierarchy depth is capped at two.** Window → page. Anything that would be a third level is a dialog or an inline expander, never a nested page. There are therefore no breadcrumbs, and each page carries a `WzTitleTextStyle` header in the content region that names the destination. A user always knows where they are because there is only one place to be.
 

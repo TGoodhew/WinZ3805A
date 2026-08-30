@@ -5,6 +5,8 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Markup;
+using Microsoft.UI.Text;
+using Windows.UI.Text;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
@@ -286,16 +288,24 @@ public sealed partial class DetailsWindow : Window
     /// </remarks>
     private static NavigationViewItem NavigationItem(DetailsDestination destination)
     {
-        // A TextBlock rather than the bare string §9.7.1's items used to carry, because the
-        // selected label takes WzBodyStrongTextStyle (§10.3) and a string has no style to set.
-        // The name is stated explicitly for the same reason: a NavigationViewItem derives its
-        // automation name from a string Content, and stops doing so the moment the content is an
-        // element — the pane would still read correctly today and would be one refactor from not.
+        // A BARE STRING, and this is load-bearing. It was briefly a TextBlock, so that the selected
+        // label could take a Style (§10.3) — and in LeftCompact the rail is 40 px wide, where an
+        // element content is still measured and wrapped to ONE CHARACTER PER LINE. Measured:
+        // itm-satellites came out 40 x 200 px, and five of eight destinations filled the rail.
+        //
+        // Invisible at Medium and Wide, because there the pane is 260 px and the label fits. It was
+        // found only by forcing the window below §9.6.2's 1024 minimum with a temporary build, which
+        // is the one way Compact can be entered on a 5120 px display.
+        //
+        // The weight is set on the item instead. A NavigationViewItem is a ContentControl, a string
+        // content renders through a ContentPresenter, and a ContentPresenter inherits FontWeight —
+        // so §10.3's distinction survives and the rail keeps a content it knows how to hide.
         NavigationViewItem item = new()
         {
-            Content = new TextBlock { Text = destination.Label, Style = LabelStyle(selected: false) },
+            Content = destination.Label,
             Tag = destination.Tag,
             Icon = IconFor(destination),
+            FontWeight = LabelWeight(selected: false),
         };
 
         AutomationProperties.SetName(item, destination.Label);
@@ -317,7 +327,9 @@ public sealed partial class DetailsWindow : Window
     /// The stock glyph is the fallback and not a redundancy. §9.9 makes the Fluent font the baseline
     /// and the custom set the exception, so a key that does not resolve — a typo, a dictionary not
     /// merged — leaves the pane looking as it did last week rather than with a blank where an icon
-    /// should be. Looked up with <c>TryGetValue</c> for the reason <see cref="LabelStyle"/> gives.
+    /// should be. Looked up with <c>TryGetValue</c> and never the indexer: a missing key throws
+    /// inside XAML's own call stack, which WinUI turns into an uncatchable <c>0xc000027b</c> rather
+    /// than anything reportable — <c>TrendChart</c> took the process down exactly that way.
     /// </para>
     /// </remarks>
     private static IconElement IconFor(DetailsDestination destination)
@@ -340,24 +352,21 @@ public sealed partial class DetailsWindow : Window
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The two styles are 14 px on a 20 px line in the same family and differ only in weight, so
-    /// swapping one for the other moves nothing but the strokes — the pane does not reflow, and the
-    /// selected item does not change size as it is selected.
+    /// A <c>FontWeight</c> and not a <c>Style</c>. §10.3 names <c>WzBodyStrongTextStyle</c>, and the
+    /// two body styles are 14 px on a 20 px line in one family differing only in weight — so the
+    /// weight <i>is</i> the difference, and taking it alone lets the item keep a string content.
+    /// Which it must: see <see cref="NavigationItem"/> for the 40 x 200 px items an element content
+    /// produced in the compact rail.
     /// </para>
     /// <para>
-    /// <b>Looked up with <c>TryGetValue</c> and never the indexer.</b> A missing key throws inside
-    /// XAML's own call stack, which WinUI turns into an uncatchable <c>0xc000027b</c> rather than an
-    /// exception anything can report; <c>TrendChart</c> took the process down exactly that way. A
-    /// null style here means the label keeps the stock nav font, which is the weight this method
-    /// existed to correct and nothing worse.
+    /// The numbers are <c>Themes/Typography.xaml</c>'s and are repeated here with a pointer back to
+    /// it, the same arrangement <c>Controls/CardEntrance.cs</c> has with the motion tokens: a
+    /// <c>Style</c> is a XAML object and a <c>FontWeight</c> is a struct, so there is no conversion
+    /// between them.
     /// </para>
     /// </remarks>
-    private static Style? LabelStyle(bool selected) =>
-        Application.Current.Resources.TryGetValue(
-            selected ? "WzBodyStrongTextStyle" : "WzBodyTextStyle",
-            out object? found)
-            ? found as Style
-            : null;
+    private static FontWeight LabelWeight(bool selected) =>
+        selected ? FontWeights.SemiBold : FontWeights.Normal;
 
     /// <summary>
     /// Puts §9.4.3's second channel on the pane selection (§10.3).
@@ -380,10 +389,7 @@ public sealed partial class DetailsWindow : Window
             .Concat(Nav.FooterMenuItems)
             .OfType<NavigationViewItem>())
         {
-            if (item.Content is TextBlock label)
-            {
-                label.Style = LabelStyle(ReferenceEquals(item, selected));
-            }
+            item.FontWeight = LabelWeight(ReferenceEquals(item, selected));
         }
     }
 
