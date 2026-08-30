@@ -240,6 +240,19 @@
                                     Click="OnApplyThresholdClicked" />
                         </Grid>
 
+                        <!--
+                            §9.11's rule applied to a capability the receiver may not have (#304):
+                            disabled and explained, never hidden. A page that quietly loses half its
+                            controls looks broken, or - worse - looks complete.
+                        -->
+                        <TextBlock x:Name="MaskUnsupportedText"
+                                   Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}"
+                                   HorizontalAlignment="Left"
+                                   TextWrapping="Wrap"
+                                   Visibility="Collapsed" />
+
                         <TextBlock x:Name="DurationLimitExplanationText"
                                    Style="{ThemeResource WzCaptionTextStyle}"
                                    Foreground="{ThemeResource WzTextSecondaryBrush}"
@@ -301,6 +314,14 @@
                             it reads as a diagnosis. Visible as well as in the tooltip, for the
                             reason the threshold caption above gives.
                         -->
+                        <TextBlock x:Name="ManualUnsupportedText"
+                                   Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}"
+                                   HorizontalAlignment="Left"
+                                   TextWrapping="Wrap"
+                                   Visibility="Collapsed" />
+
                         <TextBlock x:Name="PowerUpExplanationText"
                                    Style="{ThemeResource WzCaptionTextStyle}"
                                    Foreground="{ThemeResource WzTextSecondaryBrush}"

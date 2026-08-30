@@ -66,6 +66,11 @@ public sealed partial class AdvancedConsolePage : Page, ICsvExportSource
             {
                 transcript.Changed -= OnTranscriptChanged;
             }
+
+            if (_device is DeviceContext device)
+            {
+                device.Session.StatusChanged -= OnStatusChanged;
+            }
         };
     }
 
@@ -84,17 +89,61 @@ public sealed partial class AdvancedConsolePage : Page, ICsvExportSource
         _transcript = device.Transcript;
         _transcript.Changed += OnTranscriptChanged;
 
-        _catalog = new ConsoleCatalog(device.Driver);
-        CommandPicker.ItemsSource = _catalog.All;
+        // _ready first: BindDriver selects the first command, and the picker's own
+        // SelectionChanged is what builds the parameter editor for it.
         _ready = true;
+        BindDriver();
 
-        if (_catalog.All.Count > 0)
-        {
-            CommandPicker.SelectedIndex = 0;
-        }
+        device.Session.StatusChanged += OnStatusChanged;
 
         RenderTranscript();
         Render();
+    }
+
+    private void OnStatusChanged(object? sender, ConnectionStatusChanged e) =>
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            if (e?.Status == ConnectionStatus.Connected)
+            {
+                // The receiver on the port can have been swapped while the link was down, so the
+                // session re-selects a driver on every connect (#287) and this page's answer to
+                // "what may I offer" has to be asked again rather than kept from navigation (#304).
+                BindDriver();
+            }
+
+            Render();
+        });
+
+    /// <summary>
+    /// Rebuilds §10.11's picker from the connected receiver's driver (#304).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This page <b>is</b> §8.1's allowlist made visible — there is no free-text box (#55), so the
+    /// picker's contents are the whole of what a user can send. A list kept from navigation would
+    /// therefore be the one place in the application where a reconnect to a different family offers
+    /// commands that family has never heard of, and the failure would be a receiver error rather
+    /// than anything the interface said.
+    /// </para>
+    /// <para>
+    /// The filter and the selection are reset rather than carried across, because a
+    /// <see cref="ConsoleCommand"/> from the old catalog is not an entry in the new one even when
+    /// the two spell the same mnemonic: <c>Matching</c> would keep it, <c>Send</c> would run it, and
+    /// the value it carried would be validated against the wrong parameter spec.
+    /// </para>
+    /// </remarks>
+    private void BindDriver()
+    {
+        if (_device is not DeviceContext device)
+        {
+            return;
+        }
+
+        _catalog = new ConsoleCatalog(device.Driver);
+
+        FilterBox.Text = string.Empty;
+        CommandPicker.ItemsSource = _catalog.All;
+        CommandPicker.SelectedIndex = _catalog.All.Count > 0 ? 0 : -1;
     }
 
     // ===========================================================================================

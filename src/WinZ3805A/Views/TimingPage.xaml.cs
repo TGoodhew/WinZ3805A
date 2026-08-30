@@ -7,6 +7,7 @@ using Microsoft.UI.Xaml.Navigation;
 
 using WinZ3805A.Controls;
 using WinZ3805A.Device.Commands;
+using WinZ3805A.Device.Drivers;
 using WinZ3805A.Device.Models;
 using WinZ3805A.Device.Parsing;
 using WinZ3805A.Device.Transport;
@@ -37,6 +38,9 @@ public sealed partial class TimingPage : Page, ICsvExportSource
     /// there is no driver until a device arrives.
     /// </summary>
     private NumberFieldValidator? _directDelay;
+
+    /// <summary>Whether the connected receiver's driver offers the antenna delay (#304).</summary>
+    private bool _canSetDelay;
     private readonly NumberFieldValidator _length;
     private readonly NumberFieldValidator _velocityFactor;
     private bool _busy;
@@ -125,11 +129,13 @@ public sealed partial class TimingPage : Page, ICsvExportSource
 
         // §8.3's antenna delay is the one tier C command on this page; §10.7's field range is its
         // catalog entry's, taken from the driver rather than restated here.
+        // A talker has no antenna-delay command (#304), so the spec is looked up rather than
+        // required and the field is disabled below instead of the navigation throwing.
         _directDelay = new NumberFieldValidator(
-            DirectDelayBox,
-            DirectDelayError,
-            CommandConfirmation.Require(device.Driver, ":GPS:REF:ADELay").Parameters[0]);
+            DirectDelayBox, DirectDelayError, minimum: null, maximum: null);
         _directDelay.ValidityChanged += (_, _) => Render();
+
+        BindDriver();
 
         _trends = App.Services?.GetService<TrendStore>();
 
@@ -158,6 +164,19 @@ public sealed partial class TimingPage : Page, ICsvExportSource
         Render();
     }
 
+    /// <summary>
+    /// A stored sync token, read by the driver that is on the port now (#304).
+    /// </summary>
+    /// <remarks>
+    /// The honest limit of colouring history by mode: <c>trend.db</c> records the receiver's own
+    /// token, and which mode that means is a fact about the family. A window spanning a swap to a
+    /// different family would read the older half in the newer family's vocabulary — which is why
+    /// the token and not the mode is what gets stored, so the reading can be redone rather than
+    /// having been baked in wrong.
+    /// </remarks>
+    private ReceiverMode InterpretSyncState(string? syncState) =>
+        _device?.Driver.InterpretSyncState(syncState) ?? ReceiverMode.Disconnected;
+
     private void OnStatusChanged(object? sender, ConnectionStatusChanged e) =>
         DispatcherQueue.TryEnqueue(() =>
         {
@@ -165,7 +184,32 @@ public sealed partial class TimingPage : Page, ICsvExportSource
             {
                 model.Connection = e.Status;
             }
+
+            if (e?.Status == ConnectionStatus.Connected)
+            {
+                // The receiver on the port can have been swapped while the link was down, so the
+                // session re-selects a driver on every connect (#287) and this page's answer to
+                // "what may I offer" has to be asked again rather than kept from navigation (#304).
+                BindDriver();
+                Render();
+            }
         });
+
+    /// <summary>
+    /// Re-reads everything this page takes from the connected receiver's driver (#304).
+    /// </summary>
+    /// <remarks>
+    /// Called at navigation and again on every connect. Nothing here subscribes or allocates a
+    /// validator: <see cref="NumberFieldValidator.Rebind"/> exists so the bounds can move without
+    /// a second validator being left listening to the same field.
+    /// </remarks>
+    private void BindDriver()
+    {
+        IReceiverDriver? driver = _device?.Driver;
+
+        _canSetDelay = Capability.Offers(driver, ":GPS:REF:ADELay");
+        _directDelay?.Rebind(Capability.SpecFor(driver, ":GPS:REF:ADELay"));
+    }
 
     /// <summary>§10.7's outer choice: type the delay, or work it out from the cable.</summary>
     private void OnDelaySourceChanged(object sender, RoutedEventArgs e)
@@ -315,8 +359,15 @@ public sealed partial class TimingPage : Page, ICsvExportSource
         // The cable path needs its length *and*, when the custom factor is selected, the factor -
         // §9.11 disables Apply while any field in the card is invalid, and the factor was not being
         // counted because the control used to clamp it into range instead of reporting it.
+        // Capability first, then state (#304).
+        DelayUnsupportedText.Text = _canSetDelay
+            ? string.Empty
+            : Capability.NotOffered(_device?.Driver, "an antenna delay");
+        DelayUnsupportedText.Visibility = _canSetDelay ? Visibility.Collapsed : Visibility.Visible;
+
         ApplyDelayButton.IsEnabled =
-            !_busy
+            _canSetDelay
+            && !_busy
             && model.CanApplyDelay
             && (model.UseDirectEntry
                 ? _directDelay is { IsValid: true }
@@ -506,7 +557,7 @@ public sealed partial class TimingPage : Page, ICsvExportSource
                 continue;
             }
 
-            ReceiverMode mode = ReceiverModes.FromSyncState(record.SyncState);
+            ReceiverMode mode = InterpretSyncState(record.SyncState);
             samples.Add(new EfcSample(
                 record.Ticks,
                 percent,
@@ -690,7 +741,7 @@ public sealed partial class TimingPage : Page, ICsvExportSource
         // so the two cannot disagree about when the receiver was locked.
         IReadOnlyList<TrendSample> states = Project(
             window,
-            record => (double)ReceiverModes.FromSyncState(record.SyncState));
+            record => (double)InterpretSyncState(record.SyncState));
 
         TimeIntervalTrend.FromTicks = from;
         TimeIntervalTrend.ToTicks = now;

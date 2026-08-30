@@ -8,6 +8,7 @@ using Windows.ApplicationModel.DataTransfer;
 
 using WinZ3805A.Controls;
 using WinZ3805A.Device.Commands;
+using WinZ3805A.Device.Drivers;
 using WinZ3805A.Device.Transport;
 using WinZ3805A.Services;
 using WinZ3805A.ViewModels;
@@ -24,6 +25,10 @@ public sealed partial class PositionPage : Page
     private CommandInvoker? _invoker;
     private readonly NumberFieldValidator[] _fields;
     private bool _busy;
+
+    /// <summary>What the connected receiver's driver offers (#304), decided once per navigation.</summary>
+    private bool _canSurvey;
+    private bool _canSetPosition;
     private bool _ready;
     private readonly DispatcherTimer _stalenessTicker = new() { Interval = TimeSpan.FromSeconds(1) };
 
@@ -84,6 +89,9 @@ public sealed partial class PositionPage : Page
         }
 
         _device = device;
+
+        BindDriver();
+
         _invoker = new CommandInvoker(device.Session);
         _model = new PositionViewModel(device.Store) { Connection = device.Session.Status };
         _model.PropertyChanged += (_, _) => DispatcherQueue.TryEnqueue(Render);
@@ -112,8 +120,12 @@ public sealed partial class PositionPage : Page
             return;
         }
 
-        // The read behind the power-up checkbox — an ordinary tier S query.
-        ScpiCommand readPowerUp = CommandConfirmation.Require(device.Driver, ":GPS:POS:SURV:STAT:POW?");
+        // The read behind the power-up checkbox — an ordinary tier S query. A talker has no survey
+        // at all (#304), so this returns rather than throwing and the controls stay disabled.
+        if (device.Driver.Find(":GPS:POS:SURV:STAT:POW?") is not ScpiCommand readPowerUp)
+        {
+            return;
+        }
 
         try
         {
@@ -144,7 +156,39 @@ public sealed partial class PositionPage : Page
             {
                 model.Connection = e.Status;
             }
+
+            if (e?.Status == ConnectionStatus.Connected)
+            {
+                // The receiver on the port can have been swapped while the link was down, so the
+                // session re-selects a driver on every connect (#287) and this page's answer to
+                // "what may I offer" has to be asked again rather than kept from navigation (#304).
+                BindDriver();
+                Render();
+
+                _ = ReadPowerUpSettingAsync();
+            }
         });
+
+    /// <summary>
+    /// Re-reads everything this page takes from the connected receiver's driver (#304).
+    /// </summary>
+    /// <remarks>
+    /// §10.6's survey and position hold are the receiver's own commands. A talker reports a fix and
+    /// offers neither, so the controls are disabled with a reason rather than throwing when they
+    /// are clicked. The three coordinate fields take their bounds from §10.6 directly rather than
+    /// from a catalog parameter — latitude is ±90° whoever is listening — so they need no rebind.
+    /// </remarks>
+    private void BindDriver()
+    {
+        IReceiverDriver? driver = _device?.Driver;
+
+        _canSurvey = Capability.Offers(
+            driver,
+            ":GPS:POSition:SURVey:STATe ONCE",
+            ":GPS:POSition SURVey",
+            ":GPS:POS:SURV:STAT:POWerup");
+        _canSetPosition = Capability.Offers(driver, ":GPS:POSition", ":GPS:POSition LAST");
+    }
 
     private void Render()
     {
@@ -188,16 +232,30 @@ public sealed partial class PositionPage : Page
 
         SurveyStatusText.Text = model.SurveyStatusText;
 
-        StartSurveyButton.IsEnabled = !_busy && model.CanStartSurvey;
-        AdoptSurveyButton.IsEnabled = !_busy && model.CanEndSurvey;
-        CancelSurveyButton.IsEnabled = !_busy && model.CanEndSurvey;
+        StartSurveyButton.IsEnabled = _canSurvey && !_busy && model.CanStartSurvey;
+        AdoptSurveyButton.IsEnabled = _canSurvey && !_busy && model.CanEndSurvey;
+        CancelSurveyButton.IsEnabled = _canSurvey && !_busy && model.CanEndSurvey;
 
         PowerUpSurveyCheck.IsEnabled = !_busy && model.CanSetPosition;
         PowerUpSurveyCheck.IsChecked = model.SurveyAtPowerUp;
 
-        FillFromReceiverButton.IsEnabled = !_busy && model.HasPosition;
-        ApplyPositionButton.IsEnabled =
-            !_busy && model.CanSetPosition && Array.TrueForAll(_fields, field => field.IsValid);
+        // Capability first, then state (#304). §10.6's survey and position hold are the receiver's
+        // own commands, and a talker reports a fix without offering either.
+        SurveyUnsupportedText.Text = _canSurvey
+            ? string.Empty
+            : Capability.NotOffered(_device?.Driver, "a position survey");
+        SurveyUnsupportedText.Visibility = _canSurvey ? Visibility.Collapsed : Visibility.Visible;
+
+        PositionUnsupportedText.Text = _canSetPosition
+            ? string.Empty
+            : Capability.NotOffered(_device?.Driver, "setting a held position");
+        PositionUnsupportedText.Visibility = _canSetPosition ? Visibility.Collapsed : Visibility.Visible;
+
+        PowerUpSurveyCheck.IsEnabled = _canSurvey;
+
+        FillFromReceiverButton.IsEnabled = _canSetPosition && !_busy && model.HasPosition;
+        ApplyPositionButton.IsEnabled = _canSetPosition
+            && !_busy && model.CanSetPosition && Array.TrueForAll(_fields, field => field.IsValid);
 
         // §10.6 annotates the entry field WGS-84 while the receiver command is documented as
         // "height above mean sea level" (#114). Until that is settled the page says which datum

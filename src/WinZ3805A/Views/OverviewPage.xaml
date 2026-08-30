@@ -219,6 +219,15 @@
                         <!-- §9.11 puts the result of a card-scoped command at the top of its card. -->
                         <controls:CommandOutcomeBar x:Name="SelfTestOutcome" />
 
+                        <!-- §9.11: absent is disabled and explained, never hidden (#304). -->
+                        <TextBlock x:Name="SelfTestUnsupportedText"
+                                   Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}"
+                                   HorizontalAlignment="Left"
+                                   TextWrapping="Wrap"
+                                   Visibility="Collapsed" />
+
                         <TextBlock x:Name="HealthSummaryText"
                                    Style="{ThemeResource WzBodyTextStyle}"
                                    Foreground="{ThemeResource WzTextSecondaryBrush}" />

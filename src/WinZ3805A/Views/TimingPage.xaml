@@ -212,6 +212,17 @@
                                  Title="Before applying"
                                  Message="Changing the antenna delay while the receiver is locked can send it into holdover." />
 
+                        <!--
+                            §9.11's rule for a capability the receiver may not have (#304).
+                        -->
+                        <TextBlock x:Name="DelayUnsupportedText"
+                                   Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}"
+                                   HorizontalAlignment="Left"
+                                   TextWrapping="Wrap"
+                                   Visibility="Collapsed" />
+
                         <controls:CommandOutcomeBar x:Name="DelayOutcome" />
 
                         <!--

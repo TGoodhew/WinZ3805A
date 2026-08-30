@@ -1,4 +1,4 @@
-using Microsoft.UI.Xaml;
+﻿using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 
@@ -41,9 +41,11 @@ public sealed class NumberFieldValidator
 {
     private readonly NumberBox _field;
     private readonly FieldErrorText _error;
-    private readonly double? _minimum;
-    private readonly double? _maximum;
-    private readonly string? _unit;
+    // Not readonly: the driver can change under an open page (#304), and the bounds come from
+    // its catalog. See Rebind.
+    private double? _minimum;
+    private double? _maximum;
+    private string? _unit;
 
     /// <summary>Validates a field against a catalogued parameter's declared range.</summary>
     public NumberFieldValidator(NumberBox field, FieldErrorText error, ParameterSpec parameter)
@@ -68,21 +70,8 @@ public sealed class NumberFieldValidator
 
         _field = field;
         _error = error;
-        _minimum = minimum;
-        _maximum = maximum;
-        _unit = unit;
 
-        // The bounds still reach the control, so the spinner clamps and assistive technology can
-        // read the range off the field itself rather than only off the error text.
-        if (minimum is double low)
-        {
-            field.Minimum = low;
-        }
-
-        if (maximum is double high)
-        {
-            field.Maximum = high;
-        }
+        ApplyBounds(minimum, maximum, unit);
 
         field.ValidationMode = NumberBoxValidationMode.Disabled;
 
@@ -132,12 +121,71 @@ public sealed class NumberFieldValidator
         Announce(valid);
     }
 
+    /// <summary>Points the field at a different receiver's declared range (#304).</summary>
+    /// <remarks>
+    /// <para>
+    /// The bounds are the connected driver's, and <c>DeviceSessionService</c> re-selects a driver on
+    /// <b>every</b> connect — including a reconnect, because the box on the port can have been
+    /// swapped while the link was down. A page built once at navigation would then be validating
+    /// against the range of a receiver that is no longer there, and the failure is silent: the field
+    /// accepts a number the new receiver refuses, or refuses one it would have taken.
+    /// </para>
+    /// <para>
+    /// Rebinding rather than constructing a replacement, because the constructor subscribes to three
+    /// of the field's events and nothing unsubscribes them — a fresh validator per reconnect would
+    /// leave the old one still listening and still writing the error line.
+    /// </para>
+    /// <para>
+    /// It revalidates, and does not clear: a value already on screen and now out of range is exactly
+    /// what the user needs told about.
+    /// </para>
+    /// </remarks>
+    public void Rebind(ParameterSpec? parameter)
+    {
+        ApplyBounds(parameter?.Minimum, parameter?.Maximum, parameter?.Unit);
+        Revalidate();
+    }
+
     /// <summary>Clears the error without judging the field, for a card being reset.</summary>
     public void Reset()
     {
         _error.Message = null;
         ApplyBorder(valid: true);
         Announce(IsValid);
+    }
+
+    /// <summary>
+    /// Records the range and pushes it at the control, so the spinner clamps and assistive
+    /// technology can read it off the field rather than only off the error text.
+    /// </summary>
+    /// <remarks>
+    /// <c>ClearValue</c> and not <c>double.MinValue</c> for an absent bound: writing the extreme
+    /// locally would pin the property, so a later <see cref="Rebind"/> onto a narrower range would
+    /// have to remember to undo it. Clearing puts the control back on its own default.
+    /// </remarks>
+    private void ApplyBounds(double? minimum, double? maximum, string? unit)
+    {
+        _minimum = minimum;
+        _maximum = maximum;
+        _unit = unit;
+
+        if (minimum is double low)
+        {
+            _field.Minimum = low;
+        }
+        else
+        {
+            _field.ClearValue(NumberBox.MinimumProperty);
+        }
+
+        if (maximum is double high)
+        {
+            _field.Maximum = high;
+        }
+        else
+        {
+            _field.ClearValue(NumberBox.MaximumProperty);
+        }
     }
 
     /// <summary>Raises <see cref="ValidityChanged"/> when the answer has actually moved.</summary>
