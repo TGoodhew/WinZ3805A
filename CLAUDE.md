@@ -10,6 +10,11 @@ for weeks, and a command model that makes destructive receiver commands
 presented through a native Fluent surface, never as a reproduction of the
 device's 80×24 terminal screen.
 
+Every receiver-specific fact sits behind a driver (§12, `src/WinZ3805A.Device/Drivers/`).
+The SmartClock family is the first driver; a generic NMEA 0183 talker (#310) is the second,
+proven against the simulator under `tools/` rather than against hardware, and it shows only
+what NMEA carries.
+
 ---
 
 ## The specification
@@ -57,7 +62,7 @@ forced, not a preference. Do not scaffold WinForms or WPF on 4.x.
 Use the **LTS** release. Do not adopt .NET 11 (Nov 2026, STS) on release.
 
 §6.4 lists the platform features this project uses deliberately
-(`System.IO.Pipelines`, `SearchValues<byte>`, `Channels`, `PeriodicTimer`,
+(`System.IO.Pipelines`, `SequenceReader<byte>`, `Channels`, `PeriodicTimer`,
 `TimeProvider`, `FrozenDictionary`, records with `required` members) and the
 ones it must not (**Native AOT** and **trimming** — both break WinUI 3's
 reflection-driven XAML type resolution; `SerialPort.DataReceived`;
@@ -72,10 +77,13 @@ referenced. Do not add them to any catalog, list, comment, or test fixture.**
 
 This extends to issue titles, branch names, commit messages, and TODOs. The
 command catalog is an **allowlist** (§8.1): blocked commands are not entries
-with a flag, they do not exist as data. The only place their patterns may appear
-is `CommandCatalog.BlockedPatterns`, used solely by the Advanced Console
-validator to reject a typed string and log the attempt. That collection must not
-be enumerable through any public API a view can bind to.
+with a flag, they do not exist as data. The only place their patterns exist is
+`src/WinZ3805A.Device/Commands/BlockedCommands.cs`, private to the Device assembly;
+the only way out is the `IsBlocked` predicate on `CommandCatalog` and
+`IReceiverDriver`, which answers one bool about one candidate and cannot be
+enumerated or bound to (§8.4, corrected 21 Aug 2026 by #85). No production path
+feeds it typed text: the Advanced Console shipped as a picker over the allowlist
+with no free-text box (#55), so the log-the-attempt half was never built.
 
 ---
 
@@ -97,6 +105,10 @@ be enumerable through any public API a view can bind to.
 - `DeviceSessionService` must be instantiable per device and resolvable from a
   keyed DI registration even though v1 creates exactly one (§12). No static state
   for connection or device identity.
+- **Every receiver-specific fact sits behind `IReceiverDriver`** (`Drivers/`). The
+  app never reaches `SmartClockDriver` or `NmeaDriver` directly; it asks the driver
+  the session selected. Adding a receiver is `docs/adding-a-receiver.md`, and
+  `docs/tutorial-nmea-driver.md` is that guide followed to the end.
 
 ---
 
@@ -159,9 +171,18 @@ winapp run src\WinZ3805A\bin\x64\Debug\net10.0-windows10.0.26100.0\win-x64 --det
 must be clean with zero warnings** — including code-style rules. File-scoped
 namespaces are a build error (`IDE0161`), not a suggestion.
 
+Three things the tree does not make obvious. `tools/NmeaSimulator` is referenced by the
+test project, so changing the simulator changes the tests; its README says how to run it
+against a port or to stdout. `docs/how-to-use.md` and its images ship inside the package
+as linked `Content` items, and `HelpDocumentTests` parses the real document and checks
+every image it names, so editing the guide can fail the tests. And `Themes/Colors.xaml`
+is also an `EmbeddedResource` that `ThemePalette` reads at run time, so colours are never
+restated in C#.
+
 ### CI gates — run them before you push
 
-Several §9.12 and §9.13 criteria are enforced by CI rather than by review. All are
+Several §9.12 and §9.13 criteria are enforced by CI rather than by review; what no gate
+can reach — a person, a receiver, or a machine setting — is `docs/manual-qa.md`. All are
 plain scripts, so run them locally and get the answer in a second:
 
 ```powershell
@@ -185,14 +206,16 @@ than a rule:
 pwsh build/Capture-Fixtures.ps1 -SelfTest # #4 / #185 — the harness, not the app
 ```
 
-`.github/workflows/ci.yml` runs all twelve first, before any restore, so a token,
-accessibility, or safety regression fails in seconds rather than after a full build. It then
-builds both Configuration × Platform combinations — Debug and Release against x64,
+`.github/workflows/ci.yml` runs all twelve in their own dependency-free jobs, alongside the
+build rather than ahead of it — they need no restore, so a token, accessibility, or safety
+regression fails in seconds rather than after a full build. A separate matrix job builds both
+Configuration × Platform combinations — Debug and Release against x64,
 since §6.1 dropped ARM64 on 15 Aug 2026 — and runs the tests.
 
-**Why a build script is in CI at all.** `Capture-Fixtures.ps1` collects §11.1's missing
+**Why a build script is in CI at all.** `Capture-Fixtures.ps1` collects §11.1's
 fixtures, and the states it exists to catch — power-up, acquiring, holdover, a failing health
-monitor — happen only while the receiver is being moved. It is used perhaps once a season, and
+monitor; the first three were captured on 27–28 Aug 2026 and only the last is still missing —
+happen only while the receiver is being moved. It is used perhaps once a season, and
 a parsing bug found afterwards cannot be retried without moving the hardware again. So the
 half that needs no serial port is checked on every push rather than on the day. The serial
 half still cannot be, and the self-test says so when it passes.
@@ -209,7 +232,7 @@ runs the app and HighContrast is not — testing it means switching the whole
 desktop over. A token defined in one theme and not another compiles, passes
 review, and then fails at run time for precisely the user who needs that theme.
 
-The pointer-target gate is the newest, added 28 Aug 2026, and it exists because **A11Y-5 was signed
+The pointer-target gate was added 28 Aug 2026, and it exists because **A11Y-5 was signed
 off as passing while two breaches sat in the primary window**. Tony found the first by trying to use
 it: the §7.4 rollover badge was a bare `TextBlock` in a symbol font, and **a `TextBlock` is
 hit-testable only where its glyph is**, so the target was about 12 × 15 px against a 32 × 32 floor —
@@ -227,7 +250,7 @@ exists to catch. It requires the floor to be **declared** rather than inferred, 
 the icon gate gives: a floor that holds only while a stock style happens to supply it is a
 coincidence, not a floor.
 
-The focus-visual coverage gate is the newest, added 27 Aug 2026 alongside the A11Y-2 pass that
+The focus-visual coverage gate was added 27 Aug 2026 alongside the A11Y-2 pass that
 closed #22. **The surface behind a focus ring is not knowable from source**: the accent-filled
 button uses stock `AccentButtonStyle` and this application does not remap `AccentFillColorDefault`,
 so the fill is the **end user's Windows accent colour** — every measured ratio (3.06:1 on 24 Aug,
@@ -238,7 +261,7 @@ near black and one near white **cover the whole luminance range**, because a col
 4.43:1 at L=0.187. It exists to catch a future "softer" or brand-coloured focus ring, whose failure
 would otherwise appear only for users whose accent happens to land in the gap.
 
-The colour-only-states gate is the newest, added 27 Aug 2026 for #32. §10.3's footer staleness had
+The colour-only-states gate was added 27 Aug 2026 for #32. §10.3's footer staleness had
 three states whose only difference was `FooterText.Foreground` — the age in words was in the text
 either way, but **the judgement about that age was hue and nothing else**. §9.4.3 already says
 caution and critical converge under protanopia and deuteranopia; under high contrast it is not a
@@ -249,7 +272,7 @@ is a *good* one — a group setting `Opacity` passes and may still be weak — b
 thing review kept missing impossible. Pointer and focus feedback are exempt with reasons, because
 those groups convey no information to read.
 
-The high-contrast legibility gate is the newest, added 27 Aug 2026 for #218 — the first defect
+The high-contrast legibility gate was added 26 Aug 2026 for #218 — the first defect
 found by actually switching the desktop into high contrast rather than reasoning about it. The
 parity gate above **passed** it: `WzSequential1Brush` and `WzSequential2Brush` existed, in all
 three themes, with the right type — and were defined as `SystemColorWindowColor`, the surface
@@ -262,7 +285,7 @@ need to know what colour the user's window is to know that a foreground must not
 allowlist holds the four genuine surfaces, each with a reason asserted non-empty — a row there is
 a claim that the token names something drawn *under* other content, not an exemption.
 
-The contrast gate is the newest, added 21 Aug 2026 for #24 — which had carried a `ci-gate`
+The contrast gate was added 21 Aug 2026 for #24 — which had carried a `ci-gate`
 label since the backlog was written while nothing in the repository computed a contrast ratio.
 It needed `build/fluent-stock-colours.txt`, because §9.4.1 maps the text and surface tokens onto
 **stock Fluent colours** that are not readable from source: the SDK ships no XAML, so they were
@@ -270,11 +293,12 @@ measured from the running app and recorded with provenance, the way a fixture is
 worth not rediscovering — almost every stock token is **semi-transparent**, so a check that reads
 them as opaque produces confident nonsense, and **HighContrast cannot be checked at all**, its
 tokens being the user's own `SystemColor*` choices. It found tertiary text at 3.28:1 against a
-4.5:1 floor in Light in 117 places (#176), and two chart series under 3:1 (#177). Both are
-baselined against their issue numbers — **a baseline row is a debt with a number on it, not an
+4.5:1 floor in Light in 117 places (#176), and two chart series under 3:1 (#177). Both were
+then fixed — #176 in PR #180, #177 with #87 in PR #181 — and the gate's baseline table has been
+empty since, which is the point: **a baseline row is a debt with a number on it, not an
 exemption**.
 
-The spacing gate was the previous newest, added after the §15 step 11 anti-pattern audit found
+The spacing gate was added 15 Aug 2026, after the §15 step 11 anti-pattern audit found
 **nine** off-scale values that had each passed review — `Padding="0,3"`,
 `Margin="0,0,0,6"`, `Margin="28,0,0,0"`. None of them is visible one at a time, which
 is exactly how a spacing scale stops being one. It strips XML comments before
@@ -283,7 +307,7 @@ example. `BorderThickness` is deliberately **not** checked: a stroke width is §
 business rather than the spacing scale's, and `SkyPlotControl`'s 1 px and 1.5 px
 marker outlines are correct.
 
-The series-separation gate is the newest, added 22 Aug 2026 for #87 and #177. §9.4.4 claimed the
+The series-separation gate was added 22 Aug 2026 for #87 and #177. §9.4.4 claimed the
 categorical palette was derived from **Okabe–Ito**, which separates every pair under the common
 dichromacies — but three of its eight entries had been substituted for values that read better as
 thin lines, and the substitution silently gave up precisely that property. Series 1 and 7 measured
@@ -320,19 +344,32 @@ already set. Publishing is framework-dependent, never self-contained (§6.3).
 
 ---
 
+## Branches and merges
+
+Never work on `main`, not even for a one-line fix. Branch off an up-to-date `main`, named for
+the work — `feat/310-nmea-tutorial`, `fix/307-compact-medallion`, `docs/316-documentation-audit`
+— commit in separately revertable pieces where the work has separable parts, and open a pull
+request so CI runs. Merge when it is green (rebase merge, so `main` stays linear), then leave the
+local repository matching the remote: delete the branch on both sides
+(`gh pr merge --rebase --delete-branch` does both), fast-forward local `main`
+(`git fetch origin main:main` from another branch), and `git remote prune origin`.
+
+---
+
 ## Repository layout
 
-Mirrors §6.2. Empty folders carry a `.gitkeep` and are placeholders for work that
-has not started — creating a file in one is expected, not a licence to skip the
-implementation sequence in §15.
+§6.2 owns the tree; this copy is for orientation.
 
 ```
 docs/requirements.md          the specification
 src/WinZ3805A/                WinUI 3 app, single-project MSIX
   Views/ ViewModels/ Controls/ Themes/ Services/ Assets/Fonts/
 src/WinZ3805A.Device/         class library, no UI references
-  Transport/ Commands/ Parsing/ Models/
+  Transport/ Commands/ Parsing/ Models/ Drivers/ (SmartClock, and Nmea/)
 tests/WinZ3805A.Tests/        xUnit, with Fixtures/ for captured status screens
+tools/NmeaSimulator/          the NMEA 0183 talker the tests and the tutorial run against
+build/                        the gate scripts, the sideload packager, the palette derivation
+.github/workflows/ci.yml      the gates in their own jobs, then the Debug and Release builds and the tests
 ```
 
 **§15 is an ordering constraint, not a suggestion.** In particular: the `Themes/`

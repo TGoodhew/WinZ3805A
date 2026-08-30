@@ -17,9 +17,10 @@ env:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # The two §9.12 criteria that gate the build rather than a review.
-  # Deliberately first and dependency-free: they need no restore, so a token or
-  # accessibility regression fails in seconds instead of after a full build.
+  # The §9.12 and §9.13 criteria that gate the build rather than a review — ten of them.
+  # Deliberately in their own dependency-free job, alongside the build rather than ahead
+  # of it: they need no restore, so a token or accessibility regression fails in
+  # seconds instead of after a full build.
   # ---------------------------------------------------------------------------
   design-system-gates:
     name: Design system gates
@@ -55,7 +56,7 @@ jobs:
         shell: pwsh
         run: ./build/Test-ThemeDictionaryParity.ps1
 
-      # A11Y-8 / §9.2. Added 27 Aug 2026 (#218), the first defect found by actually
+      # A11Y-8 / §9.2. Added 26 Aug 2026 (#218), the first defect found by actually
       # switching the desktop into high contrast. The gate above passed it: the two
       # tokens existed, in every theme, with the right type - and were defined as the
       # surface they are painted on, so a tracked satellite at C/N 26-34 was drawn in
