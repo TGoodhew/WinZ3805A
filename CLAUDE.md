@@ -145,7 +145,9 @@ not surface XAML compiler diagnostics.** A malformed `.xaml` file under
 reports it correctly. This project is XAML-heavy by design (§9), so this matters
 in practice rather than theoretically.
 
-MSBuild is not on `PATH`. Resolve it with `vswhere`, or use the full path:
+The commands below are copied from the README's *Building from source*, which owns
+them — change there first; what this file adds is the reasoning. MSBuild is not on
+`PATH`. Resolve it with `vswhere`, or use the full path:
 
 ```powershell
 $msb = 'C:\Program Files\Microsoft Visual Studio\18\Enterprise\MSBuild\Current\Bin\MSBuild.exe'
