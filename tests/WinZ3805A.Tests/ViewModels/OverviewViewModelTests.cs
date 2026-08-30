@@ -49,6 +49,8 @@ public sealed class OverviewViewModelTests
 
         public double? Present { get; set; }
 
+        public TimeSpan? Duration { get; set; }
+
         public IReadOnlyDictionary<string, bool> Health { get; set; } =
             new Dictionary<string, bool> { ["Self Test"] = true, ["Oven Pwr"] = true };
 
@@ -58,6 +60,7 @@ public sealed class OverviewViewModelTests
             HoldoverPredictedSeconds = Predicted,
             HoldThresholdSeconds = Threshold,
             HoldoverPresentSeconds = Present,
+            HoldoverDuration = Duration,
             HealthItems = Health,
             HealthOk = Health.Values.All(ok => ok),
             CapturedAt = Captured,
@@ -155,14 +158,37 @@ public sealed class OverviewViewModelTests
         Assert.Equal("Not in holdover", model.HoldoverDuration);
     }
 
+    /// <remarks>
+    /// This asserted the present <i>uncertainty</i> until #319 — 4.2 µs under a row labelled
+    /// "Duration", a different quantity in a different unit from the one the label names, while the
+    /// Holdover page beside it showed the real duration from the same field.
+    /// </remarks>
     [Fact]
-    public void InHoldoverTheDurationRowCarriesThePresentUncertainty()
+    public void InHoldoverTheDurationRowCarriesHowLongItHasLasted()
+    {
+        (OverviewViewModel model, _) = Connected(
+            Status(b =>
+            {
+                b.Present = 4.2e-6;
+                b.Duration = TimeSpan.FromSeconds(694);
+            }),
+            syncState: "HOLD");
+
+        Assert.Equal(ReceiverMode.Holdover, model.Mode);
+        Assert.Equal(Staleness.Describe(TimeSpan.FromSeconds(694)), model.HoldoverDuration);
+
+        // Emphatically not the uncertainty, which is what it used to show.
+        Assert.DoesNotContain("4.2", model.HoldoverDuration, StringComparison.Ordinal);
+        Assert.DoesNotContain("µs", model.HoldoverDuration, StringComparison.Ordinal);
+    }
+
+    /// <summary>A receiver in holdover that does not print the duration shows the §11.1 dash.</summary>
+    [Fact]
+    public void InHoldoverWithNoDurationReportedTheRowIsADash()
     {
         (OverviewViewModel model, _) = Connected(Status(b => b.Present = 4.2e-6), syncState: "HOLD");
 
-        Assert.Equal(ReceiverMode.Holdover, model.Mode);
-        Assert.Contains("4.2", model.HoldoverDuration);
-        Assert.Contains("µs", model.HoldoverDuration);
+        Assert.Equal(ReadoutFormatter.NoValue, model.HoldoverDuration);
     }
 
     // ---- Health ----------------------------------------------------------------------------

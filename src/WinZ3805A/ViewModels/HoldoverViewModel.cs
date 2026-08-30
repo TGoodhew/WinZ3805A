@@ -110,9 +110,10 @@ public sealed class HoldoverViewModel : INotifyPropertyChanged
 
     /// <summary>How long this holdover has lasted.</summary>
     /// <remarks>
-    /// Unparsed pending #4: §11.2's <c>HoldoverDuration</c> has no known screen label, and the
-    /// fixture that would settle it is one of the captures still waiting for bench time. It shows
-    /// the §11.1 dash rather than a zero, because a zero would read as "no time has passed".
+    /// Parsed since 28 Aug 2026: the backyard captures printed <c>Holdover Duration: 11m 34s</c>,
+    /// which gave the field the screen label it had been waiting for (the remark here said
+    /// "unparsed pending #4" until #319). A receiver that does not print it still shows the §11.1
+    /// dash rather than a zero, because a zero would read as "no time has passed".
     /// </remarks>
     public string DurationText => Status?.HoldoverDuration is TimeSpan duration
         ? Staleness.Describe(duration)
