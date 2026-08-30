@@ -163,6 +163,43 @@ public sealed class BroadcastListenerTests : IAsyncDisposable
         Assert.Equal(TransactionOutcome.TimedOut, listener.Answer("$--RMC", Silence).Outcome);
     }
 
+    /// <summary>
+    /// A talker whose boundary sentence never arrives does not accumulate for the life of the link.
+    /// </summary>
+    /// <remarks>
+    /// The driver claims any sentence it understands, while its plan names one of them — RMC — as
+    /// the cycle boundary, so a talker configured to send GGA and not RMC is claimed and can never
+    /// complete a cycle. The silence timeout does not catch it, because lines are arriving. Before
+    /// #319 the current cycle grew without limit and <c>WholeCycle</c> answered with all of it,
+    /// marked <c>Completed</c>: an unbounded buffer and a parser fed a blob that grew by a sentence
+    /// a second. Now the cycle is abandoned at the cap and counted.
+    /// </remarks>
+    [Fact]
+    public async Task ACycleWhoseBoundaryNeverArrivesIsAbandonedRatherThanGrowing()
+    {
+        // No consume-wait, and one emit rather than hundreds: this test's whole point is a volume
+        // of lines, and a writer that must be drained between every one of them is both slow and
+        // the deadlock FakeTransport's own remarks warn about.
+        (FakeTransport transport, BroadcastListener listener) = await StartAsync(waitForReaderToConsume: false);
+
+        string gga = NmeaSentence.Format(
+            "GP", "GGA", "120000.00", "4737.2300", "N", "12220.9580", "W", "1", "07", "1.0", "50.0", "M", "-17.0", "M", null, null);
+
+        // One more than the cap, so the cycle is abandoned exactly once. None of them is an RMC.
+        string burst = string.Concat(Enumerable.Repeat(gga + "\r\n", BroadcastListener.MaximumCycleLines + 1));
+
+        await transport.EmitAsync(burst);
+        await SettleAsync(() => listener.CyclesAbandoned, abandoned => abandoned > 0);
+
+        Assert.Equal(1, listener.CyclesAbandoned);
+        Assert.Equal(0, listener.CyclesHeard);
+
+        // Every line was claimed, so none was discarded as noise — and the answer is not the
+        // growing blob it would have been, because the cycle was dropped rather than accumulated.
+        Assert.Equal(0, listener.LinesDiscarded);
+        Assert.True(listener.Answer(PollPlan.WholeCycle, Silence).Lines.Count <= BroadcastListener.MaximumCycleLines);
+    }
+
     [Fact]
     public async Task NoiseIsCountedAndDiscarded()
     {

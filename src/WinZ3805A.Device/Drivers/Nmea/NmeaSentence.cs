@@ -26,12 +26,15 @@ namespace WinZ3805A.Device.Drivers.Nmea;
 public sealed record NmeaSentence
 {
     /// <summary>
-    /// The longest sentence the standard allows, counting the <c>$</c> but not the line ending, is
-    /// 81 characters — 80 plus the <c>$</c>. This constant is one over, and the driver never reads
-    /// it; only the simulator's test does. Left as it is because that test pins the value, and
-    /// recorded as an audit finding (#316).
+    /// The longest sentence the standard allows, counting the <c>$</c> but not the line ending:
+    /// 81 characters, being the 80 the standard permits plus the <c>$</c>.
     /// </summary>
-    public const int MaximumLength = 82;
+    /// <remarks>
+    /// This was 82 until #319 — one over, from counting the <c>$</c> twice. Nothing in the driver
+    /// reads it, so the only effect was on the simulator's test, which asserts the sentences it
+    /// emits are legal lengths; 81 is the figure that test should have been holding them to.
+    /// </remarks>
+    public const int MaximumLength = 81;
 
     private NmeaSentence(string talker, string identifier, IReadOnlyList<string> fields, bool hasChecksum, bool checksumValid, string raw)
     {
