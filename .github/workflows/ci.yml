@@ -1,4 +1,4 @@
-name: CI
+﻿name: CI
 
 on:
   push:
@@ -155,6 +155,28 @@ jobs:
   # so the half that needs no serial port is checked on every push instead of
   # on the day. It is a pwsh script over one committed fixture: no build, no
   # restore, under a second.
+  # ---------------------------------------------------------------------------
+  # #321. The #316 audit read sixteen documents by hand and found some 360 stale or
+  # wrong claims; a recognisable share were mechanical and recurred across files
+  # because nothing was checking them. Its own job rather than a step of the design
+  # gates: those check the source against a design rule, and this checks the
+  # documents against each other, the specification and the project files.
+  #
+  # The issue-state rule needs the network. GITHUB_TOKEN authenticates gh on the
+  # runner, and the rule stands itself down rather than failing when it cannot ask.
+  # ---------------------------------------------------------------------------
+  documents:
+    name: Document references
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Links, section references, cited issues and the notices table
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./build/Test-DocumentReferences.ps1
+
   # ---------------------------------------------------------------------------
   tooling:
     name: Tooling self-tests
