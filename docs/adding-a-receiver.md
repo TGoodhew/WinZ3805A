@@ -204,13 +204,15 @@ making the probe belong to no driver:
 4. **Re-selection.** Selection runs on *every* connect, including automatic
    reconnects, because the receiver on the port can have been swapped while
    the link was down. Services therefore read `DeviceContext.Driver` at the
-   point of use, never from a cached field. (Pages currently snapshot
-   driver-derived state — the console's picker, validator ranges — for one
-   navigation's lifetime; that staleness across a cross-family reconnect is
-   [#304](https://github.com/TGoodhew/WinZ3805A/issues/304), and it is safe
-   meanwhile because the session re-checks every command against the current
-   driver's allowlist at the moment it is served, refusing unsent what the
-   connected receiver's driver does not offer.)
+   point of use, never from a cached field. Pages do the same since
+   [#304](https://github.com/TGoodhew/WinZ3805A/issues/304): each has a
+   `BindDriver` that rebuilds what it takes from the driver — the console's
+   picker, the §8.5 rows, the capability flags, the validator ranges — and
+   calls it at navigation *and* on every connect. It was never a safety gap,
+   because the session re-checks every command against the current driver's
+   allowlist at the moment it is served and refuses unsent what the connected
+   receiver's driver does not offer; it was a staleness one, and the console's
+   picker was the sharp edge, being §8.1's allowlist made visible.
 
 The whole flow is asserted in
 [`DriverSelectionTests.cs`](../tests/WinZ3805A.Tests/Services/DriverSelectionTests.cs),
@@ -228,21 +230,27 @@ notifications, the tray icon and taskbar badge, the Advanced Console picker
 over your allowlist, the transcript, and the §8.5 experimental card over your
 experimental entries.
 
-**The Details pages are still written in the SmartClock dialect.** They talk
-through your driver — every command lookup goes via `Find`, so nothing routes
-around your allowlist or exclusions — but they *require* commands and reply
-shapes your receiver may not have. This is deliberate, recorded in
-[#287](https://github.com/TGoodhew/WinZ3805A/issues/287)'s items 4–7 as work
-best decided against a real second receiver rather than in the abstract. #287
-is closed now: what the NMEA family made concrete moved to
-[#304](https://github.com/TGoodhew/WinZ3805A/issues/304)'s items 1–4, and
-items 5 and 7 — a binary protocol and a network transport — are on no open
-issue until a family needs them:
+**The Details pages are still written in the SmartClock dialect** — but they no
+longer *require* it. Every command lookup goes via `Find`, so nothing routes
+around your allowlist or exclusions, and since
+[#304](https://github.com/TGoodhew/WinZ3805A/issues/304) every control that
+needs a command your driver lacks is disabled with a sentence saying so rather
+than throwing. What remains is that the *pages themselves* are HP's: a Status
+Registers page over HP's register maps means little to a receiver that has no
+such registers, and no amount of gating changes that.
+
+The deeper items — `ReceiverStatus`'s HP-shaped fields, `Parse(string)`
+assuming a text status screen, the specification being written for one family,
+and a network transport — were
+[#287](https://github.com/TGoodhew/WinZ3805A/issues/287)'s items 4–7, recorded
+there as work best decided against a real second receiver rather than in the
+abstract. #287 is closed and they are on no open issue: file one when a family
+needs them.
 
 | Surface | SmartClock assumption | Where it bites a new family |
 |---|---|---|
-| Tier C page actions | The mnemonics in `ReceiverDriverTests.EveryMnemonicThePagesRequireIsCatalogued` | A driver lacking one fails loudly at the click (`CommandConfirmation.Require` throws). Capability-gating the pages is [#304](https://github.com/TGoodhew/WinZ3805A/issues/304) |
-| Mode-driven UI (medallion, tray, badge) | `:SYNC:STAT?`'s six tokens, mapped in `Controls/ReceiverMode.cs` | A foreign family's sync states render as *Disconnected* — your sweep is stored and trended, but the mode mapping is app-side today ([#304](https://github.com/TGoodhew/WinZ3805A/issues/304)) |
+| Tier C page actions | The mnemonics in `ReceiverDriverTests.EveryMnemonicThePagesRequireIsCatalogued` | **Closed by [#304](https://github.com/TGoodhew/WinZ3805A/issues/304).** Every page asks `Views/Capability.cs` first and disables what your driver does not offer, with one sentence saying so. `CommandConfirmation.Require` still throws, but only past a gate — it is an assertion now, not a lookup |
+| Mode-driven UI (medallion, tray, badge) | None. `IReceiverDriver.InterpretSyncState` is yours | **Closed by [#304](https://github.com/TGoodhew/WinZ3805A/issues/304).** Your driver says which of the seven `ReceiverMode` members its own token means; `Controls/ReceiverMode.cs` keeps only how a mode is drawn. The set is closed, so pick the nearest honest member and say why in the override's remarks |
 | `ReceiverStatus` itself | `SmartClockMode`, `Tfom`, `Ffom`, `WeekRolloverEpochs` are HP concepts | Your receiver's own concepts have nowhere to go; leave the first three `null` and `WeekRolloverEpochs` at `0` (it is a non-nullable `int`), and raise the §11.2 amendment for anything new |
 | Status Registers page | HP's `:STAT:` register maps and bit meanings | Renders HP's registers regardless of driver |
 | Time page | `:PTIM:LEAP:*`, HP time-code formats | Queries fail politely (null lookups), features show em dashes |
@@ -250,8 +258,8 @@ issue until a family needs them:
 | Timing page | Antenna-cable presets, EFC hardware-condition bit meanings | Same |
 | Line protocol | Two link styles now (#310): an `scpi >` prompt grammar with `E-` error tokens for a family that answers, and a line-oriented listener for one that talks | A **binary protocol** (TSIP, UBX…) still cannot be driven — `Parse(string)` and `ClassifyLine(string)` are that assumption surfacing in the contract (item 5). A text protocol with a *different prompt* is nearer than it was: the listener shows how a second framing is served, but the prompt grammar itself is still `LineProtocol`'s |
 | The connect sequence | Listens, then sends `*CLS`, then asks `*IDN?` | A talker is recognised from what it says and never asked — but the `*CLS` still goes out before the session knows what it is talking to. Harmless to every talker met so far; the end-to-end test pins that it is the *only* write |
-| Control lines on open | DTR and RTS asserted, unconditionally, by the transport (§7.1) | A receiver that uses a control line as an *input* has no way to say so — the BG7TBL went silent with DTR asserted (#309). Control-line policy on open is [#304](https://github.com/TGoodhew/WinZ3805A/issues/304)'s item 4 |
-| Mode vocabulary | `LOCK`, `REC`, `WAIT`, `HOLD`, `POW`, `OFF` | A broadcast family speaks the vocabulary in its own terms — the NMEA driver says `LOCK` for a fix and `POW` for none — until the mapping is driver-supplied ([#304](https://github.com/TGoodhew/WinZ3805A/issues/304)) |
+| Control lines on open | DTR and RTS asserted, unconditionally, by the transport (§7.1) | A receiver that uses a control line as an *input* has no way to say so — the BG7TBL went silent with DTR asserted ([#309](https://github.com/TGoodhew/WinZ3805A/issues/309), closed unbuilt). Control-line policy on open is on **no open issue**; raise one if your receiver needs a line deasserted |
+| Mode vocabulary | None, since [#304](https://github.com/TGoodhew/WinZ3805A/issues/304) | Say whatever your receiver says and map it in `InterpretSyncState`. The token is also what `trend.db` stores, so a history spanning a swap between families is read in the vocabulary of whichever driver is connected — the honest limit of colouring a chart by mode. The NMEA driver still says `LOCK`/`POW` because the common words happen to fit a talker, and it now maps them itself |
 | Advanced Console | *"Will send"*, then the transcript's `>` line | Over a broadcast link nothing is sent: picking a key shows the latest of what was heard, and the label is a query/response word |
 | Capture harness | `Capture-Fixtures.ps1` sends `:SYST:STAT?` and strips echo and prompt; `FixtureCorpusTests` assumes every `*.txt` under `Fixtures/` is a status screen | A talker's capture is a timed listen, and belongs beside its tests rather than in the corpus folder until the corpus test can tell families apart |
 | Transport | Serial only | A network transport is item 7, sketched in [`lady-heather-comparison.md`](lady-heather-comparison.md) |
@@ -540,11 +548,13 @@ Adding a family means amending them so the document and the code do not drift
 apart — **raise the amendment rather than absorbing the divergence in code**.
 The same applies to anything on the [boundary
 table](#what-works-with-a-driver-alone--and-what-does-not-yet): capability-gated
-pages, mode mapping and control-line policy are
-[#304](https://github.com/TGoodhew/WinZ3805A/issues/304); binary protocols and
+pages and the mode mapping shipped in
+[#304](https://github.com/TGoodhew/WinZ3805A/issues/304). Binary protocols and
 network transports were
 [#287](https://github.com/TGoodhew/WinZ3805A/issues/287)'s items 5 and 7, and
-with #287 closed they are on no open issue — file one when a family needs them.
+control-line policy on open was raised by
+[#309](https://github.com/TGoodhew/WinZ3805A/issues/309); both issues are
+closed, so all three are on no open issue — file one when a family needs them.
 
 ---
 

@@ -887,7 +887,7 @@ Both exceed the 4.5:1 floor with margin, so accent-coloured text is permitted at
 | `WzInfoBrush` | `WzAccentDark1` | `WzAccentLight2` | ⬤ circle-i | `\uE946` Info | Neutral advisory, rollover notice |
 | `WzNeutralBrush` | `#616161` | `#9A9A9A` | ○ ring | `\uE823` Clock (power-up); PowerButton (off); DisconnectDrive (disconnected) — `Controls/ReceiverMode.cs` | Unknown, power-up, not applicable |
 
-*(The neutral row's glyph cell named the Warning glyph, which is the caution row's — corrected 29 Aug 2026, #316. `ReceiverMode.cs` also draws the Holdover mode with that Warning glyph today, standing in for §10.3's custom holdover icon; see §10.3.)*
+*(The neutral row's glyph cell named the Warning glyph, which is the caution row's — corrected 29 Aug 2026, #316. `Controls/ReceiverMode.cs` also draws the Holdover mode with that Warning glyph today, standing in for §10.3's custom holdover icon; see §10.3. Since #304 that file holds only the drawing: which mode a receiver is in is `IReceiverDriver.InterpretSyncState`'s answer.)*
 
 **Meaning is never carried by colour alone.** Every severity indication is a triple: **colour + shape + text label**. The shape channel is what makes the app usable under deuteranopia and protanopia, where `WzSuccessBrush` and `WzCriticalBrush` converge — a circle and a hexagon do not. This is implemented once in the `SeverityPill` control (§9.10) and every severity surface uses that control rather than hand-rolling a coloured dot.
 
@@ -1944,7 +1944,7 @@ Two behavioural principles remain here because they are functional rather than v
 
 **Behaviour**
 
-- The medallion is `StatusMedallion` (§9.10.2). Glyph, severity token, and mode text derive from `:SYNC:STAT?`:
+- The medallion is `StatusMedallion` (§9.10.2). Glyph, severity token, and mode text derive from `:SYNC:STAT?` — **through the connected receiver's driver since 30 Aug 2026 (#304)**, not from a table in the application. The rows below are the *SmartClock* driver's answers, and they are what this receiver family reports; another family's driver maps its own tokens onto the same seven modes and the right-hand three columns are unchanged. Before #304 the mapping was app-side, so a family that says anything but these six words rendered as *Disconnected* on the medallion, the tray icon and the taskbar badge while its readings were being stored and trended correctly. **The seven modes are a closed set**: a driver picks the nearest honest member rather than adding one, because an eighth mode is a severity, a glyph and a label, which is §9's decision and not a driver author's.
 
   | Response | Severity token | Glyph | Text |
   |---|---|---|---|
@@ -3055,6 +3055,12 @@ something might later branch on.
   > Generalising that prose is a large edit with no second receiver to check it against, and #122's own note says to raise the amendment rather than let code and document drift apart. **This is that raise.** Until it is done, read §7, §8 and §11 as describing the SmartClock driver specifically, and `IReceiverDriver` as the contract any other would have to meet.
   >
   > The one part that must not wait for it is §8.4: exclusions are per-device by nature, the interface exposes a verdict and never the patterns, and a test asserts that against the interface by reflection so the rule binds every future driver rather than only the existing one.
+
+  **Amended 30 Aug 2026 (#304): the pages, the reconnect, and the mode.** Three places still assumed the SmartClock after #287 and #310 closed the seam itself.
+
+  1. **Capability-gating.** Every Details page asked for its tier C commands with `CommandConfirmation.Require`, which throws when the driver has none — correct while one family shipped, and a crash on navigation the day a reads-only talker arrived. Pages now ask `Views/Capability.cs` first. **Absent means disabled and explained, never hidden** (§9.11): the control stays where it is, greyed, with one sentence naming the family and saying it has no command for this. `Require` keeps its throw and becomes an *assertion* that the gate ran — which is why `SatelliteManagementDialog`'s five lookups stay `Require`, gated by the same five on the Manage button.
+  2. **Rebuilding on reconnect.** `ConsoleCatalog`, §8.5's experimental rows, the capability flags and the validator ranges were built once at navigation from a driver the session re-selects on every connect. Each page has a `BindDriver` now, called at navigation *and* on connect; `NumberFieldValidator.Rebind` moves a field's bounds without leaving a second validator subscribed to the same control. Never a §8.1 gap — the session re-checks every command against the current driver's allowlist at the moment it is served — but the Advanced Console's picker **is** the allowlist made visible, so a stale one offered a family commands it had never heard of.
+  3. **The mode is the driver's.** See §10.3. `ReceiverMode` moved into the Device library and `IReceiverDriver.InterpretSyncState` is the mapping; `Controls/ReceiverMode.cs` keeps only severity, glyph, geometry key and label, which is §9's half and no driver's business.
 - **No `DateTime.Now` / `DateTime.UtcNow` anywhere in the Device library.** Inject `TimeProvider` and call `provider.GetUtcNow()`. This is not stylistic — the week-rollover logic (§7.4), staleness display, and poll scheduling are all clock-dependent, and fixture tests must be able to pin the clock. **Enforced by the compiler** (amended 30 Aug 2026, #320): `Microsoft.CodeAnalysis.BannedApiAnalyzers` with `src/WinZ3805A.Device/BannedSymbols.txt`, which bans `DateTime.Now`/`UtcNow`/`Today`, the `DateTimeOffset` pair, and `Stopwatch.StartNew`/`GetTimestamp` — elapsed time reads the same machine clock, and `TimeProvider.GetTimestamp` is the injectable equivalent. `RS0030` plus `TreatWarningsAsErrors` makes a use a build error. This row offered "a Roslyn analyzer rule **or** a code-review checklist item" and had only the checklist until now, which is to say it had only memory. The analyzer is `PrivateAssets="all"`: it ships nothing and does not widen the library's runtime dependencies (§6.4, and CLAUDE.md's boundary).
 
 ---
