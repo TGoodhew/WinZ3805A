@@ -410,7 +410,16 @@ public sealed partial class MainPage : Page
             _ => "AgeFresh",
         }, useTransitions: false);
 
+        // The label and its tooltip move together. The tooltip carries the accelerator, which is
+        // registered on the window's content root rather than on this button (§9.6.2 collapses the
+        // footer in compact mode), so nothing would otherwise tell a user the shortcut exists —
+        // the Details button beside it has said so all along, and this one said nothing (#319).
         ConnectButton.Content = _model.CanConnect ? "Connect" : "Disconnect";
+        ToolTipService.SetToolTip(
+            ConnectButton,
+            _model.CanConnect
+                ? "Connect to a receiver (Ctrl+Shift+C)"
+                : "Disconnect from the receiver (Ctrl+Shift+C)");
 
         // A11Y-9. Last, so that the announcement is never made about a surface that has not been
         // written yet: a reader that follows it straight to the medallion must find the state it

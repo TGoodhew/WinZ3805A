@@ -575,7 +575,11 @@ public static class CommandCatalog
         new ParameterSpec("Longitude degrees", ParameterKind.Integer, Unit: "°", Minimum: 0, Maximum: 180),
         new ParameterSpec("Longitude minutes", ParameterKind.Integer, Unit: "′", Minimum: 0, Maximum: 59),
         new ParameterSpec("Longitude seconds", ParameterKind.Decimal, Unit: "″", Minimum: 0, Maximum: 59.999),
-        new ParameterSpec("Height above mean sea level", ParameterKind.Decimal, Unit: "m", Minimum: -1000, Maximum: 18000),
+        // "Height", with no datum asserted: §10.6's #114 correction found the manual contradicting
+        // itself about whether this is above mean sea level or the ellipsoid, so the application
+        // reports the datum the receiver itself gives and claims none of its own. The label said
+        // "Height above mean sea level" until #319 (from the #316 audit).
+        new ParameterSpec("Height", ParameterKind.Decimal, Unit: "m", Minimum: -1000, Maximum: 18000),
     ];
 
     private static ParameterSpec Prn() =>
