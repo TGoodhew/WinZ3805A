@@ -138,14 +138,20 @@ public sealed class BroadcastListener : IAsyncDisposable
     }
 
     /// <summary>Starts hearing. Idempotent. A fresh listener is not stale until the silence timeout has passed.</summary>
+    /// <remarks>
+    /// Both assignments are under the gate, and starting the loop has to be: <c>_loop ??= …</c> is
+    /// not atomic, so two callers arriving together could each start a read loop over a
+    /// <see cref="PipeReader"/> that allows exactly one consumer — and "idempotent" in the summary
+    /// above is a promise that it is safe to call twice. It sat outside the lock until #324, which
+    /// was the same unsynchronised-lazy-initialisation defect as the one that issue is about.
+    /// </remarks>
     public void Start()
     {
         lock (_gate)
         {
             _lastHeardAt ??= _timeProvider.GetTimestamp();
+            _loop ??= Task.Run(ReadLoopAsync, CancellationToken.None);
         }
-
-        _loop ??= Task.Run(ReadLoopAsync, CancellationToken.None);
     }
 
     /// <summary>
