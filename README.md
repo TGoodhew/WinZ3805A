@@ -63,14 +63,6 @@ receiver that talks unprompted and then sending `*IDN?`, until one is recognised
 Handshaking is always off; DTR and RTS are asserted on open. §7.1 of the
 specification gives the full parameter ranges.
 
-> **On ARM64 machines:** the application is built for x64 only and runs on
-> Windows on ARM under emulation. The thing that actually bites there is the
-> driver, not the emulation: third-party USB-serial drivers frequently lack
-> ARM64 builds — Prolific PL2303 and CH340 clones especially, while FTDI is
-> generally fine. A serial-port driver is kernel-mode, so emulating the
-> application does not help. If no ports enumerate on an ARM64 machine, the
-> adapter's driver is the likely cause rather than the application.
-
 ## Supported platforms
 
 The application is a Windows App SDK (WinUI 3) desktop app, so what it runs on is
@@ -81,7 +73,7 @@ what the Windows App SDK runs on.
 | **Minimum** | Windows 10, version 1809 (build 10.0.17763) |
 | **Also supported** | Windows 10 21H2 / 22H2 / 23H2, Windows 11 21H2 through 25H2 |
 | **Windows Server** | Server 2019 (17763) and Server 2022 (20348) |
-| **Architecture** | **x64 only.** ARM64 runs under emulation — see the note under *Supported hardware* |
+| **Architecture** | **x64 only** — see §6.1. Windows on ARM is not a supported configuration |
 | **Runtime** | .NET 10 (LTS) and the Windows App SDK runtime, both resolved at install time |
 
 The floor is set in [`WinZ3805A.csproj`](src/WinZ3805A/WinZ3805A.csproj) as
@@ -178,10 +170,8 @@ the file; reproduce it locally with MSBuild.)
 
 Restore is per-platform, because the runtime identifier — and so the assets file
 — differs between them. The valid combinations are `Debug` and `Release`
-configurations against the `x64` platform. There is no `AnyCPU` (the Windows App
-SDK is native), no `x86`, and — since 15 August 2026 — no `ARM64`: the
-certification kit installs and runs what it certifies and so cannot cross-test,
-and there is no ARM64 hardware to certify a submission on. See §6.1.
+configurations against the `x64` platform, which is the only one: there is no
+`AnyCPU` (the Windows App SDK is native), no `x86` and no `ARM64`. See §6.1.
 
 `TreatWarningsAsErrors` and `EnforceCodeStyleInBuild` are both on, so a clean
 build produces zero warnings and a code-style violation is a build error rather

@@ -15,7 +15,7 @@ public enum TransportFault
     /// <summary>No fault.</summary>
     None = 0,
 
-    /// <summary>The named port does not exist. On ARM64 this is often a missing driver rather than a missing device (§6.1).</summary>
+    /// <summary>The named port does not exist — the adapter unplugged, or its driver not loaded.</summary>
     PortNotFound,
 
     /// <summary>The port exists but is held by another process — usually a terminal emulator (§9.11, "No permission").</summary>

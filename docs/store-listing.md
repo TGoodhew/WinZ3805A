@@ -99,10 +99,8 @@ otherwise — and it deliberately contains no company mark.
 > asks first, in a dialog that names the command, says what it will do, and reads
 > back the receiver's own error response if it is refused.
 >
-> Requires a serial port and a cable to the receiver. USB-to-serial adapters
-> work. The application is built for x64 and runs on Windows on ARM under
-> emulation; there, check that your adapter's manufacturer ships an ARM64
-> driver, as several common chipsets do not.
+> Requires a 64-bit Intel or AMD processor, a serial port and a cable to the
+> receiver. USB-to-serial adapters work.
 >
 > Not affiliated with, endorsed by, or sponsored by HP, Hewlett-Packard,
 > Agilent, Keysight or Symmetricom. Product and model names are used to describe

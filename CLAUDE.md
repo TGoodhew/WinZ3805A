@@ -157,9 +157,8 @@ $msb = 'C:\Program Files\Microsoft Visual Studio\18\Enterprise\MSBuild\Current\B
 ```
 
 Restore is per-platform because the RID differs. The only valid platform is
-**x64** — no AnyCPU, no x86, and no ARM64 (§6.1, amended 15 Aug 2026: WACK
-cannot cross-test and there is no ARM64 hardware to certify on; Windows on ARM
-runs the x64 package under emulation).
+**x64** — no AnyCPU, no x86, no ARM64 (§6.1). ARM64 is not a target of this
+project: do not add a platform, a publish profile or a matrix row for it.
 
 ```powershell
 # Tests (UI-independent, so the plain SDK is fine here)
@@ -211,8 +210,8 @@ pwsh build/Capture-Fixtures.ps1 -SelfTest # #4 / #185 — the harness, not the a
 `.github/workflows/ci.yml` runs all twelve in their own dependency-free jobs, alongside the
 build rather than ahead of it — they need no restore, so a token, accessibility, or safety
 regression fails in seconds rather than after a full build. A separate matrix job builds both
-Configuration × Platform combinations — Debug and Release against x64,
-since §6.1 dropped ARM64 on 15 Aug 2026 — and runs the tests.
+Configuration × Platform combinations — Debug and Release against x64, the only platform
+§6.1 has — and runs the tests.
 
 **Why a build script is in CI at all.** `Capture-Fixtures.ps1` collects §11.1's
 fixtures, and the states it exists to catch — power-up, acquiring, holdover, a failing health

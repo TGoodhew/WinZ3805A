@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Runtime.InteropServices;
 
 namespace WinZ3805A.Services;
 
@@ -59,35 +58,17 @@ public sealed record SerialPortInfo
     }
 
     /// <summary>
-    /// The copy shown when Windows reports no serial ports at all (§9.11, §6.1).
+    /// The copy shown when Windows reports no serial ports at all (§9.11).
     /// </summary>
-    /// <param name="architecture">
-    /// The <b>machine's</b> architecture — <c>RuntimeInformation.OSArchitecture</c> — which changes
-    /// the likely cause. Not the process's: see the remarks.
-    /// </param>
     /// <remarks>
-    /// <para>
-    /// §6.1 singles ARM64 out for a reason: several common USB-serial chipsets ship no ARM64 driver,
-    /// so on that architecture an empty list is far more often a driver that never loaded than a
-    /// cable that is not plugged in. Naming that saves the user from checking the hardware they can
-    /// see instead of the driver they cannot.
-    /// </para>
-    /// <para>
-    /// <b>Callers must pass <c>OSArchitecture</c> (#319).</b> Both passed
-    /// <c>ProcessArchitecture</c> until then, and §6.1's x64-only package runs under emulation on
-    /// ARM64, where that is always <c>X64</c> — so the ARM64 branch could never be reached on an
-    /// ARM64 machine, the only kind that would ever see it. The branch stayed green throughout
-    /// because the tests call this method with <c>Arm64</c> directly, which no caller could.
-    /// </para>
+    /// One message, because there is one supported architecture. This took the machine's
+    /// architecture and named a missing ARM64 driver as the likely cause on ARM64, which §6.1
+    /// required until it was amended on 29 Aug 2026 to stop describing ARM64 as a target at all.
+    /// The message that remains names the adapter and Device Manager, which is the right first
+    /// step for a missing driver on any architecture — so nothing that mattered was in the branch.
     /// </remarks>
-    public static string NoPortsMessage(Architecture architecture) => architecture switch
-    {
-        Architecture.Arm64 =>
-            "Windows reports no serial ports. Several USB-serial adapters ship no ARM64 driver — "
-            + "check the adapter in Device Manager, then choose Refresh.",
-        _ =>
-            "Windows reports no serial ports. Connect the receiver's serial adapter, then choose Refresh.",
-    };
+    public static string NoPortsMessage() =>
+        "Windows reports no serial ports. Connect the receiver's serial adapter, then choose Refresh.";
 
     /// <summary>Orders ports the way a person reads them, so COM9 precedes COM10.</summary>
     /// <remarks>

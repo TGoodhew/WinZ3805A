@@ -125,7 +125,8 @@ The first time the application runs it shows a **Connect your receiver** panel w
 `Ctrl+Shift+C`, or from the **status pill** in the Details window's title bar.
 
 - **Port** lists the serial ports Windows can see; **Refresh** re-scans after plugging an adapter
-  in. If no ports appear at all on an ARM64 machine, the adapter's driver is the likely cause.
+  in. If no ports appear at all, the adapter's driver is the likely cause — check it in Device
+  Manager.
 - **Auto-detect settings** tries the likely baud rates and framings — listening first for a
   receiver that talks by itself, then asking for an identity — until one is recognised. Use it
   unless you know the settings. **Manual** exposes baud, data bits, parity and stop bits — the

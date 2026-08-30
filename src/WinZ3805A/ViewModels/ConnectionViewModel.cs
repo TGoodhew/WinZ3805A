@@ -1,7 +1,6 @@
 ﻿using System.ComponentModel;
 using System.IO.Ports;
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 using WinZ3805A.Device.Transport;
 using WinZ3805A.Services;
 
@@ -328,10 +327,7 @@ public sealed class ConnectionViewModel : INotifyPropertyChanged
                     _session.LastFault,
                     port.PortName,
                     IsAutoDetect,
-                    IsAutoDetect ? null : ManualSettings,
-                    // The machine's architecture, not the emulated process's: the x64 package
-                    // reports X64 for its process on every ARM64 machine (#319).
-                    RuntimeInformation.OSArchitecture);
+                    IsAutoDetect ? null : ManualSettings);
             }
 
             return connected;
@@ -404,11 +400,6 @@ public sealed class ConnectionViewModel : INotifyPropertyChanged
     /// <param name="portName">The port that was tried.</param>
     /// <param name="autoDetect">Whether the eight-combination walk was used.</param>
     /// <param name="settings">The settings tried, for the manual case.</param>
-    /// <param name="architecture">
-    /// The <b>machine's</b> architecture (<c>RuntimeInformation.OSArchitecture</c>), which changes
-    /// what a missing port means. The caller passed the process's until #319; under emulation that
-    /// is <c>X64</c> on an ARM64 machine, so the ARM64 copy could never be reached.
-    /// </param>
     /// <remarks>
     /// Static and fully parameterised so every row can be asserted without a serial port in the
     /// machine. The copy follows §9.11's rules literally: what happened, then what to do next, with
@@ -419,17 +410,15 @@ public sealed class ConnectionViewModel : INotifyPropertyChanged
         TransportFault fault,
         string portName,
         bool autoDetect,
-        SerialSettings? settings,
-        Architecture architecture) => fault switch
+        SerialSettings? settings) => fault switch
     {
         TransportFault.AccessDenied =>
             $"Windows wouldn't let the app open {portName}. Another program may have it open. "
             + "Close it, then try again.",
 
-        TransportFault.PortNotFound when architecture == Architecture.Arm64 =>
-            $"Windows no longer reports {portName}. On ARM64 this is usually a USB-serial adapter "
-            + "whose driver did not load — check it in Device Manager, then choose Refresh.",
-
+        // This took the machine's architecture and named a missing ARM64 driver here. §6.1 no
+        // longer describes ARM64 as a target (amended 29 Aug 2026), so there is one message, and
+        // reconnecting the adapter is the right first step whatever the machine.
         TransportFault.PortNotFound =>
             $"Windows no longer reports {portName}. Reconnect the adapter, then choose Refresh.",
 

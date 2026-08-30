@@ -20,32 +20,18 @@
     <RootNamespace>WinZ3805A</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <!--
-      §6.1 as amended 15 Aug 2026: x64 only. No AnyCPU (Windows App SDK is
-      native) and no x86.
-
-      This used to be x64;ARM64. ARM64 was dropped because WACK installs and
-      runs the package it certifies and therefore cannot cross-test, so an ARM64
-      submission needs ARM64 hardware to certify on, and this project has none -
-      shipping it would mean shipping a binary nobody had run the certification
-      kit against. Windows 11 on ARM runs x64 applications under emulation, so
-      ARM64 machines still get a working application from this package.
-
-      Restoring it is deliberately small: add ARM64 here, add win-arm64 to
-      RuntimeIdentifiers with its Condition line back, restore
-      Properties/PublishProfiles/win-arm64.pubxml, and add the matrix row in
-      .github/workflows/ci.yml. Do that when there is hardware to certify on.
+      §6.1: x64 only. No AnyCPU (the Windows App SDK is native), no x86, no
+      ARM64 - which is not a deferred build but a platform this project does not
+      target (§6.1, amended 29 Aug 2026).
     -->
     <Platforms>x64</Platforms>
     <!--
-      The template derived the RID from the *building process*' architecture.
-      That is right on an x64-only project today and was wrong when ARM64 was a
-      solution platform, so the RID still follows $(Platform) rather than the
-      process - which is what makes the restoration above a one-line change
-      rather than a rewrite.
+      The RID follows $(Platform) rather than the building process' architecture,
+      which is what the template did. Building an x64 package must not depend on
+      what the machine doing the building happens to be.
     -->
     <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
-    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(Platform)' == 'x64'">win-x64</RuntimeIdentifier>
-    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-$([System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString().ToLowerInvariant())</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-x64</RuntimeIdentifier>
     <PublishProfile Condition="Exists('Properties\PublishProfiles\win-$(Platform).pubxml')">win-$(Platform).pubxml</PublishProfile>
     <UseWinUI>true</UseWinUI>
     <WinUISDKReferences>false</WinUISDKReferences>

@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using WinZ3805A.Services;
 
 namespace WinZ3805A.Tests.Services;
@@ -95,36 +94,21 @@ public sealed class SerialPortInfoTests
     }
 
     /// <remarks>
-    /// <para>
-    /// §6.1 singles ARM64 out because several USB-serial chipsets ship no driver for it, so an empty
-    /// list there points at the driver rather than at the cable.
-    /// </para>
-    /// <para>
-    /// <b>This test binds the copy, not the caller, and cannot be made to bind the caller here.</b>
-    /// It passes an architecture directly; the defect #319 fixed was that the callers read
-    /// <c>ProcessArchitecture</c>, which an x64 package reports as <c>X64</c> even on an ARM64
-    /// machine, so the branch asserted below was unreachable in the running application. On x64
-    /// hardware — this machine and CI — <c>OSArchitecture</c> and <c>ProcessArchitecture</c> are
-    /// the same value, so no test run here can tell a correct caller from the broken one. What
-    /// guards it is the call sites saying which reading they take and why.
-    /// </para>
+    /// One message, because §6.1 has one supported architecture. This asserted a second one that
+    /// named a missing ARM64 driver, which the specification required until it was amended on
+    /// 29 Aug 2026 to stop describing ARM64 as a target — and which no caller could ever select,
+    /// because an x64 package reports <c>X64</c> for its process even on an ARM64 machine (#319).
     /// </remarks>
     [Fact]
-    public void NoPortsMessage_NamesTheDriverOnArm64AndTheCableElsewhere()
+    public void NoPortsMessage_NamesTheAdapterAndWhatToDo()
     {
-        string arm = SerialPortInfo.NoPortsMessage(Architecture.Arm64);
-        string x64 = SerialPortInfo.NoPortsMessage(Architecture.X64);
+        string message = SerialPortInfo.NoPortsMessage();
 
-        Assert.Contains("ARM64", arm, StringComparison.Ordinal);
-        Assert.Contains("driver", arm, StringComparison.Ordinal);
-        Assert.DoesNotContain("driver", x64, StringComparison.Ordinal);
+        Assert.Contains("adapter", message, StringComparison.Ordinal);
 
         // §9.11: no apology, and an instruction to follow.
-        Assert.All([arm, x64], message =>
-        {
-            Assert.Contains("Refresh", message, StringComparison.Ordinal);
-            Assert.DoesNotContain("Sorry", message, StringComparison.OrdinalIgnoreCase);
-            Assert.DoesNotContain("Oops", message, StringComparison.OrdinalIgnoreCase);
-        });
+        Assert.Contains("Refresh", message, StringComparison.Ordinal);
+        Assert.DoesNotContain("Sorry", message, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Oops", message, StringComparison.OrdinalIgnoreCase);
     }
 }
