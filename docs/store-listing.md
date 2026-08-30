@@ -5,22 +5,25 @@ the repository so the listing is reviewed in a pull request like anything else,
 and so the wording that carries the §6.3 trademark position cannot be quietly
 rewritten in a web form.
 
-**Status: not yet submitted.** Partner Center registration has not happened, so
-the four values in [Identity](#identity-blocked-on-39) are still placeholders and
-the package cannot be submitted. Everything else here is ready.
+**Status: not yet submitted, and deferred.** Store submission was deferred by
+decision on 21 Aug 2026 — P0-15 (#15) and OQ-6 (#39) were both closed as
+deferred, and are the issues to reopen if the Store is returned to. Partner
+Center registration has not happened, so two of the three values in
+[Identity](#identity) are still placeholders and the package cannot be
+submitted. Everything else here is ready.
 
 ---
 
-## Identity (blocked on #39)
+## Identity
 
 Reserve the app name in Partner Center, then copy these from **Product identity**
 into `src/WinZ3805A/Package.appxmanifest` verbatim.
 
-| Partner Center field | Manifest location | Placeholder in the repository now |
+| Partner Center field | Manifest location | In the repository now |
 |---|---|---|
 | Package/Identity/Name | `Identity/@Name` | `WinZ3805A` |
-| Package/Identity/Publisher | `Identity/@Publisher` | `CN=AppPublisher` |
-| Package/Properties/PublisherDisplayName | `Properties/PublisherDisplayName` | `AppPublisher` |
+| Package/Identity/Publisher | `Identity/@Publisher` | `CN=AppPublisher` (placeholder) |
+| Package/Properties/PublisherDisplayName | `Properties/PublisherDisplayName` | `The Schanzuer Group LLC` — correct for the sideloaded build; Partner Center issues its own and it must match the account |
 
 Retyping the publisher distinguished name rather than copying it is the usual
 way a first submission fails: it must match the certificate the Store signs with
@@ -29,7 +32,8 @@ exactly.
 `Identity/@Name` is effectively permanent — changing it later is a new app, a new
 listing, and no upgrade path for existing users. `Properties/DisplayName` is
 deliberately **not** coupled to it (§6.3) and is a one-line change at any time,
-which is the hedge if a reviewer objects to the name. See OQ-8 (#41).
+which is the hedge if a reviewer objects to the name. See OQ-8 (#41, closed as
+deferred with the submission).
 
 ## Privacy policy URL
 
@@ -65,7 +69,8 @@ otherwise — and it deliberately contains no company mark.
 
 > WinZ3805A is a modern Windows application for monitoring and controlling
 > GPS-disciplined oscillators over RS-232. It works with HP and Symmetricom SCPI
-> GPS receivers including the Z3805A, Z3801A, 58503A/B, 59551A and Z3816A.
+> GPS receivers including the Z3805A, Z3801A, 58503A/B, 59551A and Z3816A, and
+> monitors any GPS receiver that speaks NMEA 0183.
 >
 > It is built for the way these instruments are actually used: left running on a
 > bench for weeks at a time. The main window is a single glanceable surface —
@@ -114,8 +119,8 @@ is metrology and amateur radio rather than either.
 ### Search terms
 
 GPSDO, GPS disciplined oscillator, frequency standard, 10 MHz reference, 1 PPS,
-SCPI, RS-232, time and frequency, Z3805A, Z3801A, 58503A, 59551A, Thunderbolt
-alternative, laboratory instrument
+SCPI, RS-232, NMEA 0183, u-blox, time and frequency, Z3805A, Z3801A, 58503A,
+59551A, Thunderbolt alternative, laboratory instrument
 
 ### Age rating
 
@@ -155,4 +160,6 @@ screenshot of a disconnected application shows nothing worth seeing.
 - [ ] `pwsh build/Invoke-Wack.ps1` clean on **x64**, from an elevated shell —
       the only architecture, per §6.1 as amended
 - [ ] Screenshots captured
-- [ ] `Version` in the manifest set to the release version
+- [ ] `Identity/@Version` in the manifest set to the release version — it is
+      the single version source; `build/New-SideloadPackage.ps1` reads it and
+      names the zip from it, and nothing else carries a version
