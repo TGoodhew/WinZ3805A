@@ -79,20 +79,30 @@ public sealed class SerialTransport : ITransport
 
     /// <inheritdoc />
     /// <remarks>
+    /// <para>
     /// <see cref="SerialPort.Open"/> is synchronous and has no async form. It is quick on a healthy
-    /// port and slow on a sick one, and it runs on whichever thread awaits <see cref="OpenAsync"/>;
-    /// wrapping it here would only hide that. Today that thread is the connection dialog's UI thread
-    /// for the first open of a connect or an auto-detect walk — nothing in the connect chain moves
-    /// off it before the open — which is a known gap (#316 audit); a reconnect runs on the pool.
+    /// port and slow on a sick one — a driver that has to enumerate a device which is not answering
+    /// can take seconds — so it runs on the thread pool rather than on whichever thread awaited
+    /// this (#319). Before that it ran on the caller's, and nothing in the connect chain moves off
+    /// the UI thread: the connection dialog's first open, and every step of an auto-detect walk,
+    /// froze the window for as long as the driver took.
+    /// </para>
+    /// <para>
+    /// <b>This is not the <c>Task.Run</c> §6.4 forbids.</b> That rule is about <i>reads</i>, and
+    /// exists because <see cref="SerialPort.BaseStream"/> offers genuine async I/O to use instead;
+    /// here there is no async form to prefer, so a pool thread is the only way not to block the
+    /// caller. The token cannot interrupt an open once it has started — nothing can — so it only
+    /// prevents one starting.
+    /// </para>
     /// </remarks>
-    public ValueTask OpenAsync(CancellationToken cancellationToken = default)
+    public async ValueTask OpenAsync(CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         cancellationToken.ThrowIfCancellationRequested();
 
         if (IsOpen)
         {
-            return ValueTask.CompletedTask;
+            return;
         }
 
         SerialPort port = new(_portName, _settings.BaudRate, _settings.Parity, _settings.DataBits, _settings.StopBits)
@@ -113,7 +123,7 @@ public sealed class SerialTransport : ITransport
 
         try
         {
-            port.Open();
+            await Task.Run(port.Open, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex) when (TransportFaults.IsTransportFault(ex) || ex is ArgumentException)
         {
@@ -122,13 +132,19 @@ public sealed class SerialTransport : ITransport
             port.Dispose();
             throw new TransportException(fault, $"Could not open {Description}: {ex.Message}", ex);
         }
+        catch (OperationCanceledException)
+        {
+            // Cancelled before the open ran. The port was constructed here and never handed over,
+            // so this method still owns it.
+            port.Dispose();
+            throw;
+        }
 
         _port = port;
         _pipe = new Pipe();
         _pump = PumpAsync(port, _pipe.Writer);
 
         TransportLog.PortOpened(_logger, Description);
-        return ValueTask.CompletedTask;
     }
 
     /// <inheritdoc />
