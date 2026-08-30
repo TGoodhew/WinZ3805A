@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System.Runtime.InteropServices;
 
@@ -13,6 +13,7 @@ using AppInstance = Microsoft.Windows.AppLifecycle.AppInstance;
 using Windows.ApplicationModel;
 
 using WinZ3805A.Device.Drivers;
+using WinZ3805A.Device.Drivers.Nmea;
 using WinZ3805A.Device.Transport;
 using WinZ3805A.Services;
 using WinZ3805A.Views;
@@ -462,6 +463,13 @@ public partial class App : Application
         // walkthrough. AddDevice hands every registration to each session it composes.
         services.AddSingleton<IReceiverDriver>(
             provider => new SmartClockDriver(provider.GetRequiredService<TimeProvider>()));
+
+        // #310: the second family — any NMEA 0183 talker — and the line docs/adding-a-receiver.md
+        // promises is the only application-project edit a new family needs. Registered after the
+        // SmartClock, so the SmartClock stays the fallback for an identity nothing claims; a talker
+        // is claimed by what it says, before any identity is asked for.
+        services.AddSingleton<IReceiverDriver>(
+            provider => new NmeaDriver(provider.GetRequiredService<TimeProvider>()));
 
         services.AddDevice(DeviceKeys.Primary, (port, settings) => new SerialTransport(port, settings));
 
