@@ -168,4 +168,19 @@ public sealed class FakeReceiverDriver : IReceiverDriver
             ? new SweepInterpretation(readings, Rejection: null)
             : new SweepInterpretation(readings, "the run state was not RUN or IDLE, which is all this receiver says");
     }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The point of the fictional vocabulary (#304). This family says <c>RUN</c> and <c>IDLE</c> and
+    /// has never heard of <c>LOCK</c> — so before the mapping was the driver's, every reading it
+    /// produced rendered as <see cref="ReceiverMode.Disconnected"/> on the medallion, the tray icon
+    /// and the taskbar badge while the sweep behind it was being stored and trended correctly.
+    /// </remarks>
+    public ReceiverMode InterpretSyncState(string? syncState) =>
+        ScalarParsers.ParseKeyword(syncState) switch
+        {
+            "RUN" => ReceiverMode.Locked,
+            "IDLE" => ReceiverMode.PowerUp,
+            _ => ReceiverMode.Disconnected,
+        };
 }

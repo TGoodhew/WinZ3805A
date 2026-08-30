@@ -336,6 +336,7 @@ public sealed class DriverSelectionTests
         public ReceiverStatus Parse(string? response) => _inner.Parse(response);
 
         public SweepInterpretation InterpretSweep(IReadOnlyList<string?> answers) => _inner.InterpretSweep(answers);
+        public ReceiverMode InterpretSyncState(string? syncState) => _inner.InterpretSyncState(syncState);
     }
 
     /// <summary>
@@ -373,6 +374,7 @@ public sealed class DriverSelectionTests
         public ReceiverStatus Parse(string? response) => _inner.Parse(response);
 
         public SweepInterpretation InterpretSweep(IReadOnlyList<string?> answers) => _inner.InterpretSweep(answers);
+        public ReceiverMode InterpretSyncState(string? syncState) => _inner.InterpretSyncState(syncState);
     }
 
     // -------------------------------------------------------------------------------------

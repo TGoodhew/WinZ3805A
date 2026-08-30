@@ -90,6 +90,24 @@ public sealed class SmartClockDriver(TimeProvider timeProvider) : IReceiverDrive
 
     /// <inheritdoc />
     /// <remarks>
+    /// The closed set of <c>:SYNC:STAT?</c> answers, per the 58503A/59551A guide, and §10.3's table
+    /// read from the driver's side. It is also the sweep's acceptance test — see
+    /// <see cref="InterpretSweep"/> — so there is one list rather than two that can drift.
+    /// </remarks>
+    public ReceiverMode InterpretSyncState(string? syncState) =>
+        syncState?.Trim().ToUpperInvariant() switch
+        {
+            "LOCK" => ReceiverMode.Locked,
+            "REC" => ReceiverMode.Recovering,
+            "WAIT" => ReceiverMode.Waiting,
+            "HOLD" => ReceiverMode.Holdover,
+            "POW" => ReceiverMode.PowerUp,
+            "OFF" => ReceiverMode.Off,
+            _ => ReceiverMode.Disconnected,
+        };
+
+    /// <inheritdoc />
+    /// <remarks>
     /// <para>
     /// The rejection rule is #209's: the sync state is the one field with a closed set of legal
     /// values — <c>LOCK</c>, <c>REC</c>, <c>WAIT</c>, <c>HOLD</c>, <c>POW</c>, <c>OFF</c> — so an
@@ -119,7 +137,10 @@ public sealed class SmartClockDriver(TimeProvider timeProvider) : IReceiverDrive
             EfcPercent: ScalarParsers.ParseDecimal(At(answers, 4)),
             SatellitesTracked: ScalarParsers.ParseInteger(At(answers, 5)));
 
-        return SyncStates.Contains(syncState ?? string.Empty)
+        // One source for "is this a state?" and "which state is it?" (#304): a token the mapping
+        // does not know is exactly a token the sweep must reject, and keeping two lists is how the
+        // two answers drift apart.
+        return InterpretSyncState(syncState) != ReceiverMode.Disconnected
             ? new SweepInterpretation(readings, Rejection: null)
             : new SweepInterpretation(
                 readings,
@@ -136,19 +157,6 @@ public sealed class SmartClockDriver(TimeProvider timeProvider) : IReceiverDrive
         ":DIAG:ROSC:EFC:REL?",
         ":GPS:SAT:TRAC:COUN?",
     ];
-
-    /// <summary>
-    /// The closed set of <c>:SYNC:STAT?</c> answers, per the 58503A/59551A guide.
-    /// </summary>
-    /// <remarks>
-    /// <c>ReceiverModes.FromSyncState</c>, in the app project, maps these same six tokens to the
-    /// UI's modes — and the two lists cannot share a definition, because this library must not
-    /// reference the app. A test asserts they agree
-    /// (<c>ReceiverDriverTests.TheDriverAndTheUiAgreeOnTheSyncVocabulary</c>), so a token added to
-    /// one place without the other fails loudly instead of dropping sweeps while looking healthy.
-    /// </remarks>
-    private static readonly IReadOnlySet<string> SyncStates =
-        new HashSet<string>(StringComparer.Ordinal) { "LOCK", "REC", "WAIT", "HOLD", "POW", "OFF" };
 
     /// <summary>The answer at <paramref name="index"/>, or null when the sweep was shorter.</summary>
     private static string? At(IReadOnlyList<string?> answers, int index) =>

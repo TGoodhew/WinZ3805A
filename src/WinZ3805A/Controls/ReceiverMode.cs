@@ -1,60 +1,27 @@
-﻿namespace WinZ3805A.Controls;
+﻿using WinZ3805A.Device.Models;
+
+namespace WinZ3805A.Controls;
 
 /// <summary>
-/// What the receiver is doing, from the <c>:SYNC:STAT?</c> responses §10.3 tabulates.
-/// </summary>
-public enum ReceiverMode
-{
-    /// <summary>Nothing is connected, or the link has gone.</summary>
-    Disconnected = 0,
-
-    /// <summary>Locked to GPS.</summary>
-    Locked,
-
-    /// <summary>Recovering toward lock.</summary>
-    Recovering,
-
-    /// <summary>Waiting before it may recover.</summary>
-    Waiting,
-
-    /// <summary>Running on the oscillator alone.</summary>
-    Holdover,
-
-    /// <summary>Warming up after power was applied.</summary>
-    PowerUp,
-
-    /// <summary>In diagnostics, or with outputs off.</summary>
-    Off,
-}
-
-/// <summary>
-/// Maps the receiver's <c>:SYNC:STAT?</c> keyword onto the §10.3 presentation triple.
+/// Draws §10.3's presentation triple for a <see cref="ReceiverMode"/>.
 /// </summary>
 /// <remarks>
+/// <para>
 /// The mapping lives in one place because §10.3 states it as one table, and because severity,
 /// glyph and text must change together — a mode whose colour and glyph disagree is worse than
 /// either alone. <c>StatusMedallion</c> derives all three from <see cref="ReceiverMode"/> rather
 /// than taking them separately, so a caller cannot set two of the three.
+/// </para>
+/// <para>
+/// <b>What is no longer here is the token.</b> Turning a receiver's <c>:SYNC:STAT?</c> answer into a
+/// mode moved to <c>IReceiverDriver.InterpretSyncState</c> (#304): the six keywords are one
+/// family's vocabulary, and reading them here made every other family render as
+/// <see cref="ReceiverMode.Disconnected"/>. What stays is the half §9 owns — how a mode is drawn —
+/// which no driver has an opinion about.
+/// </para>
 /// </remarks>
 public static class ReceiverModes
 {
-    /// <summary>Interprets the keyword <c>:SYNC:STAT?</c> answered with.</summary>
-    /// <remarks>
-    /// Anything unrecognised becomes <see cref="ReceiverMode.Disconnected"/> rather than being
-    /// guessed at: a mode the application does not understand is one it cannot describe honestly,
-    /// and showing "locked" on a maybe would be the worst possible default.
-    /// </remarks>
-    public static ReceiverMode FromSyncState(string? syncState) => syncState?.Trim().ToUpperInvariant() switch
-    {
-        "LOCK" => ReceiverMode.Locked,
-        "REC" => ReceiverMode.Recovering,
-        "WAIT" => ReceiverMode.Waiting,
-        "HOLD" => ReceiverMode.Holdover,
-        "POW" => ReceiverMode.PowerUp,
-        "OFF" => ReceiverMode.Off,
-        _ => ReceiverMode.Disconnected,
-    };
-
     /// <summary>The §9.4.3 severity this mode carries.</summary>
     public static Severity SeverityOf(ReceiverMode mode) => mode switch
     {

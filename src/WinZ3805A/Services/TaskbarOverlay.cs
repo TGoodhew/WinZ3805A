@@ -1,9 +1,10 @@
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 using WinZ3805A.Controls;
+using WinZ3805A.Device.Models;
 
 namespace WinZ3805A.Services;
 

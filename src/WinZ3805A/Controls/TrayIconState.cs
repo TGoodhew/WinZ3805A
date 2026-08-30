@@ -1,3 +1,5 @@
+﻿using WinZ3805A.Device.Models;
+
 namespace WinZ3805A.Controls;
 
 /// <summary>Everything the shell needs to draw and describe the tray icon for one mode.</summary>

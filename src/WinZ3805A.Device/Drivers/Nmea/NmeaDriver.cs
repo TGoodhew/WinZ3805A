@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 
 using WinZ3805A.Device.Commands;
 using WinZ3805A.Device.Models;
@@ -174,6 +174,31 @@ public sealed class NmeaDriver(TimeProvider timeProvider) : IReceiverDriver
 
     /// <inheritdoc />
     public ReceiverStatus Parse(string? response) => NmeaStatusParser.Parse(response, _timeProvider.GetUtcNow());
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Two states, because a talker has two: it has a fix or it has not. The mapping is the
+    /// judgement call recorded on this class — a fix is <see cref="ReceiverMode.Locked"/>, no fix is
+    /// <see cref="ReceiverMode.PowerUp"/> — and it lives here now rather than being borrowed from
+    /// the SmartClock's table app-side (#304).
+    /// </para>
+    /// <para>
+    /// The other four modes are genuinely unreachable. <see cref="ReceiverMode.Holdover"/> and
+    /// <see cref="ReceiverMode.Recovering"/> describe a disciplined oscillator riding out a GPS
+    /// outage, and a talker has no oscillator to discipline: when its fix goes, it stops reporting
+    /// one and there is nothing to hold over. Saying so is the point of a driver-supplied mapping —
+    /// a table that showed four modes this family cannot enter would be a promise about a receiver
+    /// nobody has.
+    /// </para>
+    /// </remarks>
+    public ReceiverMode InterpretSyncState(string? syncState) =>
+        syncState?.Trim().ToUpperInvariant() switch
+        {
+            FixToken => ReceiverMode.Locked,
+            NoFixToken => ReceiverMode.PowerUp,
+            _ => ReceiverMode.Disconnected,
+        };
 
     /// <summary>
     /// Reads the fast tier: RMC for the cycle and its status, GGA for the fix quality, GSA for the

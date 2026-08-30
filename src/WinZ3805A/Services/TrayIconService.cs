@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging;
 
 using Microsoft.UI.Dispatching;
 
-using WinZ3805A.Controls;
+using WinZ3805A.Device.Models;
 
 namespace WinZ3805A.Services;
 
@@ -88,7 +88,7 @@ public sealed class TrayIconService : IDisposable
     /// into <see cref="ShellMode"/> for #274, when the taskbar badge became a third surface that has
     /// to agree with this one.
     /// </remarks>
-    private ReceiverMode Mode => ShellMode.For(_store, _connection);
+    private ReceiverMode Mode => ShellMode.For(_session.Driver, _store, _connection);
 
     private void OnSessionChanged(object? sender, ConnectionStatusChanged e)
     {

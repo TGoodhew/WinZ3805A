@@ -1,9 +1,9 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Dispatching;
 
-using WinZ3805A.Controls;
+using WinZ3805A.Device.Models;
 
 namespace WinZ3805A.Services;
 
@@ -85,7 +85,7 @@ public sealed class TaskbarOverlayService : IDisposable
             return;
         }
 
-        ReceiverMode mode = ShellMode.For(_store, _connection);
+        ReceiverMode mode = ShellMode.For(_session.Driver, _store, _connection);
 
         if (_dispatcher.HasThreadAccess)
         {

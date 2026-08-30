@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Time.Testing;
+﻿using Microsoft.Extensions.Time.Testing;
 
 using WinZ3805A.Controls;
 using WinZ3805A.Device.Commands;
@@ -447,14 +447,21 @@ public class ReceiverDriverTests
     }
 
     /// <summary>
-    /// The driver and the UI agree about which tokens are sync states.
+    /// Every token the sweep accepts names a mode, and every mode it names is drawn.
     /// </summary>
     /// <remarks>
-    /// The closed set exists twice — the driver's rejection rule in the Device library, and
-    /// <see cref="ReceiverModes.FromSyncState"/> in the app's Controls — and cannot share a
-    /// definition, because the library must not reference the app. This test is the agreement: the
-    /// six tokens listed here are the authority, and a token added to either side without the other
-    /// fails here instead of dropping sweeps (or rendering Disconnected) while looking healthy.
+    /// <para>
+    /// The closed set used to exist twice — the driver's rejection rule here, and
+    /// <c>ReceiverModes.FromSyncState</c> in the app's Controls — because the library must not
+    /// reference the app, and this test was the agreement between them. #304 removed the second
+    /// copy instead: <see cref="IReceiverDriver.InterpretSyncState"/> is now both the mapping and
+    /// the sweep's acceptance test, so those two cannot drift by construction.
+    /// </para>
+    /// <para>
+    /// What remains worth asserting is the other seam. The driver names a mode; §9 draws it; and
+    /// the six tokens listed here are §10.3's table, so a token that stopped naming a mode would
+    /// silently start rejecting sweeps.
+    /// </para>
     /// </remarks>
     [Theory]
     [InlineData("LOCK")]
@@ -465,15 +472,42 @@ public class ReceiverDriverTests
     [InlineData("OFF")]
     public void TheDriverAndTheUiAgreeOnTheSyncVocabulary(string token)
     {
+        ReceiverMode mode = Driver().InterpretSyncState(token);
+
         Assert.Null(Driver().InterpretSweep([token]).Rejection);
-        Assert.NotEqual(ReceiverMode.Disconnected, ReceiverModes.FromSyncState(token));
+        Assert.NotEqual(ReceiverMode.Disconnected, mode);
+
+        // The other half of the seam: the driver names a mode, §9 draws it. A mode with no label
+        // would reach the medallion as an empty string rather than as a compile error.
+        Assert.False(string.IsNullOrWhiteSpace(ReceiverModes.TextOf(mode)));
+        Assert.False(string.IsNullOrWhiteSpace(ReceiverModes.GlyphOf(mode)));
+    }
+
+    /// <summary>
+    /// A family whose receiver has never heard of <c>LOCK</c> still lights the medallion (#304).
+    /// </summary>
+    /// <remarks>
+    /// The defect this closed, stated as a test. <see cref="FakeReceiverDriver"/>'s receiver says
+    /// <c>RUN</c> and <c>IDLE</c>; while the mapping was a static table over the SmartClock's six
+    /// tokens, every reading it produced rendered as <see cref="ReceiverMode.Disconnected"/> on the
+    /// medallion, the tray icon and the taskbar badge — with the sweep behind it stored and trended
+    /// perfectly well, which is what made it hard to see.
+    /// </remarks>
+    [Fact]
+    public void AFamilyWithItsOwnVocabularyGetsItsOwnModes()
+    {
+        FakeReceiverDriver driver = new();
+
+        Assert.Equal(ReceiverMode.Locked, driver.InterpretSyncState("RUN"));
+        Assert.Equal(ReceiverMode.PowerUp, driver.InterpretSyncState("IDLE"));
+        Assert.Equal(ReceiverMode.Disconnected, driver.InterpretSyncState("LOCK"));
     }
 
     [Fact]
     public void ATokenNeitherSideKnowsIsRejectedByBoth()
     {
         Assert.NotNull(Driver().InterpretSweep(["TRACKING"]).Rejection);
-        Assert.Equal(ReceiverMode.Disconnected, ReceiverModes.FromSyncState("TRACKING"));
+        Assert.Equal(ReceiverMode.Disconnected, Driver().InterpretSyncState("TRACKING"));
     }
 
     // ---- Parsing ------------------------------------------------------------------------------

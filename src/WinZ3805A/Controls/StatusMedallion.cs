@@ -9,6 +9,8 @@ using Microsoft.UI.Xaml.Shapes;
 // System.IO.Path arrives through the implicit usings and collides with the shape.
 using Path = Microsoft.UI.Xaml.Shapes.Path;
 
+using WinZ3805A.Device.Models;
+
 namespace WinZ3805A.Controls;
 
 /// <summary>The three medallion diameters §9.10.2 sanctions.</summary>

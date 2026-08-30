@@ -2,6 +2,7 @@
 using System.Globalization;
 using System.Runtime.CompilerServices;
 using WinZ3805A.Controls;
+using WinZ3805A.Device.Drivers;
 using WinZ3805A.Device.Models;
 using WinZ3805A.Services;
 
@@ -31,17 +32,20 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private readonly TimeProvider _timeProvider;
 
     private ConnectionStatus _connection = ConnectionStatus.Disconnected;
+    private IReceiverDriver _driver;
     private string? _portDescription;
     private TimeZoneInfo _displayZone = TimeZoneInfo.Local;
 
     /// <summary>Creates a view model over a store.</summary>
-    public MainViewModel(ReceiverStateStore store, TimeProvider timeProvider)
+    public MainViewModel(ReceiverStateStore store, TimeProvider timeProvider, IReceiverDriver driver)
     {
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(timeProvider);
+        ArgumentNullException.ThrowIfNull(driver);
 
         _store = store;
         _timeProvider = timeProvider;
+        _driver = driver;
         _store.PropertyChanged += (_, _) => RaiseAll();
     }
 
@@ -60,6 +64,32 @@ public sealed class MainViewModel : INotifyPropertyChanged
             }
 
             _connection = value;
+            RaiseAll();
+        }
+    }
+
+    /// <summary>The connected receiver's driver, which says what its sync token means (#304).</summary>
+    /// <remarks>
+    /// <b>Required at construction and re-set on every connect.</b> The session re-selects a driver
+    /// each time the link comes up (#287), so one captured once would describe a receiver that may
+    /// no longer be on the port — but a nullable property that a page could simply forget to set
+    /// would fail by rendering <see cref="ReceiverMode.Disconnected"/> over a healthy receiver,
+    /// which is the quietest possible way to be wrong. Taking it in the constructor makes forgetting
+    /// a compile error and leaves the setter for the one case that legitimately changes.
+    /// </remarks>
+    public IReceiverDriver Driver
+    {
+        get => _driver;
+        set
+        {
+            ArgumentNullException.ThrowIfNull(value);
+
+            if (ReferenceEquals(_driver, value))
+            {
+                return;
+            }
+
+            _driver = value;
             RaiseAll();
         }
     }
@@ -94,7 +124,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// beside it about the same receiver.
     /// </para>
     /// </remarks>
-    public ReceiverMode Mode => ShellMode.For(_store, Connection);
+    public ReceiverMode Mode => ShellMode.For(Driver, _store, Connection);
 
     /// <summary>The mode text beside the medallion (§10.3).</summary>
     public string ModeText => ReceiverModes.TextOf(Mode);
