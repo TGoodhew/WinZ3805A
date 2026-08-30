@@ -47,6 +47,19 @@ public sealed partial class SatellitesPage : Page
     private NumberFieldValidator? _mask;
     private bool _busy;
 
+    /// <summary>The last value this page wrote into the mask editor.</summary>
+    /// <remarks>
+    /// Compared against rather than guarded with a flag around the assignment, for the reason
+    /// §10.8's duration limit gives: when <c>ValueChanged</c> arrives relative to the setter is the
+    /// control's business, and a comparison does not depend on the answer. <c>double.Equals</c>, so
+    /// the empty box compares equal to itself and an untouched field is never taken for an edited
+    /// one.
+    /// </remarks>
+    private double _seededMask = double.NaN;
+
+    /// <summary>Whether the number in the mask editor is the user's rather than the receiver's.</summary>
+    private bool _maskEdited;
+
     /// <summary>Which form of the sky is showing.</summary>
     private SkyView _skyView = SkyView.Plot;
 
@@ -71,8 +84,14 @@ public sealed partial class SatellitesPage : Page
     {
         InitializeComponent();
 
-        // Assigned here, not in XAML: the parser widens the literal and 10 arrives with a tail.
-        MaskBox.Value = 10;
+        // Empty until the receiver says otherwise (#320), for the reason §10.8's duration limit is:
+        // a hard-coded 10 reads as the receiver's current mask and is not one. That it happened to
+        // match this unit made it worse, not better - a default that is right by luck is a default
+        // nobody checks.
+        //
+        // Assigned here and not in XAML either way: the parser widens a NumberBox.Value literal and
+        // a round number arrives with a tail of decimals.
+        MaskBox.Value = double.NaN;
 
         _stalenessTicker.Tick += (_, _) => _model?.RaiseAll();
         Unloaded += (_, _) =>
@@ -99,11 +118,25 @@ public sealed partial class SatellitesPage : Page
         _invoker = new CommandInvoker(device.Session);
 
         // §8.3's elevation mask, with its 0-90 range taken from the driver's catalog.
-        _mask = new NumberFieldValidator(
-            MaskBox,
-            MaskError,
-            CommandConfirmation.Require(device.Driver, ":GPS:SAT:TRAC:EMANgle").Parameters[0]);
+        ParameterSpec maskRange =
+            CommandConfirmation.Require(device.Driver, ":GPS:SAT:TRAC:EMANgle").Parameters[0];
+
+        _mask = new NumberFieldValidator(MaskBox, MaskError, maskRange);
         _mask.ValidityChanged += (_, _) => Render();
+
+        // §9.10.1's slider takes its bounds from the same catalog entry the validator does, rather
+        // than restating 0 and 90 in XAML where the two could drift apart. A slider physically
+        // cannot leave its range, which is why the error text below it is for typed entry only.
+        MaskSlider.Minimum = maskRange.Minimum ?? 0;
+        MaskSlider.Maximum = maskRange.Maximum ?? 90;
+
+        MaskBox.ValueChanged += (_, args) =>
+        {
+            if (!(args?.NewValue ?? double.NaN).Equals(_seededMask))
+            {
+                _maskEdited = true;
+            }
+        };
 
         _model = new SatellitesViewModel(device.Store) { Connection = device.Session.Status };
         _model.PropertyChanged += (_, _) => DispatcherQueue.TryEnqueue(Render);
@@ -201,6 +234,17 @@ public sealed partial class SatellitesPage : Page
 
         ShowEmpty(TrackedEmptyText, model.Tracked.Count == 0, model.EmptyMessage);
         ShowEmpty(NotTrackedEmptyText, model.NotTracked.Count == 0, "Nothing else is expected in view.");
+
+        // The editor opens on the receiver's own mask (#320). It arrives on the status screen, so
+        // this costs no wire time - unlike §10.8's duration limit, which needed a query. Not
+        // overwritten once the user has typed: a sweep lands every second and would otherwise undo
+        // them mid-edit.
+        if (!_maskEdited && model.ElevationMaskDegrees is int current && !_seededMask.Equals((double)current))
+        {
+            _seededMask = current;
+            MaskBox.Value = current;
+            _mask?.Revalidate();
+        }
 
         ElevationMaskText.Text = model.ElevationMaskDegrees is int mask
             ? $"{mask}° — satellites below this are not used"
