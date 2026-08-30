@@ -1450,12 +1450,12 @@ Declared as `KeyboardAccelerator` on the command, with `KeyboardAcceleratorPlace
 |---|---|---|---|---|
 | Nav page change | `SlideNavigationTransitionInfo` with `FromBottom` — **one direction, always** | stock, not settable | stock, not settable | `SuppressNavigationTransitionInfo` |
 | Main → Details window | **None.** Amended 29 Aug 2026 (#316) from *`ConnectedAnimation` on the medallion → Overview medallion*: `ConnectedAnimationService` is per-view and §10.2 makes Main and Details separate top-level windows, so the animation is impossible across them and the reduced-motion fallback is what is built — `Views/OverviewPage.xaml` records why. Revert or keep is #320's call. | — | — | Details opens directly |
-| Card enter on page load | Implicit show, opacity + 8 px translate up, 30 ms stagger, max 4 cards. **Not built** — noted 29 Aug 2026 (#316). **To build** — decided 30 Aug 2026 (#320). | `Normal` | `WzEaseDecelerate` | Opacity only, no stagger, no translate |
-| `Expander` toggle | Stock expand/collapse. **Not built** — no `Expander` exists (§9.10.1); noted 29 Aug 2026 (#316). **To build** — decided 30 Aug 2026 (#320). | `Normal` | `WzEaseStandard` | Instant height change |
+| Card enter on page load | Implicit show, opacity + 8 px translate up, 30 ms stagger, max 4 cards. **Built** 30 Aug 2026 (#320) — `Controls/CardEntrance.cs`, an attached property on each page's card panel so that adding a card joins the sequence rather than needing anyone to remember | `Normal` | `WzEaseDecelerate` | Opacity only, no stagger, no translate |
+| `Expander` toggle | Stock expand/collapse. **Built** 30 Aug 2026 (#320) by the `SettingsExpander` on §10.13, which is an `Expander` underneath and brings the stock transition with it — nothing here had to be written | `Normal` | `WzEaseStandard` | Instant height change |
 | `InfoBar` appear / dismiss | Height + opacity | `Normal` | `WzEaseDecelerate` / `WzEaseAccelerate` | Instant |
 | `ContentDialog` | Stock | stock | stock | Stock reduced behaviour |
-| Satellite row reorder | `ItemsRepeater` implicit reposition, offset only. **Not built** — the satellite tables are `ListView` (§9.10.1) and nothing animates reorder; noted 29 Aug 2026 (#316). **To build** — decided 30 Aug 2026 (#320). | `Fast` | `WzEaseStandard` | Instant reposition |
-| Hover / pressed / focus | Brush + scale (pressed 0.98). The scale is **Not built** — no scale transform exists anywhere; noted 29 Aug 2026 (#316). **To build** — decided 30 Aug 2026 (#320). | `Fast` | `WzEaseStandard` | Brush change only, no scale |
+| Satellite row reorder | Implicit reposition, offset only. **Built** 30 Aug 2026 (#320) as a `RepositionThemeTransition` on the three `ListView`s. **The control did not change**: §9.10.1 specifies `ListView` and a `ListView` already offers exactly this animation through its container transitions, so switching to `ItemsRepeater` would have been a rewrite in exchange for a behaviour it already had. Reposition alone — an add/delete transition would fire on every first fill and every reconnect, and a table that flies its rows in each time the link returns is motion on a window meant to sit still | `Fast` | `WzEaseStandard` | Instant reposition |
+| Hover / pressed / focus | Brush + scale (pressed 0.98). **Built** 30 Aug 2026 (#320) — `Controls/PressEffect.cs`, an attached behaviour carried by the **implicit** `Button` and `ToggleButton` styles. See the note below | `Fast` | `WzEaseStandard` | Brush change only, no scale |
 | Loading > 500 ms | `ProgressRing` indeterminate | — | — | `ProgressRing` continues; it is status, not decoration |
 | **Readout value change** | **none** | `Instant` | — | Same — already instant |
 | **Medallion ring redraw** | **none** | `Instant` | — | Same |
@@ -1464,6 +1464,28 @@ Declared as `KeyboardAccelerator` on the command, with `KeyboardAcceleratorPlace
 > **⚠ Corrected 21 Aug 2026 (#120).** The nav row named two APIs the Windows App SDK does not have, failing in opposite directions. **`SlideNavigationTransitionEffect` has no `FromTop`** — it never has, in UWP or WinUI — so the "by index direction" rule was half-unbuildable, and the two effects that do exist besides `FromBottom` are horizontal, which this section’s own *Directional consistency* paragraph forbids four lines further down. So the transition is one direction, always. **`EntranceNavigationTransitionInfo` cannot be reduced to opacity**: WinUI 3 dropped the `FromHorizontalOffset` and `FromVerticalOffset` properties UWP carried, leaving nothing to zero. That one is the worse of the two — it compiles, and then animates anyway, which is the opposite of what a reduced-motion fallback is for. `SuppressNavigationTransitionInfo` is what actually suppresses motion.
 >
 > *Moved below the table on 29 Aug 2026 (#316): a blockquote inside a table ends it, and every row after this note failed to render. The same pass corrected the nav row's duration and easing cells — `SlideNavigationTransitionInfo` exposes neither, so `WzDurationNormal` and `WzEaseStandard` cannot reach it (`Themes/Motion.xaml`).*
+
+**The pressed scale, built 30 Aug 2026 (#320).** An attached behaviour and not a control template.
+§9.8.2 asks for the scale on hover / pressed / focus *generally*, and the stock WinUI templates have
+no scale in them — so the alternative was forking the template of every interactive control in the
+application, which would fork every focus visual with it and leave §9.12's coverage gate checking
+copies.
+
+**It is carried by the implicit styles, deliberately.** A scale applied to the buttons someone
+remembered is worse than none: it makes the rest feel dead by comparison, which is the failure mode
+§9.9's icon note describes and which applies here just as well. Every named `Button` style is
+`BasedOn` the pressable one, so opting a control *out* is the deliberate act rather than opting it
+in. The one style that had to be named separately is the accent variant — a control asking for
+`AccentButtonStyle` by key gets the stock one and an implicit style never reaches it, and that is
+§10.3's Connect button, the most-pressed control in the application.
+
+Two things it has to get right. **Every way a press can end**, not only the happy one: a pointer
+released outside the element raises `PointerExited` or `PointerCaptureLost` and never
+`PointerReleased`, and a control left at 0.98 for the rest of the session reads as a rendering
+glitch rather than as a stuck state. And **the centre point is set on every press** rather than once,
+because a button whose label is set at run time — §10.13's Exit button reads the product name — is
+zero-sized when the behaviour attaches, and a scale about the origin would slide it rather than
+press it.
 
 **Directional consistency.** Navigation is a vertical list, so page transitions move vertically — and, per the #120 correction above, always from the bottom, because `SlideNavigationTransitionEffect` offers no `FromTop` (reconciled 29 Aug 2026, #316: this said "in the direction of travel in that list", which the row above had already ruled out). Flyouts and dialogs scale from their invoking control. Nothing slides horizontally anywhere in the app, because nothing in the navigation model is horizontal.
 
@@ -1521,7 +1543,7 @@ Construction rules:
 | Surface | Controls |
 |---|---|
 | Shell | `NavigationView`, `Frame`, the WinUI `TitleBar` control (per §9.7.3's #226 amendment; this said `AppWindowTitleBar` (custom) — corrected 29 Aug 2026, #316), `MicaBackdrop` |
-| Cards | `Border` with L2 treatment (`WzCardStyle`, `WzFeatureCardStyle`); `Expander` for collapsible sections — **Not built**, no `Expander` appears; noted 29 Aug 2026 (#316). **To build** — decided 30 Aug 2026 (#320) |
+| Cards | `Border` with L2 treatment (`WzCardStyle`, `WzFeatureCardStyle`); `Expander` for collapsible sections — **built** 30 Aug 2026 (#320) as the `SettingsExpander` on §10.13, which is an `Expander` underneath |
 | Settings-style rows | `SettingsCard`, `SettingsExpander` (WinUI Community Toolkit) — Timing, Holdover, Settings pages. **Built 30 Aug 2026 (#320) on the Settings page**; Timing and Holdover still do not use them, which is the divergence §9.10's note already records. See below |
 | Tables | `ListView` for selectable tables — the three satellite tables (`SatellitesPage.xaml`), with `WzDenseListItemStyle`, which §9.10.2's #307 row-height amendment depends on; `ItemsRepeater` for read-only lists (the Overview health items, the manage dialog's PRN grid). Corrected 29 Aug 2026 (#316) from "`ItemsRepeater` inside `ScrollViewer` with a sticky header row". **Not `DataGrid`** — the Community Toolkit `DataGrid` is heavier than needed and its default styling is hard to bring in line with these tokens for a ≤ 32-row table. |
 | Status messaging | `InfoBar`, `TeachingTip`, `ContentDialog` — selection rules in §9.11 |
@@ -1612,7 +1634,7 @@ not a claim that it is wrong to raise it. If the deviation is ever judged unacce
 |---|---|---|---|
 | **First run** | Full-page centred: 32 px icon, `WzTitleLargeTextStyle` headline, one line of `WzBodyTextStyle`, primary button | "Connect your receiver" / "This app talks to HP and Symmetricom GPS receivers over a serial port. Pick the port your receiver is on to begin." / **Choose a port** | No tour, no carousel, no dismissible tips |
 | **Empty** (e.g. no diagnostic log entries) | In-card centred: 32 px icon, `WzBodyStrongTextStyle` line, optional action | "No log entries yet. The receiver records power-on, mode changes, and faults here." | An invitation, never a shrug |
-| **Loading** | Nothing < 500 ms. 500 ms–2 s: `ProgressRing` 20 px inline in the card header. > 2 s: skeleton placeholders at final layout dimensions | — | Skeletons only where layout is known ahead of data; never a full-page spinner. The skeletons are **Not built** — noted 29 Aug 2026 (#316). **To build** — decided 30 Aug 2026 (#320) |
+| **Loading** | Nothing < 500 ms. 500 ms–2 s: `ProgressRing` 20 px inline in the card header. > 2 s: skeleton placeholders at final layout dimensions | — | Skeletons only where layout is known ahead of data; never a full-page spinner. **Built** 30 Aug 2026 (#320) — see the note below |
 | **Partial / streaming** | Render what has arrived; unresolved fields show `—` in `WzTextTertiaryBrush`; card header carries an inline `ProgressRing` | — | Applies to `:SYST:STAT?` mid-fetch |
 | **Stale** (poll overdue) | `WzCautionBrush` `SeverityPill` in the footer; values remain visible, dimmed to `WzTextSecondaryBrush` | "Last updated 47 seconds ago" | Per §10.3: amber > 15 s, critical > 60 s. **Never blank stale data** — an old reading with an honest timestamp beats an empty field. **Built** 30 Aug 2026 (#320), both halves; see the note below |
 | **Error — recoverable** | `InfoBar` `Severity="Error"`, inline at the top of the affected card, with an action button | "Couldn't set antenna delay. The receiver returned error −222, data out of range. Enter a value between 0 and 999,999 ns." / **Try again** | |
@@ -1622,6 +1644,27 @@ not a claim that it is wrong to raise it. If the deviation is ever judged unacce
 | **No permission** | `ContentDialog` | "Windows wouldn't let the app open COM3. Another program may have it open. Close it, then try again." | `UnauthorizedAccessException` — usually a terminal emulator still holding the port |
 | **Success — routine** | No UI. The value in the interface updates. | — | A setter that worked needs no toast |
 | **Success — consequential** | `InfoBar` `Severity="Success"`, auto-dismiss 5 s | "Started the position survey. This usually takes about two hours." | Tier C commands only |
+
+**The loading ladder, built 30 Aug 2026 (#320).** `ViewModels/LoadingIndicator.cs` holds the two
+thresholds and the rule, for the reason `Staleness` gives: *how long is too long* is a judgement the
+application makes once, and two pages implementing it from this prose would drift. It is pure, so
+the thresholds are tested without a window or a clock.
+
+**The first threshold was broken and is the one that matters most.** #316 recorded only the missing
+skeletons; the *nothing under 500 ms* half was also unbuilt, the §10.9 ring being bound straight to
+"is reading". A read that finishes quickly — which is most of them — therefore put a spinner on
+screen and took it away inside a fifth of a second, which reads as a glitch rather than as progress
+and draws the eye to a card with nothing to say.
+
+**The skeleton does not replace the ring.** They are successive states rather than alternatives: the
+ring is *status* — something is happening — and the skeleton is *shape* — this much is coming.
+
+Built on §10.9's diagnostic log, which is where both of this row's conditions hold. It is the one
+read in the application that reliably passes two seconds (222 entries of text at 9600 baud), and its
+layout is known before the data arrives — which is what §9.11 requires before a skeleton may be shown
+at all. **Nothing about the skeleton animates**: §9.13 permits no animation without a row in §9.8.2
+and there is no shimmer row, which is also the right answer on its own terms for a window that sits
+on a second monitor for weeks.
 
 **The footer staleness, built 30 Aug 2026 (#320).** #316 recorded this row as *Code disagrees* on
 two counts, and both were real.
@@ -1838,7 +1881,7 @@ Two behavioural principles remain here because they are functional rather than v
   | `LOCK` | `WzSuccessBrush` ● | `\uE73E` CheckMark | Locked to GPS |
   | `REC` | `WzCautionBrush` ▲ | `\uE72C` Refresh | Recovering |
   | `WAIT` | `WzCautionBrush` ▲ | `\uE769` Pause | Waiting to recover |
-  | `HOLD` | `WzCriticalBrush` ⬢ | custom Holdover icon — **Code disagrees**, noted 29 Aug 2026 (#316): the Warning glyph stands in (`Controls/ReceiverMode.cs`), the custom set being §9.9's not-built one. **To build** — decided 30 Aug 2026 (#320) with the rest of §9.9's set | Holdover |
+  | `HOLD` | `WzCriticalBrush` ⬢ | custom Holdover icon — **built 30 Aug 2026 (#320)** with the rest of §9.9's set, and the reason it was authored: a Warning glyph says *something is wrong*, and holdover means the receiver is still producing a disciplined 10 MHz from the oscillator's memory. The stock glyph stays behind it (`Controls/ReceiverMode.cs`) | Holdover |
   | `POW` | `WzNeutralBrush` ○ | `\uE823` Clock | Power-up |
   | `OFF` | `WzNeutralBrush` ○ | `\uE7E8` PowerButton | Diagnostic / off |
   | *(no connection)* | `WzNeutralBrush` ○ | `\uE8CD` DisconnectDrive | Disconnected |

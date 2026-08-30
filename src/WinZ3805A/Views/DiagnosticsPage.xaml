@@ -17,7 +17,8 @@
         something this page does on arrival.
     -->
     <ScrollViewer HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
-        <StackPanel Padding="{ThemeResource WzPageMarginThickness}"
+        <StackPanel controls:CardEntrance.IsEnabled="True"
+                    Padding="{ThemeResource WzPageMarginThickness}"
                     MaxWidth="{ThemeResource WzContentMaxWidth}"
                     HorizontalAlignment="Left"
                     Spacing="{ThemeResource WzSpaceXl}">
@@ -186,6 +187,33 @@
                              PlaceholderText="Filter entries"
                              TextChanged="OnFilterChanged"
                              AutomationProperties.Name="Filter log entries" />
+
+                    <!--
+                        §9.11's > 2 s skeleton (#320). The log is the one read in this application
+                        that reliably passes two seconds - 222 entries of text at 9600 baud - and it
+                        is also the one whose layout is known before the data arrives, which is the
+                        condition §9.11 puts on showing a skeleton at all.
+
+                        Eight bars because the card shows about eight rows before it scrolls: the
+                        rule is "at final layout dimensions", and a skeleton that is taller than the
+                        content it stands in for makes the card collapse as the answer lands.
+
+                        The ProgressRing in the header carries 500 ms to 2 s and stays visible
+                        behind this; the skeleton says how MUCH is coming, which a spinner cannot.
+                    -->
+                    <StackPanel x:Name="LogSkeleton"
+                                Visibility="Collapsed"
+                                Spacing="{ThemeResource WzSpaceSm}"
+                                AutomationProperties.AccessibilityView="Raw">
+                        <Border Style="{ThemeResource WzSkeletonBarStyle}" Width="420" />
+                        <Border Style="{ThemeResource WzSkeletonBarStyle}" Width="380" />
+                        <Border Style="{ThemeResource WzSkeletonBarStyle}" Width="440" />
+                        <Border Style="{ThemeResource WzSkeletonBarStyle}" Width="360" />
+                        <Border Style="{ThemeResource WzSkeletonBarStyle}" Width="420" />
+                        <Border Style="{ThemeResource WzSkeletonBarStyle}" Width="400" />
+                        <Border Style="{ThemeResource WzSkeletonBarStyle}" Width="340" />
+                        <Border Style="{ThemeResource WzSkeletonBarStyle}" Width="410" />
+                    </StackPanel>
 
                     <ItemsControl x:Name="LogRows">
                         <ItemsControl.ItemTemplate>

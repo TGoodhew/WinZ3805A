@@ -14,7 +14,8 @@
 <ResourceDictionary
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:tk="using:CommunityToolkit.WinUI.Controls">
+    xmlns:tk="using:CommunityToolkit.WinUI.Controls"
+    xmlns:controls="using:WinZ3805A.Controls">
 
     <!--
         L2 card (§9.2). Fill, one-pixel hairline, 8 px radius, and no shadow.
@@ -92,7 +93,40 @@
         The leading warning glyph is part of the style rather than each call site, so it
         cannot be forgotten on the one button where it matters most.
     -->
-    <Style x:Key="WzDestructiveButtonStyle" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
+    <!--
+        §9.8.2's pressed 0.98 scale (#320), applied by making the implicit Button style carry it.
+
+        IMPLICIT AND NOT A NAMED STYLE, deliberately. The row is about hover / pressed / focus
+        generally, and a scale applied to the buttons someone remembered is worse than none: it makes
+        the rest feel dead by comparison, which is the failure mode §9.9's icon note describes for
+        icons and which applies just as well here. Every named Button style below is BasedOn this
+        one, so opting a control OUT would be the deliberate act rather than opting it in.
+
+        The behaviour reads the reduced-motion setting itself and does nothing when it is off
+        (§9.8.2's "brush change only, no scale"). See Controls/PressEffect.cs, which also explains
+        why this is a behaviour and not a fork of the stock template.
+    -->
+    <Style x:Key="WzPressableButtonStyle" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
+        <Setter Property="controls:PressEffect.IsEnabled" Value="True" />
+    </Style>
+
+    <Style TargetType="Button" BasedOn="{StaticResource WzPressableButtonStyle}" />
+
+    <!--
+        The accent variant has to be named rather than implicit: a control asking for
+        AccentButtonStyle by key gets the stock one, and an implicit style never reaches it. It is
+        the application's most-pressed control (Connect on §10.3), so leaving it out would have made
+        the one button people actually use the only one that did not respond.
+    -->
+    <Style x:Key="WzAccentButtonStyle" TargetType="Button" BasedOn="{StaticResource AccentButtonStyle}">
+        <Setter Property="controls:PressEffect.IsEnabled" Value="True" />
+    </Style>
+
+    <Style TargetType="ToggleButton" BasedOn="{StaticResource DefaultToggleButtonStyle}">
+        <Setter Property="controls:PressEffect.IsEnabled" Value="True" />
+    </Style>
+
+    <Style x:Key="WzDestructiveButtonStyle" TargetType="Button" BasedOn="{StaticResource WzPressableButtonStyle}">
         <Setter Property="Foreground" Value="{ThemeResource WzCriticalBrush}" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderBrush" Value="{ThemeResource WzStrokeDefaultBrush}" />
@@ -166,6 +200,25 @@
         <Setter Property="Padding" Value="{ThemeResource WzSpaceXxsThickness}" />
         <Setter Property="Margin" Value="0" />
         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    </Style>
+
+    <!--
+        §9.11's skeleton placeholder, built 30 Aug 2026 (#320).
+
+        NOTHING ANIMATES. §9.13's rule is no animation without a row in §9.8.2, and there is no
+        shimmer row - so the bar is a static block. That is also the right answer on its own terms:
+        the window this application is built around sits on a second monitor for weeks, and a
+        pulsing rectangle in peripheral vision is exactly what §9.8 exists to prevent.
+
+        WzSurfacePressedBrush rather than dimmed text: a skeleton is a SURFACE standing in for
+        content, not faint content. The distinction matters under high contrast, where a text brush
+        would draw a row of solid bars that read as data.
+    -->
+    <Style x:Key="WzSkeletonBarStyle" TargetType="Border">
+        <Setter Property="Background" Value="{ThemeResource WzSurfacePressedBrush}" />
+        <Setter Property="CornerRadius" Value="{StaticResource WzControlCornerRadius}" />
+        <Setter Property="Height" Value="12" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
     </Style>
 
     <Style x:Key="WzSkyPlotMarkerStyle" TargetType="Button">
