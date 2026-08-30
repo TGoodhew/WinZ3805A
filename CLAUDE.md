@@ -206,7 +206,37 @@ pwsh build/Test-HighContrastLegibility.ps1 # A11Y-8 / §9.2
 pwsh build/Test-NoColourOnlyStates.ps1   # A11Y-12 / §9.4.3
 pwsh build/Test-FocusVisualCoverage.ps1  # A11Y-2 / §9.12
 pwsh build/Test-PointerTargets.ps1       # A11Y-5 / §9.6.3
+pwsh build/Test-DocumentReferences.ps1   # #321 — the documents, not the source
 ```
+
+The document-references gate was added 30 Aug 2026 for #321, and it is the only one that checks
+the **documents** rather than the source. The #316 audit read sixteen of them by hand and found some 360
+stale or wrong claims; most needed a person, but a recognisable share were mechanical and had recurred
+across files precisely because nothing was checking them. Four rules: every relative link and `#anchor`
+resolves; every `§n.n` names a heading of `docs/requirements.md` — **the defect it exists to catch is
+the specification citing a subsection of §6 that has never existed, §6 ending at 6.4**; every `#NNN` a
+sentence is *built around* is open; and every `<PackageReference>` in a shipping project has a `THIRD-PARTY-NOTICES.md`
+row carrying its version.
+
+Three things worth not rediscovering. The issue rule is a **heuristic on English and was tuned by
+measurement**: a trigger word anywhere on the line gave 18 hits of which about 3 were real, a
+40-character window gave 2 and both were false, and naming the phrasings individually gives 0 — these
+documents write long lines mixing history with live work, so a sentence saying one file tracks an item
+and closing with a dated correction marker reads, to anything looser, as though the issue in that
+marker were the tracker. It **warns and does not fail**, which makes
+precision more important rather than less: a gate that cries wolf is one people learn to scroll past.
+The notices rule reads only `src/` and `tools/` because the document sets that scope itself, and it
+matches a package's **family** when its full id is absent, because the table writes
+`Microsoft.Extensions.Logging, .Abstractions` for two packages on one row — a legal document does not
+get reformatted for a script's convenience. And **the rule that finds nothing today is doing the
+work**: zero broken links across ~200 hand-maintained section references is what the first rename
+would have taken out silently.
+
+**The gate scans this file too, and caught two defects in this very paragraph.** The first draft cited
+the missing section by number, and the second illustrated the false positive by quoting the phrasing
+verbatim — so the description of the rule tripped the rule. Both are now described rather than quoted.
+It is a small thing and it is the whole argument for the gate: these are exactly the references nobody
+re-reads.
 
 One more script runs in CI and is **not** a gate on the source — it checks a tool rather
 than a rule:
@@ -215,7 +245,7 @@ than a rule:
 pwsh build/Capture-Fixtures.ps1 -SelfTest # #4 / #185 — the harness, not the app
 ```
 
-`.github/workflows/ci.yml` runs all twelve in their own dependency-free jobs, alongside the
+`.github/workflows/ci.yml` runs all thirteen in their own dependency-free jobs, alongside the
 build rather than ahead of it — they need no restore, so a token, accessibility, or safety
 regression fails in seconds rather than after a full build. A separate matrix job builds both
 Configuration × Platform combinations — Debug and Release against x64, the only platform
