@@ -1514,12 +1514,40 @@ Construction rules:
 |---|---|
 | Shell | `NavigationView`, `Frame`, the WinUI `TitleBar` control (per §9.7.3's #226 amendment; this said `AppWindowTitleBar` (custom) — corrected 29 Aug 2026, #316), `MicaBackdrop` |
 | Cards | `Border` with L2 treatment (`WzCardStyle`, `WzFeatureCardStyle`); `Expander` for collapsible sections — **Not built**, no `Expander` appears; noted 29 Aug 2026 (#316). **To build** — decided 30 Aug 2026 (#320) |
-| Settings-style rows | `SettingsCard`, `SettingsExpander` (WinUI Community Toolkit) — Timing, Holdover, Settings pages. **Not built** — the `SettingsControls` package is referenced and unused; noted 29 Aug 2026 (#316). **To build** — decided 30 Aug 2026 (#320), on the Settings page: the reference stays and starts earning its place |
+| Settings-style rows | `SettingsCard`, `SettingsExpander` (WinUI Community Toolkit) — Timing, Holdover, Settings pages. **Built 30 Aug 2026 (#320) on the Settings page**; Timing and Holdover still do not use them, which is the divergence §9.10's note already records. See below |
 | Tables | `ListView` for selectable tables — the three satellite tables (`SatellitesPage.xaml`), with `WzDenseListItemStyle`, which §9.10.2's #307 row-height amendment depends on; `ItemsRepeater` for read-only lists (the Overview health items, the manage dialog's PRN grid). Corrected 29 Aug 2026 (#316) from "`ItemsRepeater` inside `ScrollViewer` with a sticky header row". **Not `DataGrid`** — the Community Toolkit `DataGrid` is heavier than needed and its default styling is hard to bring in line with these tokens for a ≤ 32-row table. |
 | Status messaging | `InfoBar`, `TeachingTip`, `ContentDialog` — selection rules in §9.11 |
 | Inputs | `NumberBox` (all numeric entry, `SpinButtonPlacementMode="Compact"`, `ValidationMode="Disabled"` — amended 29 Aug 2026 (#316) from `InvalidInputOverwritten`, to the code: `Controls/NumberFieldValidator.cs` records that `InvalidInputOverwritten` silently reverts an out-of-range entry to the last good value, which cannot coexist with §9.11's error text — there is nothing left to put a message under — so the bounds are enforced by refusing to *send*; revert or keep is #320's call), `ComboBox`, `ToggleSwitch`, `Slider` (elevation mask only — **Not built**, the mask is a `NumberBox`; noted 29 Aug 2026 (#316). **To build** — decided 30 Aug 2026 (#320)), `CheckBox` |
 | Progress | `ProgressRing` (indeterminate), `ProgressBar` (survey percentage — determinate and meaningful) |
-| Commands | `Button`; `HyperlinkButton`, `DropDownButton`, `MenuFlyout` — **Not built**, none appears; noted 29 Aug 2026 (#316). **To build** — decided 30 Aug 2026 (#320) — `MenuFlyout` arrives with §9.7's right-click menus |
+| Commands | `Button`; `HyperlinkButton`, `DropDownButton`, `MenuFlyout`. `MenuFlyout` **built 30 Aug 2026 (#320)** with §9.7.4's right-click menus; `HyperlinkButton` and `DropDownButton` still do not appear |
+
+**`SettingsCard` adopted 30 Aug 2026 (#320).** The `SettingsControls` package had been referenced and
+unused since it was added, kept through three audits on the argument that removing and re-adding it
+would cost more churn than the 0.31 MB it weighs. §10.13's page is now built out of it.
+
+**The control is adopted for its structure and not for its appearance.** It supplies the
+header / description / control row, the keyboard behaviour, and the wrap to a stacked arrangement in
+a narrow pane — all of which the page would otherwise hand-roll. Its stock Fluent chrome is
+overridden by `WzSettingsCardStyle` and `WzSettingsExpanderStyle`, token for token from
+`WzCardStyle`, because a settings row must be visibly the same surface as every other card in the
+application rather than a Windows Settings row that wandered in.
+
+What it replaced was a card per *group* holding a stack of switch-then-caption pairs, in which a
+control and the paragraph explaining it were **siblings rather than parent and child**: nothing in
+the markup said which caption belonged to which control, and the answer was proximity. The group is
+now a heading with rows under it. *Running in the background* became a `SettingsExpander` because its
+three settings are not peers — starting hidden and quitting outright mean nothing until the
+application keeps running, and the expander says so structurally rather than by listing order.
+
+Two findings worth not rediscovering. **The toolkit's dictionaries must be merged in `App.xaml`** —
+the implicit styles arrive on their own through the assembly's `Generic.xbf`, so the controls render
+without it, but `DefaultSettingsCardStyle` is a *named* key and the §9 restyle is `BasedOn` it;
+without the merge that reference fails to resolve, which fails the whole page parse, and **the frame
+silently does not navigate**: no exception, nothing in the application log, and the nav item
+highlighting correctly over the page the user was already on. And **`HorizontalAlignment` is
+load-bearing beside `MaxWidth`**: a width-constrained element in a `Stretch` slot centres itself in
+what is left over, so two prose blocks sat indented into the middle of the page while every other row
+started at the card's left edge.
 
 #### 9.10.2 Custom and templated controls
 
