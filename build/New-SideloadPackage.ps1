@@ -179,6 +179,9 @@ Copy-Item $cer.FullName (Join-Path $staging 'WinZ3805A.cer')
 Copy-Item (Join-Path $templates 'Install.cmd') $staging
 Copy-Item (Join-Path $templates 'install.ps1') $staging
 Copy-Item (Join-Path $templates 'README.txt') $staging
+# The licences of what the package redistributes (MIT, BSD-2-Clause, Apache-2.0 and the OFL)
+# each want their notice beside the binaries; the same file ships inside the MSIX.
+Copy-Item (Join-Path $repo 'THIRD-PARTY-NOTICES.md') $staging
 
 if ($runtime) {
     $runtimeFolder = Join-Path $staging 'Runtime'

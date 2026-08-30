@@ -92,6 +92,12 @@
     -->
     <Content Include="Assets\Fonts\CascadiaMono.ttf" />
     <Content Include="Assets\Fonts\CascadiaMono-OFL.txt" />
+    <!--
+      The notices file ships too: the MIT, BSD-2-Clause and Apache-2.0 licences of the
+      assemblies in the package each require their notice to accompany a binary
+      redistribution, and the OFL text beside the font covers only the font (#316).
+    -->
+    <Content Include="..\..\THIRD-PARTY-NOTICES.md" Link="THIRD-PARTY-NOTICES.md" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
