@@ -49,6 +49,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\WinZ3805A.Device\WinZ3805A.Device.csproj" />
+    <!-- #310: the tutorial's simulated talker, for the NMEA tests. The driver under test does not depend on it. -->
+    <ProjectReference Include="..\..\tools\NmeaSimulator\NmeaSimulator.csproj" />
   </ItemGroup>
 
   <ItemGroup>
