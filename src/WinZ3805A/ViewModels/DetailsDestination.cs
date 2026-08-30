@@ -103,7 +103,8 @@ public static class DetailsDestinations
         {
             Tag = "position",
             Label = "Position",
-            Glyph = "\uE81D", // MapPin
+            Glyph = "\uE81D", // MapPin, the fallback behind §9.9's custom earth
+            IconGeometryKey = "WzIconEarth",
             Summary = "Surveyed position, survey progress, and the position hold controls (§10.6).",
         },
         new()

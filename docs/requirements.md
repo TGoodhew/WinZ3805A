@@ -1547,14 +1547,17 @@ The three `Instant` rows are the thesis made testable: a reviewer can confirm th
 
 **Baseline: Segoe Fluent Icons** (`\uEnnn`), present on Windows 10 1809+. Use stock glyphs wherever one exists.
 
-**Custom icons.** Four concepts have no adequate Fluent glyph and are drawn as `PathIcon` geometry:
+**Custom icons.** Five concepts have no adequate Fluent glyph and are drawn as `PathIcon` geometry:
 
 | Icon | Used for |
 |---|---|
 | Satellite | Satellites nav item, tracked-count readout |
+| Earth (globe with meridian and equator) | Position nav item — **added 30 Aug 2026 (#345)**, replacing stock MapPin |
 | Sky plot | Sky plot card header, view toggle |
 | Oscillator (sine in a rounded square) | EFC card, oscillator health |
 | Holdover (pause inside a clock face) | Holdover nav item and state |
+
+> **⚠ The fifth was added 30 Aug 2026 (#345).** §10.6 is about the receiver's own surveyed position on the planet, held to a metre over hours of averaging. A pin says *a place on a map* — one point, chosen, provisional — which is the opposite claim.
 
 **Built 30 Aug 2026 (#320)**; all four live in `Themes/Shapes.xaml` beside §9.4.3's severity shapes. Satellite and holdover reach the nav items through `DetailsDestination.IconGeometryKey`, holdover also reaches the medallion centre through `ReceiverModes.GeometryKeyOf`, and sky plot and oscillator sit in their card headers on §10.5 and §10.4 / §10.7.
 
@@ -1569,7 +1572,11 @@ The three `Instant` rows are the thesis made testable: a reviewer can confirm th
 Construction rules:
 
 - Designed on a **16 × 16 grid** with a 1 px safe margin, scaled by `Viewbox` to 20 and 24.
-- **1.5 px stroke at 16 px**, scaling proportionally. Matches Fluent's optical weight so custom and stock icons in the same nav list do not read as two sets.
+- **1.0 px stroke at 16 px**, scaling proportionally. Matches Fluent's optical weight so custom and stock icons in the same nav list do not read as two sets.
+
+  > **⚠ Amended 30 Aug 2026 (#345), from 1.5.** The rule's *intent* — the optical match — is unchanged and is what the amendment serves: drawn at 1.5 the custom set read as visibly heavier than the Segoe Fluent glyphs beside it in the same pane, which is the failure this line exists to prevent. Tony called it in review and named the reference, the Overview glyph. **Measured** rather than judged: its strokes render as exactly 1.0 device pixel at 16 px, crisply, the font being grid-fitted at that size. 1.5 was an estimate of Fluent's weight; 1.0 is a measurement of it.
+
+- **Author every icon on the same bounding box** — nominally 1.5 → 14.5 on both axes. `PathIcon` scales each geometry by *its own* bounds, so a wide, short drawing is magnified more than a square one and its stroke arrives heavier: the satellite at 14 × 5.2 units rendered into a 21 × 8 px box and its 1.0 stroke measured **1.45 px** against 1.14 for the stock glyphs. Squaring the drawing brought the same stroke to 1.07. A cheaper fix was tried and does not work — zero-area anchor subpaths at the corners contribute nothing to the bounds `PathIcon` measures — so a genuinely non-square silhouette has to pre-divide its stroke by its own aspect ratio instead.
 - Terminals and joins rounded, 0.75 px radius.
 - **Monochrome only**, filled with `{ThemeResource}` so they recolour with theme and high contrast. No multi-colour icons anywhere.
 - Optically centred, not mathematically — a circular glyph is drawn ~2% larger than a square one to match perceived size.
