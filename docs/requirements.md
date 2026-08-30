@@ -2309,14 +2309,18 @@ The *Waiting reason* row shows the status screen's own mode detail, not an answe
 │  └────────────────────────────────────────────────────────────────────┘  │
 │                                                                          │
 │  ┌─ Lifetime ─────────────────────────────────────────────────────────┐  │
-│  │  Power-on count  1 247                                             │  │
+│  │  Power-on hours  1 247 h                                           │  │
 │  └────────────────────────────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
 **The self-test card shows one result, not eleven.** Amended 29 Aug 2026 (#316) to the code: `:DIAG:TEST:RES?` reports one `<code>,<subsystem>` pair for whichever test ran last, so the wireframe's eleven simultaneous ticks are not obtainable — filling the others in from an `ALL` run would assert results the receiver never sent. A row shows `—` until that subsystem has been tested in this session, and the twelve subsystem keywords were probed against the live receiver rather than taken on trust (`Views/DiagnosticsPage.xaml`, #53). Revert or keep is #320's call.
 
-**The Lifetime card is Not built** — no query for one is sent; noted 29 Aug 2026 (#316). **To build** — decided 30 Aug 2026 (#320). **Corrected 30 Aug 2026:** #316 said no such query exists in the catalog. `:DIAG:LIF:COUN?` is in it, as *Power-on hours — reads the receiver's accumulated running time*, and the manual lists `:DIAGnostic:LIFetime:COUNt?`. What is wrong is this row's label: the receiver reports hours, not a count.
+**Built** 30 Aug 2026 (#320), as part of the on-demand read the rest of the page uses — `:DIAG:LIF:COUN?` goes out beside `:DIAG:LOG:COUN?`, and an unread or unparseable answer renders `—` per §11.1 rather than `0 h`, a zero being a claim about the hardware where a dash is a statement about the read.
+
+**Corrected 30 Aug 2026:** #316 recorded that no such query existed in the catalog and this requirement was nearly struck on that basis. `:DIAG:LIF:COUN?` is in it, as *Power-on hours — reads the receiver's accumulated running time*, and the manual lists `:DIAGnostic:LIFetime:COUNt?`. What was wrong was this card's label: the receiver reports **hours**, not a count. The wireframe above is amended to match.
+
+Worth the card on an instrument whose oscillator ages with running time — §10.4's EFC trend shows the drift, and this is the figure that says how much life produced it.
 
 **Two cards the wireframe omits** (added 29 Aug 2026 from the code, #316): **Application log**, with *Show log folder* and the path — what this application saw: the port opening, the settings auto-detect settled on, every connection change, and the receiver's mode and satellite count whenever they move (#127, §6.1); and **Undocumented queries**, §8.5's fixed list of six with a *Run* per row and the result shown raw, present only while the Settings switch is on (#56).
 
@@ -2755,7 +2759,11 @@ public sealed record GeoPosition                      // signed decimal degrees;
 > Latent on this hardware, and exactly the cross-model difference §11.1's header-relative parsing
 > exists to survive.
 
-`ParseWarnings` is surfaced in Diagnostics so field reports about odd firmware revisions are actionable. **Not built** — today the warnings reach only the application log, and at Debug (`Services/PollingService.cs`), below the Information level the application ships at, so they reach nobody; noted 29 Aug 2026 (#316). **To build** — decided 30 Aug 2026 (#320). A card on Diagnostics, so §11.1's *unparseable becomes null* stops being silent.
+`ParseWarnings` is surfaced in Diagnostics so field reports about odd firmware revisions are actionable. **Built** 30 Aug 2026 (#320) as a *Status screen parsing* card on §10.9, fed from the store rather than from a query — a warning belongs to a screen, not to a command — and refreshed on every sweep.
+
+This had said "surfaced in Diagnostics" since the specification was written and was never true: the warnings reached the application log and nowhere else, at Debug level (`Services/PollingService.cs`), below the Information floor the application ships at, so in practice they reached nobody; noted 29 Aug 2026 (#316).
+
+The card states the negative — *The last status screen parsed completely* — rather than going blank, because an empty card reads as *not implemented*, and it is §11.1's rule that makes the report necessary at all: an unreadable field becomes null and renders `—`, which is right for the reading and useless as a report. "It shows dashes" is not something a field report can act on; *unrecognised health item 'Xtal Pwr'* is.
 
 ### 11.3 Known advisory strings
 

@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -218,6 +218,8 @@
              Link="ViewModels\StateAnnouncer.cs" />
     <Compile Include="..\..\src\WinZ3805A\ViewModels\OverviewViewModel.cs"
              Link="ViewModels\OverviewViewModel.cs" />
+    <Compile Include="..\..\src\WinZ3805A\ViewModels\DiagnosticsViewModel.cs"
+             Link="ViewModels\DiagnosticsViewModel.cs" />
     <Compile Include="..\..\src\WinZ3805A\ViewModels\SatellitesViewModel.cs"
              Link="ViewModels\SatellitesViewModel.cs" />
     <Compile Include="..\..\src\WinZ3805A\ViewModels\PositionViewModel.cs"
