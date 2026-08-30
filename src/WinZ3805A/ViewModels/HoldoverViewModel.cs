@@ -131,7 +131,18 @@ public sealed class HoldoverViewModel : INotifyPropertyChanged
         ? Status.ModeDetail
         : ReadoutFormatter.NoValue;
 
-    /// <summary>The 1 PPS time interval at which the receiver enters holdover.</summary>
+    /// <summary>
+    /// The receiver's holdover <b>uncertainty</b> threshold — the screen's <c>HOLD THR</c>, which
+    /// <see cref="Predicted"/> is compared against.
+    /// </summary>
+    /// <remarks>
+    /// Not the 1 PPS time interval, which is what this summary claimed until #320, and not the
+    /// duration limit the Holdover page's editor sets. Three quantities were being called "the
+    /// threshold": this one (microseconds, read from the status screen, with no command to set it),
+    /// <c>:SYNC:HOLD:DUR:THReshold</c> (seconds, a limit on elapsed holdover time), and §10.8's
+    /// wireframe, which named the 1 PPS TI. The 58503A guide has exactly one threshold command and
+    /// it is the duration one.
+    /// </remarks>
     public (string Value, string Unit) Threshold =>
         ReadoutFormatter.Seconds(Status?.HoldThresholdSeconds, decimalPlaces: 3);
 

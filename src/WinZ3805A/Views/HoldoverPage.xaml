@@ -73,7 +73,7 @@
             <!-- =============================== Threshold =============================== -->
             <Border Style="{ThemeResource WzCardStyle}">
                 <StackPanel Spacing="{ThemeResource WzSpaceSm}">
-                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Threshold" />
+                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Thresholds" />
 
                     <Grid RowSpacing="{ThemeResource WzSpaceXs}" ColumnSpacing="{ThemeResource WzSpaceXl}">
                         <Grid.ColumnDefinitions>
@@ -85,10 +85,18 @@
                             <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
 
+                        <!--
+                            Two different receiver settings live on this card, and until #320 they
+                            were labelled as though they were one. This row is the receiver's
+                            *uncertainty* threshold - the screen's HOLD THR, in microseconds, which
+                            the predicted 24 h uncertainty below is compared against. There is no
+                            command to set it: the 58503A guide has exactly one threshold command,
+                            and it sets the duration limit the editor below sends.
+                        -->
                         <TextBlock Grid.Row="0" Grid.Column="0"
                                    Style="{ThemeResource WzBodyTextStyle}"
                                    Foreground="{ThemeResource WzTextSecondaryBrush}"
-                                   Text="Enter holdover above" />
+                                   Text="Uncertainty threshold" />
                         <TextBlock x:Name="ThresholdText" Grid.Row="0" Grid.Column="1"
                                    Style="{ThemeResource WzMonoTextStyle}" />
 
@@ -107,9 +115,18 @@
                         </Grid.ColumnDefinitions>
 
                         <StackPanel Grid.Column="0" Spacing="{ThemeResource WzSpaceXxs}">
+                            <!--
+                                This sets :SYNC:HOLD:DUR:THReshold, which the 58503A guide defines
+                                as "the duration (in seconds) which represents a limit against which
+                                the elapsed time of holdover is compared", resolution one second -
+                                hence the 1 and 60 steps. It is NOT the uncertainty threshold shown
+                                above, and its header said only "New threshold (seconds)" until
+                                #320, so adjusting it and watching that reading never move was the
+                                obvious thing to do and told you nothing.
+                            -->
                             <NumberBox x:Name="ThresholdBox"
                                        MinWidth="240"
-                                       Header="New threshold (seconds)"
+                                       Header="Holdover duration limit (seconds)"
                                        SmallChange="1"
                                        LargeChange="60"
                                        SpinButtonPlacementMode="Compact" />
