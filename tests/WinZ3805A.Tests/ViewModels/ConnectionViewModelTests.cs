@@ -1,4 +1,4 @@
-﻿using System.IO.Ports;
+using System.IO.Ports;
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.Time.Testing;
 using WinZ3805A.Device.Transport;
@@ -553,7 +553,8 @@ public sealed class ConnectionViewModelTests
     {
         using Fixture fixture = new(ports: []);
 
-        Assert.Equal([1200, 2400, 9600, 19200], fixture.Model.BaudRateOptions);
+        // 4800 and 38400 since #310: NMEA 0183's own rate and its high-speed variant (§7.1, amended).
+        Assert.Equal([1200, 2400, 4800, 9600, 19200, 38400], fixture.Model.BaudRateOptions);
         Assert.Equal([7, 8], fixture.Model.DataBitOptions);
         Assert.Equal([Parity.None, Parity.Even, Parity.Odd], fixture.Model.ParityOptions);
         Assert.Equal([1, 2], fixture.Model.StopBitOptions);

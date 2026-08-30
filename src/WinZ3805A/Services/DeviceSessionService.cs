@@ -62,6 +62,12 @@ public sealed class DeviceSessionService : IAsyncDisposable
     /// </remarks>
     private volatile IReceiverDriver _driver;
 
+    /// <summary>
+    /// The read side of a broadcast link while one is connected (#310). Null for a query/response
+    /// family, which is served through <see cref="_protocol"/> instead.
+    /// </summary>
+    private BroadcastListener? _listener;
+
     private readonly Channel<PendingCommand> _queue = Channel.CreateUnbounded<PendingCommand>(
         new UnboundedChannelOptions { SingleReader = true, SingleWriter = false });
 
@@ -452,21 +458,36 @@ public sealed class DeviceSessionService : IAsyncDisposable
             // path is also the auto-detect inner loop, and at a wrong baud rate both transactions
             // time out. Two seconds each keeps the eight-combination worst case near half a minute
             // instead of most of one.
-            await _protocol.SynchroniseAsync(TransactionTimeouts.AutoDetectProbe, cancellationToken).ConfigureAwait(false);
+            Transaction heard = await _protocol.SynchroniseAsync(TransactionTimeouts.AutoDetectProbe, cancellationToken).ConfigureAwait(false);
 
-            Transaction identity = await _protocol
-                .ExecuteAsync("*IDN?", TransactionTimeouts.AutoDetectProbe, cancellationToken)
-                .ConfigureAwait(false);
-
-            Record(CommandOrigin.Session, identity);
-
-            if (!identity.Succeeded || !LooksLikeIdentity(identity.FirstLine))
+            // #310: a receiver that talks unprompted has already said who it is by the time the
+            // synchronise step times out, and asking it *IDN? would only spend another probe timeout
+            // on a question it will never answer. Every driver gets what was heard; the first that
+            // claims it is selected below, and the identity probe is skipped.
+            DeviceIdentity? overheard = Overhear(heard.Lines);
+            if (overheard is not null)
             {
-                return false;
+                Record(CommandOrigin.Session, heard);
+                Identity = $"{overheard.Manufacturer},{overheard.Model},{overheard.SerialNumber},{overheard.FirmwareRevision}";
+                ParsedIdentity = overheard;
+            }
+            else
+            {
+                Transaction identity = await _protocol
+                    .ExecuteAsync("*IDN?", TransactionTimeouts.AutoDetectProbe, cancellationToken)
+                    .ConfigureAwait(false);
+
+                Record(CommandOrigin.Session, identity);
+
+                if (!identity.Succeeded || !LooksLikeIdentity(identity.FirstLine))
+                {
+                    return false;
+                }
+
+                Identity = identity.FirstLine!.Trim();
+                ParsedIdentity = DeviceIdentity.Parse(Identity);
             }
 
-            Identity = identity.FirstLine!.Trim();
-            ParsedIdentity = DeviceIdentity.Parse(Identity);
             _consecutiveTimeouts = 0;
 
             // #287: the probe above belonged to no driver — a bare *IDN? at a neutral timeout —
@@ -475,6 +496,20 @@ public sealed class DeviceSessionService : IAsyncDisposable
             // down, and before the pump starts, so no command is ever served under a driver the
             // identity has disqualified.
             SelectDriver();
+
+            // #310: a broadcast family is served from what its listener hears rather than from the
+            // protocol. Started here, after the probe has finished with the pipe and before the
+            // pump can ask anything, so the first poll already has a cycle to read.
+            if (_driver.Link == LinkStyle.Broadcast)
+            {
+                _listener = new BroadcastListener(_transport, _driver, _timeProvider, _logger);
+
+                // The probe consumed the talker's first seconds from the pipe; they are real data,
+                // and without them the first sweep would find nothing to answer with and could read
+                // a healthy link as a silent one.
+                _listener.Seed(heard.Lines);
+                _listener.Start();
+            }
 
             _sessionCts = new CancellationTokenSource();
             _pump = Task.Run(() => PumpAsync(_sessionCts.Token), CancellationToken.None);
@@ -492,6 +527,54 @@ public sealed class DeviceSessionService : IAsyncDisposable
             _logger.LogDebug(exception, "Opening {Port} at {Settings} failed.", PortName, Settings);
             return false;
         }
+    }
+
+    /// <summary>
+    /// Hands what the synchronise step heard to every driver, and returns the identity of the
+    /// first to claim it (#310). Null when nobody does — the ordinary case for a receiver that
+    /// waits to be asked.
+    /// </summary>
+    /// <remarks>
+    /// Guarded the way <see cref="SelectDriver"/> guards <c>Recognises</c>: a driver that throws
+    /// on a list of lines has a bug, and the connect path is the wrong place to pay for it.
+    /// </remarks>
+    private DeviceIdentity? Overhear(IReadOnlyList<string> lines)
+    {
+        if (lines.Count == 0)
+        {
+            return null;
+        }
+
+        foreach (IReceiverDriver candidate in _drivers)
+        {
+            DeviceIdentity? claimed;
+            try
+            {
+                claimed = candidate.Overhear(lines);
+            }
+            catch (Exception exception)
+            {
+                _logger.LogWarning(
+                    exception,
+                    "The {Family} driver's Overhear threw over {Count} line(s); treating that as not claimed.",
+                    candidate.Family,
+                    lines.Count);
+                continue;
+            }
+
+            if (claimed is not null)
+            {
+                _logger.LogInformation(
+                    "The {Family} driver overheard {Model} on {Port} in {Count} line(s); the identity probe is skipped.",
+                    candidate.Family,
+                    claimed.Model,
+                    PortName,
+                    lines.Count);
+                return claimed;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -642,6 +725,25 @@ public sealed class DeviceSessionService : IAsyncDisposable
                 + "The receiver on the port has changed since the command was resolved.",
                 pending.Command.Mnemonic,
                 _driver.Family);
+            return;
+        }
+
+        // #310: on a broadcast link nothing goes to the wire. The answer is what the listener has
+        // heard under this key, and a talker that has gone quiet reads as a timeout so the
+        // reconnect logic below treats it exactly as a receiver that stopped answering.
+        if (_driver.Link == LinkStyle.Broadcast)
+        {
+            BroadcastListener? listener = _listener;
+            if (listener is null)
+            {
+                pending.Completion.TrySetException(new TransportException(TransportFault.NotOpen, "Not listening."));
+                return;
+            }
+
+            Transaction heard = listener.Answer(pending.Command.Mnemonic, TimeoutFor(pending.Command));
+            pending.Completion.TrySetResult(heard);
+            Record(pending.Origin, heard);
+            await NoteOutcomeAsync(heard).ConfigureAwait(false);
             return;
         }
 
@@ -929,6 +1031,14 @@ public sealed class DeviceSessionService : IAsyncDisposable
         _sessionCts?.Dispose();
         _sessionCts = null;
         _protocol = null;
+
+        // Before the transport goes: the listener is the pipe's reader, and stopping it after the
+        // transport has closed is a read on a disposed pipe (#310).
+        if (_listener is not null)
+        {
+            await _listener.DisposeAsync().ConfigureAwait(false);
+            _listener = null;
+        }
 
         if (_transport is not null)
         {
