@@ -19,10 +19,9 @@
     -->
     <ScrollViewer HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
         <StackPanel x:Name="PageRoot"
-                    controls:CardEntrance.IsEnabled="True"
                     Padding="{ThemeResource WzPageMarginThickness}"
                     MaxWidth="{ThemeResource WzContentMaxWidth}"
-                    HorizontalAlignment="Left"
+                    HorizontalAlignment="Stretch"
                     Spacing="{ThemeResource WzSpaceMd}">
                 <VisualStateManager.VisualStateGroups>
                     <!--
@@ -81,175 +80,189 @@
                         ToolTipService.ToolTip="Read this register from the receiver" />
             </Grid>
 
-            <ComboBox x:Name="RegisterPicker"
-                      MinWidth="240"
-                      HorizontalAlignment="Left"
-                      Header="Register"
-                      DisplayMemberPath="Name"
-                      SelectionChanged="OnRegisterChanged" />
+            <!--
+                §9.6.1's content grid (#345). The cards flow into as many columns as the width
+                holds, each going to whichever column is currently SHORTEST - so a tall card sits
+                alone while two short ones stack beside it, rather than alternating into a ragged
+                pair. Every page was a single StackPanel before this, which meant §9.6.1's Compact
+                arrangement at every width and half of a wide window empty.
 
-            <TextBlock x:Name="SummaryText"
-                       Style="{ThemeResource WzBodyTextStyle}"
-                       Foreground="{ThemeResource WzTextSecondaryBrush}"
-                       TextWrapping="Wrap"
-                       MaxWidth="{ThemeResource WzProseMaxWidth}" />
-
-            <ProgressRing x:Name="ReadingRing"
-                          IsActive="False"
-                          Width="20"
-                          Height="20"
+                The page heading stays outside it: a title is not a card, and it belongs across the
+                top rather than in whichever column happened to be shorter.
+            -->
+            <controls:CardColumns controls:CardEntrance.IsEnabled="True"
+                                  ColumnSpacing="{ThemeResource WzSpaceXl}"
+                                  RowSpacing="{ThemeResource WzSpaceXl}">
+                <ComboBox x:Name="RegisterPicker"
+                          MinWidth="240"
                           HorizontalAlignment="Left"
-                          AutomationProperties.Name="Reading the register" />
+                          Header="Register"
+                          DisplayMemberPath="Name"
+                          SelectionChanged="OnRegisterChanged" />
 
-            <InfoBar x:Name="ErrorBar"
-                     IsOpen="False"
-                     IsClosable="False"
-                     Severity="Error"
-                     Title="Could not read the register" />
+                <TextBlock x:Name="SummaryText"
+                           Style="{ThemeResource WzBodyTextStyle}"
+                           Foreground="{ThemeResource WzTextSecondaryBrush}"
+                           TextWrapping="Wrap"
+                           MaxWidth="{ThemeResource WzProseMaxWidth}" />
 
-            <Border Style="{ThemeResource WzCardStyle}">
-                <StackPanel Spacing="{ThemeResource WzSpaceXs}">
-                    <Grid ColumnSpacing="{ThemeResource WzSpaceSm}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="44" />
-                            <ColumnDefinition Width="56" />
-                            <ColumnDefinition Width="56" />
-                            <ColumnDefinition Width="56" />
-                            <ColumnDefinition Width="48" />
-                            <ColumnDefinition Width="48" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
+                <ProgressRing x:Name="ReadingRing"
+                              IsActive="False"
+                              Width="20"
+                              Height="20"
+                              HorizontalAlignment="Left"
+                              AutomationProperties.Name="Reading the register" />
 
-                        <TextBlock Grid.Column="0" Style="{ThemeResource WzCaptionTextStyle}"
-                                   Foreground="{ThemeResource WzTextSecondaryBrush}" Text="Bit" />
-                        <TextBlock Grid.Column="1" Style="{ThemeResource WzCaptionTextStyle}"
-                                   Foreground="{ThemeResource WzTextSecondaryBrush}" Text="Cond" />
-                        <TextBlock Grid.Column="2" Style="{ThemeResource WzCaptionTextStyle}"
-                                   Foreground="{ThemeResource WzTextSecondaryBrush}" Text="Event" />
-                        <TextBlock Grid.Column="3" Style="{ThemeResource WzCaptionTextStyle}"
-                                   Foreground="{ThemeResource WzTextSecondaryBrush}" Text="Enab" />
-                        <TextBlock Grid.Column="4" Style="{ThemeResource WzCaptionTextStyle}"
-                                   Foreground="{ThemeResource WzTextSecondaryBrush}" Text="PTr" />
-                        <TextBlock Grid.Column="5" Style="{ThemeResource WzCaptionTextStyle}"
-                                   Foreground="{ThemeResource WzTextSecondaryBrush}" Text="NTr" />
-                        <TextBlock Grid.Column="6" Style="{ThemeResource WzCaptionTextStyle}"
-                                   Foreground="{ThemeResource WzTextSecondaryBrush}" Text="Meaning" />
-                    </Grid>
+                <InfoBar x:Name="ErrorBar"
+                         IsOpen="False"
+                         IsClosable="False"
+                         Severity="Error"
+                         Title="Could not read the register" />
 
-                    <ItemsControl x:Name="BitRows">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="vm:RegisterBitRow">
-                                <Grid ColumnSpacing="{ThemeResource WzSpaceSm}" Padding="0,4"
-                                      AutomationProperties.Name="{x:Bind Description}">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="44" />
-                                        <ColumnDefinition Width="56" />
-                                        <ColumnDefinition Width="56" />
-                                        <ColumnDefinition Width="56" />
-                                        <ColumnDefinition Width="48" />
-                                        <ColumnDefinition Width="48" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
+                <Border Style="{ThemeResource WzCardStyle}">
+                    <StackPanel Spacing="{ThemeResource WzSpaceXs}">
+                        <Grid ColumnSpacing="{ThemeResource WzSpaceSm}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="44" />
+                                <ColumnDefinition Width="56" />
+                                <ColumnDefinition Width="56" />
+                                <ColumnDefinition Width="56" />
+                                <ColumnDefinition Width="48" />
+                                <ColumnDefinition Width="48" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
 
-                                    <TextBlock Grid.Column="0" Style="{ThemeResource WzMonoTextStyle}"
-                                               Text="{x:Bind Bit}" />
-                                    <TextBlock Grid.Column="1" Style="{ThemeResource WzMonoTextStyle}"
-                                               Text="{x:Bind ConditionText}" />
-                                    <TextBlock Grid.Column="2" Style="{ThemeResource WzMonoTextStyle}"
-                                               Text="{x:Bind EventText}" />
-                                    <!--
-                                        The three masks are settings, not readings, so §10.10 draws
-                                        them as boxes and P1-4 makes them editable. TwoWay, and the
-                                        rows are cached in the view model - handing out fresh row
-                                        objects on each render would discard a half-finished edit
-                                        every time the staleness ticker fires.
+                            <TextBlock Grid.Column="0" Style="{ThemeResource WzCaptionTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}" Text="Bit" />
+                            <TextBlock Grid.Column="1" Style="{ThemeResource WzCaptionTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}" Text="Cond" />
+                            <TextBlock Grid.Column="2" Style="{ThemeResource WzCaptionTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}" Text="Event" />
+                            <TextBlock Grid.Column="3" Style="{ThemeResource WzCaptionTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}" Text="Enab" />
+                            <TextBlock Grid.Column="4" Style="{ThemeResource WzCaptionTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}" Text="PTr" />
+                            <TextBlock Grid.Column="5" Style="{ThemeResource WzCaptionTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}" Text="NTr" />
+                            <TextBlock Grid.Column="6" Style="{ThemeResource WzCaptionTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}" Text="Meaning" />
+                        </Grid>
 
-                                        Each carries its own automation name because a bare checkbox
-                                        in a grid announces only "checkbox"; the row's own name says
-                                        which bit, but not which of three columns has focus.
+                        <ItemsControl x:Name="BitRows">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:RegisterBitRow">
+                                    <Grid ColumnSpacing="{ThemeResource WzSpaceSm}" Padding="0,4"
+                                          AutomationProperties.Name="{x:Bind Description}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="44" />
+                                            <ColumnDefinition Width="56" />
+                                            <ColumnDefinition Width="56" />
+                                            <ColumnDefinition Width="56" />
+                                            <ColumnDefinition Width="48" />
+                                            <ColumnDefinition Width="48" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
 
-                                        MinWidth is 32, not 0. WinUI's default CheckBoxMinWidth is
-                                        120, which would force these 48 px columns open - that is
-                                        what the 0 here was for. But 0 let the box render 28 px wide,
-                                        under A11Y-5's 32 px pointer floor, measured on all 21 of
-                                        them. 32 satisfies the floor and still fits the column.
+                                        <TextBlock Grid.Column="0" Style="{ThemeResource WzMonoTextStyle}"
+                                                   Text="{x:Bind Bit}" />
+                                        <TextBlock Grid.Column="1" Style="{ThemeResource WzMonoTextStyle}"
+                                                   Text="{x:Bind ConditionText}" />
+                                        <TextBlock Grid.Column="2" Style="{ThemeResource WzMonoTextStyle}"
+                                                   Text="{x:Bind EventText}" />
+                                        <!--
+                                            The three masks are settings, not readings, so §10.10 draws
+                                            them as boxes and P1-4 makes them editable. TwoWay, and the
+                                            rows are cached in the view model - handing out fresh row
+                                            objects on each render would discard a half-finished edit
+                                            every time the staleness ticker fires.
 
-                                        MinHeight is stated for the same reason rather than left to
-                                        the framework's default. These carry a tooltip, so they are
-                                        pointer targets, and Test-PointerTargets.ps1 requires the
-                                        floor to be DECLARED - a floor that holds only while a stock
-                                        style happens to supply it is not a floor, it is a
-                                        coincidence that survives until someone restyles the control.
-                                    -->
-                                    <CheckBox Grid.Column="3"
-                                              MinWidth="32"
-                                              MinHeight="32"
-                                              IsChecked="{x:Bind EnableBit, Mode=TwoWay}"
-                                              IsEnabled="{x:Bind CanEditEnable}"
-                                              AutomationProperties.Name="{x:Bind EnableName}"
-                                              ToolTipService.ToolTip="Enable mask" />
-                                    <CheckBox Grid.Column="4"
-                                              MinWidth="32"
-                                              MinHeight="32"
-                                              IsChecked="{x:Bind PositiveBit, Mode=TwoWay}"
-                                              IsEnabled="{x:Bind CanEditPositive}"
-                                              AutomationProperties.Name="{x:Bind PositiveName}"
-                                              ToolTipService.ToolTip="Positive-transition mask" />
-                                    <CheckBox Grid.Column="5"
-                                              MinWidth="32"
-                                              MinHeight="32"
-                                              IsChecked="{x:Bind NegativeBit, Mode=TwoWay}"
-                                              IsEnabled="{x:Bind CanEditNegative}"
-                                              AutomationProperties.Name="{x:Bind NegativeName}"
-                                              ToolTipService.ToolTip="Negative-transition mask" />
-                                    <TextBlock Grid.Column="6" Style="{ThemeResource WzBodyTextStyle}"
-                                               TextWrapping="Wrap"
-                                               Text="{x:Bind MeaningText}" />
-                                </Grid>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
+                                            Each carries its own automation name because a bare checkbox
+                                            in a grid announces only "checkbox"; the row's own name says
+                                            which bit, but not which of three columns has focus.
 
-                    <TextBlock x:Name="RawText"
-                               controls:CopyMenu.IsCopyable="True"
-                               Style="{ThemeResource WzMonoTextStyle}"
-                               Foreground="{ThemeResource WzTextSecondaryBrush}"
-                               TextWrapping="Wrap" />
+                                            MinWidth is 32, not 0. WinUI's default CheckBoxMinWidth is
+                                            120, which would force these 48 px columns open - that is
+                                            what the 0 here was for. But 0 let the box render 28 px wide,
+                                            under A11Y-5's 32 px pointer floor, measured on all 21 of
+                                            them. 32 satisfies the floor and still fits the column.
 
-                    <controls:CommandOutcomeBar x:Name="MaskOutcome" />
+                                            MinHeight is stated for the same reason rather than left to
+                                            the framework's default. These carry a tooltip, so they are
+                                            pointer targets, and Test-PointerTargets.ps1 requires the
+                                            floor to be DECLARED - a floor that holds only while a stock
+                                            style happens to supply it is not a floor, it is a
+                                            coincidence that survives until someone restyles the control.
+                                        -->
+                                        <CheckBox Grid.Column="3"
+                                                  MinWidth="32"
+                                                  MinHeight="32"
+                                                  IsChecked="{x:Bind EnableBit, Mode=TwoWay}"
+                                                  IsEnabled="{x:Bind CanEditEnable}"
+                                                  AutomationProperties.Name="{x:Bind EnableName}"
+                                                  ToolTipService.ToolTip="Enable mask" />
+                                        <CheckBox Grid.Column="4"
+                                                  MinWidth="32"
+                                                  MinHeight="32"
+                                                  IsChecked="{x:Bind PositiveBit, Mode=TwoWay}"
+                                                  IsEnabled="{x:Bind CanEditPositive}"
+                                                  AutomationProperties.Name="{x:Bind PositiveName}"
+                                                  ToolTipService.ToolTip="Positive-transition mask" />
+                                        <CheckBox Grid.Column="5"
+                                                  MinWidth="32"
+                                                  MinHeight="32"
+                                                  IsChecked="{x:Bind NegativeBit, Mode=TwoWay}"
+                                                  IsEnabled="{x:Bind CanEditNegative}"
+                                                  AutomationProperties.Name="{x:Bind NegativeName}"
+                                                  ToolTipService.ToolTip="Negative-transition mask" />
+                                        <TextBlock Grid.Column="6" Style="{ThemeResource WzBodyTextStyle}"
+                                                   TextWrapping="Wrap"
+                                                   Text="{x:Bind MeaningText}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
 
-                    <!-- §10.10's single "Apply mask changes", with Discard beside it: an edit that
-                         cannot be undone without re-reading the register would make the checkboxes
-                         feel like switches on the instrument rather than a pending change. -->
-                    <StackPanel Orientation="Horizontal"
-                                Spacing="{ThemeResource WzSpaceXs}"
-                                HorizontalAlignment="Right">
-                        <Button x:Name="DiscardMasksButton"
-                                Content="Discard changes"
-                                IsEnabled="False"
-                                ToolTipService.ToolTip="Put the mask checkboxes back to what the receiver reported"
-                                Click="OnDiscardMasksClicked" />
-                        <Button x:Name="ApplyMasksButton"
-                                Content="Apply mask changes"
-                                Style="{ThemeResource WzDestructiveButtonStyle}"
-                                IsEnabled="False"
-                                ToolTipService.ToolTip="Write the changed masks to the receiver"
-                                Click="OnApplyMasksClicked" />
+                        <TextBlock x:Name="RawText"
+                                   controls:CopyMenu.IsCopyable="True"
+                                   Style="{ThemeResource WzMonoTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   TextWrapping="Wrap" />
+
+                        <controls:CommandOutcomeBar x:Name="MaskOutcome" />
+
+                        <!-- §10.10's single "Apply mask changes", with Discard beside it: an edit that
+                             cannot be undone without re-reading the register would make the checkboxes
+                             feel like switches on the instrument rather than a pending change. -->
+                        <StackPanel Orientation="Horizontal"
+                                    Spacing="{ThemeResource WzSpaceXs}"
+                                    HorizontalAlignment="Right">
+                            <Button x:Name="DiscardMasksButton"
+                                    Content="Discard changes"
+                                    IsEnabled="False"
+                                    ToolTipService.ToolTip="Put the mask checkboxes back to what the receiver reported"
+                                    Click="OnDiscardMasksClicked" />
+                            <Button x:Name="ApplyMasksButton"
+                                    Content="Apply mask changes"
+                                    Style="{ThemeResource WzDestructiveButtonStyle}"
+                                    IsEnabled="False"
+                                    ToolTipService.ToolTip="Write the changed masks to the receiver"
+                                    Click="OnApplyMasksClicked" />
+                        </StackPanel>
+
+                        <TextBlock x:Name="PendingText"
+                                   Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextTertiaryBrush}"
+                                   TextWrapping="Wrap"
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}" />
                     </StackPanel>
+                </Border>
 
-                    <TextBlock x:Name="PendingText"
-                               Style="{ThemeResource WzCaptionTextStyle}"
-                               Foreground="{ThemeResource WzTextTertiaryBrush}"
-                               TextWrapping="Wrap"
-                               MaxWidth="{ThemeResource WzProseMaxWidth}" />
-                </StackPanel>
-            </Border>
-
-            <InfoBar IsOpen="True"
-                     IsClosable="False"
-                     Severity="Informational"
-                     Title="Read on demand"
-                     Message="Reading the event field clears its latches, so this page reads only when you ask it to. Each mask you change is written as a separate command and asks for its own confirmation." />
+                <InfoBar IsOpen="True"
+                         IsClosable="False"
+                         Severity="Informational"
+                         Title="Read on demand"
+                         Message="Reading the event field clears its latches, so this page reads only when you ask it to. Each mask you change is written as a separate command and asks for its own confirmation." />
+            </controls:CardColumns>
         </StackPanel>
     </ScrollViewer>
 </Page>

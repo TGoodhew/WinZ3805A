@@ -16,10 +16,9 @@
     -->
     <ScrollViewer HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
         <StackPanel x:Name="PageRoot"
-                    controls:CardEntrance.IsEnabled="True"
                     Padding="{ThemeResource WzPageMarginThickness}"
                     MaxWidth="{ThemeResource WzContentMaxWidth}"
-                    HorizontalAlignment="Left"
+                    HorizontalAlignment="Stretch"
                     Spacing="{ThemeResource WzSpaceXl}">
                 <VisualStateManager.VisualStateGroups>
                     <!--
@@ -64,386 +63,400 @@
 
             <TextBlock Style="{ThemeResource WzTitleTextStyle}" Text="Timing &amp; antenna" />
 
-            <!-- ========================== Antenna cable delay ========================== -->
-            <Border Style="{ThemeResource WzCardStyle}">
-                <StackPanel Spacing="{ThemeResource WzSpaceMd}">
-                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Antenna cable delay" />
+            <!--
+                §9.6.1's content grid (#345). The cards flow into as many columns as the width
+                holds, each going to whichever column is currently SHORTEST - so a tall card sits
+                alone while two short ones stack beside it, rather than alternating into a ragged
+                pair. Every page was a single StackPanel before this, which meant §9.6.1's Compact
+                arrangement at every width and half of a wide window empty.
 
-                    <Grid ColumnSpacing="{ThemeResource WzSpaceXl}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" MinWidth="120" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
+                The page heading stays outside it: a title is not a card, and it belongs across the
+                top rather than in whichever column happened to be shorter.
+            -->
+            <controls:CardColumns controls:CardEntrance.IsEnabled="True"
+                                  ColumnSpacing="{ThemeResource WzSpaceXl}"
+                                  RowSpacing="{ThemeResource WzSpaceXl}">
+                <!-- ========================== Antenna cable delay ========================== -->
+                <Border Style="{ThemeResource WzCardStyle}">
+                    <StackPanel Spacing="{ThemeResource WzSpaceMd}">
+                        <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Antenna cable delay" />
 
-                        <TextBlock Grid.Column="0"
-                                   Style="{ThemeResource WzBodyTextStyle}"
-                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
-                                   Text="In use now" />
-                        <TextBlock x:Name="CurrentDelayText"
-                                   controls:CopyMenu.IsCopyable="True" Grid.Column="1"
-                                   Style="{ThemeResource WzMonoTextStyle}" />
-                    </Grid>
+                        <Grid ColumnSpacing="{ThemeResource WzSpaceXl}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" MinWidth="120" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
 
-                    <!--
-                        §10.7's two ways in. Direct entry first, as the wireframe draws it: a user
-                        who already knows their delay should not have to work through a calculator
-                        to type it, and the surplus-equipment buyer (§3) usually does not know it
-                        and needs the calculator. Both feed the same Apply.
-                    -->
-                    <RadioButton x:Name="EnterDirectlyRadio"
-                                 Content="Enter delay directly"
-                                 GroupName="DelaySource"
-                                 Checked="OnDelaySourceChanged" />
-
-                    <StackPanel Margin="32,0,0,0" Spacing="{ThemeResource WzSpaceXxs}">
-                        <NumberBox x:Name="DirectDelayBox"
-                                   MinWidth="240"
-                                   HorizontalAlignment="Left"
-                                   Header="Delay (nanoseconds)"
-                                   SmallChange="1"
-                                   LargeChange="100"
-                                   SpinButtonPlacementMode="Compact"
-                                   ValueChanged="OnDirectDelayChanged" />
-                        <controls:FieldErrorText x:Name="DirectDelayError" />
-                    </StackPanel>
-
-                    <RadioButton x:Name="CalculateRadio"
-                                 Content="Calculate from cable"
-                                 GroupName="DelaySource"
-                                 IsChecked="True"
-                                 Checked="OnDelaySourceChanged" />
-
-                    <StackPanel Margin="32,0,0,0"
-                                Spacing="{ThemeResource WzSpaceMd}">
-
-                    <StackPanel Spacing="{ThemeResource WzSpaceXs}">
-                        <RadioButton x:Name="UsePresetRadio"
-                                     Content="Named cable"
-                                     GroupName="CableSource"
-                                     IsChecked="True"
-                                     Checked="OnCableSourceChanged" />
-
-                        <ComboBox x:Name="CablePicker"
-                                  MinWidth="240"
-                                  Margin="32,0,0,0"
-                                  Header="Cable type"
-                                  DisplayMemberPath="Name"
-                                  SelectionChanged="OnCableChanged" />
-
-                        <RadioButton x:Name="UseVelocityRadio"
-                                     Content="Custom velocity factor"
-                                     GroupName="CableSource"
-                                     Checked="OnCableSourceChanged" />
+                            <TextBlock Grid.Column="0"
+                                       Style="{ThemeResource WzBodyTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                       Text="In use now" />
+                            <TextBlock x:Name="CurrentDelayText"
+                                       controls:CopyMenu.IsCopyable="True" Grid.Column="1"
+                                       Style="{ThemeResource WzMonoTextStyle}" />
+                        </Grid>
 
                         <!--
-                            No Minimum, Maximum or ValidationMode here, and that is the same rule
-                            every other NumberBox in this application already follows.
-                            InvalidInputOverwritten - which is the control's default and was set
-                            explicitly here - silently replaces an out-of-range entry, so §9.11 has
-                            nothing left to put an error message under: a user who typed 1.5 got
-                            0.99 back with no explanation. Bounds live on the validator below and
-                            are enforced by refusing to send.
-
-                            Writing them in XAML was wrong a second way. The parser reads the
-                            literal as a float and widens it, so Maximum="0.99" reached the control
-                            as 0.9900000095 - and the clamp then wrote that into the field, in
-                            full, where the user could read it.
+                            §10.7's two ways in. Direct entry first, as the wireframe draws it: a user
+                            who already knows their delay should not have to work through a calculator
+                            to type it, and the surplus-equipment buyer (§3) usually does not know it
+                            and needs the calculator. Both feed the same Apply.
                         -->
-                        <NumberBox x:Name="VelocityFactorBox"
-                                   MinWidth="240"
-                                   Margin="32,0,0,0"
-                                   Header="Velocity factor"
-                                   SmallChange="0.01"
-                                   IsEnabled="False"
-                                   SpinButtonPlacementMode="Compact"
-                                   ValueChanged="OnVelocityFactorChanged" />
-                        <controls:FieldErrorText x:Name="VelocityFactorError"
-                                                 Margin="32,0,0,0" />
-                    </StackPanel>
+                        <RadioButton x:Name="EnterDirectlyRadio"
+                                     Content="Enter delay directly"
+                                     GroupName="DelaySource"
+                                     Checked="OnDelaySourceChanged" />
 
-                    <StackPanel Spacing="{ThemeResource WzSpaceXxs}">
-                        <NumberBox x:Name="LengthBox"
-                                   MinWidth="240"
-                                   HorizontalAlignment="Left"
-                                   Header="Cable length (metres)"
-                                   SmallChange="1"
-                                   SpinButtonPlacementMode="Compact"
-                                   ValueChanged="OnLengthChanged" />
-                        <controls:FieldErrorText x:Name="LengthError" />
-                    </StackPanel>
+                        <StackPanel Margin="32,0,0,0" Spacing="{ThemeResource WzSpaceXxs}">
+                            <NumberBox x:Name="DirectDelayBox"
+                                       MinWidth="240"
+                                       HorizontalAlignment="Left"
+                                       Header="Delay (nanoseconds)"
+                                       SmallChange="1"
+                                       LargeChange="100"
+                                       SpinButtonPlacementMode="Compact"
+                                       ValueChanged="OnDirectDelayChanged" />
+                            <controls:FieldErrorText x:Name="DirectDelayError" />
+                        </StackPanel>
 
-                    <StackPanel Spacing="{ThemeResource WzSpaceXxs}">
-                        <controls:ReadoutTile x:Name="ComputedDelay"
-                                              Label="Computed delay"
-                                              Unit="ns"
-                                              DecimalPlaces="1"
-                                              MaxIntegerDigits="6"
-                                              Size="Medium" />
-                        <TextBlock x:Name="CableSourceText"
+                        <RadioButton x:Name="CalculateRadio"
+                                     Content="Calculate from cable"
+                                     GroupName="DelaySource"
+                                     IsChecked="True"
+                                     Checked="OnDelaySourceChanged" />
+
+                        <StackPanel Margin="32,0,0,0"
+                                    Spacing="{ThemeResource WzSpaceMd}">
+
+                        <StackPanel Spacing="{ThemeResource WzSpaceXs}">
+                            <RadioButton x:Name="UsePresetRadio"
+                                         Content="Named cable"
+                                         GroupName="CableSource"
+                                         IsChecked="True"
+                                         Checked="OnCableSourceChanged" />
+
+                            <ComboBox x:Name="CablePicker"
+                                      MinWidth="240"
+                                      Margin="32,0,0,0"
+                                      Header="Cable type"
+                                      DisplayMemberPath="Name"
+                                      SelectionChanged="OnCableChanged" />
+
+                            <RadioButton x:Name="UseVelocityRadio"
+                                         Content="Custom velocity factor"
+                                         GroupName="CableSource"
+                                         Checked="OnCableSourceChanged" />
+
+                            <!--
+                                No Minimum, Maximum or ValidationMode here, and that is the same rule
+                                every other NumberBox in this application already follows.
+                                InvalidInputOverwritten - which is the control's default and was set
+                                explicitly here - silently replaces an out-of-range entry, so §9.11 has
+                                nothing left to put an error message under: a user who typed 1.5 got
+                                0.99 back with no explanation. Bounds live on the validator below and
+                                are enforced by refusing to send.
+
+                                Writing them in XAML was wrong a second way. The parser reads the
+                                literal as a float and widens it, so Maximum="0.99" reached the control
+                                as 0.9900000095 - and the clamp then wrote that into the field, in
+                                full, where the user could read it.
+                            -->
+                            <NumberBox x:Name="VelocityFactorBox"
+                                       MinWidth="240"
+                                       Margin="32,0,0,0"
+                                       Header="Velocity factor"
+                                       SmallChange="0.01"
+                                       IsEnabled="False"
+                                       SpinButtonPlacementMode="Compact"
+                                       ValueChanged="OnVelocityFactorChanged" />
+                            <controls:FieldErrorText x:Name="VelocityFactorError"
+                                                     Margin="32,0,0,0" />
+                        </StackPanel>
+
+                        <StackPanel Spacing="{ThemeResource WzSpaceXxs}">
+                            <NumberBox x:Name="LengthBox"
+                                       MinWidth="240"
+                                       HorizontalAlignment="Left"
+                                       Header="Cable length (metres)"
+                                       SmallChange="1"
+                                       SpinButtonPlacementMode="Compact"
+                                       ValueChanged="OnLengthChanged" />
+                            <controls:FieldErrorText x:Name="LengthError" />
+                        </StackPanel>
+
+                        <StackPanel Spacing="{ThemeResource WzSpaceXxs}">
+                            <controls:ReadoutTile x:Name="ComputedDelay"
+                                                  Label="Computed delay"
+                                                  Unit="ns"
+                                                  DecimalPlaces="1"
+                                                  MaxIntegerDigits="6"
+                                                  Size="Medium" />
+                            <TextBlock x:Name="CableSourceText"
+                                       Style="{ThemeResource WzCaptionTextStyle}"
+                                       Foreground="{ThemeResource WzTextTertiaryBrush}" />
+                            <controls:FieldErrorText x:Name="ComputedDelayError" />
+                        </StackPanel>
+
+                        <controls:SeverityPill x:Name="DifferencePill" Visibility="Collapsed" />
+                        </StackPanel>
+
+                        <!--
+                            §10.7's warning, which is the reason the command is tier C in the first
+                            place. It stays visible rather than appearing on hover: the consequence is
+                            the same every time, so hiding it until the user is already committing is
+                            the wrong moment to mention it.
+                        -->
+                        <InfoBar IsOpen="True"
+                                 IsClosable="False"
+                                 Severity="Warning"
+                                 Title="Before applying"
+                                 Message="Changing the antenna delay while the receiver is locked can send it into holdover." />
+
+                        <controls:CommandOutcomeBar x:Name="DelayOutcome" />
+
+                        <!--
+                            §9.7.4 puts Apply inline with the values it affects, never in a page-level
+                            bar. §9.11 keeps it disabled while any field in this card is invalid.
+                        -->
+                        <Button x:Name="ApplyDelayButton"
+                                HorizontalAlignment="Right"
+                                Content="Apply delay"
+                                Style="{ThemeResource WzDestructiveButtonStyle}"
+                                IsEnabled="False"
+                                ToolTipService.ToolTip="Send this delay to the receiver"
+                                Click="OnApplyDelayClicked" />
+                    </StackPanel>
+                </Border>
+
+                <!-- =========================== 1 PPS time interval ========================== -->
+                <Border x:Name="TrendCard" Style="{ThemeResource WzCardStyle}">
+                    <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                        <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="1 PPS time interval" />
+
+                        <Grid ColumnSpacing="{ThemeResource WzSpaceXl}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <controls:ReadoutTile x:Name="TimeInterval"
+                                                  Grid.Column="0"
+                                                  Label="Current"
+                                                  Unit="ns"
+                                                  DecimalPlaces="1"
+                                                  MaxIntegerDigits="5"
+                                                  AllowNegative="True"
+                                                  Size="Medium" />
+
+                            <controls:ReadoutTile x:Name="Deviation"
+                                                  Grid.Column="1"
+                                                  Label="σ"
+                                                  Unit="ns"
+                                                  DecimalPlaces="1"
+                                                  MaxIntegerDigits="5"
+                                                  Size="Medium" />
+                        </Grid>
+
+                        <!--
+                            P1-1's trend. The range selector is §9.10.2's, and the four settings are
+                            §13's 1 h / 6 h / 24 h / 7 d. RadioButtons rather than a ComboBox: four
+                            mutually exclusive settings that are all worth seeing at once, and the
+                            current one is then legible without opening anything.
+                        -->
+                        <StackPanel Orientation="Horizontal"
+                                    Spacing="{ThemeResource WzSpaceXs}">
+                            <RadioButton x:Name="Range1h" Content="1 h" GroupName="TrendRange"
+                                         Checked="OnRangeChanged" Tag="1" />
+                            <RadioButton x:Name="Range6h" Content="6 h" GroupName="TrendRange"
+                                         Checked="OnRangeChanged" Tag="6" />
+                            <RadioButton x:Name="Range24h" Content="24 h" GroupName="TrendRange"
+                                         Checked="OnRangeChanged" Tag="24" />
+                            <RadioButton x:Name="Range7d" Content="7 d" GroupName="TrendRange"
+                                         Checked="OnRangeChanged" Tag="168" />
+                        </StackPanel>
+
+                        <controls:TrendChart x:Name="TimeIntervalTrend"
+                                             Height="140"
+                                             Unit="ns"
+                                             AutomationProperties.Name="1 PPS time interval trend" />
+
+                        <!--
+                            EFC on its own chart rather than a second axis on the first. §9.4.4's
+                            diverging ramp is anchored on zero and the two quantities do not share a
+                            zero: 0 ns is the receiver on time, and 0 % is the oscillator at the middle
+                            of its range. Overlaying them would make one of the two colour scales lie.
+                        -->
+                        <StackPanel Orientation="Horizontal" Spacing="{ThemeResource WzSpaceXs}">
+                            <PathIcon Data="{StaticResource WzIconOscillator}"
+                                      Width="16" Height="16"
+                                      VerticalAlignment="Center"
+                                      Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                      AutomationProperties.AccessibilityView="Raw" />
+                            <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}"
+                                       VerticalAlignment="Center"
+                                       Text="Oscillator control (EFC)" />
+                        </StackPanel>
+
+                        <!--
+                            Framed on the data, not on zero (#183). Zero-anchored, a receiver parked at
+                            -16.83 % drew as a flat line in a thousandth of the plot: the axis extent
+                            was set by the offset from zero and by nothing about the signal. §10.7.1
+                            already says these two charts do not share a zero; this is that sentence
+                            applied to the axis as well as to the chart.
+
+                            MinimumSpan 0.01 % is about 55 EFC codes on the bench receiver, whose step
+                            measures ~0.00018 % (280 distinct values across 0.0516 %). Below that the
+                            plot would be drawing the converter's least significant bit rather than the
+                            oscillator, which is the same failure the medallion's +/-50 ns floor exists
+                            to prevent.
+
+                            Decimals 2 because 1 dp cannot separate -16.86 from -16.80. Fixed for this
+                            chart at every range, which is what §9.11 item 6 is about.
+                        -->
+                        <controls:TrendChart x:Name="EfcTrend"
+                                             Height="140"
+                                             Unit="%"
+                                             Anchoring="Data"
+                                             MinimumSpan="0.01"
+                                             Decimals="2"
+                                             AutomationProperties.Name="Oscillator control trend" />
+
+                        <!--
+                            #137's drift analysis, specified in §10.7.1. A card on this page rather than
+                            a destination of its own: §10.2's cap is twelve now and a page was
+                            available, but the fit is about the series drawn immediately above it and
+                            separating them would put a number on one page and its evidence on another.
+
+                            That placement was a code decision when it was made - §10.7 described this
+                            page as the cable delay and the 1 PPS trend and nothing else - which is why
+                            it was raised as #142 rather than settled here. §10.7.1 settles it.
+                        -->
+                        <StackPanel Spacing="{ThemeResource WzSpaceXs}">
+                            <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}"
+                                       Text="Oscillator drift" />
+
+                            <controls:SeverityPill x:Name="DriftPill" HorizontalAlignment="Left" />
+
+                            <TextBlock x:Name="DriftAdvisoryText"
+                                       Style="{ThemeResource WzBodyTextStyle}"
+                                       TextWrapping="Wrap"
+                                       MaxWidth="{ThemeResource WzProseMaxWidth}" />
+
+                            <TextBlock x:Name="DriftNumbersText"
+                                       controls:CopyMenu.IsCopyable="True"
+                                       Style="{ThemeResource WzMonoTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                       TextWrapping="Wrap" />
+
+                            <TextBlock x:Name="DriftEvidenceText"
+                                       Style="{ThemeResource WzCaptionTextStyle}"
+                                       Foreground="{ThemeResource WzTextTertiaryBrush}"
+                                       TextWrapping="Wrap"
+                                       MaxWidth="{ThemeResource WzProseMaxWidth}" />
+
+                            <TextBlock x:Name="DriftHardwareText"
+                                       Style="{ThemeResource WzCaptionTextStyle}"
+                                       Foreground="{ThemeResource WzTextTertiaryBrush}"
+                                       TextWrapping="Wrap"
+                                       MaxWidth="{ThemeResource WzProseMaxWidth}" />
+                        </StackPanel>
+
+                        <TextBlock x:Name="TrendSummaryText"
                                    Style="{ThemeResource WzCaptionTextStyle}"
-                                   Foreground="{ThemeResource WzTextTertiaryBrush}" />
-                        <controls:FieldErrorText x:Name="ComputedDelayError" />
+                                   Foreground="{ThemeResource WzTextTertiaryBrush}"
+                                   TextWrapping="Wrap"
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}" />
+
+                        <TextBlock x:Name="DeviationWindowText"
+                                   Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextTertiaryBrush}"
+                                   TextWrapping="Wrap"
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}" />
                     </StackPanel>
+                </Border>
 
-                    <controls:SeverityPill x:Name="DifferencePill" Visibility="Collapsed" />
-                    </StackPanel>
+                <!-- ============================= Stability (P2-3) =========================== -->
 
-                    <!--
-                        §10.7's warning, which is the reason the command is tier C in the first
-                        place. It stays visible rather than appearing on hover: the consequence is
-                        the same every time, so hiding it until the user is already committing is
-                        the wrong moment to mention it.
-                    -->
-                    <InfoBar IsOpen="True"
-                             IsClosable="False"
-                             Severity="Warning"
-                             Title="Before applying"
-                             Message="Changing the antenna delay while the receiver is locked can send it into holdover." />
+                <!--
+                    #63. Allan deviation over the persisted time-interval series. The estimator is the
+                    GAP-AWARE one, because trend.db follows the poll schedule rather than a clock and a
+                    run either side of a gap is not adjacent - joining them invents a second difference
+                    across the hole and reports a worse figure with nothing to say it did.
 
-                    <controls:CommandOutcomeBar x:Name="DelayOutcome" />
-
-                    <!--
-                        §9.7.4 puts Apply inline with the values it affects, never in a page-level
-                        bar. §9.11 keeps it disabled while any field in this card is invalid.
-                    -->
-                    <Button x:Name="ApplyDelayButton"
-                            HorizontalAlignment="Right"
-                            Content="Apply delay"
-                            Style="{ThemeResource WzDestructiveButtonStyle}"
-                            IsEnabled="False"
-                            ToolTipService.ToolTip="Send this delay to the receiver"
-                            Click="OnApplyDelayClicked" />
-                </StackPanel>
-            </Border>
-
-            <!-- =========================== 1 PPS time interval ========================== -->
-            <Border x:Name="TrendCard" Style="{ThemeResource WzCardStyle}">
-                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
-                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="1 PPS time interval" />
-
-                    <Grid ColumnSpacing="{ThemeResource WzSpaceXl}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-
-                        <controls:ReadoutTile x:Name="TimeInterval"
-                                              Grid.Column="0"
-                                              Label="Current"
-                                              Unit="ns"
-                                              DecimalPlaces="1"
-                                              MaxIntegerDigits="5"
-                                              AllowNegative="True"
-                                              Size="Medium" />
-
-                        <controls:ReadoutTile x:Name="Deviation"
-                                              Grid.Column="1"
-                                              Label="σ"
-                                              Unit="ns"
-                                              DecimalPlaces="1"
-                                              MaxIntegerDigits="5"
-                                              Size="Medium" />
-                    </Grid>
-
-                    <!--
-                        P1-1's trend. The range selector is §9.10.2's, and the four settings are
-                        §13's 1 h / 6 h / 24 h / 7 d. RadioButtons rather than a ComboBox: four
-                        mutually exclusive settings that are all worth seeing at once, and the
-                        current one is then legible without opening anything.
-                    -->
-                    <StackPanel Orientation="Horizontal"
-                                Spacing="{ThemeResource WzSpaceXs}">
-                        <RadioButton x:Name="Range1h" Content="1 h" GroupName="TrendRange"
-                                     Checked="OnRangeChanged" Tag="1" />
-                        <RadioButton x:Name="Range6h" Content="6 h" GroupName="TrendRange"
-                                     Checked="OnRangeChanged" Tag="6" />
-                        <RadioButton x:Name="Range24h" Content="24 h" GroupName="TrendRange"
-                                     Checked="OnRangeChanged" Tag="24" />
-                        <RadioButton x:Name="Range7d" Content="7 d" GroupName="TrendRange"
-                                     Checked="OnRangeChanged" Tag="168" />
-                    </StackPanel>
-
-                    <controls:TrendChart x:Name="TimeIntervalTrend"
-                                         Height="140"
-                                         Unit="ns"
-                                         AutomationProperties.Name="1 PPS time interval trend" />
-
-                    <!--
-                        EFC on its own chart rather than a second axis on the first. §9.4.4's
-                        diverging ramp is anchored on zero and the two quantities do not share a
-                        zero: 0 ns is the receiver on time, and 0 % is the oscillator at the middle
-                        of its range. Overlaying them would make one of the two colour scales lie.
-                    -->
-                    <StackPanel Orientation="Horizontal" Spacing="{ThemeResource WzSpaceXs}">
-                        <PathIcon Data="{StaticResource WzIconOscillator}"
-                                  Width="16" Height="16"
-                                  VerticalAlignment="Center"
-                                  Foreground="{ThemeResource WzTextSecondaryBrush}"
-                                  AutomationProperties.AccessibilityView="Raw" />
+                    Rows a series cannot support are absent rather than dashed: unlike a field the
+                    receiver declined to answer, a tau this data cannot speak to is not a hole in the
+                    reading, and a row of dashes would imply the receiver was asked.
+                -->
+                <Border Style="{ThemeResource WzCardStyle}">
+                    <StackPanel Spacing="{ThemeResource WzSpaceSm}">
                         <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}"
-                                   VerticalAlignment="Center"
-                                   Text="Oscillator control (EFC)" />
-                    </StackPanel>
+                                   Text="Stability (Allan deviation)" />
 
-                    <!--
-                        Framed on the data, not on zero (#183). Zero-anchored, a receiver parked at
-                        -16.83 % drew as a flat line in a thousandth of the plot: the axis extent
-                        was set by the offset from zero and by nothing about the signal. §10.7.1
-                        already says these two charts do not share a zero; this is that sentence
-                        applied to the axis as well as to the chart.
-
-                        MinimumSpan 0.01 % is about 55 EFC codes on the bench receiver, whose step
-                        measures ~0.00018 % (280 distinct values across 0.0516 %). Below that the
-                        plot would be drawing the converter's least significant bit rather than the
-                        oscillator, which is the same failure the medallion's +/-50 ns floor exists
-                        to prevent.
-
-                        Decimals 2 because 1 dp cannot separate -16.86 from -16.80. Fixed for this
-                        chart at every range, which is what §9.11 item 6 is about.
-                    -->
-                    <controls:TrendChart x:Name="EfcTrend"
-                                         Height="140"
-                                         Unit="%"
-                                         Anchoring="Data"
-                                         MinimumSpan="0.01"
-                                         Decimals="2"
-                                         AutomationProperties.Name="Oscillator control trend" />
-
-                    <!--
-                        #137's drift analysis, specified in §10.7.1. A card on this page rather than
-                        a destination of its own: §10.2's cap is twelve now and a page was
-                        available, but the fit is about the series drawn immediately above it and
-                        separating them would put a number on one page and its evidence on another.
-
-                        That placement was a code decision when it was made - §10.7 described this
-                        page as the cable delay and the 1 PPS trend and nothing else - which is why
-                        it was raised as #142 rather than settled here. §10.7.1 settles it.
-                    -->
-                    <StackPanel Spacing="{ThemeResource WzSpaceXs}">
-                        <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}"
-                                   Text="Oscillator drift" />
-
-                        <controls:SeverityPill x:Name="DriftPill" HorizontalAlignment="Left" />
-
-                        <TextBlock x:Name="DriftAdvisoryText"
+                        <TextBlock x:Name="StabilitySummary"
                                    Style="{ThemeResource WzBodyTextStyle}"
-                                   TextWrapping="Wrap"
-                                   MaxWidth="{ThemeResource WzProseMaxWidth}" />
-
-                        <TextBlock x:Name="DriftNumbersText"
-                                   controls:CopyMenu.IsCopyable="True"
-                                   Style="{ThemeResource WzMonoTextStyle}"
                                    Foreground="{ThemeResource WzTextSecondaryBrush}"
-                                   TextWrapping="Wrap" />
-
-                        <TextBlock x:Name="DriftEvidenceText"
-                                   Style="{ThemeResource WzCaptionTextStyle}"
-                                   Foreground="{ThemeResource WzTextTertiaryBrush}"
                                    TextWrapping="Wrap"
                                    MaxWidth="{ThemeResource WzProseMaxWidth}" />
 
-                        <TextBlock x:Name="DriftHardwareText"
-                                   Style="{ThemeResource WzCaptionTextStyle}"
-                                   Foreground="{ThemeResource WzTextTertiaryBrush}"
-                                   TextWrapping="Wrap"
-                                   MaxWidth="{ThemeResource WzProseMaxWidth}" />
+                        <Grid x:Name="StabilityHeader" ColumnSpacing="{ThemeResource WzSpaceMd}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="120" />
+                                <ColumnDefinition Width="140" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Grid.Column="0"
+                                       Style="{ThemeResource WzCaptionTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                       Text="Averaging time τ" />
+                            <TextBlock Grid.Column="1"
+                                       Style="{ThemeResource WzCaptionTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                       Text="σy(τ)" />
+                            <TextBlock Grid.Column="2"
+                                       Style="{ThemeResource WzCaptionTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                       Text="Differences averaged" />
+                        </Grid>
+
+                        <ItemsControl x:Name="StabilityRows">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="viewmodels:StabilityRow">
+                                    <Grid ColumnSpacing="{ThemeResource WzSpaceMd}"
+                                          Padding="{ThemeResource WzSpaceXxsThickness}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="120" />
+                                            <ColumnDefinition Width="140" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <TextBlock Grid.Column="0"
+                                                   Style="{ThemeResource WzMonoTextStyle}"
+                                                   Text="{x:Bind TauText}" />
+                                        <TextBlock Grid.Column="1"
+                                                   Style="{ThemeResource WzMonoTextStyle}"
+                                                   Text="{x:Bind DeviationText}" />
+
+                                        <!--
+                                            The count travels with the figure because confidence goes as
+                                            1/sqrt(N): sigma from four differences and sigma from four
+                                            thousand are different claims wearing the same digits.
+                                        -->
+                                        <TextBlock Grid.Column="2"
+                                                   Style="{ThemeResource WzMonoTextStyle}"
+                                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                                   Text="{x:Bind PairsText}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
                     </StackPanel>
+                </Border>
 
-                    <TextBlock x:Name="TrendSummaryText"
-                               Style="{ThemeResource WzCaptionTextStyle}"
-                               Foreground="{ThemeResource WzTextTertiaryBrush}"
-                               TextWrapping="Wrap"
-                               MaxWidth="{ThemeResource WzProseMaxWidth}" />
-
-                    <TextBlock x:Name="DeviationWindowText"
-                               Style="{ThemeResource WzCaptionTextStyle}"
-                               Foreground="{ThemeResource WzTextTertiaryBrush}"
-                               TextWrapping="Wrap"
-                               MaxWidth="{ThemeResource WzProseMaxWidth}" />
-                </StackPanel>
-            </Border>
-
-            <!-- ============================= Stability (P2-3) =========================== -->
-
-            <!--
-                #63. Allan deviation over the persisted time-interval series. The estimator is the
-                GAP-AWARE one, because trend.db follows the poll schedule rather than a clock and a
-                run either side of a gap is not adjacent - joining them invents a second difference
-                across the hole and reports a worse figure with nothing to say it did.
-
-                Rows a series cannot support are absent rather than dashed: unlike a field the
-                receiver declined to answer, a tau this data cannot speak to is not a hole in the
-                reading, and a row of dashes would imply the receiver was asked.
-            -->
-            <Border Style="{ThemeResource WzCardStyle}">
-                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
-                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}"
-                               Text="Stability (Allan deviation)" />
-
-                    <TextBlock x:Name="StabilitySummary"
-                               Style="{ThemeResource WzBodyTextStyle}"
-                               Foreground="{ThemeResource WzTextSecondaryBrush}"
-                               TextWrapping="Wrap"
-                               MaxWidth="{ThemeResource WzProseMaxWidth}" />
-
-                    <Grid x:Name="StabilityHeader" ColumnSpacing="{ThemeResource WzSpaceMd}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="120" />
-                            <ColumnDefinition Width="140" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-
-                        <TextBlock Grid.Column="0"
-                                   Style="{ThemeResource WzCaptionTextStyle}"
-                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
-                                   Text="Averaging time τ" />
-                        <TextBlock Grid.Column="1"
-                                   Style="{ThemeResource WzCaptionTextStyle}"
-                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
-                                   Text="σy(τ)" />
-                        <TextBlock Grid.Column="2"
-                                   Style="{ThemeResource WzCaptionTextStyle}"
-                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
-                                   Text="Differences averaged" />
-                    </Grid>
-
-                    <ItemsControl x:Name="StabilityRows">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="viewmodels:StabilityRow">
-                                <Grid ColumnSpacing="{ThemeResource WzSpaceMd}"
-                                      Padding="{ThemeResource WzSpaceXxsThickness}">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="120" />
-                                        <ColumnDefinition Width="140" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-
-                                    <TextBlock Grid.Column="0"
-                                               Style="{ThemeResource WzMonoTextStyle}"
-                                               Text="{x:Bind TauText}" />
-                                    <TextBlock Grid.Column="1"
-                                               Style="{ThemeResource WzMonoTextStyle}"
-                                               Text="{x:Bind DeviationText}" />
-
-                                    <!--
-                                        The count travels with the figure because confidence goes as
-                                        1/sqrt(N): sigma from four differences and sigma from four
-                                        thousand are different claims wearing the same digits.
-                                    -->
-                                    <TextBlock Grid.Column="2"
-                                               Style="{ThemeResource WzMonoTextStyle}"
-                                               Foreground="{ThemeResource WzTextSecondaryBrush}"
-                                               Text="{x:Bind PairsText}" />
-                                </Grid>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </StackPanel>
-            </Border>
-
-            <TextBlock x:Name="FooterText"
-                       Style="{ThemeResource WzCaptionTextStyle}"
-                       Foreground="{ThemeResource WzTextTertiaryBrush}" />
+                <TextBlock x:Name="FooterText"
+                           Style="{ThemeResource WzCaptionTextStyle}"
+                           Foreground="{ThemeResource WzTextTertiaryBrush}" />
+            </controls:CardColumns>
         </StackPanel>
     </ScrollViewer>
 </Page>

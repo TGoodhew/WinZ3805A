@@ -19,10 +19,9 @@
     -->
     <ScrollViewer HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
         <StackPanel x:Name="PageRoot"
-                    controls:CardEntrance.IsEnabled="True"
                     Padding="{ThemeResource WzPageMarginThickness}"
                     MaxWidth="{ThemeResource WzContentMaxWidth}"
-                    HorizontalAlignment="Left"
+                    HorizontalAlignment="Stretch"
                     Spacing="{ThemeResource WzSpaceXl}">
                 <VisualStateManager.VisualStateGroups>
                     <!--
@@ -67,348 +66,362 @@
 
             <TextBlock Style="{ThemeResource WzTitleTextStyle}" Text="Overview" />
 
-            <!-- ============================ Synchronization ============================ -->
-            <Border Style="{ThemeResource WzCardStyle}">
-                <StackPanel Spacing="{ThemeResource WzSpaceMd}">
-                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Synchronization" />
+            <!--
+                §9.6.1's content grid (#345). The cards flow into as many columns as the width
+                holds, each going to whichever column is currently SHORTEST - so a tall card sits
+                alone while two short ones stack beside it, rather than alternating into a ragged
+                pair. Every page was a single StackPanel before this, which meant §9.6.1's Compact
+                arrangement at every width and half of a wide window empty.
 
-                    <StackPanel Orientation="Horizontal" Spacing="{ThemeResource WzSpaceMd}">
-                        <controls:StatusMedallion x:Name="Medallion"
-                                                  Size="Standard"
-                                                  VerticalAlignment="Top" />
+                The page heading stays outside it: a title is not a card, and it belongs across the
+                top rather than in whichever column happened to be shorter.
+            -->
+            <controls:CardColumns controls:CardEntrance.IsEnabled="True"
+                                  ColumnSpacing="{ThemeResource WzSpaceXl}"
+                                  RowSpacing="{ThemeResource WzSpaceXl}">
+                <!-- ============================ Synchronization ============================ -->
+                <Border Style="{ThemeResource WzCardStyle}">
+                    <StackPanel Spacing="{ThemeResource WzSpaceMd}">
+                        <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Synchronization" />
 
-                        <StackPanel Spacing="{ThemeResource WzSpaceXxs}" VerticalAlignment="Center">
-                            <TextBlock x:Name="ModeText" Style="{ThemeResource WzSubtitleTextStyle}" />
-                            <TextBlock x:Name="ModeDetailText"
-                                       Style="{ThemeResource WzBodyTextStyle}"
-                                       Foreground="{ThemeResource WzTextSecondaryBrush}" />
-                            <controls:SeverityPill x:Name="CoastingPill"
-                                                   Severity="Caution"
-                                                   Text="coasting"
-                                                   Visibility="Collapsed" />
-                        </StackPanel>
-                    </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="{ThemeResource WzSpaceMd}">
+                            <controls:StatusMedallion x:Name="Medallion"
+                                                      Size="Standard"
+                                                      VerticalAlignment="Top" />
 
-                    <controls:SeverityPill x:Name="OutputsPill" />
-
-                    <!--
-                        The three headline figures. Each carries the number, its label, and what the
-                        number means - the sub-caption is the whole point of showing TFOM at all.
-                    -->
-                    <Grid ColumnSpacing="{ThemeResource WzSpaceMd}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-
-                        <StackPanel Grid.Column="0" Spacing="{ThemeResource WzSpaceXxs}">
-                            <controls:SeverityPill x:Name="TfomPill" />
-                            <TextBlock x:Name="TfomDetailText"
-                                       Style="{ThemeResource WzCaptionTextStyle}"
-                                       Foreground="{ThemeResource WzTextSecondaryBrush}" />
+                            <StackPanel Spacing="{ThemeResource WzSpaceXxs}" VerticalAlignment="Center">
+                                <TextBlock x:Name="ModeText" Style="{ThemeResource WzSubtitleTextStyle}" />
+                                <TextBlock x:Name="ModeDetailText"
+                                           Style="{ThemeResource WzBodyTextStyle}"
+                                           Foreground="{ThemeResource WzTextSecondaryBrush}" />
+                                <controls:SeverityPill x:Name="CoastingPill"
+                                                       Severity="Caution"
+                                                       Text="coasting"
+                                                       Visibility="Collapsed" />
+                            </StackPanel>
                         </StackPanel>
 
-                        <StackPanel Grid.Column="1" Spacing="{ThemeResource WzSpaceXxs}">
-                            <controls:SeverityPill x:Name="FfomPill" />
-                            <TextBlock x:Name="FfomDetailText"
-                                       Style="{ThemeResource WzCaptionTextStyle}"
-                                       Foreground="{ThemeResource WzTextSecondaryBrush}" />
-                        </StackPanel>
-
-                        <StackPanel Grid.Column="2" Spacing="{ThemeResource WzSpaceXxs}">
-                            <controls:ReadoutTile x:Name="TimeInterval"
-                                                  Label="1 PPS TI"
-                                                  Unit="ns"
-                                                  DecimalPlaces="1"
-                                                  MaxIntegerDigits="5"
-                                                  AllowNegative="True"
-                                                  Size="Medium" />
-                            <TextBlock Style="{ThemeResource WzCaptionTextStyle}"
-                                       Foreground="{ThemeResource WzTextSecondaryBrush}"
-                                       Text="relative to GPS" />
-                        </StackPanel>
-                    </Grid>
-                </StackPanel>
-            </Border>
-
-            <!-- ========================= Holdover uncertainty ========================== -->
-            <Border Style="{ThemeResource WzCardStyle}">
-                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
-                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Holdover uncertainty" />
-
-                    <Grid RowSpacing="{ThemeResource WzSpaceXs}" ColumnSpacing="{ThemeResource WzSpaceXl}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" MinWidth="160" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
-
-                        <TextBlock Grid.Row="0" Grid.Column="0"
-                                   Style="{ThemeResource WzBodyTextStyle}"
-                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
-                                   Text="Predicted (24 h)" />
-                        <TextBlock x:Name="HoldoverPredictedText"
-                                   controls:CopyMenu.IsCopyable="True"
-                                   Grid.Row="0" Grid.Column="1"
-                                   Style="{ThemeResource WzMonoTextStyle}" />
-
-                        <TextBlock Grid.Row="1" Grid.Column="0"
-                                   Style="{ThemeResource WzBodyTextStyle}"
-                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
-                                   Text="Threshold" />
-                        <TextBlock x:Name="HoldoverThresholdText"
-                                   controls:CopyMenu.IsCopyable="True"
-                                   Grid.Row="1" Grid.Column="1"
-                                   Style="{ThemeResource WzMonoTextStyle}" />
-
-                        <TextBlock Grid.Row="2" Grid.Column="0"
-                                   Style="{ThemeResource WzBodyTextStyle}"
-                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
-                                   Text="Duration" />
-                        <TextBlock x:Name="HoldoverDurationText"
-                                   Grid.Row="2" Grid.Column="1"
-                                   Style="{ThemeResource WzBodyTextStyle}" />
-                    </Grid>
-                </StackPanel>
-            </Border>
-
-            <!-- ============================ Health monitor ============================= -->
-            <Border Style="{ThemeResource WzCardStyle}">
-                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-
-                        <TextBlock Grid.Column="0"
-                                   Style="{ThemeResource WzBodyStrongTextStyle}"
-                                   VerticalAlignment="Center"
-                                   Text="Health monitor" />
+                        <controls:SeverityPill x:Name="OutputsPill" />
 
                         <!--
-                            §9.7.4 scopes commands to the card they affect. *TST? is tier C, so it
-                            goes through CommandConfirmation and nowhere else - the button knows
-                            the mnemonic and nothing about what running it means.
+                            The three headline figures. Each carries the number, its label, and what the
+                            number means - the sub-caption is the whole point of showing TFOM at all.
                         -->
-                        <Button x:Name="RunTestButton"
-                                Grid.Column="1"
-                                Content="Run test"
-                                IsEnabled="False"
-                                ToolTipService.ToolTip="Run the receiver&apos;s built-in self-test"
-                                Click="OnRunTestClicked" />
-                    </Grid>
+                        <Grid ColumnSpacing="{ThemeResource WzSpaceMd}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
 
-                    <!-- §9.11 puts the result of a card-scoped command at the top of its card. -->
-                    <controls:CommandOutcomeBar x:Name="SelfTestOutcome" />
+                            <StackPanel Grid.Column="0" Spacing="{ThemeResource WzSpaceXxs}">
+                                <controls:SeverityPill x:Name="TfomPill" />
+                                <TextBlock x:Name="TfomDetailText"
+                                           Style="{ThemeResource WzCaptionTextStyle}"
+                                           Foreground="{ThemeResource WzTextSecondaryBrush}" />
+                            </StackPanel>
 
-                    <TextBlock x:Name="HealthSummaryText"
-                               Style="{ThemeResource WzBodyTextStyle}"
-                               Foreground="{ThemeResource WzTextSecondaryBrush}" />
+                            <StackPanel Grid.Column="1" Spacing="{ThemeResource WzSpaceXxs}">
+                                <controls:SeverityPill x:Name="FfomPill" />
+                                <TextBlock x:Name="FfomDetailText"
+                                           Style="{ThemeResource WzCaptionTextStyle}"
+                                           Foreground="{ThemeResource WzTextSecondaryBrush}" />
+                            </StackPanel>
 
-                    <!--
-                        Wraps rather than a fixed grid: the receiver decides how many items it
-                        prints, and a layout that assumed the wireframe's six would clip a seventh
-                        from a firmware nobody has seen yet. ItemsRepeater because WinUI has no
-                        WrapPanel and this project does not take the Toolkit dependency for one.
-                    -->
-                    <ItemsRepeater x:Name="HealthItems">
-                        <ItemsRepeater.Layout>
-                            <UniformGridLayout MinItemWidth="200"
-                                               MinColumnSpacing="{ThemeResource WzSpaceMd}"
-                                               MinRowSpacing="{ThemeResource WzSpaceXs}"
-                                               ItemsStretch="None" />
-                        </ItemsRepeater.Layout>
-                    </ItemsRepeater>
-                </StackPanel>
-            </Border>
-
-            <!-- ========================== Oscillator control =========================== -->
-            <Border Style="{ThemeResource WzCardStyle}">
-                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
-                    <!--
-                        §9.9's custom oscillator icon (#320) - a sine in a rounded square,
-                        which is the concept the section names and which no Fluent glyph has.
-                        Raw to assistive technology: the heading beside it already says what
-                        the card is, and an icon that repeats it aloud is noise.
-                    -->
-                    <StackPanel Orientation="Horizontal" Spacing="{ThemeResource WzSpaceXs}">
-                        <PathIcon Data="{StaticResource WzIconOscillator}"
-                                  Width="16" Height="16"
-                                  VerticalAlignment="Center"
-                                  Foreground="{ThemeResource WzTextSecondaryBrush}"
-                                  AutomationProperties.AccessibilityView="Raw" />
-                        <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}"
-                                   VerticalAlignment="Center"
-                                   Text="Oscillator control (EFC)" />
+                            <StackPanel Grid.Column="2" Spacing="{ThemeResource WzSpaceXxs}">
+                                <controls:ReadoutTile x:Name="TimeInterval"
+                                                      Label="1 PPS TI"
+                                                      Unit="ns"
+                                                      DecimalPlaces="1"
+                                                      MaxIntegerDigits="5"
+                                                      AllowNegative="True"
+                                                      Size="Medium" />
+                                <TextBlock Style="{ThemeResource WzCaptionTextStyle}"
+                                           Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                           Text="relative to GPS" />
+                            </StackPanel>
+                        </Grid>
                     </StackPanel>
+                </Border>
 
-                    <controls:ReadoutTile x:Name="OscillatorControl"
-                                          Label="Current"
-                                          Unit="%"
-                                          DecimalPlaces="2"
-                                          MaxIntegerDigits="3"
-                                          AllowNegative="True"
-                                          Size="Medium" />
+                <!-- ========================= Holdover uncertainty ========================== -->
+                <Border Style="{ThemeResource WzCardStyle}">
+                    <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                        <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Holdover uncertainty" />
 
-                    <!--
-                        §10.4's trend (#285). The card carried a placeholder saying this "arrives
-                        with the P1 charting work" from the beginning; the charting (#49), the
-                        blocker (OQ-5, #38) and the trend store (#50) have all been closed for some
-                        time, so it was an unbuilt feature rather than an untidy comment.
+                        <Grid RowSpacing="{ThemeResource WzSpaceXs}" ColumnSpacing="{ThemeResource WzSpaceXl}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" MinWidth="160" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
 
-                        The range selector is §9.10.2's, with §13's four settings, and it is
-                        INDEPENDENT of the Timing page's rather than shared. §10.4 names six hours
-                        as this card's default and Timing defaults to one, so a single shared
-                        setting would have to discard one of the two specified defaults on every
-                        visit. The two surfaces also do different jobs - this one is glanced at,
-                        Timing is where a reading is examined.
+                            <TextBlock Grid.Row="0" Grid.Column="0"
+                                       Style="{ThemeResource WzBodyTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                       Text="Predicted (24 h)" />
+                            <TextBlock x:Name="HoldoverPredictedText"
+                                       controls:CopyMenu.IsCopyable="True"
+                                       Grid.Row="0" Grid.Column="1"
+                                       Style="{ThemeResource WzMonoTextStyle}" />
 
-                        Its own GroupName, not Timing's. RadioButton grouping is per visual tree so
-                        the two could not actually collide, but naming it after this page rather
-                        than the quantity means the next chart added here does not silently join a
-                        group it should not be in.
-                    -->
-                    <StackPanel Orientation="Horizontal"
-                                Spacing="{ThemeResource WzSpaceXs}">
-                        <RadioButton x:Name="OverviewRange1h" Content="1 h"
-                                     GroupName="OverviewTrendRange"
-                                     Checked="OnRangeChanged" Tag="1" />
-                        <RadioButton x:Name="OverviewRange6h" Content="6 h"
-                                     GroupName="OverviewTrendRange"
-                                     Checked="OnRangeChanged" Tag="6" />
-                        <RadioButton x:Name="OverviewRange24h" Content="24 h"
-                                     GroupName="OverviewTrendRange"
-                                     Checked="OnRangeChanged" Tag="24" />
-                        <RadioButton x:Name="OverviewRange7d" Content="7 d"
-                                     GroupName="OverviewTrendRange"
-                                     Checked="OnRangeChanged" Tag="168" />
+                            <TextBlock Grid.Row="1" Grid.Column="0"
+                                       Style="{ThemeResource WzBodyTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                       Text="Threshold" />
+                            <TextBlock x:Name="HoldoverThresholdText"
+                                       controls:CopyMenu.IsCopyable="True"
+                                       Grid.Row="1" Grid.Column="1"
+                                       Style="{ThemeResource WzMonoTextStyle}" />
+
+                            <TextBlock Grid.Row="2" Grid.Column="0"
+                                       Style="{ThemeResource WzBodyTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                       Text="Duration" />
+                            <TextBlock x:Name="HoldoverDurationText"
+                                       Grid.Row="2" Grid.Column="1"
+                                       Style="{ThemeResource WzBodyTextStyle}" />
+                        </Grid>
                     </StackPanel>
+                </Border>
 
-                    <!--
-                        Same control and the same settings as the Timing page's EFC chart, because
-                        it is the same quantity: Anchoring="Data" because EFC does not meaningfully
-                        return to zero, MinimumSpan so a flat trace does not get magnified into
-                        noise, and Decimals="2".
+                <!-- ============================ Health monitor ============================= -->
+                <Border Style="{ThemeResource WzCardStyle}">
+                    <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
 
-                        Two, not one. §9.5.3 rule 6 said EFC was 1 dp while §10.4's wireframe showed
-                        -16.83 and this chart's sibling had shipped at 2 dp since it was built -
-                        at 1 dp, -16.86 and -16.80 render identically, which defeats the one
-                        quantity a user watches for small movement. §9.5.3 was amended on
-                        29 Aug 2026 to say 2, so all three now agree.
+                            <TextBlock Grid.Column="0"
+                                       Style="{ThemeResource WzBodyStrongTextStyle}"
+                                       VerticalAlignment="Center"
+                                       Text="Health monitor" />
 
-                        Height matches Timing's 140 px, and nothing adaptive is needed: both pages
-                        live in the Details window inside the same ScrollViewer over a width-capped
-                        StackPanel. §9.6.2's compact and short layouts are the MAIN window's, and
-                        this card is not on it.
-                    -->
-                    <controls:TrendChart x:Name="EfcTrend"
-                                         Height="140"
-                                         Unit="%"
-                                         Anchoring="Data"
-                                         MinimumSpan="0.01"
-                                         Decimals="2"
-                                         AutomationProperties.Name="Oscillator control trend" />
+                            <!--
+                                §9.7.4 scopes commands to the card they affect. *TST? is tier C, so it
+                                goes through CommandConfirmation and nowhere else - the button knows
+                                the mnemonic and nothing about what running it means.
+                            -->
+                            <Button x:Name="RunTestButton"
+                                    Grid.Column="1"
+                                    Content="Run test"
+                                    IsEnabled="False"
+                                    ToolTipService.ToolTip="Run the receiver&apos;s built-in self-test"
+                                    Click="OnRunTestClicked" />
+                        </Grid>
 
-                    <!--
-                        Names the shading in words as well as colour (§9.4.3, A11Y-12), and reports
-                        the count - a 7-day range drawn from four hours of history looks exactly
-                        like one drawn from seven days, and only the count separates them.
-                    -->
-                    <TextBlock x:Name="TrendSummaryText"
-                               Style="{ThemeResource WzCaptionTextStyle}"
-                               Foreground="{ThemeResource WzTextTertiaryBrush}"
-                               TextWrapping="Wrap"
-                               MaxWidth="{ThemeResource WzProseMaxWidth}" />
-                </StackPanel>
-            </Border>
+                        <!-- §9.11 puts the result of a card-scoped command at the top of its card. -->
+                        <controls:CommandOutcomeBar x:Name="SelfTestOutcome" />
 
-            <!-- ============================== Receiver ================================= -->
-            <!--
-                P0-1: "displays the *IDN? string within 20 s". Nothing displayed it until #320 —
-                the identity reached the application log and stopped there, so the criterion was
-                met only somewhere nobody had open.
-
-                Last on the page deliberately. §9.1's premise is that the medallion is what the eye
-                goes to; this is reference material, read once when you want to know which unit is
-                on the bench and never glanced at again. Putting it above the readings would push
-                live state down the page to make room for four fields that never change.
-
-                Values in the mono style: a serial number and a firmware revision are identifiers
-                to be compared character by character against a label on a case, which is what
-                §9.5.3 reserves the monospaced face for.
-            -->
-            <Border Style="{ThemeResource WzCardStyle}">
-                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
-                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Receiver" />
-
-                    <Grid RowSpacing="{ThemeResource WzSpaceXs}" ColumnSpacing="{ThemeResource WzSpaceXl}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" MinWidth="140" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
-
-                        <TextBlock Grid.Row="0" Grid.Column="0"
+                        <TextBlock x:Name="HealthSummaryText"
                                    Style="{ThemeResource WzBodyTextStyle}"
-                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
-                                   Text="Model" />
-                        <TextBlock x:Name="IdentityModelText"
-                                   controls:CopyMenu.IsCopyable="True" Grid.Row="0" Grid.Column="1"
-                                   Style="{ThemeResource WzMonoTextStyle}" />
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}" />
 
-                        <TextBlock Grid.Row="1" Grid.Column="0"
-                                   Style="{ThemeResource WzBodyTextStyle}"
-                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
-                                   Text="Manufacturer" />
-                        <TextBlock x:Name="IdentityManufacturerText"
-                                   controls:CopyMenu.IsCopyable="True" Grid.Row="1" Grid.Column="1"
-                                   Style="{ThemeResource WzMonoTextStyle}" />
+                        <!--
+                            Wraps rather than a fixed grid: the receiver decides how many items it
+                            prints, and a layout that assumed the wireframe's six would clip a seventh
+                            from a firmware nobody has seen yet. ItemsRepeater because WinUI has no
+                            WrapPanel and this project does not take the Toolkit dependency for one.
+                        -->
+                        <ItemsRepeater x:Name="HealthItems">
+                            <ItemsRepeater.Layout>
+                                <UniformGridLayout MinItemWidth="200"
+                                                   MinColumnSpacing="{ThemeResource WzSpaceMd}"
+                                                   MinRowSpacing="{ThemeResource WzSpaceXs}"
+                                                   ItemsStretch="None" />
+                            </ItemsRepeater.Layout>
+                        </ItemsRepeater>
+                    </StackPanel>
+                </Border>
 
-                        <TextBlock Grid.Row="2" Grid.Column="0"
-                                   Style="{ThemeResource WzBodyTextStyle}"
-                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
-                                   Text="Serial number" />
-                        <TextBlock x:Name="IdentitySerialText" Grid.Row="2" Grid.Column="1"
+                <!-- ========================== Oscillator control =========================== -->
+                <Border Style="{ThemeResource WzCardStyle}">
+                    <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                        <!--
+                            §9.9's custom oscillator icon (#320) - a sine in a rounded square,
+                            which is the concept the section names and which no Fluent glyph has.
+                            Raw to assistive technology: the heading beside it already says what
+                            the card is, and an icon that repeats it aloud is noise.
+                        -->
+                        <StackPanel Orientation="Horizontal" Spacing="{ThemeResource WzSpaceXs}">
+                            <PathIcon Data="{StaticResource WzIconOscillator}"
+                                      Width="16" Height="16"
+                                      VerticalAlignment="Center"
+                                      Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                      AutomationProperties.AccessibilityView="Raw" />
+                            <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}"
+                                       VerticalAlignment="Center"
+                                       Text="Oscillator control (EFC)" />
+                        </StackPanel>
+
+                        <controls:ReadoutTile x:Name="OscillatorControl"
+                                              Label="Current"
+                                              Unit="%"
+                                              DecimalPlaces="2"
+                                              MaxIntegerDigits="3"
+                                              AllowNegative="True"
+                                              Size="Medium" />
+
+                        <!--
+                            §10.4's trend (#285). The card carried a placeholder saying this "arrives
+                            with the P1 charting work" from the beginning; the charting (#49), the
+                            blocker (OQ-5, #38) and the trend store (#50) have all been closed for some
+                            time, so it was an unbuilt feature rather than an untidy comment.
+
+                            The range selector is §9.10.2's, with §13's four settings, and it is
+                            INDEPENDENT of the Timing page's rather than shared. §10.4 names six hours
+                            as this card's default and Timing defaults to one, so a single shared
+                            setting would have to discard one of the two specified defaults on every
+                            visit. The two surfaces also do different jobs - this one is glanced at,
+                            Timing is where a reading is examined.
+
+                            Its own GroupName, not Timing's. RadioButton grouping is per visual tree so
+                            the two could not actually collide, but naming it after this page rather
+                            than the quantity means the next chart added here does not silently join a
+                            group it should not be in.
+                        -->
+                        <StackPanel Orientation="Horizontal"
+                                    Spacing="{ThemeResource WzSpaceXs}">
+                            <RadioButton x:Name="OverviewRange1h" Content="1 h"
+                                         GroupName="OverviewTrendRange"
+                                         Checked="OnRangeChanged" Tag="1" />
+                            <RadioButton x:Name="OverviewRange6h" Content="6 h"
+                                         GroupName="OverviewTrendRange"
+                                         Checked="OnRangeChanged" Tag="6" />
+                            <RadioButton x:Name="OverviewRange24h" Content="24 h"
+                                         GroupName="OverviewTrendRange"
+                                         Checked="OnRangeChanged" Tag="24" />
+                            <RadioButton x:Name="OverviewRange7d" Content="7 d"
+                                         GroupName="OverviewTrendRange"
+                                         Checked="OnRangeChanged" Tag="168" />
+                        </StackPanel>
+
+                        <!--
+                            Same control and the same settings as the Timing page's EFC chart, because
+                            it is the same quantity: Anchoring="Data" because EFC does not meaningfully
+                            return to zero, MinimumSpan so a flat trace does not get magnified into
+                            noise, and Decimals="2".
+
+                            Two, not one. §9.5.3 rule 6 said EFC was 1 dp while §10.4's wireframe showed
+                            -16.83 and this chart's sibling had shipped at 2 dp since it was built -
+                            at 1 dp, -16.86 and -16.80 render identically, which defeats the one
+                            quantity a user watches for small movement. §9.5.3 was amended on
+                            29 Aug 2026 to say 2, so all three now agree.
+
+                            Height matches Timing's 140 px, and nothing adaptive is needed: both pages
+                            live in the Details window inside the same ScrollViewer over a width-capped
+                            StackPanel. §9.6.2's compact and short layouts are the MAIN window's, and
+                            this card is not on it.
+                        -->
+                        <controls:TrendChart x:Name="EfcTrend"
+                                             Height="140"
+                                             Unit="%"
+                                             Anchoring="Data"
+                                             MinimumSpan="0.01"
+                                             Decimals="2"
+                                             AutomationProperties.Name="Oscillator control trend" />
+
+                        <!--
+                            Names the shading in words as well as colour (§9.4.3, A11Y-12), and reports
+                            the count - a 7-day range drawn from four hours of history looks exactly
+                            like one drawn from seven days, and only the count separates them.
+                        -->
+                        <TextBlock x:Name="TrendSummaryText"
+                                   Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextTertiaryBrush}"
+                                   TextWrapping="Wrap"
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}" />
+                    </StackPanel>
+                </Border>
+
+                <!-- ============================== Receiver ================================= -->
+                <!--
+                    P0-1: "displays the *IDN? string within 20 s". Nothing displayed it until #320 —
+                    the identity reached the application log and stopped there, so the criterion was
+                    met only somewhere nobody had open.
+
+                    Last on the page deliberately. §9.1's premise is that the medallion is what the eye
+                    goes to; this is reference material, read once when you want to know which unit is
+                    on the bench and never glanced at again. Putting it above the readings would push
+                    live state down the page to make room for four fields that never change.
+
+                    Values in the mono style: a serial number and a firmware revision are identifiers
+                    to be compared character by character against a label on a case, which is what
+                    §9.5.3 reserves the monospaced face for.
+                -->
+                <Border Style="{ThemeResource WzCardStyle}">
+                    <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                        <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Receiver" />
+
+                        <Grid RowSpacing="{ThemeResource WzSpaceXs}" ColumnSpacing="{ThemeResource WzSpaceXl}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" MinWidth="140" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0"
+                                       Style="{ThemeResource WzBodyTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                       Text="Model" />
+                            <TextBlock x:Name="IdentityModelText"
+                                       controls:CopyMenu.IsCopyable="True" Grid.Row="0" Grid.Column="1"
+                                       Style="{ThemeResource WzMonoTextStyle}" />
+
+                            <TextBlock Grid.Row="1" Grid.Column="0"
+                                       Style="{ThemeResource WzBodyTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                       Text="Manufacturer" />
+                            <TextBlock x:Name="IdentityManufacturerText"
+                                       controls:CopyMenu.IsCopyable="True" Grid.Row="1" Grid.Column="1"
+                                       Style="{ThemeResource WzMonoTextStyle}" />
+
+                            <TextBlock Grid.Row="2" Grid.Column="0"
+                                       Style="{ThemeResource WzBodyTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                       Text="Serial number" />
+                            <TextBlock x:Name="IdentitySerialText" Grid.Row="2" Grid.Column="1"
+                                       Style="{ThemeResource WzMonoTextStyle}"
+                                       IsTextSelectionEnabled="True" />
+
+                            <TextBlock Grid.Row="3" Grid.Column="0"
+                                       Style="{ThemeResource WzBodyTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                       Text="Firmware" />
+                            <TextBlock x:Name="IdentityFirmwareText" Grid.Row="3" Grid.Column="1"
+                                       Style="{ThemeResource WzMonoTextStyle}"
+                                       IsTextSelectionEnabled="True" />
+                        </Grid>
+
+                        <!--
+                            Only for a receiver whose answer was not the four fields IEEE 488.2 defines.
+                            The rows above would all read "—" then, which says "nothing connected" when
+                            what happened is "a model this build has not seen". §11.1 keeps the evidence.
+                        -->
+                        <TextBlock x:Name="IdentityRawText"
                                    Style="{ThemeResource WzMonoTextStyle}"
-                                   IsTextSelectionEnabled="True" />
-
-                        <TextBlock Grid.Row="3" Grid.Column="0"
-                                   Style="{ThemeResource WzBodyTextStyle}"
                                    Foreground="{ThemeResource WzTextSecondaryBrush}"
-                                   Text="Firmware" />
-                        <TextBlock x:Name="IdentityFirmwareText" Grid.Row="3" Grid.Column="1"
-                                   Style="{ThemeResource WzMonoTextStyle}"
-                                   IsTextSelectionEnabled="True" />
-                    </Grid>
+                                   TextWrapping="Wrap"
+                                   IsTextSelectionEnabled="True"
+                                   Visibility="Collapsed" />
+                    </StackPanel>
+                </Border>
 
-                    <!--
-                        Only for a receiver whose answer was not the four fields IEEE 488.2 defines.
-                        The rows above would all read "—" then, which says "nothing connected" when
-                        what happened is "a model this build has not seen". §11.1 keeps the evidence.
-                    -->
-                    <TextBlock x:Name="IdentityRawText"
-                               Style="{ThemeResource WzMonoTextStyle}"
-                               Foreground="{ThemeResource WzTextSecondaryBrush}"
-                               TextWrapping="Wrap"
-                               IsTextSelectionEnabled="True"
-                               Visibility="Collapsed" />
-                </StackPanel>
-            </Border>
-
-            <TextBlock x:Name="FooterText"
-                       Style="{ThemeResource WzCaptionTextStyle}"
-                       Foreground="{ThemeResource WzTextTertiaryBrush}" />
+                <TextBlock x:Name="FooterText"
+                           Style="{ThemeResource WzCaptionTextStyle}"
+                           Foreground="{ThemeResource WzTextTertiaryBrush}" />
+            </controls:CardColumns>
         </StackPanel>
     </ScrollViewer>
 </Page>

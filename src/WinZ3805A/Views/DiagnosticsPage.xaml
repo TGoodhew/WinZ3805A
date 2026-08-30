@@ -18,10 +18,9 @@
     -->
     <ScrollViewer HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
         <StackPanel x:Name="PageRoot"
-                    controls:CardEntrance.IsEnabled="True"
                     Padding="{ThemeResource WzPageMarginThickness}"
                     MaxWidth="{ThemeResource WzContentMaxWidth}"
-                    HorizontalAlignment="Left"
+                    HorizontalAlignment="Stretch"
                     Spacing="{ThemeResource WzSpaceXl}">
                 <VisualStateManager.VisualStateGroups>
                     <!--
@@ -79,470 +78,484 @@
                         ToolTipService.ToolTip="Read the self-test result and the diagnostic log" />
             </Grid>
 
-            <ProgressRing x:Name="ReadingRing"
-                          IsActive="False"
-                          Width="20" Height="20"
-                          HorizontalAlignment="Left"
-                          AutomationProperties.Name="Reading from the receiver" />
-
-            <InfoBar x:Name="FaultBar" IsOpen="False" IsClosable="False" Severity="Error"
-                     Title="Could not read from the receiver" />
-
-            <!-- ================================ Self test ============================== -->
-
             <!--
-                P1-5 (#53). The subsystem keywords were probed against the live receiver rather than
-                taken from §10.9 on trust - neither manual documents :DIAG:TEST?'s parameter at all.
-                All twelve were accepted; an invalid one returns -224 immediately.
+                §9.6.1's content grid (#345). The cards flow into as many columns as the width
+                holds, each going to whichever column is currently SHORTEST - so a tall card sits
+                alone while two short ones stack beside it, rather than alternating into a ragged
+                pair. Every page was a single StackPanel before this, which meant §9.6.1's Compact
+                arrangement at every width and half of a wide window empty.
 
-                A row shows "—" until that subsystem has actually been tested in this session. The
-                wireframe's eleven simultaneous ticks are not obtainable: :DIAG:TEST:RES? reports one
-                <code>,<subsystem> pair for whichever test ran last, so filling the other ten in from
-                an ALL run would assert results the receiver never sent.
+                The page heading stays outside it: a title is not a card, and it belongs across the
+                top rather than in whichever column happened to be shorter.
             -->
-            <Border Style="{ThemeResource WzCardStyle}">
-                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
-                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Self test" />
+            <controls:CardColumns controls:CardEntrance.IsEnabled="True"
+                                  ColumnSpacing="{ThemeResource WzSpaceXl}"
+                                  RowSpacing="{ThemeResource WzSpaceXl}">
+                <ProgressRing x:Name="ReadingRing"
+                              IsActive="False"
+                              Width="20" Height="20"
+                              HorizontalAlignment="Left"
+                              AutomationProperties.Name="Reading from the receiver" />
 
-                    <Grid ColumnSpacing="{ThemeResource WzSpaceMd}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
+                <InfoBar x:Name="FaultBar" IsOpen="False" IsClosable="False" Severity="Error"
+                         Title="Could not read from the receiver" />
 
-                        <ComboBox x:Name="SubsystemPicker"
-                                  Grid.Column="0"
-                                  MinWidth="200"
-                                  Header="Subsystem"
-                                  AutomationProperties.Name="Subsystem to test"
-                                  SelectionChanged="OnSubsystemChanged"
-                                  DisplayMemberPath="DisplayName" />
+                <!-- ================================ Self test ============================== -->
 
-                        <!--
-                            The label names the subsystem rather than saying "Run test", because the
-                            action costs the receiver its lock for several minutes. A button that
-                            does not say what it is about to do is the wrong affordance for that.
-                        -->
-                        <Button x:Name="RunTestButton"
-                                Grid.Column="2"
-                                VerticalAlignment="Bottom"
-                                Click="OnRunTestClicked" />
-                    </Grid>
+                <!--
+                    P1-5 (#53). The subsystem keywords were probed against the live receiver rather than
+                    taken from §10.9 on trust - neither manual documents :DIAG:TEST?'s parameter at all.
+                    All twelve were accepted; an invalid one returns -224 immediately.
 
-                    <controls:CommandOutcomeBar x:Name="SelfTestOutcome" />
+                    A row shows "—" until that subsystem has actually been tested in this session. The
+                    wireframe's eleven simultaneous ticks are not obtainable: :DIAG:TEST:RES? reports one
+                    <code>,<subsystem> pair for whichever test ran last, so filling the other ten in from
+                    an ALL run would assert results the receiver never sent.
+                -->
+                <Border Style="{ThemeResource WzCardStyle}">
+                    <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                        <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Self test" />
 
-                    <TextBlock x:Name="SelfTestSummary"
-                               Style="{ThemeResource WzBodyTextStyle}"
-                               Foreground="{ThemeResource WzTextSecondaryBrush}"
-                               TextWrapping="Wrap"
-                               MaxWidth="{ThemeResource WzProseMaxWidth}" />
+                        <Grid ColumnSpacing="{ThemeResource WzSpaceMd}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
 
-                    <ItemsControl x:Name="SelfTestRows">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="viewmodels:SelfTestRow">
-                                <Grid ColumnSpacing="{ThemeResource WzSpaceMd}"
-                                      Padding="{ThemeResource WzSpaceXxsThickness}">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="180" />
-                                        <ColumnDefinition Width="160" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
+                            <ComboBox x:Name="SubsystemPicker"
+                                      Grid.Column="0"
+                                      MinWidth="200"
+                                      Header="Subsystem"
+                                      AutomationProperties.Name="Subsystem to test"
+                                      SelectionChanged="OnSubsystemChanged"
+                                      DisplayMemberPath="DisplayName" />
 
-                                    <TextBlock Grid.Column="0"
-                                               Style="{ThemeResource WzBodyTextStyle}"
-                                               VerticalAlignment="Center"
-                                               Text="{x:Bind Name}" />
+                            <!--
+                                The label names the subsystem rather than saying "Run test", because the
+                                action costs the receiver its lock for several minutes. A button that
+                                does not say what it is about to do is the wrong affordance for that.
+                            -->
+                            <Button x:Name="RunTestButton"
+                                    Grid.Column="2"
+                                    VerticalAlignment="Bottom"
+                                    Click="OnRunTestClicked" />
+                        </Grid>
 
-                                    <!--
-                                        SeverityPill, not a coloured mark: §9.13 item 10 and §9.4.3
-                                        require colour PLUS shape PLUS text, and "Code 65536" is the
-                                        part a reader can act on.
-                                    -->
-                                    <controls:SeverityPill Grid.Column="1"
-                                                           Severity="{x:Bind Severity}"
-                                                           Text="{x:Bind StatusText}" />
+                        <controls:CommandOutcomeBar x:Name="SelfTestOutcome" />
 
-                                    <TextBlock Grid.Column="2"
-                                               Style="{ThemeResource WzCaptionTextStyle}"
-                                               Foreground="{ThemeResource WzTextSecondaryBrush}"
-                                               VerticalAlignment="Center"
-                                               Text="{x:Bind RanAtText}" />
-                                </Grid>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-
-                    <TextBlock x:Name="LastReadText"
-                               Style="{ThemeResource WzCaptionTextStyle}"
-                               Foreground="{ThemeResource WzTextSecondaryBrush}"
-                               TextWrapping="Wrap"
-                               MaxWidth="{ThemeResource WzProseMaxWidth}" />
-                </StackPanel>
-            </Border>
-
-            <!-- ============================= Diagnostic log ============================= -->
-            <Border x:Name="LogCard" Style="{ThemeResource WzCardStyle}">
-                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-
-                        <TextBlock x:Name="LogHeaderText"
-                                   Grid.Column="0"
-                                   VerticalAlignment="Center"
-                                   Style="{ThemeResource WzBodyStrongTextStyle}" />
-
-                        <!--
-                            §10.9's wireframe puts Export beside Clear on this card. It duplicates
-                            the title bar's Ctrl+E, which is deliberate: the title-bar command is
-                            "export current view" and belongs to whatever page is showing, while
-                            this one is visibly the log's, next to the count of what it will write.
-                        -->
-                        <StackPanel Grid.Column="1"
-                                    Orientation="Horizontal"
-                                    Spacing="{ThemeResource WzSpaceXs}">
-                            <Button x:Name="ExportLogButton"
-                                    Content="Export"
-                                    IsEnabled="False"
-                                    ToolTipService.ToolTip="Save the entries shown here as a CSV file"
-                                    Click="OnExportLogClicked" />
-
-                            <!-- §9.7.4 scopes the command to the card it empties. -->
-                            <Button x:Name="ClearLogButton"
-                                    Content="Clear log"
-                                    Style="{ThemeResource WzDestructiveButtonStyle}"
-                                    IsEnabled="False"
-                                    ToolTipService.ToolTip="Delete every entry in the receiver&apos;s diagnostic log"
-                                    Click="OnClearLogClicked" />
-                        </StackPanel>
-                    </Grid>
-
-                    <controls:CommandOutcomeBar x:Name="LogOutcome" />
-
-                    <TextBox x:Name="FilterBox"
-                             MinWidth="280"
-                             HorizontalAlignment="Left"
-                             PlaceholderText="Filter entries"
-                             TextChanged="OnFilterChanged"
-                             AutomationProperties.Name="Filter log entries" />
-
-                    <!--
-                        §9.11's > 2 s skeleton (#320). The log is the one read in this application
-                        that reliably passes two seconds - 222 entries of text at 9600 baud - and it
-                        is also the one whose layout is known before the data arrives, which is the
-                        condition §9.11 puts on showing a skeleton at all.
-
-                        Fourteen bars in a 360 px box, because that is exactly what the loaded card
-                        shows (#345): the rule is "at final layout dimensions", and a skeleton of a
-                        different size makes the card jump as the answer lands. The number is tied to
-                        LogScroller's MaxHeight below - change one and the other is wrong.
-
-                        The ProgressRing in the header carries 500 ms to 2 s and stays visible
-                        behind this; the skeleton says how MUCH is coming, which a spinner cannot.
-                    -->
-                    <StackPanel x:Name="LogSkeleton"
-                                Height="360"
-                                Visibility="Collapsed"
-                                Spacing="{ThemeResource WzSpaceSm}"
-                                AutomationProperties.AccessibilityView="Raw">
-                        <Border Style="{ThemeResource WzSkeletonBarStyle}" Width="420" />
-                        <Border Style="{ThemeResource WzSkeletonBarStyle}" Width="380" />
-                        <Border Style="{ThemeResource WzSkeletonBarStyle}" Width="440" />
-                        <Border Style="{ThemeResource WzSkeletonBarStyle}" Width="360" />
-                        <Border Style="{ThemeResource WzSkeletonBarStyle}" Width="420" />
-                        <Border Style="{ThemeResource WzSkeletonBarStyle}" Width="400" />
-                        <Border Style="{ThemeResource WzSkeletonBarStyle}" Width="340" />
-                        <Border Style="{ThemeResource WzSkeletonBarStyle}" Width="410" />
-                        <Border Style="{ThemeResource WzSkeletonBarStyle}" Width="390" />
-                        <Border Style="{ThemeResource WzSkeletonBarStyle}" Width="430" />
-                        <Border Style="{ThemeResource WzSkeletonBarStyle}" Width="370" />
-                        <Border Style="{ThemeResource WzSkeletonBarStyle}" Width="420" />
-                        <Border Style="{ThemeResource WzSkeletonBarStyle}" Width="350" />
-                        <Border Style="{ThemeResource WzSkeletonBarStyle}" Width="400" />
-                    </StackPanel>
-
-                    <!--
-                        BOUNDED AND SCROLLED, not grown (#345). The receiver holds up to 222 entries
-                        and the card was as tall as all of them, so reaching the two cards below it
-                        meant scrolling past a screen and a half of log - and the filter box and the
-                        Export and Clear buttons scrolled away with it, which are the controls a
-                        person reading the log actually wants.
-
-                        360 px is about thirteen entries at the mono line height. The log alternates
-                        "GPS lock started" and "Holdover started" as the receiver cycles, so thirteen
-                        is roughly six events - enough to see a pattern without the card owning the
-                        page.
-
-                        MaxHeight and not Height: a receiver with four entries should show four, not
-                        four and a wall of empty card.
-                    -->
-                    <ScrollViewer x:Name="LogScroller"
-                                  MaxHeight="360"
-                                  VerticalScrollBarVisibility="Auto"
-                                  HorizontalScrollMode="Disabled"
-                                  HorizontalScrollBarVisibility="Disabled">
-                        <ItemsControl x:Name="LogRows">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="models:DiagnosticLogEntry">
-                                <TextBlock Style="{ThemeResource WzMonoTextStyle}"
-                                           Padding="0,4"
-                                           TextWrapping="Wrap"
-                                           IsTextSelectionEnabled="True"
-                                           Text="{x:Bind RawText}" />
-                            </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </ScrollViewer>
-
-                    <TextBlock x:Name="LogEmptyText"
-                               Style="{ThemeResource WzBodyTextStyle}"
-                               Foreground="{ThemeResource WzTextSecondaryBrush}"
-                               TextWrapping="Wrap"
-                               MaxWidth="{ThemeResource WzProseMaxWidth}"
-                               Visibility="Collapsed" />
-
-                    <TextBlock Style="{ThemeResource WzCaptionTextStyle}"
-                               Foreground="{ThemeResource WzTextTertiaryBrush}"
-                               TextWrapping="Wrap"
-                               MaxWidth="{ThemeResource WzProseMaxWidth}"
-                               Text="Timestamps are on the receiver's own time scale and are subject to the §7.4 week rollover. Export writes the entries shown, so a filter applies to the file too." />
-                </StackPanel>
-            </Border>
-
-            <!-- ============================ Application log ============================= -->
-            <Border Style="{ThemeResource WzCardStyle}">
-                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-
-                        <TextBlock Grid.Column="0"
-                                   VerticalAlignment="Center"
-                                   Style="{ThemeResource WzBodyStrongTextStyle}"
-                                   Text="Application log" />
-
-                        <Button x:Name="ShowLogFolderButton"
-                                Grid.Column="1"
-                                Content="Show log folder"
-                                ToolTipService.ToolTip="Open the folder holding this application&apos;s own log files"
-                                Click="OnShowLogFolderClicked" />
-                    </Grid>
-
-                    <!--
-                        Deliberately a separate card from the diagnostic log above, and named
-                        differently. "The log" meaning two different things on one page - the
-                        receiver's account of itself, and the application's account of the
-                        conversation - is worse than one extra card.
-                    -->
-                    <TextBlock Style="{ThemeResource WzBodyTextStyle}"
-                               TextWrapping="Wrap"
-                               MaxWidth="{ThemeResource WzProseMaxWidth}"
-                               Text="What this application saw: the port opening, the settings auto-detect settled on, every connection change, and the receiver's mode and satellite count whenever they move. Useful for a fault that comes and goes while nobody is watching the window." />
-
-                    <TextBlock x:Name="LogPathText"
-                               Style="{ThemeResource WzMonoTextStyle}"
-                               Foreground="{ThemeResource WzTextSecondaryBrush}"
-                               TextWrapping="Wrap"
-                               IsTextSelectionEnabled="True" />
-                </StackPanel>
-            </Border>
-
-            <!-- ============================== Parse warnings ============================ -->
-            <!--
-                §11.2 has always said these are "surfaced in Diagnostics". They were not: they
-                reached the application log and nowhere else, and at Debug level — below the
-                Information floor the application ships at — so in practice nobody ever saw one
-                (#320).
-
-                §11.1's rule is that an unreadable field becomes null and renders as a dash. That is
-                right for the reading and useless as a report: "it shows dashes" is not something
-                anyone can act on, and "unrecognised health item 'Xtal Pwr'" is. This card is the
-                difference between the two, and it is the only place a firmware revision that moved
-                a column would announce itself.
-            -->
-            <Border Style="{ThemeResource WzCardStyle}">
-                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
-                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Status screen parsing" />
-
-                    <TextBlock x:Name="ParseWarningSummaryText"
-                               Style="{ThemeResource WzBodyTextStyle}"
-                               Foreground="{ThemeResource WzTextSecondaryBrush}"
-                               TextWrapping="Wrap"
-                               MaxWidth="{ThemeResource WzProseMaxWidth}" />
-
-                    <!--
-                        Mono, selectable, one per line: these exist to be pasted into an issue.
-                    -->
-                    <ItemsControl x:Name="ParseWarningItems">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="x:String">
-                                <TextBlock Style="{ThemeResource WzMonoTextStyle}"
-                                           Foreground="{ThemeResource WzTextSecondaryBrush}"
-                                           TextWrapping="Wrap"
-                                           IsTextSelectionEnabled="True"
-                                           Text="{x:Bind}" />
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </StackPanel>
-            </Border>
-
-            <!-- ================================ Lifetime =============================== -->
-            <!--
-                §10.9's Lifetime card. #316 recorded that no query for this existed; :DIAG:LIF:COUN?
-                is in the catalog and the manual lists :DIAGnostic:LIFetime:COUNt?, so the card was
-                nearly struck on a false premise (#320). What was wrong is §10.9's label: the
-                receiver reports accumulated running time in hours, not a count.
-
-                Read with Refresh rather than polled — it changes by one an hour, so asking for it
-                every sweep would spend wire time on a figure that cannot have moved.
-            -->
-            <Border Style="{ThemeResource WzCardStyle}">
-                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
-                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Lifetime" />
-
-                    <Grid ColumnSpacing="{ThemeResource WzSpaceXl}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" MinWidth="140" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-
-                        <TextBlock Grid.Column="0"
+                        <TextBlock x:Name="SelfTestSummary"
                                    Style="{ThemeResource WzBodyTextStyle}"
                                    Foreground="{ThemeResource WzTextSecondaryBrush}"
-                                   Text="Power-on hours" />
-                        <TextBlock x:Name="PowerOnHoursText"
-                                   controls:CopyMenu.IsCopyable="True" Grid.Column="1"
-                                   Style="{ThemeResource WzMonoTextStyle}" />
-                    </Grid>
+                                   TextWrapping="Wrap"
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}" />
 
-                    <TextBlock Style="{ThemeResource WzCaptionTextStyle}"
-                               Foreground="{ThemeResource WzTextTertiaryBrush}"
-                               TextWrapping="Wrap"
-                               MaxWidth="{ThemeResource WzProseMaxWidth}"
-                               Text="How long the receiver has run in total. An oven-controlled oscillator ages with running time, so this is the figure behind the drift the Overview page's EFC trend shows." />
-                </StackPanel>
-            </Border>
+                        <ItemsControl x:Name="SelfTestRows">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="viewmodels:SelfTestRow">
+                                    <Grid ColumnSpacing="{ThemeResource WzSpaceMd}"
+                                          Padding="{ThemeResource WzSpaceXxsThickness}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="180" />
+                                            <ColumnDefinition Width="160" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
 
-            <!-- ============================== Error queue =============================== -->
-            <Border Style="{ThemeResource WzCardStyle}">
-                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0"
+                                                   Style="{ThemeResource WzBodyTextStyle}"
+                                                   VerticalAlignment="Center"
+                                                   Text="{x:Bind Name}" />
 
-                        <TextBlock Grid.Column="0" Style="{ThemeResource WzBodyStrongTextStyle}"
-                                   VerticalAlignment="Center" Text="Error queue" />
-                        <Button x:Name="ReadErrorsButton"
-                                Grid.Column="1"
-                                Content="Read errors"
-                                Click="OnReadErrorsClicked"
-                                ToolTipService.ToolTip="Read and empty the receiver's error queue" />
-                    </Grid>
+                                        <!--
+                                            SeverityPill, not a coloured mark: §9.13 item 10 and §9.4.3
+                                            require colour PLUS shape PLUS text, and "Code 65536" is the
+                                            part a reader can act on.
+                                        -->
+                                        <controls:SeverityPill Grid.Column="1"
+                                                               Severity="{x:Bind Severity}"
+                                                               Text="{x:Bind StatusText}" />
 
-                    <TextBlock x:Name="ErrorSummaryText"
-                               Style="{ThemeResource WzBodyTextStyle}"
-                               Foreground="{ThemeResource WzTextSecondaryBrush}" />
+                                        <TextBlock Grid.Column="2"
+                                                   Style="{ThemeResource WzCaptionTextStyle}"
+                                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                                   VerticalAlignment="Center"
+                                                   Text="{x:Bind RanAtText}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
 
-                    <ItemsControl x:Name="ErrorRows">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="x:String">
-                                <TextBlock Style="{ThemeResource WzMonoTextStyle}"
-                                           Padding="0,4"
-                                           TextWrapping="Wrap"
-                                           IsTextSelectionEnabled="True"
-                                           Text="{x:Bind}" />
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
+                        <TextBlock x:Name="LastReadText"
+                                   Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   TextWrapping="Wrap"
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}" />
+                    </StackPanel>
+                </Border>
 
-                    <TextBlock Style="{ThemeResource WzCaptionTextStyle}"
-                               Foreground="{ThemeResource WzTextTertiaryBrush}"
-                               TextWrapping="Wrap"
-                               MaxWidth="{ThemeResource WzProseMaxWidth}"
-                               Text="Reading the queue empties it: each read removes the entry it returns. What is shown here is what was read, and it is not re-read on its own." />
-                </StackPanel>
-            </Border>
+                <!-- ============================= Diagnostic log ============================= -->
+                <Border x:Name="LogCard" Style="{ThemeResource WzCardStyle}">
+                    <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
 
-            <!-- ========================= Undocumented queries (§8.5) ==================== -->
-            <!--
-                Hidden unless Settings - Advanced enables it, and collapsed rather than disabled:
-                a card of buttons nobody opted into is not something to grey out, it is something
-                that should not be there.
+                            <TextBlock x:Name="LogHeaderText"
+                                       Grid.Column="0"
+                                       VerticalAlignment="Center"
+                                       Style="{ThemeResource WzBodyStrongTextStyle}" />
 
-                Six queries, from the catalog, each run only on its own click. §8.5 says never on a
-                poll timer, and there is no timer here to forget about - the only thing that sends
-                anything on this card is a Click handler.
-            -->
-            <Border x:Name="ExperimentalCard" Style="{ThemeResource WzCardStyle}" Visibility="Collapsed">
-                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
-                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}"
-                               Text="Undocumented queries" />
+                            <!--
+                                §10.9's wireframe puts Export beside Clear on this card. It duplicates
+                                the title bar's Ctrl+E, which is deliberate: the title-bar command is
+                                "export current view" and belongs to whatever page is showing, while
+                                this one is visibly the log's, next to the count of what it will write.
+                            -->
+                            <StackPanel Grid.Column="1"
+                                        Orientation="Horizontal"
+                                        Spacing="{ThemeResource WzSpaceXs}">
+                                <Button x:Name="ExportLogButton"
+                                        Content="Export"
+                                        IsEnabled="False"
+                                        ToolTipService.ToolTip="Save the entries shown here as a CSV file"
+                                        Click="OnExportLogClicked" />
 
-                    <TextBlock Style="{ThemeResource WzBodyTextStyle}"
-                               Foreground="{ThemeResource WzTextSecondaryBrush}"
-                               TextWrapping="Wrap"
-                               MaxWidth="{ThemeResource WzProseMaxWidth}"
-                               Text="Present in the receiver's command parser but absent from the published manual. They may return errors or nonsense. No setting is changed." />
+                                <!-- §9.7.4 scopes the command to the card it empties. -->
+                                <Button x:Name="ClearLogButton"
+                                        Content="Clear log"
+                                        Style="{ThemeResource WzDestructiveButtonStyle}"
+                                        IsEnabled="False"
+                                        ToolTipService.ToolTip="Delete every entry in the receiver&apos;s diagnostic log"
+                                        Click="OnClearLogClicked" />
+                            </StackPanel>
+                        </Grid>
 
-                    <ItemsControl x:Name="ExperimentalRows">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="vm:ExperimentalQueryRow">
-                                <Grid ColumnSpacing="{ThemeResource WzSpaceMd}"
-                                      Padding="{ThemeResource WzSpaceXsThickness}">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                    </Grid.RowDefinitions>
+                        <controls:CommandOutcomeBar x:Name="LogOutcome" />
 
-                                    <StackPanel Grid.Row="0" Grid.Column="0"
-                                                Spacing="{ThemeResource WzSpaceXxs}">
-                                        <TextBlock Style="{ThemeResource WzMonoTextStyle}"
-                                                   IsTextSelectionEnabled="True"
-                                                   Text="{x:Bind Mnemonic}" />
-                                        <TextBlock Style="{ThemeResource WzCaptionTextStyle}"
-                                                   Foreground="{ThemeResource WzTextTertiaryBrush}"
-                                                   TextWrapping="Wrap"
-                                                   MaxWidth="{ThemeResource WzProseMaxWidth}"
-                                                   Text="{x:Bind Description}" />
-                                    </StackPanel>
+                        <TextBox x:Name="FilterBox"
+                                 MinWidth="280"
+                                 HorizontalAlignment="Left"
+                                 PlaceholderText="Filter entries"
+                                 TextChanged="OnFilterChanged"
+                                 AutomationProperties.Name="Filter log entries" />
 
-                                    <Button Grid.Row="0" Grid.Column="1"
-                                            Content="Run"
-                                            VerticalAlignment="Top"
-                                            IsEnabled="{x:Bind CanRun, Mode=OneWay}"
-                                            AutomationProperties.Name="{x:Bind Mnemonic}"
-                                            Click="OnRunExperimentalClicked" />
+                        <!--
+                            §9.11's > 2 s skeleton (#320). The log is the one read in this application
+                            that reliably passes two seconds - 222 entries of text at 9600 baud - and it
+                            is also the one whose layout is known before the data arrives, which is the
+                            condition §9.11 puts on showing a skeleton at all.
 
-                                    <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
-                                               Style="{ThemeResource WzMonoTextStyle}"
+                            Fourteen bars in a 360 px box, because that is exactly what the loaded card
+                            shows (#345): the rule is "at final layout dimensions", and a skeleton of a
+                            different size makes the card jump as the answer lands. The number is tied to
+                            LogScroller's MaxHeight below - change one and the other is wrong.
+
+                            The ProgressRing in the header carries 500 ms to 2 s and stays visible
+                            behind this; the skeleton says how MUCH is coming, which a spinner cannot.
+                        -->
+                        <StackPanel x:Name="LogSkeleton"
+                                    Height="360"
+                                    Visibility="Collapsed"
+                                    Spacing="{ThemeResource WzSpaceSm}"
+                                    AutomationProperties.AccessibilityView="Raw">
+                            <Border Style="{ThemeResource WzSkeletonBarStyle}" Width="420" />
+                            <Border Style="{ThemeResource WzSkeletonBarStyle}" Width="380" />
+                            <Border Style="{ThemeResource WzSkeletonBarStyle}" Width="440" />
+                            <Border Style="{ThemeResource WzSkeletonBarStyle}" Width="360" />
+                            <Border Style="{ThemeResource WzSkeletonBarStyle}" Width="420" />
+                            <Border Style="{ThemeResource WzSkeletonBarStyle}" Width="400" />
+                            <Border Style="{ThemeResource WzSkeletonBarStyle}" Width="340" />
+                            <Border Style="{ThemeResource WzSkeletonBarStyle}" Width="410" />
+                            <Border Style="{ThemeResource WzSkeletonBarStyle}" Width="390" />
+                            <Border Style="{ThemeResource WzSkeletonBarStyle}" Width="430" />
+                            <Border Style="{ThemeResource WzSkeletonBarStyle}" Width="370" />
+                            <Border Style="{ThemeResource WzSkeletonBarStyle}" Width="420" />
+                            <Border Style="{ThemeResource WzSkeletonBarStyle}" Width="350" />
+                            <Border Style="{ThemeResource WzSkeletonBarStyle}" Width="400" />
+                        </StackPanel>
+
+                        <!--
+                            BOUNDED AND SCROLLED, not grown (#345). The receiver holds up to 222 entries
+                            and the card was as tall as all of them, so reaching the two cards below it
+                            meant scrolling past a screen and a half of log - and the filter box and the
+                            Export and Clear buttons scrolled away with it, which are the controls a
+                            person reading the log actually wants.
+
+                            360 px is about thirteen entries at the mono line height. The log alternates
+                            "GPS lock started" and "Holdover started" as the receiver cycles, so thirteen
+                            is roughly six events - enough to see a pattern without the card owning the
+                            page.
+
+                            MaxHeight and not Height: a receiver with four entries should show four, not
+                            four and a wall of empty card.
+                        -->
+                        <ScrollViewer x:Name="LogScroller"
+                                      MaxHeight="360"
+                                      VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollMode="Disabled"
+                                      HorizontalScrollBarVisibility="Disabled">
+                            <ItemsControl x:Name="LogRows">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:DiagnosticLogEntry">
+                                    <TextBlock Style="{ThemeResource WzMonoTextStyle}"
+                                               Padding="0,4"
                                                TextWrapping="Wrap"
                                                IsTextSelectionEnabled="True"
-                                               Visibility="{x:Bind HasResult, Mode=OneWay}"
-                                               Text="{x:Bind Result, Mode=OneWay}" />
-                                </Grid>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
+                                               Text="{x:Bind RawText}" />
+                                </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
 
-                    <TextBlock Style="{ThemeResource WzCaptionTextStyle}"
-                               Foreground="{ThemeResource WzTextTertiaryBrush}"
-                               TextWrapping="Wrap"
-                               MaxWidth="{ThemeResource WzProseMaxWidth}"
-                               Text="This list is fixed. Nothing can be typed into it, and the set forms of these nodes are excluded from this application permanently." />
-                </StackPanel>
-            </Border>
+                        <TextBlock x:Name="LogEmptyText"
+                                   Style="{ThemeResource WzBodyTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   TextWrapping="Wrap"
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}"
+                                   Visibility="Collapsed" />
+
+                        <TextBlock Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextTertiaryBrush}"
+                                   TextWrapping="Wrap"
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}"
+                                   Text="Timestamps are on the receiver's own time scale and are subject to the §7.4 week rollover. Export writes the entries shown, so a filter applies to the file too." />
+                    </StackPanel>
+                </Border>
+
+                <!-- ============================ Application log ============================= -->
+                <Border Style="{ThemeResource WzCardStyle}">
+                    <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Grid.Column="0"
+                                       VerticalAlignment="Center"
+                                       Style="{ThemeResource WzBodyStrongTextStyle}"
+                                       Text="Application log" />
+
+                            <Button x:Name="ShowLogFolderButton"
+                                    Grid.Column="1"
+                                    Content="Show log folder"
+                                    ToolTipService.ToolTip="Open the folder holding this application&apos;s own log files"
+                                    Click="OnShowLogFolderClicked" />
+                        </Grid>
+
+                        <!--
+                            Deliberately a separate card from the diagnostic log above, and named
+                            differently. "The log" meaning two different things on one page - the
+                            receiver's account of itself, and the application's account of the
+                            conversation - is worse than one extra card.
+                        -->
+                        <TextBlock Style="{ThemeResource WzBodyTextStyle}"
+                                   TextWrapping="Wrap"
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}"
+                                   Text="What this application saw: the port opening, the settings auto-detect settled on, every connection change, and the receiver's mode and satellite count whenever they move. Useful for a fault that comes and goes while nobody is watching the window." />
+
+                        <TextBlock x:Name="LogPathText"
+                                   Style="{ThemeResource WzMonoTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   TextWrapping="Wrap"
+                                   IsTextSelectionEnabled="True" />
+                    </StackPanel>
+                </Border>
+
+                <!-- ============================== Parse warnings ============================ -->
+                <!--
+                    §11.2 has always said these are "surfaced in Diagnostics". They were not: they
+                    reached the application log and nowhere else, and at Debug level — below the
+                    Information floor the application ships at — so in practice nobody ever saw one
+                    (#320).
+
+                    §11.1's rule is that an unreadable field becomes null and renders as a dash. That is
+                    right for the reading and useless as a report: "it shows dashes" is not something
+                    anyone can act on, and "unrecognised health item 'Xtal Pwr'" is. This card is the
+                    difference between the two, and it is the only place a firmware revision that moved
+                    a column would announce itself.
+                -->
+                <Border Style="{ThemeResource WzCardStyle}">
+                    <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                        <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Status screen parsing" />
+
+                        <TextBlock x:Name="ParseWarningSummaryText"
+                                   Style="{ThemeResource WzBodyTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   TextWrapping="Wrap"
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}" />
+
+                        <!--
+                            Mono, selectable, one per line: these exist to be pasted into an issue.
+                        -->
+                        <ItemsControl x:Name="ParseWarningItems">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="x:String">
+                                    <TextBlock Style="{ThemeResource WzMonoTextStyle}"
+                                               Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                               TextWrapping="Wrap"
+                                               IsTextSelectionEnabled="True"
+                                               Text="{x:Bind}" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
+                <!-- ================================ Lifetime =============================== -->
+                <!--
+                    §10.9's Lifetime card. #316 recorded that no query for this existed; :DIAG:LIF:COUN?
+                    is in the catalog and the manual lists :DIAGnostic:LIFetime:COUNt?, so the card was
+                    nearly struck on a false premise (#320). What was wrong is §10.9's label: the
+                    receiver reports accumulated running time in hours, not a count.
+
+                    Read with Refresh rather than polled — it changes by one an hour, so asking for it
+                    every sweep would spend wire time on a figure that cannot have moved.
+                -->
+                <Border Style="{ThemeResource WzCardStyle}">
+                    <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                        <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Lifetime" />
+
+                        <Grid ColumnSpacing="{ThemeResource WzSpaceXl}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" MinWidth="140" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Grid.Column="0"
+                                       Style="{ThemeResource WzBodyTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                       Text="Power-on hours" />
+                            <TextBlock x:Name="PowerOnHoursText"
+                                       controls:CopyMenu.IsCopyable="True" Grid.Column="1"
+                                       Style="{ThemeResource WzMonoTextStyle}" />
+                        </Grid>
+
+                        <TextBlock Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextTertiaryBrush}"
+                                   TextWrapping="Wrap"
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}"
+                                   Text="How long the receiver has run in total. An oven-controlled oscillator ages with running time, so this is the figure behind the drift the Overview page's EFC trend shows." />
+                    </StackPanel>
+                </Border>
+
+                <!-- ============================== Error queue =============================== -->
+                <Border Style="{ThemeResource WzCardStyle}">
+                    <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Grid.Column="0" Style="{ThemeResource WzBodyStrongTextStyle}"
+                                       VerticalAlignment="Center" Text="Error queue" />
+                            <Button x:Name="ReadErrorsButton"
+                                    Grid.Column="1"
+                                    Content="Read errors"
+                                    Click="OnReadErrorsClicked"
+                                    ToolTipService.ToolTip="Read and empty the receiver's error queue" />
+                        </Grid>
+
+                        <TextBlock x:Name="ErrorSummaryText"
+                                   Style="{ThemeResource WzBodyTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}" />
+
+                        <ItemsControl x:Name="ErrorRows">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="x:String">
+                                    <TextBlock Style="{ThemeResource WzMonoTextStyle}"
+                                               Padding="0,4"
+                                               TextWrapping="Wrap"
+                                               IsTextSelectionEnabled="True"
+                                               Text="{x:Bind}" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <TextBlock Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextTertiaryBrush}"
+                                   TextWrapping="Wrap"
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}"
+                                   Text="Reading the queue empties it: each read removes the entry it returns. What is shown here is what was read, and it is not re-read on its own." />
+                    </StackPanel>
+                </Border>
+
+                <!-- ========================= Undocumented queries (§8.5) ==================== -->
+                <!--
+                    Hidden unless Settings - Advanced enables it, and collapsed rather than disabled:
+                    a card of buttons nobody opted into is not something to grey out, it is something
+                    that should not be there.
+
+                    Six queries, from the catalog, each run only on its own click. §8.5 says never on a
+                    poll timer, and there is no timer here to forget about - the only thing that sends
+                    anything on this card is a Click handler.
+                -->
+                <Border x:Name="ExperimentalCard" Style="{ThemeResource WzCardStyle}" Visibility="Collapsed">
+                    <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                        <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}"
+                                   Text="Undocumented queries" />
+
+                        <TextBlock Style="{ThemeResource WzBodyTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   TextWrapping="Wrap"
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}"
+                                   Text="Present in the receiver's command parser but absent from the published manual. They may return errors or nonsense. No setting is changed." />
+
+                        <ItemsControl x:Name="ExperimentalRows">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:ExperimentalQueryRow">
+                                    <Grid ColumnSpacing="{ThemeResource WzSpaceMd}"
+                                          Padding="{ThemeResource WzSpaceXsThickness}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+
+                                        <StackPanel Grid.Row="0" Grid.Column="0"
+                                                    Spacing="{ThemeResource WzSpaceXxs}">
+                                            <TextBlock Style="{ThemeResource WzMonoTextStyle}"
+                                                       IsTextSelectionEnabled="True"
+                                                       Text="{x:Bind Mnemonic}" />
+                                            <TextBlock Style="{ThemeResource WzCaptionTextStyle}"
+                                                       Foreground="{ThemeResource WzTextTertiaryBrush}"
+                                                       TextWrapping="Wrap"
+                                                       MaxWidth="{ThemeResource WzProseMaxWidth}"
+                                                       Text="{x:Bind Description}" />
+                                        </StackPanel>
+
+                                        <Button Grid.Row="0" Grid.Column="1"
+                                                Content="Run"
+                                                VerticalAlignment="Top"
+                                                IsEnabled="{x:Bind CanRun, Mode=OneWay}"
+                                                AutomationProperties.Name="{x:Bind Mnemonic}"
+                                                Click="OnRunExperimentalClicked" />
+
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                                                   Style="{ThemeResource WzMonoTextStyle}"
+                                                   TextWrapping="Wrap"
+                                                   IsTextSelectionEnabled="True"
+                                                   Visibility="{x:Bind HasResult, Mode=OneWay}"
+                                                   Text="{x:Bind Result, Mode=OneWay}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <TextBlock Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextTertiaryBrush}"
+                                   TextWrapping="Wrap"
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}"
+                                   Text="This list is fixed. Nothing can be typed into it, and the set forms of these nodes are excluded from this application permanently." />
+                    </StackPanel>
+                </Border>
+            </controls:CardColumns>
         </StackPanel>
     </ScrollViewer>
 </Page>

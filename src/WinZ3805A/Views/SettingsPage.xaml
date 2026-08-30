@@ -37,10 +37,9 @@
     -->
     <ScrollViewer HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
         <StackPanel x:Name="PageRoot"
-                    controls:CardEntrance.IsEnabled="True"
                     Padding="{ThemeResource WzPageMarginThickness}"
                     MaxWidth="{ThemeResource WzContentMaxWidth}"
-                    HorizontalAlignment="Left"
+                    HorizontalAlignment="Stretch"
                     Spacing="{ThemeResource WzSpaceXl}">
                 <VisualStateManager.VisualStateGroups>
                     <!--
@@ -85,206 +84,220 @@
 
             <TextBlock Style="{ThemeResource WzTitleTextStyle}" Text="Settings" />
 
-            <!-- ================================ Advanced =============================== -->
-            <StackPanel Spacing="{ThemeResource WzSpaceXs}">
-                <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Advanced" />
-
-                <!--
-                    HorizontalAlignment IS load-bearing here and on the two paragraphs below. A
-                    MaxWidth-constrained element in a Stretch slot centres itself in what is left
-                    over, so this line and the description under "Undocumented read-only queries"
-                    both sat indented into the middle of the page while every other row started at
-                    the card's left edge — measured on screen, not predicted.
-                -->
-                <TextBlock Style="{ThemeResource WzBodyTextStyle}"
-                           Foreground="{ThemeResource WzTextSecondaryBrush}"
-                           MaxWidth="{ThemeResource WzProseMaxWidth}"
-                           HorizontalAlignment="Left"
-                           TextWrapping="Wrap"
-                           Margin="{ThemeResource WzSpaceXxsThickness}"
-                           Text="For working out what the receiver is doing, rather than for using it." />
-
-                <tk:SettingsCard Style="{ThemeResource WzSettingsCardStyle}"
-                                 Header="Advanced Console"
-                                 Description="Adds a page below Settings offering every command in the catalog as a picker, with a transcript of everything sent and received. It changes what is reachable, never what is permitted: the commands this application will not send are absent from the catalog, so they are absent from the console.">
-                    <ToggleSwitch x:Name="ConsoleSwitch"
-                                  OnContent="Shown"
-                                  OffContent="Hidden"
-                                  AutomationProperties.Name="Show the Advanced Console"
-                                  Toggled="OnConsoleToggled" />
-                </tk:SettingsCard>
-
-                <!--
-                    §8.5's own sentence, verbatim, which #56 requires the toggle to carry. It is
-                    quoted rather than paraphrased because every clause of it is a warning: the
-                    queries are undocumented, they may answer with nonsense, and - the part a user
-                    most needs - nothing is being set.
-
-                    Two paragraphs rather than one Description string, so the verbatim sentence stays
-                    identifiable as a quotation and the second note stays a separate statement about
-                    where the queries appear. Description takes an object, so this is what it is for.
-                -->
-                <tk:SettingsCard Style="{ThemeResource WzSettingsCardStyle}"
-                                 Header="Undocumented read-only queries">
-                    <tk:SettingsCard.Description>
-                        <StackPanel Spacing="{ThemeResource WzSpaceXxs}">
-                            <TextBlock MaxWidth="{ThemeResource WzProseMaxWidth}"
-                                       HorizontalAlignment="Left"
-                                       TextWrapping="Wrap"
-                                       Text="Enable undocumented read-only queries. These are present in the receiver's command parser but absent from the published manual. They may return errors or nonsense. No setting is changed." />
-                            <TextBlock MaxWidth="{ThemeResource WzProseMaxWidth}"
-                                       HorizontalAlignment="Left"
-                                       TextWrapping="Wrap"
-                                       Text="Six queries appear on the Diagnostics page, each run only when you click it. There is no way to type one, and the set forms of these nodes are excluded permanently and cannot be enabled here or anywhere else." />
-                        </StackPanel>
-                    </tk:SettingsCard.Description>
-                    <ToggleSwitch x:Name="ExperimentalSwitch"
-                                  OnContent="Shown"
-                                  OffContent="Hidden"
-                                  AutomationProperties.Name="Enable undocumented read-only queries"
-                                  Toggled="OnExperimentalToggled" />
-                </tk:SettingsCard>
-            </StackPanel>
-
-            <!-- ============================== Appearance =============================== -->
-            <StackPanel Spacing="{ThemeResource WzSpaceXs}">
-                <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Appearance" />
-
-                <!--
-                    §9.4.2 in the user's terms. What the description does not say is as deliberate as
-                    what it does: it never promises the app will look "correct" either way, because
-                    both are correct. The reason to prefer the built-in accent is stated as a fact
-                    about the severity colours rather than as a recommendation, so a user who wants
-                    their desktop accent is not being told they are wrong.
-                -->
-                <tk:SettingsCard Style="{ThemeResource WzSettingsCardStyle}"
-                                 Header="Use the Windows accent colour"
-                                 Description="Selected items, buttons and links follow the accent you set in Windows. The colours that mean caution and critical never change - they are chosen to stay distinct from the built-in accent, so a Windows accent in the same family as one of them is harder to tell apart at a glance. You will be told if the one you have picked is close.">
-                    <ToggleSwitch x:Name="SystemAccentSwitch"
-                                  OnContent="Windows"
-                                  OffContent="This app&apos;s own"
-                                  AutomationProperties.Name="Use the Windows accent colour"
-                                  Toggled="OnSystemAccentToggled" />
-                </tk:SettingsCard>
-
-                <!--
-                    Anchored to the switch rather than shown as a dialog. The user has just made a
-                    choice and is looking at the control they made it with; a modal would interrupt
-                    to say something they can act on without leaving the page - and §9.4.2 makes this
-                    advice, not a permission gate.
-                -->
-                <TeachingTip x:Name="CollisionTip"
-                             Target="{x:Bind SystemAccentSwitch}"
-                             Title="This accent is close to a warning colour"
-                             PreferredPlacement="Bottom"
-                             IsLightDismissEnabled="False"
-                             ActionButtonContent="Use the app&apos;s accent"
-                             ActionButtonClick="OnRevertAccent"
-                             CloseButtonContent="Keep the Windows accent"
-                             CloseButtonClick="OnKeepAccent" />
-            </StackPanel>
-
-            <!-- ================================ Alerts ================================= -->
-            <StackPanel Spacing="{ThemeResource WzSpaceXs}">
-                <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Alerts" />
-
-                <tk:SettingsCard Style="{ThemeResource WzSettingsCardStyle}"
-                                 Header="Tell me when the receiver loses GPS lock"
-                                 Description="A Windows notification when the receiver stops disciplining to GPS, and one when it starts again. Brief drop-outs are not reported: a loss has to last a minute before it is worth telling you about, and a receiver that recovers inside that minute is never mentioned at all.">
-                    <ToggleSwitch x:Name="LockNotificationsSwitch"
-                                  OnContent="On"
-                                  OffContent="Off"
-                                  AutomationProperties.Name="Notify when the receiver loses GPS lock"
-                                  Toggled="OnLockNotificationsToggled" />
-                </tk:SettingsCard>
-            </StackPanel>
-
             <!--
-                §10.3's close behaviour (#280). Its own group rather than a row under Alerts: this is
-                about whether the application is running at all, which is a larger claim than whether
-                it speaks up.
+                §9.6.1's content grid (#345). The cards flow into as many columns as the width
+                holds, each going to whichever column is currently SHORTEST - so a tall card sits
+                alone while two short ones stack beside it, rather than alternating into a ragged
+                pair. Every page was a single StackPanel before this, which meant §9.6.1's Compact
+                arrangement at every width and half of a wide window empty.
 
-                A SettingsExpander and not three flat cards, because these three are not peers. Only
-                the first is a decision on its own; starting hidden and quitting outright both mean
-                nothing until the application keeps running, and the expander is the control that
-                says so structurally rather than by the order they happen to be listed in.
+                The page heading stays outside it: a title is not a card, and it belongs across the
+                top rather than in whichever column happened to be shorter.
             -->
-            <StackPanel Spacing="{ThemeResource WzSpaceXs}">
-                <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Running in the background" />
+            <controls:CardColumns controls:CardEntrance.IsEnabled="True"
+                                  ColumnSpacing="{ThemeResource WzSpaceXl}"
+                                  RowSpacing="{ThemeResource WzSpaceXl}">
+                <!-- ================================ Advanced =============================== -->
+                <StackPanel Spacing="{ThemeResource WzSpaceXs}">
+                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Advanced" />
 
-                <tk:SettingsExpander Style="{ThemeResource WzSettingsExpanderStyle}"
-                                     Header="Keep running when I close the window"
-                                     Description="On, closing the window leaves the receiver being polled, so the trend keeps filling and the alerts above still reach you. Click the notification area icon to bring the window back, or right-click it and choose Exit. Off, closing the window exits and monitoring stops with it."
-                                     IsExpanded="True">
-                    <tk:SettingsExpander.Content>
-                        <ToggleSwitch x:Name="KeepRunningSwitch"
-                                      OnContent="On"
-                                      OffContent="Off"
-                                      AutomationProperties.Name="Keep running when the window is closed"
-                                      Toggled="OnKeepRunningToggled" />
-                    </tk:SettingsExpander.Content>
-
-                    <tk:SettingsExpander.Items>
-                        <tk:SettingsCard Header="Start in the notification area">
-                            <tk:SettingsCard.Description>
-                                <TextBlock x:Name="StartMinimisedNote"
-                                           MaxWidth="{ThemeResource WzProseMaxWidth}"
-                                           HorizontalAlignment="Left"
-                                           TextWrapping="Wrap"
-                                           Text="Starts with no window, monitoring from the notification area." />
-                            </tk:SettingsCard.Description>
-                            <ToggleSwitch x:Name="StartMinimisedSwitch"
-                                          OnContent="On"
-                                          OffContent="Off"
-                                          AutomationProperties.Name="Start in the notification area with no window"
-                                          Toggled="OnStartMinimisedToggled" />
-                        </tk:SettingsCard>
-
-                        <!--
-                            An exit that does not depend on the notification area (#280).
-
-                            The tray menu is the documented way out once the close button stops
-                            exiting - but Windows 11 does not promote a newly registered tray icon.
-                            It goes into the hidden overflow, and a user who has not dragged it out
-                            cannot right-click what they cannot see. Leaving the tray as the ONLY
-                            exit would mean an application quittable in principle and, on a fresh
-                            install, by Task Manager in practice.
-
-                            So the application can always be quit from its own surface. §13's
-                            acceptance asks for a discoverable, non-Task-Manager way out, and this is
-                            the one that does not depend on shell behaviour nobody here controls.
-
-                            Inside the expander with the toggle that creates the problem, which is
-                            where it is looked for: a user reading "closing the window will not quit"
-                            has the other way out on the next line.
-
-                            The button's label is set in code from Package.Current.DisplayName
-                            (§6.3): the product name is never hard-coded in XAML, because identity
-                            and display name are decoupled deliberately and a rename must stay a
-                            one-line change. The card's own header is set there for the same reason.
-                        -->
-                        <tk:SettingsCard x:Name="ExitCard"
-                                         Description="Stops polling and closes the application, whether or not it is set to keep running.">
-                            <Button x:Name="ExitButton"
-                                    Click="OnExitClicked"
-                                    ToolTipService.ToolTip="Stop monitoring and close the application" />
-                        </tk:SettingsCard>
-                    </tk:SettingsExpander.Items>
-                </tk:SettingsExpander>
-            </StackPanel>
-
-            <!-- ============================== Not built yet ============================ -->
-            <StackPanel Spacing="{ThemeResource WzSpaceXs}">
-                <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Elsewhere for now" />
-
-                <Border Style="{ThemeResource WzCardStyle}">
+                    <!--
+                        HorizontalAlignment IS load-bearing here and on the two paragraphs below. A
+                        MaxWidth-constrained element in a Stretch slot centres itself in what is left
+                        over, so this line and the description under "Undocumented read-only queries"
+                        both sat indented into the middle of the page while every other row started at
+                        the card's left edge — measured on screen, not predicted.
+                    -->
                     <TextBlock Style="{ThemeResource WzBodyTextStyle}"
                                Foreground="{ThemeResource WzTextSecondaryBrush}"
                                MaxWidth="{ThemeResource WzProseMaxWidth}"
+                               HorizontalAlignment="Left"
                                TextWrapping="Wrap"
-                               Text="Poll cadences, the display time zone and units are not on this page yet. The time zone is chosen from the main window's clock; the poll cadences are fixed at the intervals the specification sets." />
-                </Border>
-            </StackPanel>
+                               Margin="{ThemeResource WzSpaceXxsThickness}"
+                               Text="For working out what the receiver is doing, rather than for using it." />
+
+                    <tk:SettingsCard Style="{ThemeResource WzSettingsCardStyle}"
+                                     Header="Advanced Console"
+                                     Description="Adds a page below Settings offering every command in the catalog as a picker, with a transcript of everything sent and received. It changes what is reachable, never what is permitted: the commands this application will not send are absent from the catalog, so they are absent from the console.">
+                        <ToggleSwitch x:Name="ConsoleSwitch"
+                                      OnContent="Shown"
+                                      OffContent="Hidden"
+                                      AutomationProperties.Name="Show the Advanced Console"
+                                      Toggled="OnConsoleToggled" />
+                    </tk:SettingsCard>
+
+                    <!--
+                        §8.5's own sentence, verbatim, which #56 requires the toggle to carry. It is
+                        quoted rather than paraphrased because every clause of it is a warning: the
+                        queries are undocumented, they may answer with nonsense, and - the part a user
+                        most needs - nothing is being set.
+
+                        Two paragraphs rather than one Description string, so the verbatim sentence stays
+                        identifiable as a quotation and the second note stays a separate statement about
+                        where the queries appear. Description takes an object, so this is what it is for.
+                    -->
+                    <tk:SettingsCard Style="{ThemeResource WzSettingsCardStyle}"
+                                     Header="Undocumented read-only queries">
+                        <tk:SettingsCard.Description>
+                            <StackPanel Spacing="{ThemeResource WzSpaceXxs}">
+                                <TextBlock MaxWidth="{ThemeResource WzProseMaxWidth}"
+                                           HorizontalAlignment="Left"
+                                           TextWrapping="Wrap"
+                                           Text="Enable undocumented read-only queries. These are present in the receiver's command parser but absent from the published manual. They may return errors or nonsense. No setting is changed." />
+                                <TextBlock MaxWidth="{ThemeResource WzProseMaxWidth}"
+                                           HorizontalAlignment="Left"
+                                           TextWrapping="Wrap"
+                                           Text="Six queries appear on the Diagnostics page, each run only when you click it. There is no way to type one, and the set forms of these nodes are excluded permanently and cannot be enabled here or anywhere else." />
+                            </StackPanel>
+                        </tk:SettingsCard.Description>
+                        <ToggleSwitch x:Name="ExperimentalSwitch"
+                                      OnContent="Shown"
+                                      OffContent="Hidden"
+                                      AutomationProperties.Name="Enable undocumented read-only queries"
+                                      Toggled="OnExperimentalToggled" />
+                    </tk:SettingsCard>
+                </StackPanel>
+
+                <!-- ============================== Appearance =============================== -->
+                <StackPanel Spacing="{ThemeResource WzSpaceXs}">
+                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Appearance" />
+
+                    <!--
+                        §9.4.2 in the user's terms. What the description does not say is as deliberate as
+                        what it does: it never promises the app will look "correct" either way, because
+                        both are correct. The reason to prefer the built-in accent is stated as a fact
+                        about the severity colours rather than as a recommendation, so a user who wants
+                        their desktop accent is not being told they are wrong.
+                    -->
+                    <tk:SettingsCard Style="{ThemeResource WzSettingsCardStyle}"
+                                     Header="Use the Windows accent colour"
+                                     Description="Selected items, buttons and links follow the accent you set in Windows. The colours that mean caution and critical never change - they are chosen to stay distinct from the built-in accent, so a Windows accent in the same family as one of them is harder to tell apart at a glance. You will be told if the one you have picked is close.">
+                        <ToggleSwitch x:Name="SystemAccentSwitch"
+                                      OnContent="Windows"
+                                      OffContent="This app&apos;s own"
+                                      AutomationProperties.Name="Use the Windows accent colour"
+                                      Toggled="OnSystemAccentToggled" />
+                    </tk:SettingsCard>
+
+                    <!--
+                        Anchored to the switch rather than shown as a dialog. The user has just made a
+                        choice and is looking at the control they made it with; a modal would interrupt
+                        to say something they can act on without leaving the page - and §9.4.2 makes this
+                        advice, not a permission gate.
+                    -->
+                    <TeachingTip x:Name="CollisionTip"
+                                 Target="{x:Bind SystemAccentSwitch}"
+                                 Title="This accent is close to a warning colour"
+                                 PreferredPlacement="Bottom"
+                                 IsLightDismissEnabled="False"
+                                 ActionButtonContent="Use the app&apos;s accent"
+                                 ActionButtonClick="OnRevertAccent"
+                                 CloseButtonContent="Keep the Windows accent"
+                                 CloseButtonClick="OnKeepAccent" />
+                </StackPanel>
+
+                <!-- ================================ Alerts ================================= -->
+                <StackPanel Spacing="{ThemeResource WzSpaceXs}">
+                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Alerts" />
+
+                    <tk:SettingsCard Style="{ThemeResource WzSettingsCardStyle}"
+                                     Header="Tell me when the receiver loses GPS lock"
+                                     Description="A Windows notification when the receiver stops disciplining to GPS, and one when it starts again. Brief drop-outs are not reported: a loss has to last a minute before it is worth telling you about, and a receiver that recovers inside that minute is never mentioned at all.">
+                        <ToggleSwitch x:Name="LockNotificationsSwitch"
+                                      OnContent="On"
+                                      OffContent="Off"
+                                      AutomationProperties.Name="Notify when the receiver loses GPS lock"
+                                      Toggled="OnLockNotificationsToggled" />
+                    </tk:SettingsCard>
+                </StackPanel>
+
+                <!--
+                    §10.3's close behaviour (#280). Its own group rather than a row under Alerts: this is
+                    about whether the application is running at all, which is a larger claim than whether
+                    it speaks up.
+
+                    A SettingsExpander and not three flat cards, because these three are not peers. Only
+                    the first is a decision on its own; starting hidden and quitting outright both mean
+                    nothing until the application keeps running, and the expander is the control that
+                    says so structurally rather than by the order they happen to be listed in.
+                -->
+                <StackPanel Spacing="{ThemeResource WzSpaceXs}">
+                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Running in the background" />
+
+                    <tk:SettingsExpander Style="{ThemeResource WzSettingsExpanderStyle}"
+                                         Header="Keep running when I close the window"
+                                         Description="On, closing the window leaves the receiver being polled, so the trend keeps filling and the alerts above still reach you. Click the notification area icon to bring the window back, or right-click it and choose Exit. Off, closing the window exits and monitoring stops with it."
+                                         IsExpanded="True">
+                        <tk:SettingsExpander.Content>
+                            <ToggleSwitch x:Name="KeepRunningSwitch"
+                                          OnContent="On"
+                                          OffContent="Off"
+                                          AutomationProperties.Name="Keep running when the window is closed"
+                                          Toggled="OnKeepRunningToggled" />
+                        </tk:SettingsExpander.Content>
+
+                        <tk:SettingsExpander.Items>
+                            <tk:SettingsCard Header="Start in the notification area">
+                                <tk:SettingsCard.Description>
+                                    <TextBlock x:Name="StartMinimisedNote"
+                                               MaxWidth="{ThemeResource WzProseMaxWidth}"
+                                               HorizontalAlignment="Left"
+                                               TextWrapping="Wrap"
+                                               Text="Starts with no window, monitoring from the notification area." />
+                                </tk:SettingsCard.Description>
+                                <ToggleSwitch x:Name="StartMinimisedSwitch"
+                                              OnContent="On"
+                                              OffContent="Off"
+                                              AutomationProperties.Name="Start in the notification area with no window"
+                                              Toggled="OnStartMinimisedToggled" />
+                            </tk:SettingsCard>
+
+                            <!--
+                                An exit that does not depend on the notification area (#280).
+
+                                The tray menu is the documented way out once the close button stops
+                                exiting - but Windows 11 does not promote a newly registered tray icon.
+                                It goes into the hidden overflow, and a user who has not dragged it out
+                                cannot right-click what they cannot see. Leaving the tray as the ONLY
+                                exit would mean an application quittable in principle and, on a fresh
+                                install, by Task Manager in practice.
+
+                                So the application can always be quit from its own surface. §13's
+                                acceptance asks for a discoverable, non-Task-Manager way out, and this is
+                                the one that does not depend on shell behaviour nobody here controls.
+
+                                Inside the expander with the toggle that creates the problem, which is
+                                where it is looked for: a user reading "closing the window will not quit"
+                                has the other way out on the next line.
+
+                                The button's label is set in code from Package.Current.DisplayName
+                                (§6.3): the product name is never hard-coded in XAML, because identity
+                                and display name are decoupled deliberately and a rename must stay a
+                                one-line change. The card's own header is set there for the same reason.
+                            -->
+                            <tk:SettingsCard x:Name="ExitCard"
+                                             Description="Stops polling and closes the application, whether or not it is set to keep running.">
+                                <Button x:Name="ExitButton"
+                                        Click="OnExitClicked"
+                                        ToolTipService.ToolTip="Stop monitoring and close the application" />
+                            </tk:SettingsCard>
+                        </tk:SettingsExpander.Items>
+                    </tk:SettingsExpander>
+                </StackPanel>
+
+                <!-- ============================== Not built yet ============================ -->
+                <StackPanel Spacing="{ThemeResource WzSpaceXs}">
+                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Elsewhere for now" />
+
+                    <Border Style="{ThemeResource WzCardStyle}">
+                        <TextBlock Style="{ThemeResource WzBodyTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}"
+                                   TextWrapping="Wrap"
+                                   Text="Poll cadences, the display time zone and units are not on this page yet. The time zone is chosen from the main window's clock; the poll cadences are fixed at the intervals the specification sets." />
+                    </Border>
+                </StackPanel>
+            </controls:CardColumns>
         </StackPanel>
     </ScrollViewer>
 </Page>
