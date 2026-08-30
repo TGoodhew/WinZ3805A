@@ -1,6 +1,7 @@
 ﻿using System.ComponentModel;
 using System.Globalization;
 
+using WinZ3805A.Controls;
 using WinZ3805A.Device.Commands;
 using WinZ3805A.Device.Models;
 using WinZ3805A.Device.Parsing;
@@ -27,6 +28,8 @@ public sealed class DiagnosticsViewModel : INotifyPropertyChanged
     private string? _selfTestResult;
     private readonly List<string> _errors = [];
     private int? _logCount;
+    private double? _powerOnHours;
+    private IReadOnlyList<string> _parseWarnings = [];
     private bool _isReading;
     private string? _fault;
 
@@ -39,6 +42,51 @@ public sealed class DiagnosticsViewModel : INotifyPropertyChanged
 
     /// <inheritdoc />
     public event PropertyChangedEventHandler? PropertyChanged;
+
+    /// <summary>
+    /// What the parser could not make sense of in the latest status screen (§11.2).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Set by the page from the store, because parse warnings belong to a screen rather than to a
+    /// query — the same reason the identity on Overview is set from the session.
+    /// </para>
+    /// <para>
+    /// <b>§11.2 has always said these are "surfaced in Diagnostics" and they were not</b> (#320).
+    /// They reached the application log and nowhere else, and at Debug level — below the
+    /// Information floor the application ships at — so in practice they reached nobody at all.
+    /// §11.1's rule is that an unreadable field becomes null and renders as a dash, which is right
+    /// for the reading and useless as a report: "it shows dashes" is not something anyone can act
+    /// on, and "unrecognised health item 'Xtal Pwr'" is.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<string> ParseWarnings
+    {
+        get => _parseWarnings;
+        set
+        {
+            IReadOnlyList<string> next = value ?? [];
+            if (!_parseWarnings.SequenceEqual(next))
+            {
+                _parseWarnings = next;
+                RaiseAll();
+            }
+        }
+    }
+
+    /// <summary>
+    /// What the card says when the parser met nothing it could not read.
+    /// </summary>
+    /// <remarks>
+    /// Stated rather than left blank: an empty card reads as "not implemented", and the useful fact
+    /// here is the negative one — the screen parsed completely.
+    /// </remarks>
+    public string ParseWarningSummary => ParseWarnings.Count switch
+    {
+        0 => "The last status screen parsed completely.",
+        1 => "1 field in the last status screen could not be read.",
+        int many => $"{many} fields in the last status screen could not be read.",
+    };
 
     /// <summary>Whether a read is in flight.</summary>
     public bool IsReading => _isReading;
@@ -53,6 +101,25 @@ public sealed class DiagnosticsViewModel : INotifyPropertyChanged
     public string SelfTestResultText => string.IsNullOrWhiteSpace(_selfTestResult)
         ? "Not read"
         : _selfTestResult;
+
+    /// <summary>
+    /// How long the receiver has been running in total, from <c>:DIAG:LIF:COUN?</c> (§10.9).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The manual calls this <c>:DIAGnostic:LIFetime:COUNt?</c> and the catalog describes it as the
+    /// accumulated running time. §10.9 called the card a "power-on <i>count</i>" and #316 recorded
+    /// that no such query existed at all — both wrong, and the second nearly had the requirement
+    /// struck. It is hours (#320).
+    /// </para>
+    /// <para>
+    /// Worth having on an instrument whose oscillator ages with running time: the EFC trend on
+    /// Overview shows the drift, and this is the figure that says how much life produced it.
+    /// </para>
+    /// </remarks>
+    public string PowerOnHoursText => _powerOnHours is double hours
+        ? string.Create(CultureInfo.CurrentCulture, $"{hours:N0} h")
+        : ReadoutFormatter.NoValue;
 
     /// <summary>
     /// Re-reads <c>:DIAG:TEST:RES?</c> after a test has run (#53).
@@ -187,6 +254,14 @@ public sealed class DiagnosticsViewModel : INotifyPropertyChanged
             string? count = await ReadTextAsync(":DIAG:LOG:COUN?", cancellationToken).ConfigureAwait(true);
             _logCount = int.TryParse(count, NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsed)
                 ? parsed
+                : null;
+
+            // §10.9's Lifetime card. Read here rather than polled: it changes by one an hour, so
+            // asking for it on every sweep would spend wire time on a figure that cannot move
+            // between sweeps.
+            string? hours = await ReadTextAsync(":DIAG:LIF:COUN?", cancellationToken).ConfigureAwait(true);
+            _powerOnHours = double.TryParse(hours, NumberStyles.Float, CultureInfo.InvariantCulture, out double parsedHours)
+                ? parsedHours
                 : null;
 
             Transaction transaction = await ExecuteAsync(":DIAG:LOG:READ:ALL?", cancellationToken)

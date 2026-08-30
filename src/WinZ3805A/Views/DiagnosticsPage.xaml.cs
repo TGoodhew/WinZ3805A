@@ -1,4 +1,6 @@
-﻿using Microsoft.UI.Xaml;
+﻿using System.ComponentModel;
+
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
 
@@ -52,9 +54,20 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
             if (_device is DeviceContext device)
             {
                 device.Session.StatusChanged -= OnStatusChanged;
+                device.Store.PropertyChanged -= OnStoreChanged;
             }
         };
     }
+
+    /// <summary>Keeps the parse-warnings card following the sweeps while the page is open.</summary>
+    private void OnStoreChanged(object? sender, PropertyChangedEventArgs e) =>
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            if (_model is DiagnosticsViewModel model && _device is DeviceContext device)
+            {
+                model.ParseWarnings = device.Store.Status?.ParseWarnings ?? [];
+            }
+        });
 
     /// <inheritdoc />
     protected override async void OnNavigatedTo(NavigationEventArgs e)
@@ -79,9 +92,15 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
         // than by hiding: a missing log is worth noticing.
         _logProvider = App.Services?.GetService<FileLoggerProvider>();
         _logFolder = ResolveLogFolder(_logProvider);
-        _model = new DiagnosticsViewModel(device.Session);
+        _model = new DiagnosticsViewModel(device.Session) { ParseWarnings = device.Store.Status?.ParseWarnings ?? [] };
         _model.PropertyChanged += (_, _) => DispatcherQueue.TryEnqueue(Render);
         device.Session.StatusChanged += OnStatusChanged;
+
+        // Parse warnings belong to a status screen, so they arrive with each full sweep rather than
+        // with a query. Following the store keeps the card current while the page is open, which is
+        // the state someone is in when they are reading it to find out what a firmware revision
+        // broke.
+        device.Store.PropertyChanged += OnStoreChanged;
 
         // §8.5's opt-in. Rows are created per page rather than shared: each holds its own last
         // answer, and two pages over one set would show each other's.
@@ -240,6 +259,11 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
         // application started, possibly at the factory. Kept separate from the rows below, which
         // are only what this session measured, because the two make different claims.
         LastReadText.Text = $"The receiver reports its last stored result as {model.SelfTestResultText}.";
+
+        ParseWarningSummaryText.Text = model.ParseWarningSummary;
+        ParseWarningItems.ItemsSource = model.ParseWarnings;
+
+        PowerOnHoursText.Text = model.PowerOnHoursText;
 
         if (_selfTest is SelfTestViewModel selfTest)
         {

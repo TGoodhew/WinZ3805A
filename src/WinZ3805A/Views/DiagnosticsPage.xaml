@@ -254,6 +254,82 @@
                 </StackPanel>
             </Border>
 
+            <!-- ============================== Parse warnings ============================ -->
+            <!--
+                §11.2 has always said these are "surfaced in Diagnostics". They were not: they
+                reached the application log and nowhere else, and at Debug level — below the
+                Information floor the application ships at — so in practice nobody ever saw one
+                (#320).
+
+                §11.1's rule is that an unreadable field becomes null and renders as a dash. That is
+                right for the reading and useless as a report: "it shows dashes" is not something
+                anyone can act on, and "unrecognised health item 'Xtal Pwr'" is. This card is the
+                difference between the two, and it is the only place a firmware revision that moved
+                a column would announce itself.
+            -->
+            <Border Style="{ThemeResource WzCardStyle}">
+                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Status screen parsing" />
+
+                    <TextBlock x:Name="ParseWarningSummaryText"
+                               Style="{ThemeResource WzBodyTextStyle}"
+                               Foreground="{ThemeResource WzTextSecondaryBrush}"
+                               TextWrapping="Wrap"
+                               MaxWidth="{ThemeResource WzProseMaxWidth}" />
+
+                    <!--
+                        Mono, selectable, one per line: these exist to be pasted into an issue.
+                    -->
+                    <ItemsControl x:Name="ParseWarningItems">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="x:String">
+                                <TextBlock Style="{ThemeResource WzMonoTextStyle}"
+                                           Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                           TextWrapping="Wrap"
+                                           IsTextSelectionEnabled="True"
+                                           Text="{x:Bind}" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
+            <!-- ================================ Lifetime =============================== -->
+            <!--
+                §10.9's Lifetime card. #316 recorded that no query for this existed; :DIAG:LIF:COUN?
+                is in the catalog and the manual lists :DIAGnostic:LIFetime:COUNt?, so the card was
+                nearly struck on a false premise (#320). What was wrong is §10.9's label: the
+                receiver reports accumulated running time in hours, not a count.
+
+                Read with Refresh rather than polled — it changes by one an hour, so asking for it
+                every sweep would spend wire time on a figure that cannot have moved.
+            -->
+            <Border Style="{ThemeResource WzCardStyle}">
+                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Lifetime" />
+
+                    <Grid ColumnSpacing="{ThemeResource WzSpaceXl}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" MinWidth="140" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Column="0"
+                                   Style="{ThemeResource WzBodyTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   Text="Power-on hours" />
+                        <TextBlock x:Name="PowerOnHoursText" Grid.Column="1"
+                                   Style="{ThemeResource WzMonoTextStyle}" />
+                    </Grid>
+
+                    <TextBlock Style="{ThemeResource WzCaptionTextStyle}"
+                               Foreground="{ThemeResource WzTextTertiaryBrush}"
+                               TextWrapping="Wrap"
+                               MaxWidth="{ThemeResource WzProseMaxWidth}"
+                               Text="How long the receiver has run in total. An oven-controlled oscillator ages with running time, so this is the figure behind the drift the Overview page's EFC trend shows." />
+                </StackPanel>
+            </Border>
+
             <!-- ============================== Error queue =============================== -->
             <Border Style="{ThemeResource WzCardStyle}">
                 <StackPanel Spacing="{ThemeResource WzSpaceSm}">
