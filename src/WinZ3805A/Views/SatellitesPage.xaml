@@ -473,9 +473,40 @@
                             <StackPanel Grid.Column="0" Spacing="{ThemeResource WzSpaceXxs}">
                                 <NumberBox x:Name="MaskBox"
                                            MinWidth="220"
+                                           MinHeight="32"
                                            Header="New mask (degrees)"
                                            SmallChange="1"
                                            SpinButtonPlacementMode="Inline" />
+
+                                <!--
+                                    §9.10.1's Slider, which it grants to the elevation mask and to
+                                    nothing else - the last row of the #316 audit's list still marked
+                                    "not built" (#320). §10.5's wireframe draws both controls on one
+                                    line for a reason worth keeping: the mask is an ANGLE, and 10
+                                    degrees against a 0-90 range is a fact a track shows and a
+                                    number does not.
+
+                                    TWO CONTROLS OVER ONE VALUE, not two values. They share MaskBox's
+                                    Value through a two-way binding, so the validator, the Apply
+                                    button's enabled state and the command all keep reading the one
+                                    field they always did - the slider is another way to move it, not
+                                    a second source of truth.
+
+                                    §9.11's validation rule is what settles the range: the bounds
+                                    come from the driver's catalog entry, and a slider physically
+                                    cannot leave them, so the error text below stays for typed entry
+                                    where it still can.
+                                -->
+                                <Slider x:Name="MaskSlider"
+                                        MinWidth="220"
+                                        MinHeight="32"
+                                        StepFrequency="1"
+                                        TickFrequency="15"
+                                        TickPlacement="Outside"
+                                        Value="{x:Bind MaskBox.Value, Mode=TwoWay}"
+                                        AutomationProperties.Name="Elevation mask in degrees"
+                                        ToolTipService.ToolTip="Drag to set the elevation mask, then Apply" />
+
                                 <controls:FieldErrorText x:Name="MaskError" />
                             </StackPanel>
 
