@@ -104,7 +104,7 @@ public static class Coordinates
             return null;
         }
 
-        // Fixed widths so a column of coordinates stays aligned (§9.5.3 rule 6), and the seconds
+        // Fixed widths so a column of coordinates stays aligned (§9.5.3 rule 7), and the seconds
         // always carry the receiver's own three decimals.
         return string.Create(
             CultureInfo.InvariantCulture,

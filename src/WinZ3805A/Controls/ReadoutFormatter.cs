@@ -14,10 +14,12 @@ namespace WinZ3805A.Controls;
 /// run.
 /// </para>
 /// <para>
-/// <c>ReadoutTile</c> is the only caller in the application. Nothing formats a readout by hand,
-/// because rules 1 to 4 and 6 are exactly the ones a page gets wrong locally. Named in plain text
-/// rather than with a cref: this file is also compiled into the test assembly, where that type does
-/// not exist, and an unresolvable cref is a build error there.
+/// This is the one formatter every readout goes through — <c>ReadoutTile</c>, the strength bars,
+/// the medallion's sentence, the chart labels, and every view model that puts a number in a string.
+/// Nothing formats a readout by hand, because rules 1 to 4 and 6 are exactly the ones a page gets
+/// wrong locally. <c>ReadoutTile</c> is named in plain text rather than with a cref: this file is
+/// also compiled into the test assembly, where that type does not exist, and an unresolvable cref
+/// is a build error there.
 /// </para>
 /// </remarks>
 public static class ReadoutFormatter

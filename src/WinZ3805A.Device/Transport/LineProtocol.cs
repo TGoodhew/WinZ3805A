@@ -14,14 +14,17 @@ namespace WinZ3805A.Device.Transport;
 /// Three things make this harder than it looks, and all three are why §15 puts it first.
 /// </para>
 /// <para>
-/// <b>The device echoes.</b> It defaults to <c>FDUPlex ON</c> and sends every character back. The
-/// echo is *detected* by comparing the first line received to the line transmitted, never assumed —
-/// a session that assumes echo-on eats the first line of every response the day someone turns it off.
+/// <b>The device may echo.</b> The manual's default is <c>FDUPlex ON</c>, sending every character
+/// back; the bench unit echoes nothing (§7.2). The echo is *detected* by comparing the first line
+/// received to the line transmitted, never assumed — a session that assumes echo-on eats the first
+/// line of every response the day it meets a unit with echo off, and one that assumes echo-off reads
+/// its own command back as the answer.
 /// </para>
 /// <para>
-/// <b>The terminator is a prompt, not a newline.</b> A transaction ends at <c>scpi&gt;</c>, which is
-/// what makes a setter (prompt only) and a multi-line block (~1900 bytes for the status screen) the
-/// same shape of read. <c>ReadLine</c> cannot express that.
+/// <b>The terminator is a prompt, not a newline.</b> A transaction ends at the prompt —
+/// <c>scpi &gt; </c> or <c>E-nnn&gt; </c> — which is what makes a setter (prompt only) and a
+/// multi-line block (~1900 bytes for the status screen) the same shape of read. <c>ReadLine</c>
+/// cannot express that.
 /// </para>
 /// <para>
 /// <b>The prompt straddles reads.</b> At 9600 baud a status screen arrives in dozens of chunks and
@@ -43,7 +46,7 @@ public sealed class LineProtocol
     /// <summary>The word the ordinary prompt is built from.</summary>
     private const string PromptWord = "scpi";
 
-    /// <summary>What the prompt shows instead of <see cref="PromptWord"/> when the last command errored.</summary>
+    /// <summary>What the prompt shows instead of <see cref="PromptWord"/> while the error queue is not empty (§7.2).</summary>
     private const string ErrorPromptPrefix = "E-";
 
     /// <summary>
@@ -59,10 +62,10 @@ public sealed class LineProtocol
     private const string ClearStatusCommand = "*CLS";
 
     /// <summary>
-    /// CR and LF. §6.4 nominates <see cref="SearchValues{T}"/> for this scan, but .NET 10 ships no
-    /// <see cref="SequenceReader{T}"/> overload that accepts one, and §7.2 mandates
-    /// <see cref="SequenceReader{T}"/> for sentinel detection. The span overloads win the conflict:
-    /// they are what exists, and a two-value <c>IndexOfAny</c> is already vectorised, so
+    /// CR and LF. §6.4 once nominated <see cref="SearchValues{T}"/> for this scan; its row was struck
+    /// on 21 Aug 2026 (#78) because .NET 10 ships no <see cref="SequenceReader{T}"/> overload that
+    /// accepts one, and §7.2 mandates <see cref="SequenceReader{T}"/> for sentinel detection. The span
+    /// overloads are what exists, and a two-value <c>IndexOfAny</c> is already vectorised, so
     /// <see cref="SearchValues{T}"/> — which earns its keep by amortising set preprocessing — would
     /// buy nothing here even if it fitted.
     /// </summary>
@@ -210,6 +213,11 @@ public sealed class LineProtocol
     /// the model to decide which commands exist. A receiver that says nothing costs one timeout here
     /// and nothing afterwards, so keep the timeout short.
     /// </para>
+    /// <para>
+    /// Since #310 this is also the one step a broadcast family passes through: the lines heard here
+    /// feed every driver's <c>Overhear</c>, and the <c>*CLS</c> sent at the end goes out regardless
+    /// of who was talking — the one write such a family ever receives (§7.2's scope note).
+    /// </para>
     /// </remarks>
     public async Task<Transaction> SynchroniseAsync(TimeSpan timeout, CancellationToken cancellationToken = default)
     {
@@ -303,14 +311,6 @@ public sealed class LineProtocol
     }
 
     /// <summary>
-    /// Empties the driver buffer and the pipe before writing.
-    /// </summary>
-    /// <remarks>
-    /// The receiver only speaks when spoken to, so anything already waiting is the late tail of a
-    /// transaction that timed out. Leaving it in place would prepend one dead response to every
-    /// subsequent one — a single timeout silently misaligning the session for as long as it stays up.
-    /// </remarks>
-    /// <summary>
     /// Notes that a reply was abandoned part-read, so the next command realigns before it is sent.
     /// </summary>
     /// <remarks>
@@ -395,6 +395,15 @@ public sealed class LineProtocol
         }
     }
 
+    /// <summary>
+    /// Empties the driver buffer and the pipe before writing.
+    /// </summary>
+    /// <remarks>
+    /// On §7.2's query/response link the receiver only speaks when spoken to, so anything already
+    /// waiting is the late tail of a transaction that timed out. Leaving it in place would prepend
+    /// one dead response to every subsequent one — a single timeout silently misaligning the session
+    /// for as long as it stays up.
+    /// </remarks>
     private void DiscardStaleInput()
     {
         _transport.DiscardInput();
@@ -581,15 +590,16 @@ public sealed class LineProtocol
     /// </param>
     /// <remarks>
     /// <para>
-    /// §7.2 describes one fixed sentinel, <c>"scpi&gt; "</c>. The receiver has two departures from
-    /// that, both observed on a Z3805A running firmware 1.01.03-A:
+    /// §7.2's prompt grammar has two forms, both observed on a Z3805A running firmware 1.01.03-A —
+    /// the literal <c>"scpi&gt; "</c> the section used to give never matches at all:
     /// </para>
     /// <para>
-    /// It writes <c>"scpi &gt; "</c>, with a space before the bracket. And when the last command
-    /// errored it replaces the word entirely, writing <c>"E-230&gt; "</c> — the prompt doubles as the
-    /// error indicator. A command that errors answers with *only* that prompt, so a protocol looking
-    /// for the literal string waits out its full timeout on every failed command and then does it
-    /// again on the next one.
+    /// The ordinary prompt is <c>"scpi &gt; "</c>, with a space before the bracket. While the error
+    /// queue is not empty the word is replaced entirely, <c>"E-230&gt; "</c> and the like, with no
+    /// space — the prompt doubles as the queue indicator, not as a verdict on the last command. A
+    /// command that is rejected answers with *only* that prompt, so a protocol looking for the
+    /// literal string waits out its full timeout on every failed command and then does it again on
+    /// the next one.
     /// </para>
     /// <para>
     /// Matching is deliberately narrow rather than "anything ending in &gt;": the tail is also where

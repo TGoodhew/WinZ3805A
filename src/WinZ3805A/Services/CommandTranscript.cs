@@ -13,7 +13,11 @@ public enum CommandOrigin
     /// <summary>§7.3's poll timers. The traffic §10.11's toggle hides.</summary>
     Poll,
 
-    /// <summary>The connect sequence: the synchronising write and the identity read.</summary>
+    /// <summary>
+    /// The connect sequence: the <c>*IDN?</c> read on a query/response link, or what the
+    /// synchronise step overheard on a broadcast one (#310). The synchronising write itself is not
+    /// recorded.
+    /// </summary>
     Session,
 }
 
@@ -62,10 +66,11 @@ public sealed class CommandTranscript
     /// How many transactions are kept.
     /// </summary>
     /// <remarks>
-    /// At §7.3's cadences the fast tier alone is about 3 600 transactions an hour, so this is
-    /// roughly the last ten minutes of polling, or far longer once poll traffic is the only thing
-    /// filling it. Chosen against the full status screen, the largest entry at some 1 900 bytes:
-    /// 500 of those is under a megabyte, and the fast tier's replies are a few bytes each.
+    /// At §7.3's cadences the fast tier alone is six transactions a second, some 21 600 an hour,
+    /// so this is roughly the last 80 to 100 seconds of polling, or far longer once poll traffic
+    /// is filtered out of the view. Chosen against the full status screen, the largest entry at
+    /// some 1 900 bytes: 500 of those is under a megabyte, and the fast tier's replies are a few
+    /// bytes each.
     /// </remarks>
     public const int Capacity = 500;
 

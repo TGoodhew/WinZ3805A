@@ -250,9 +250,11 @@ public sealed class TimingViewModel : INotifyPropertyChanged
     /// The standard deviation of the samples held in memory.
     /// </summary>
     /// <remarks>
-    /// §10.7's wireframe says "σ (1 h)". Nothing keeps an hour yet — trend persistence is P1-2 and
-    /// the ring buffer is the §12 60-sample window — so this is the deviation of what there is, and
-    /// <see cref="DeviationWindow"/> says so rather than letting a reader assume an hour.
+    /// §10.7's wireframe says "σ (1 h)". This view model holds only the §12 60-sample ring buffer,
+    /// so this is the deviation of what there is, and <see cref="DeviationWindow"/> says so rather
+    /// than letting a reader assume an hour. The hour itself comes from the trend store:
+    /// <c>TimingPage.RenderDeviation</c> reads the last hour out of <c>trend.db</c> where one exists
+    /// and falls back to this figure where it does not, which is §10.7's rule.
     /// </remarks>
     public double? TimeIntervalDeviation
     {

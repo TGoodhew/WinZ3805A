@@ -32,9 +32,10 @@ public sealed class FileLoggerProvider : ILoggerProvider
     /// <summary>Creates a provider over a writer.</summary>
     /// <param name="writer">Where the lines go.</param>
     /// <param name="timeProvider">
-    /// The clock stamping each line. Injected because §12 forbids reading the clock directly, and
-    /// because a test asserting a timestamp against <c>DateTime.Now</c> is a test that passes for
-    /// the minute it was written in.
+    /// The clock stamping each line. Injected on §12's rule against reading the clock directly —
+    /// binding on the Device library, followed here by choice — because a test asserting a
+    /// timestamp against <c>DateTime.Now</c> is a test that passes for the minute it was written
+    /// in.
     /// </param>
     public FileLoggerProvider(FileLogWriter writer, TimeProvider timeProvider)
     {

@@ -69,9 +69,10 @@ public sealed record ConnectionPreferences
 /// Where <see cref="ConnectionPreferences"/> are kept.
 /// </summary>
 /// <remarks>
-/// An interface because the storage is <c>ApplicationData.Current.LocalSettings</c>, which needs
-/// package identity and therefore cannot exist in a headless test run — while the rules about what
-/// is remembered, and when, are exactly what wants testing.
+/// An interface so the rules about what is remembered, and when, can be tested against a recorder
+/// rather than a disk. The real store, <see cref="LocalConnectionPreferenceStore"/>, is a JSON file
+/// under local application data — not <c>ApplicationData.Current.LocalSettings</c>, for the reason
+/// given there — and is itself linked into the test project.
 /// </remarks>
 public interface IConnectionPreferenceStore
 {

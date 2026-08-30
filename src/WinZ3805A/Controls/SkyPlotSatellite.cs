@@ -44,9 +44,11 @@ public enum SkyPlotMarkerKind
 /// <param name="Kind">Which scale <paramref name="SignalStrength"/> is on.</param>
 /// <param name="Marker">How it is drawn.</param>
 /// <param name="Description">
-/// The full sentence §9.10.2 requires the marker's automation peer to carry — "PRN 19, elevation 65
-/// degrees, azimuth 52 degrees, C/N 49 of 55, tracked." Supplied by the caller rather than built
-/// here, so the plot and the table say the same thing about the same satellite.
+/// The full sentence §9.10.2 requires the marker's automation peer to carry. The specification's
+/// example reads "PRN 19, elevation 65 degrees, azimuth 52 degrees, carrier to noise 49, tracked.";
+/// the application's own sentence names the scale as well, as "C/N 49 of 55", which is
+/// <c>SignalStrengthScale</c>'s wording. Supplied by the caller rather than built here, so the plot
+/// and the table say the same thing about the same satellite.
 /// </param>
 public sealed record SkyPlotSatellite(
     int Prn,

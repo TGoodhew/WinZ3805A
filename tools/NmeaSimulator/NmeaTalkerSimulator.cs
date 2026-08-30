@@ -37,8 +37,9 @@ public enum FixPhase
 /// three phases a cold start moves through; satellites drift across the sky slowly enough to be
 /// plausible and fast enough to be visible; time advances with the injected clock, so a test can
 /// step it. <b>What it does not pretend to be:</b> a particular product. There are no proprietary
-/// sentences, no lock or holdover state — NMEA has none — and no serial quirks. The BG7TBL's own
-/// behaviour is #309's to capture, and this is the thing that capture will be compared against.
+/// sentences, no lock or holdover state — NMEA has none — and no serial quirks. No real talker
+/// has been captured (#309, the BG7TBL, was deferred: its port carries no NMEA); when one is,
+/// this is the thing that capture will be compared against.
 /// </para>
 /// <para>
 /// Deterministic for a given clock and options: two runs from the same start produce the same

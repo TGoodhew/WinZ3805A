@@ -26,7 +26,8 @@ namespace WinZ3805A.Device.Transport;
 /// announces itself the moment DTR is asserted.
 /// </para>
 /// <para>
-/// All four §6.4 surprise-removal mitigations live here. In particular this type never subscribes to
+/// The three code mitigations of §6.4's surprise-removal list live here; the fourth is not code but
+/// <c>docs/manual-qa.md</c> §1. In particular this type never subscribes to
 /// <c>DataReceived</c>, <c>ErrorReceived</c> or <c>PinChanged</c>: those events raise on an internal
 /// thread that can take the process down when a USB-serial adapter is pulled, which is the P0-14 case.
 /// Nor is a read wrapped in <c>Task.Run</c> — the pump is a genuine async loop and burns no thread.
@@ -79,8 +80,10 @@ public sealed class SerialTransport : ITransport
     /// <inheritdoc />
     /// <remarks>
     /// <see cref="SerialPort.Open"/> is synchronous and has no async form. It is quick on a healthy
-    /// port and slow on a sick one, so callers open off the UI thread; wrapping it here would only
-    /// hide that.
+    /// port and slow on a sick one, and it runs on whichever thread awaits <see cref="OpenAsync"/>;
+    /// wrapping it here would only hide that. Today that thread is the connection dialog's UI thread
+    /// for the first open of a connect or an auto-detect walk — nothing in the connect chain moves
+    /// off it before the open — which is a known gap (#316 audit); a reconnect runs on the pool.
     /// </remarks>
     public ValueTask OpenAsync(CancellationToken cancellationToken = default)
     {

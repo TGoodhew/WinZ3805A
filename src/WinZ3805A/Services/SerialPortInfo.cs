@@ -63,10 +63,21 @@ public sealed record SerialPortInfo
     /// </summary>
     /// <param name="architecture">The process architecture, which changes the likely cause.</param>
     /// <remarks>
+    /// <para>
     /// §6.1 singles ARM64 out for a reason: several common USB-serial chipsets ship no ARM64 driver,
     /// so on that architecture an empty list is far more often a driver that never loaded than a
     /// cable that is not plugged in. Naming that saves the user from checking the hardware they can
     /// see instead of the driver they cannot.
+    /// </para>
+    /// <para>
+    /// <b>The only caller passes a value that can never select it</b> (#316 audit finding). §6.1's
+    /// x64-only package runs under emulation on ARM64, where
+    /// <c>RuntimeInformation.ProcessArchitecture</c> is always <c>X64</c>, so
+    /// <c>SerialPortEnumerator.EmptyMessage</c> never reaches the ARM64 branch (plain text, not a
+    /// cref: this file is linked into the test project without the enumerator);
+    /// <c>RuntimeInformation.OSArchitecture</c> is the reading that would. The tests call this
+    /// method with <c>Arm64</c> directly, which is why the branch stayed green.
+    /// </para>
     /// </remarks>
     public static string NoPortsMessage(Architecture architecture) => architecture switch
     {

@@ -18,8 +18,8 @@ namespace WinZ3805A.Services;
 /// </para>
 /// <para>
 /// Disposal order is the poller first, then the session. The poller issues commands through the
-/// session, and tearing the session down underneath an in-flight sweep is exactly the race the
-/// §7.2 reconnect policy was written to avoid.
+/// session, and tearing the session down underneath an in-flight sweep is exactly the race §7.2's
+/// one-transaction-at-a-time rule exists to make impossible.
 /// </para>
 /// </remarks>
 public sealed class DeviceContext : IAsyncDisposable
@@ -65,7 +65,8 @@ public sealed class DeviceContext : IAsyncDisposable
     /// Already a constructor parameter and previously consumed only by <see cref="PowerUp"/>.
     /// Exposed so a page that needs the time — the CSV export stamps its suggested file name with
     /// it — takes the same injected clock as everything else rather than reaching for
-    /// <c>DateTime.Now</c>, which §12 forbids and which a test could not pin.
+    /// <c>DateTime.Now</c>, which §12 forbids in the Device library, which the app avoids by
+    /// choice, and which a test could not pin.
     /// </remarks>
     public TimeProvider TimeProvider { get; }
 

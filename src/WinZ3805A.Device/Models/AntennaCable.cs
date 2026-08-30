@@ -61,7 +61,12 @@ public sealed record AntennaCable
         Source = "§10.7, velocity factor 0.85",
     };
 
-    /// <summary>The presets, in the order §10.7 lists them.</summary>
+    /// <summary>The presets.</summary>
+    /// <remarks>
+    /// §10.7 lists RG-213, LMR-400 and Custom, in that order, and the first two lead here. Belden
+    /// 9913 is offered as well, from the guide's own second recommendation (see the remarks above);
+    /// §10.7 does not yet list it.
+    /// </remarks>
     public static IReadOnlyList<AntennaCable> Presets { get; } = [Rg213, Lmr400, Belden9913];
 
     /// <summary>

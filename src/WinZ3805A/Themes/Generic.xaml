@@ -540,18 +540,18 @@
                             </VisualStateGroup>
 
                             <!--
-                                §9.9's icon table gives the medallion glyph two sizes: 40 compact and
-                                56 standard. 56 is the 160 px medallion the main window shows normally;
-                                40 is the 64 px one it shows in §10.3's compact mode.
+                                The glyph carries no FontSize here. StatusMedallion.ApplySize sets it
+                                from MedallionRingMath.GlyphSize, which is 56/160 of the diameter: 56
+                                in the 160 px medallion the main window shows normally, 34 in the
+                                Overview page's 96 px one, and 22 in the 64 px one §10.3's compact
+                                mode shows — a ratio rather than a table, so a size added later
+                                cannot arrive without a glyph size (#48).
 
-                                Compact was 28 until #54, which is when compact mode acquired a
-                                keyboard route and anyone was likely to use it. 40 in a 64 px
-                                medallion is proportionally larger than 56 in a 160 px one, and that
-                                is deliberate rather than an oversight in the table: compact mode is
-                                the ambient-legibility mode, and G1 measures it at two metres.
-
-                                Standard, at 36, is a size nothing currently asks for. It is left
-                                alone rather than adjusted to match a rule §9.9 does not state for it.
+                                §9.9's icon table still gives the glyph two fixed sizes, 40 compact
+                                and 56 standard, and §10.3's compact wireframe draws "glyph 40 px".
+                                The control does not implement the 40: at 64 px the ratio gives 22.
+                                That mismatch between the table and the control was surfaced by the
+                                #316 audit and is recorded here, not resolved.
                             -->
                         </VisualStateManager.VisualStateGroups>
                     </Grid>

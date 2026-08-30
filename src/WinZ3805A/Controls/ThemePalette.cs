@@ -107,9 +107,9 @@ public static class ThemePalette
     /// <summary>The §9.4.3 brush token that carries a severity's colour.</summary>
     /// <remarks>
     /// The one place the enum is mapped to a resource key. Every consumer that needs a severity's
-    /// actual colour — currently only the tray, since everything on screen uses
-    /// <c>SeverityPill</c> and a <c>ThemeResource</c> — goes through this rather than spelling the
-    /// key out.
+    /// actual colour — the tray icon, and <c>AccentGuard</c> reading caution and critical to check
+    /// an accent's clearance from them, since everything on screen uses <c>SeverityPill</c> and a
+    /// <c>ThemeResource</c> — goes through this rather than spelling the key out.
     /// </remarks>
     public static string BrushKey(Severity severity) => severity switch
     {

@@ -6,7 +6,9 @@ namespace WinZ3805A.Services;
 /// <remarks>
 /// <b>Disconnected is not the same state as Faulted</b>, and §9.11 treats them differently on
 /// purpose: an intentional disconnect is informational, while a link that dropped underneath the
-/// application is critical and gets a retry countdown with both "retry now" and "stop retrying".
+/// application is critical — <see cref="ConnectionStatus.Reconnecting"/> while the §7.2 backoff is
+/// counting down, with both "retry now" and "stop retrying", and
+/// <see cref="ConnectionStatus.Faulted"/> once it no longer is.
 /// Collapsing the two into one "not connected" is the shortcut that makes an app cry wolf.
 /// </remarks>
 public enum ConnectionStatus

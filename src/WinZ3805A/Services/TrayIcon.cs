@@ -98,9 +98,10 @@ public sealed class TrayIcon : IDisposable
 
     /// <summary>Raised when Exit is chosen from the menu (#280).</summary>
     /// <remarks>
-    /// The only way out of the application once the close button no longer exits. Raised rather
-    /// than acted on here: this class knows about an icon, not about a service provider or a
-    /// receiver that may be mid-transaction.
+    /// One of the two ways out of the application once the close button no longer exits — §10.3.1
+    /// requires an Exit under Settings → Advanced as well, because Windows 11 puts a new icon in
+    /// the hidden overflow. Raised rather than acted on here: this class knows about an icon, not
+    /// about a service provider or a receiver that may be mid-transaction.
     /// </remarks>
     public event EventHandler? ExitRequested;
 
@@ -219,14 +220,16 @@ public sealed class TrayIcon : IDisposable
 
     /// <summary>Builds an <c>HICON</c> from a premultiplied BGRA buffer.</summary>
     /// <remarks>
+    /// <para>
     /// A top-down DIB — the negative height — because the raster produces the top row first, and a
     /// bottom-up section would show every shape mirrored. The mask bitmap is required by
     /// <c>ICONINFO</c> and ignored for a 32-bit colour bitmap, so it is left blank.
-    /// </remarks>
-    /// <remarks>
+    /// </para>
+    /// <para>
     /// <b>Internal rather than private since #274.</b> The taskbar overlay builds an HICON from the
     /// same raster, and two copies of this would be two chances to get the top-down DIB wrong in
     /// different ways.
+    /// </para>
     /// </remarks>
     internal static nint CreateIcon(uint[] pixels, int size)
     {
@@ -268,7 +271,8 @@ public sealed class TrayIcon : IDisposable
     /// <b>This class had no menu until close-to-tray landed, and the reason it had none was
     /// good</b> - "there is nothing to put on one that the window does not already do". That stops
     /// being true the moment the close button no longer exits, because an application with no
-    /// window and no menu cannot be quit except through Task Manager. The menu exists to carry
+    /// window and no menu cannot be quit from the notification area at all (§10.3.1's other exit,
+    /// the button on Settings → Advanced, needs the window back first). The menu exists to carry
     /// <i>Exit</i>; <i>Open</i> is there because one item is a worse affordance than two, and it
     /// duplicates the left-click that already works.
     /// </para>

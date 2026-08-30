@@ -201,26 +201,6 @@ public sealed class ReadoutTile : Control
     private int ReserveLength() =>
         GetTemplateChild(ReserveValueRunPart) is Run run ? run.Text?.Length ?? 0 : 0;
 
-    /// <summary>Resolves a theme brush, or null when the key is absent.</summary>
-    /// <remarks>
-    /// The indexer on <c>ResourceDictionary</c> throws on a missing key, and this is called during
-    /// the first layout pass, so a typo would be a startup crash rather than a visible defect.
-    /// </remarks>
-    /// <summary>
-    /// Centres the caption on the decimal axis rather than on the tile.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The axis sits at the right edge of the reserved integer column, which is not the middle of
-    /// the tile — the fractional side and the unit are narrower than the integer side on every
-    /// quantity here. Centring the caption on the tile therefore puts it off the point it names.
-    /// </para>
-    /// <para>
-    /// A centred element shifts right by half of any left margin, so the correction is twice the
-    /// offset. Applied as a margin rather than a translation so it participates in layout and
-    /// cannot overlap its neighbours.
-    /// </para>
-    /// </remarks>
     /// <summary>
     /// Places the caption on the decimal axis, once every child has its final size.
     /// </summary>
@@ -235,7 +215,9 @@ public sealed class ReadoutTile : Control
     /// </para>
     /// <para>
     /// The offset is applied as a render transform, which runs after arrange and changes no desired
-    /// size — so this cannot invalidate the layout that produced its inputs, and needs no guard.
+    /// size — so this cannot invalidate the layout that produced its inputs, and needs no guard. An
+    /// earlier version applied it as a margin so it would participate in layout; the comment on the
+    /// transform in <see cref="AlignLabelToAxis"/> records why that could not stand.
     /// </para>
     /// </remarks>
     protected override Size ArrangeOverride(Size finalSize)
@@ -315,6 +297,11 @@ public sealed class ReadoutTile : Control
         shift.X = offset;
     }
 
+    /// <summary>Resolves a theme brush, or null when the key is absent.</summary>
+    /// <remarks>
+    /// The indexer on <c>ResourceDictionary</c> throws on a missing key, and this is called during
+    /// the first layout pass, so a typo would be a startup crash rather than a visible defect.
+    /// </remarks>
     private static Brush? Lookup(string key) =>
         Application.Current.Resources.TryGetValue(key, out object? found) ? found as Brush : null;
 

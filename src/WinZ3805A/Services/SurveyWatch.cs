@@ -35,8 +35,9 @@ public enum SurveyNote
 /// </summary>
 /// <remarks>
 /// <para>
-/// A survey runs for about two hours and is polled every second, so recording the state would
-/// produce some seven thousand identical lines and bury the four that matter. This records
+/// A survey runs for about two hours and its progress arrives with the full status screen — §7.3's
+/// 10 s tier — so recording the state would produce some seven hundred near-identical lines and
+/// bury the four that matter. This records
 /// <b>transitions</b>: it began, it passed another tenth, it stalled and why, it picked up again,
 /// it finished.
 /// </para>

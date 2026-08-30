@@ -1,15 +1,16 @@
 ﻿namespace WinZ3805A.Controls;
 
 /// <summary>
-/// Draws §9.4.3's severity shapes as pixels, for the P1-10 tray icon.
+/// Draws §9.4.3's severity shapes as pixels, for the P1-10 tray icon and the #274 taskbar overlay.
 /// </summary>
 /// <remarks>
 /// <para>
 /// <b>Why this is not XAML.</b> Every other severity surface in the application goes through
-/// <c>SeverityPill</c>, and §9.13 is emphatic that it should. The tray is the one place that cannot:
-/// the shell wants an <c>HICON</c>, which is a block of pixels, and there is no path from a
-/// <c>Path</c> in a visual tree to one. So the shapes are restated here — the same circle, triangle,
-/// hexagon and ring, from the same table — and rasterised directly.
+/// <c>SeverityPill</c>, and §9.13 is emphatic that it should. The shell's two surfaces — the tray
+/// icon, and since #274 the taskbar overlay — are the places that cannot: the shell wants an
+/// <c>HICON</c>, which is a block of pixels, and there is no path from a <c>Path</c> in a visual
+/// tree to one. So the shapes are restated here — the same circle, triangle, hexagon and ring, from
+/// the same table — and rasterised directly.
 /// </para>
 /// <para>
 /// <b>The shape is doing the work, not the colour.</b> §9.4.3's rule applies everywhere, but in the
@@ -97,9 +98,11 @@ public static class TrayIconRaster
     /// Whether a point in the -1..1 square falls inside the shape §9.4.3 gives this severity.
     /// </summary>
     /// <remarks>
-    /// The shapes are inset to 0.92 rather than filling the square. A tray icon is composited
-    /// against a strip whose height it nearly matches, and a triangle whose apex touches the top
-    /// edge reads as clipped.
+    /// The circle, ring and circled i are inset to 0.92 rather than filling the square, and the
+    /// triangle's apex sits on the same inset. A tray icon is composited against a strip whose
+    /// height it nearly matches, and a triangle whose apex touches the top edge reads as clipped.
+    /// The triangle's base reaches 0.95 and the hexagon's circumradius is 0.96; both are noted
+    /// where they are declared.
     /// </remarks>
     private static bool IsInside(Severity severity, double x, double y) => severity switch
     {
@@ -146,7 +149,10 @@ public static class TrayIconRaster
     private static (double X, double Y)[] Triangle { get; } =
         [(0, -0.92), (-0.95, 0.72), (0.95, 0.72)];
 
-    /// <summary>A regular hexagon, flat-topped, inscribed in the 0.92 circle.</summary>
+    /// <summary>
+    /// A regular hexagon with a vertex at the top, circumradius 0.96 — a little past the 0.92 inset
+    /// the round shapes use.
+    /// </summary>
     private static (double X, double Y)[] Hexagon { get; } = Regular(6, -Math.PI / 2, 0.96);
 
     /// <summary>The vertices of a regular polygon.</summary>

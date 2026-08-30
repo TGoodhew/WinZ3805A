@@ -31,8 +31,8 @@ public sealed record Transaction
     public required TransactionOutcome Outcome { get; init; }
 
     /// <summary>
-    /// The response lines, echo removed and line terminators stripped. Empty for a setter, which
-    /// §7.2 says answers with the prompt alone.
+    /// The response lines, echo removed and line terminators stripped. Empty for a setter, and for
+    /// a command the receiver rejected — §7.2 says both answer with the prompt alone.
     /// </summary>
     public required IReadOnlyList<string> Lines { get; init; }
 

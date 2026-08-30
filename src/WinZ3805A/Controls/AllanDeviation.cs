@@ -1,6 +1,17 @@
 namespace WinZ3805A.Controls;
 
 /// <summary>
+/// One point on a stability curve: the averaging time, the deviation, and how well founded it is.
+/// </summary>
+/// <param name="Tau">The averaging time τ, in seconds.</param>
+/// <param name="Deviation">σ<sub>y</sub>(τ), dimensionless.</param>
+/// <param name="Pairs">
+/// How many second differences the estimate averaged. Confidence goes roughly as 1/√N, so this is
+/// part of the reading rather than a footnote to it.
+/// </param>
+public readonly record struct AllanPoint(double Tau, double Deviation, int Pairs);
+
+/// <summary>
 /// §13's Allan deviation over the logged 1 PPS time-interval series (P2-3, #63).
 /// </summary>
 /// <remarks>
@@ -29,17 +40,6 @@ namespace WinZ3805A.Controls;
 /// below is what converts one to the other, so nothing here should be handed a frequency series.
 /// </para>
 /// </remarks>
-/// <summary>
-/// One point on a stability curve: the averaging time, the deviation, and how well founded it is.
-/// </summary>
-/// <param name="Tau">The averaging time τ, in seconds.</param>
-/// <param name="Deviation">σ<sub>y</sub>(τ), dimensionless.</param>
-/// <param name="Pairs">
-/// How many second differences the estimate averaged. Confidence goes roughly as 1/√N, so this is
-/// part of the reading rather than a footnote to it.
-/// </param>
-public readonly record struct AllanPoint(double Tau, double Deviation, int Pairs);
-
 public static class AllanDeviation
 {
     /// <summary>

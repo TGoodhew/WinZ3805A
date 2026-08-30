@@ -124,7 +124,7 @@
 
                 These eight solve both at once, plus three constraints the first attempts got
                 wrong — see §9.4.4. build/Test-SeriesSeparation.ps1 holds them to it, and
-                build/derive-series-palette.py records how they were found.
+                build/palette/derive.py records how they were found.
 
                 A hue is shared between the themes, so series 5 is the teal one in both. Light
                 is darker and more muted than the ramp it replaces; that is forced by the floor,

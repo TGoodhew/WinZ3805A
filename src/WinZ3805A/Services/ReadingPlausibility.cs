@@ -8,7 +8,7 @@ namespace WinZ3805A.Services;
 /// <remarks>
 /// <para>
 /// #209 established the rule and the reason: a sweep whose sync state is not a state this receiver
-/// reports is somebody else's reply, and storing it puts values in a durable seven-day series the
+/// reports is somebody else's reply, and storing it puts values in a durable 56-day series the
 /// instrument cannot produce. It also considered a range check and deliberately did not use one —
 /// the sweep that prompted it carried an EFC of <b>+2 %</b>, inside the oscillator's control range
 /// and indistinguishable from a real reading by magnitude alone.

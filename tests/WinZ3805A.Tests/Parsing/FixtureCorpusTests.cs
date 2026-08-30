@@ -88,14 +88,17 @@ public class FixtureCorpusTests
     /// the very directory it fills with fixtures, and the corpus globs <c>*.txt</c> through every
     /// subdirectory — so the log was collected as a screen and passed. Caught on 27 Aug by
     /// dry-running the harness against the receiver before the sitting; the harness now writes
-    /// <c>.log</c>, and this makes the next such file fail loudly rather than pad the count.
+    /// <c>capture-log.md</c> (#221 — <c>.log</c> was tried first and is gitignored, so the
+    /// provenance never reached the repository), and this makes the next such file fail loudly
+    /// rather than pad the count.
     /// </para>
     /// <para>
     /// The bar is deliberately low. A screen is at least a few hundred bytes and states the mode
     /// the receiver is in, and both are true of every state §11.1 describes — including the four
-    /// #185 exists to capture, none of which has been seen yet. Anything narrower would be
-    /// asserting what a screen says, which is <see cref="StatusScreenParserTests"/>'s business
-    /// against a capture someone has read.
+    /// #185 exists to capture, of which power-up, acquiring and holdover have since been seen and
+    /// only the health-monitor failure has not. Anything narrower would be asserting what a screen
+    /// says, which is <see cref="StatusScreenParserTests"/>'s business against a capture someone
+    /// has read.
     /// </para>
     /// </remarks>
     [Theory]

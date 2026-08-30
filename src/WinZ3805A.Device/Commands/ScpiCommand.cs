@@ -8,18 +8,20 @@ namespace WinZ3805A.Device.Commands;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The shape follows §8.1, with two members appended. §8.1's record predates §8.3's "stronger
-/// variant" rule and §8.5's opt-in queries, neither of which it has anywhere to record, so
-/// <see cref="RequiresAcknowledgement"/> and <see cref="IsExperimental"/> are added at the end
-/// where they are source-compatible with the declared shape. <see cref="SuccessText"/> is a third
-/// of the same kind, required by §9.11's rule that a verb keeps its identity from button to dialog
-/// to result and unobtainable from the other members, since no rule turns "Force holdover" into
-/// "Forced holdover". All three are noted against the specification rather than resolved silently
-/// (#85).
+/// The shape is §8.1's. Four of its members arrived after the record was first declared —
+/// <see cref="RequiresAcknowledgement"/> for §8.3's "stronger variant" rule,
+/// <see cref="IsExperimental"/> for §8.5's opt-in queries, <see cref="SuccessText"/> for §9.11's
+/// rule that a verb keeps its identity from button to dialog to result (no rule turns "Force
+/// holdover" into "Forced holdover"), and <see cref="ValueLabel"/> for §10.6's composite value —
+/// and were appended at the end, where they are source-compatible with the original shape. §8.1
+/// has declared all four since its 21 Aug 2026 correction (#85).
 /// </para>
 /// <para>
-/// Instances exist only inside <see cref="CommandCatalog"/>. Nothing else constructs one, because
-/// a command that did not come from the catalog is exactly what §8.1 exists to prevent.
+/// Instances are constructed only by a driver's allowlist — <see cref="CommandCatalog"/> for the
+/// SmartClock family, <c>NmeaDriver</c> for NMEA 0183 — and by the test doubles that stand in for
+/// one. Nothing else constructs one, because a command that did not come from the current driver's
+/// allowlist is exactly what §8.1 exists to prevent, and the session checks that at the point of
+/// send.
 /// </para>
 /// </remarks>
 /// <param name="Mnemonic">
@@ -51,7 +53,7 @@ namespace WinZ3805A.Device.Commands;
 /// </param>
 /// <param name="RequiresAcknowledgement">
 /// True for the four commands §9.7.4 names as strong variants, where a checkbox gates the confirm
-/// button. Not in §8.1's record; see the remarks.
+/// button. Declared in §8.1 since #85; see the remarks.
 /// </param>
 /// <param name="ValueLabel">
 /// What to call the whole value in a confirmation dialog, when the command takes several
@@ -65,7 +67,7 @@ namespace WinZ3805A.Device.Commands;
 /// </param>
 /// <param name="IsExperimental">
 /// True for the §8.5 queries, which are undocumented, read-only, off by default, and run only on
-/// an explicit click. Not in §8.1's record; see the remarks.
+/// an explicit click. Declared in §8.1 since #85; see the remarks.
 /// </param>
 public sealed record ScpiCommand(
     string Mnemonic,

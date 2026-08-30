@@ -48,7 +48,7 @@ public static class TrendDecimation
     /// </summary>
     /// <remarks>
     /// <para>
-    /// §49's lock-state shading. Separate from <see cref="ToColumns"/> because a state is not a
+    /// #49's lock-state shading. Separate from <see cref="ToColumns"/> because a state is not a
     /// number: two states in one column cannot be averaged, and the honest reduction is "the state
     /// that covered most of this column", not a mean of an enumeration.
     /// </para>
@@ -275,7 +275,7 @@ public static class TrendDecimation
     /// </para>
     /// <para>
     /// Bounds are snapped outward to a round step of about a quarter of the span, so the three
-    /// labels §9.1 allows land on numbers a reader can subtract.
+    /// labels §9.10.2's <c>TrendChart</c> row allows land on numbers a reader can subtract.
     /// </para>
     /// </remarks>
     /// <param name="columns">The decimated columns.</param>

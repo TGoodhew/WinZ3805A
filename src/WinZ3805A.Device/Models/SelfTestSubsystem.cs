@@ -14,11 +14,13 @@ public sealed record SelfTestSubsystem(string Keyword, string DisplayName)
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>Probed, not guessed.</b> Neither the Z3801A nor the 58503A manual documents
-    /// <c>:DIAG:TEST?</c>'s parameter at all — the command appears only in the error list for
-    /// <c>-330</c>, and §10.9's eleven names had no stated source. Each was sent to the live
-    /// receiver on 28 Aug 2026 and all twelve were accepted, which is what turned this from a
-    /// plausible list into a fact.
+    /// <b>Probed, not guessed.</b> The Z3801A guide does not document <c>:DIAG:TEST?</c>'s
+    /// parameter at all — there the command appears only in the error list for <c>-330</c>. The
+    /// 58503A/59551A guide does, and disagrees with itself: its Quick Reference (4-9) lists
+    /// twelve keywords and its Command Reference (5-54) eleven, omitting <c>IREFerence</c>, and
+    /// §10.9's eleven names had no stated source. Each was sent to the live receiver on
+    /// 28 Aug 2026 and all twelve were accepted, which is what turned this from a plausible list
+    /// into a fact.
     /// </para>
     /// <para>
     /// The control that made the result mean something was an invalid keyword sent first:

@@ -38,6 +38,15 @@ public sealed record ConnectionStatusChanged(ConnectionStatus Status, string? De
 /// to <see cref="ConnectionStatus.Reconnecting"/> and retries on the §7.2 backoff rather than
 /// letting the failure escape.
 /// </para>
+/// <para>
+/// <b>Two link styles, one session</b> (#310). A query/response family is served through
+/// <see cref="LineProtocol"/>. A broadcast family — one that talks unprompted, an NMEA 0183 talker
+/// being the shipped case — is claimed by what its driver's <see cref="IReceiverDriver.Overhear"/>
+/// makes of the lines the synchronise step heard, before <c>*IDN?</c> is ever sent to it; its
+/// driver's <see cref="IReceiverDriver.Link"/> says which kind it is, and from recognition on it is
+/// served from a <see cref="BroadcastListener"/> and never written to. The synchronise step's
+/// <c>*CLS</c> is the one write such a family ever receives (§7.2's scope note).
+/// </para>
 /// </remarks>
 public sealed class DeviceSessionService : IAsyncDisposable
 {
@@ -135,12 +144,15 @@ public sealed class DeviceSessionService : IAsyncDisposable
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>Every</b> transaction: polls, user commands, the connect sequence, successes, timeouts
-    /// and faults alike. §10.11 says the transcript shows all traffic, and a transcript that
-    /// quietly omitted the failures would be worthless for the one job it has.
+    /// Every transaction the pump serves — polls, user commands, refusals, successes, timeouts and
+    /// faults alike — plus the connect sequence's identity read, or the overheard listen that
+    /// stands in for it on a broadcast link (#310). The synchronise step's <c>*CLS</c> is not
+    /// published. §10.11 says the transcript shows all traffic, and a transcript that quietly
+    /// omitted the failures would be worthless for the one job it has.
     /// </para>
     /// <para>
-    /// Raised on the pump thread, not the UI thread. A handler that touches XAML must marshal.
+    /// Raised off the UI thread — on the pump for served commands, on the connect path for the
+    /// identity entry. A handler that touches XAML must marshal.
     /// </para>
     /// </remarks>
     public event EventHandler<TranscriptEntry>? TransactionCompleted;
@@ -150,11 +162,13 @@ public sealed class DeviceSessionService : IAsyncDisposable
 
     /// <summary>The driver for the receiver on this port (#122).</summary>
     /// <remarks>
-    /// Selected where the identity is read (#287): the connect sequence probes neutrally, then
-    /// picks the first registered driver whose <see cref="IReceiverDriver.Recognises"/> claims the
-    /// answer, falling back to the first registered when none does. Callers should read it per use
-    /// rather than caching it, because a reconnect re-selects — the receiver on the port can have
-    /// been swapped while the link was down.
+    /// Selected where the identity is read (#287, #310): the connect sequence listens first and
+    /// hands the lines it hears to every driver's <see cref="IReceiverDriver.Overhear"/>; only when
+    /// nothing claims them does it probe <c>*IDN?</c> neutrally. Either way it then picks the first
+    /// registered driver whose <see cref="IReceiverDriver.Recognises"/> claims the identity, falling
+    /// back to the first registered when none does. Callers should read it per use rather than
+    /// caching it, because a reconnect re-selects — the receiver on the port can have been swapped
+    /// while the link was down.
     /// </remarks>
     public IReceiverDriver Driver => _driver;
 
@@ -168,7 +182,11 @@ public sealed class DeviceSessionService : IAsyncDisposable
     /// </remarks>
     public IReadOnlyList<SerialSettings> AutoDetectPlan { get; }
 
-    /// <summary>The identity string the receiver answered <c>*IDN?</c> with, once connected.</summary>
+    /// <summary>
+    /// The identity string the receiver answered <c>*IDN?</c> with — or, for a family overheard
+    /// before it was asked (#310), the identity its driver claimed, in the same four-field shape —
+    /// once connected.
+    /// </summary>
     public string? Identity { get; private set; }
 
     /// <summary>
@@ -176,8 +194,9 @@ public sealed class DeviceSessionService : IAsyncDisposable
     /// </summary>
     /// <remarks>
     /// The raw string is kept alongside rather than replaced: §11.1's rule is that an unparseable
-    /// field becomes null and the reader still gets what the device said. Diagnostics shows the raw
-    /// line, so a model this build has never heard of loses nothing.
+    /// field becomes null and the reader still gets what the device said. The log records the raw
+    /// line; nothing on screen shows it yet, so a model this build has never heard of loses
+    /// nothing that was ever displayed.
     /// </remarks>
     public DeviceIdentity? ParsedIdentity { get; private set; }
 
@@ -202,9 +221,10 @@ public sealed class DeviceSessionService : IAsyncDisposable
     /// </summary>
     /// <remarks>
     /// The connect path deliberately returns <see langword="false"/> rather than throwing, because
-    /// auto-detect walks eight settings and seven of them are expected to fail. That collapses two
-    /// outcomes §9.11 gives different copy to: a port that answered nothing, and a port Windows
-    /// would not open at all. This carries the distinction out without reintroducing the exception —
+    /// auto-detect walks every registered driver's settings — ten in the shipped composition — and
+    /// all but one are expected to fail. That collapses two outcomes §9.11 gives different copy
+    /// to: a port that answered nothing, and a port Windows would not open at all. This carries the
+    /// distinction out without reintroducing the exception —
     /// <see cref="TransportFault.AccessDenied"/> is the "No permission" row, and
     /// <see cref="TransportFault.PortNotFound"/> on ARM64 is usually the missing driver of §6.1.
     /// </remarks>
@@ -295,7 +315,9 @@ public sealed class DeviceSessionService : IAsyncDisposable
     }
 
     /// <summary>
-    /// Walks the §10.12 sequence until a port answers with a plausible identity.
+    /// Walks <see cref="AutoDetectPlan"/> — §10.12's sequence and every other registered driver's,
+    /// in registration order — until the port answers with a plausible identity or is overheard
+    /// saying one (#310).
     /// </summary>
     /// <param name="portName">The port to probe.</param>
     /// <param name="progress">Reports each combination as it is tried, for the dialog's progress line.</param>
@@ -303,8 +325,9 @@ public sealed class DeviceSessionService : IAsyncDisposable
     /// <returns>The settings that worked, or <see langword="null"/> if none did.</returns>
     /// <remarks>
     /// Most-likely-first, so a Z3805A answers on the first attempt and a Z3801A on the second, and
-    /// the eight-combination worst case is only reached by a receiver configured unusually. Each
-    /// probe opens the port afresh: a wrong baud rate leaves framing errors behind, and reusing the
+    /// the worst case — every registered driver's settings, ten in the shipped composition — is
+    /// only reached by a receiver configured unusually or a port with nothing on it. Each probe
+    /// opens the port afresh: a wrong baud rate leaves framing errors behind, and reusing the
     /// handle carries them into the next attempt.
     /// </remarks>
     public async Task<SerialSettings?> AutoDetectAsync(
@@ -339,7 +362,7 @@ public sealed class DeviceSessionService : IAsyncDisposable
                 await TearDownAsync().ConfigureAwait(false);
 
                 // A port Windows will not open, or one that is not there, fails identically at
-                // every baud rate. Walking the remaining seven only delays the message §9.11 has
+                // every baud rate. Walking the rest of the plan only delays the message §9.11 has
                 // for that case, and its copy is nothing like "no receiver answered".
                 if (LastFault is TransportFault.AccessDenied or TransportFault.PortNotFound)
                 {
@@ -455,9 +478,10 @@ public sealed class DeviceSessionService : IAsyncDisposable
             // anything real is asked. Skipping this puts every subsequent reply one behind.
             //
             // The probe timeout rather than the 3 s default, here and for the identity below: this
-            // path is also the auto-detect inner loop, and at a wrong baud rate both transactions
-            // time out. Two seconds each keeps the eight-combination worst case near half a minute
-            // instead of most of one.
+            // path is also the auto-detect inner loop, and at a wrong baud rate every transaction in
+            // it times out — the listen, the *CLS it sends, and the identity probe. Two seconds each
+            // keeps a silent combination under ten seconds, and the walk is every registered
+            // driver's settings, ten in the shipped composition.
             Transaction heard = await _protocol.SynchroniseAsync(TransactionTimeouts.AutoDetectProbe, cancellationToken).ConfigureAwait(false);
 
             // #310: a receiver that talks unprompted has already said who it is by the time the
@@ -804,27 +828,13 @@ public sealed class DeviceSessionService : IAsyncDisposable
         }
     }
 
-    /// <remarks>
-    /// §7.2 gives the full status screen 15 s because ~1900 bytes at 9600 baud is about 2 s of wire
-    /// time alone, and the self-tests 30 s because they genuinely take that long. Everything else
-    /// gets the 3 s default.
-    /// </remarks>
-    /// <summary>
-    /// The §7.2 timeout for one command.
-    /// </summary>
-    /// <remarks>
-    /// <b>Delegates to <see cref="TransactionTimeouts.For"/> and must keep doing so.</b> This used
-    /// to carry its own switch — status screen by response format, self-test by a mnemonic prefix,
-    /// default for everything else — which was a second timeout policy beside the tested one, and
-    /// it silently diverged: <c>TransactionTimeouts</c> grew a class for the whole diagnostic log
-    /// and the session never consulted it, so a 15 kB read kept failing on a 3 s timeout while the
-    /// table said 60 s and its tests passed. One table, one lookup.
-    /// </remarks>
     /// <summary>How long to wait for a command, asked of the driver rather than of a static (#122).</summary>
     /// <remarks>
     /// These are measurements against one receiver, not conventions — the Z3805A's GPS self-test
     /// reached 24.0 s against a 30 s class — so which receiver is attached decides them. Routing
-    /// through the driver is what makes that true rather than merely intended.
+    /// through the driver is what makes that true rather than merely intended, and it keeps one
+    /// table and one lookup: a second timeout policy kept here once diverged silently from the
+    /// tested one.
     /// </remarks>
     private TimeSpan TimeoutFor(ScpiCommand command) => _driver.TimeoutFor(command.Mnemonic);
 
@@ -874,12 +884,15 @@ public sealed class DeviceSessionService : IAsyncDisposable
         _ = Task.Run(ReconnectLoopAsync, CancellationToken.None);
     }
 
+    /// <summary>
+    /// Retries the connection on §7.2's backoff — doubling from 2 s, capped at 30 s — until it
+    /// connects, is told to stop, or is disposed.
+    /// </summary>
     /// <remarks>
-    /// The backoff doubles from 2 s and caps at 30 s (§7.2). It waits through
-    /// <see cref="TimeProvider"/> rather than <c>Task.Delay</c> so a test can step a 30 s cap
-    /// instantly instead of waiting for it.
-    /// </remarks>
-    /// <remarks>
+    /// <para>
+    /// The wait goes through the <see cref="TimeProvider"/> overload of <c>Task.Delay</c>, so a
+    /// test can step a 30 s cap instantly instead of waiting for it.
+    /// </para>
     /// <para>
     /// <b>Every attempt is logged at Information, and that is deliberate</b> (#14). P0-14's only
     /// verification is a person unplugging the adapter once and watching what happens, and its
@@ -1067,7 +1080,6 @@ public sealed class DeviceSessionService : IAsyncDisposable
         StatusChanged?.Invoke(this, new ConnectionStatusChanged(status, detail));
     }
 
-    /// <summary>One queued command and the caller waiting on it.</summary>
     /// <summary>
     /// Exactly what goes on the wire for a command and its argument.
     /// </summary>
@@ -1105,6 +1117,7 @@ public sealed class DeviceSessionService : IAsyncDisposable
             TimeSpan.Zero,
             PromptStatus: null));
 
+    /// <summary>One queued command and the caller waiting on it.</summary>
     private sealed class PendingCommand(
         ScpiCommand command,
         string? argument,
