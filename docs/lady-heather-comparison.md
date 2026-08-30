@@ -17,7 +17,7 @@ evidence would produce spec amendments nobody could defend.
 | Source | Used for |
 |---|---|
 | **`heather.cfg` on this machine** — a real Lady Heather configuration file, with its own explanatory comments | Auto-detect order, display options, scripting and hex-send mechanisms, platform notes |
-| Project documentation and the published source tree | Receiver list, deviation statistics, log-file options, temperature control |
+| Project documentation (`heather.docx`) and the published source tree, both in the default Lady Heather install folder (`Heather\` under Program Files (x86)) on this machine | Receiver list, deviation statistics, log-file options, temperature control |
 
 **What could not be verified, and is therefore not claimed below:** the precise handling of
 destructive receiver commands. That is the most interesting half of the comparison for this project
@@ -28,17 +28,19 @@ guessed at.
 
 | Area | Lady Heather | WinZ3805A today | Specified, unbuilt |
 |---|---|---|---|
-| **Receiver coverage** | ~20 families: Trimble Thunderbolt/-E and TSIP, UCCM, Datum STARLOC II, NEC/STAR-4, Jupiter-T, Lucent KS24361, Motorola binary, NMEA, SiRF, u-blox UBX, Venus, Nortel SCPI, **Z3801A and compatible SCPI**, HP 5xxxx SCPI, NVS, Oscilloquartz, GPSD | SmartClock family only, behind `IReceiverDriver` since #122 | The driver seam exists and is documented; no second driver |
-| **Auto-detect** | Tries 9600:8:N:1, 115200:8:N:1, 57600:8:N:1, 19200:7:E:1; uses **19200:7:O:1** for the Z3801A specifically | Eight combinations, documented default first (§7.1) | — |
+| **Receiver coverage** | ~20 families: Trimble Thunderbolt/-E and TSIP, UCCM, Datum STARLOC II, NEC/STAR-4, Jupiter-T, Lucent KS24361, Motorola binary, NMEA, SiRF, u-blox UBX, Venus, Nortel SCPI, **Z3801A and compatible SCPI**, HP 5xxxx SCPI, NVS, Oscilloquartz, GPSD | The SmartClock family plus any generic NMEA 0183 talker (#310) — two drivers behind `IReceiverDriver` (#122, #287); the NMEA driver is proven against a simulator, not hardware | No second family on the bench (#309 closed, not planned); page gating for non-SmartClock families is #304 |
+| **Auto-detect** | Tries 9600:8:N:1, 115200:8:N:1, 57600:8:N:1, 19200:7:E:1 (per `heather.cfg`'s comment; the source tree's generic list has 19200:7:O:1); uses **19200:7:O:1** for the Z3801A specifically | Ten — the SmartClock's eight, documented default first (§7.1), plus the NMEA driver's 4800 and 38400 (#310) | — |
 | **Deviation statistics** | **ADEV, HDEV, MDEV and TDEV**, adapted from Tom Van Baak's `adev1.c` | **Overlapping ADEV only** (#63, shipped 28 Aug) with gap-aware segmentation and a pair count per τ | MDEV/TDEV/HDEV have **no §13 row** |
 | **Plotting** | Multi-trace on shared axes, keyboard-driven scaling and annotation | Single-series `TrendChart`, EFC and 1 PPS TI on separate axes, min/max decimation that preserves excursions | Multi-series requires §9.4.4's second channel first |
-| **Logging** | Configurable interval (default 1 s), optional comments, signal-level comments, optional timestamp header, tab **or comma** separator, reads its own older formats | CSV export (§9.7.5), plus a durable SQLite `trend.db` with retention and compaction | No interop with any external log format |
+| **Logging** | Configurable interval (default 1 s), optional comments, signal-level comments, optional timestamp header, tab **or comma** separator, reads its own older formats | CSV export (P0-13, P1-1; §10.7) and image export of the sky plot (OQ-D6), plus a durable SQLite `trend.db` with retention and compaction | No interop with any external log format |
 | **Satellite display** | Sky map, signal levels, constellation views | `SkyPlotControl` with polar plot, mask circle, signal-scaled markers, **plus a non-spatial list alternate carrying the same data** (A11Y-11) | — |
-| **Temperature / environment** | Temperature display to configurable precision, and **PID parameters for temperature control** | **Nothing** | **No §13 row at all** |
-| **Platform** | Windows, Linux, macOS; can reach a receiver over **TCP/IP**, local or internet | Windows 11 only, local serial only | Network transport has no row |
-| **Extensibility** | Keyboard scripting (`@` lines), **raw hex sent to the receiver** (`$` lines) | Advanced Console is a catalogue **picker**, never a text box (§8.1); six opt-in experimental queries, query-only, off by default | Deliberate divergence — see below |
-| **Interface** | Console-derived, keyboard-driven, very large single-file implementation | Native Fluent, mouse and keyboard, tokenised design system, eleven CI gates | — |
+| **Temperature / environment** | Temperature display to configurable precision, and **PID parameters for temperature control** | No temperature reading — only the opt-in temperature-*coefficient* query (§8.5) | **No §13 row at all** |
+| **Platform** | Windows, Linux, macOS; can reach a receiver over **TCP/IP**, local or internet | Windows 10 1809 and later, x64 (README › Supported platforms); local serial only | Network transport has no row |
+| **Extensibility** | Keyboard scripting (`@` lines), **raw hex sent to the receiver** (`$` lines) | Advanced Console is a catalogue **picker**, never a text box (§8.1 allowlist; §10.11 picker); six opt-in experimental queries, query-only, off by default | Deliberate divergence — see below |
+| **Interface** | Console-derived, keyboard-driven, very large implementation (about 2 MB of C++ across seven source files) | Native Fluent, mouse and keyboard, tokenised design system, the CI gates in `build/` | — |
 | **Accessibility** | Not a stated goal | Thirteen A11Y criteria, high contrast as a first-class theme, colour never the sole channel | — |
+| **Help** | — (not checked) | The user's guide opens in the application on `F1` (#312) | — |
+| **Ambient operation** | — (not checked) | Notification-area icon, lock and holdover notifications, compact mode — §9.1's premise of a window left running for weeks | — |
 
 ## Where this project is deliberately different
 
@@ -53,7 +55,7 @@ changing it.**
 
 **Accessibility is the other.** It is not a feature Lady Heather is missing so much as a different
 premise about who is using the program — and it is the premise that produced this project's most
-expensive defects and its eleven gates.
+expensive defects and its CI gates.
 
 ## Candidate specification amendments
 
@@ -61,9 +63,11 @@ Each becomes its own issue if wanted. None is filed by this document.
 
 1. **Temperature monitoring — the clearest gap.** Lady Heather displays it and can run a PID loop
    against it; §13 has no row. Oscillator temperature is the dominant environmental influence on a
-   double-oven OCXO's drift, and #137's EFC drift analysis is trying to characterise exactly that
-   without it. **Whether the Z3805A even reports a temperature over SCPI is unverified** and should
-   be probed before anything is specified.
+   double-oven OCXO's drift, and #137's EFC drift analysis (shipped 20 Aug) characterises exactly
+   that without it. **The SmartClock reports no temperature over SCPI** — verified under #137 (see
+   `EfcDrift.cs`): the only documented oscillator node is the EFC itself, and the temperature
+   *coefficient* query is a coefficient, not a reading — so a temperature row needs an external
+   sensor or a family that reports one.
 2. **MDEV and TDEV alongside ADEV.** #63 delivers overlapping ADEV. MDEV separates white from
    flicker phase noise, which ADEV alone cannot, and TDEV is the natural statistic for a timing
    receiver. The estimator already segments on gaps, so the additional work is arithmetic rather
@@ -81,8 +85,8 @@ Each becomes its own issue if wanted. None is filed by this document.
 
 - **Raw hex send, or a free-text command box.** See above; it is the thing §8.1 exists to prevent.
 - **Higher baud rates.** Lady Heather auto-detects 115200 and 57600 for other receiver families;
-  the SmartClock family tops out at 19200, so §7.1's list is complete for the hardware this
-  application supports.
+  the SmartClock family tops out at 19200 and NMEA 0183 at 38400, both in §7.1, so nothing this
+  application supports needs 57600 or 115200.
 - **Reproducing the console layout.** §1's premise is that a native surface beats a reproduction of
   a terminal screen. Having looked at what the terminal screen actually offers, that premise holds —
   the density is real, but it is achieved with a keyboard vocabulary that has to be learned, and
@@ -94,6 +98,8 @@ Each becomes its own issue if wanted. None is filed by this document.
 Z3801A specifically. §7.1 described the Z3801A as *"commonly 19200-7-E-1"* until 28 Aug 2026, when
 the Z3801A user guide was found to give **odd** parity twice and the order was corrected under #64.
 
-The incumbent agrees, from a completely independent direction. It also shows where the even-parity
-folklore probably came from: it is in the **generic** auto-detect list, which serves the other SCPI
-families, not the Z3801A entry.
+The incumbent agrees, from a completely independent direction. It may also show where the
+even-parity folklore came from: `heather.cfg`'s comment puts `19200:7:E:1` in the **generic**
+auto-detect list, which serves the other SCPI families, not the Z3801A entry — though the source
+tree's own generic list reads `19200:7:O:1`, so the two cited sources disagree and the inference
+rests on the configuration file alone.
