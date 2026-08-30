@@ -38,7 +38,7 @@
 
     THE MATHS. Vienot, Brettel & Mollon's LMS projection for the dichromat simulation and
     CIEDE2000 for the difference - the same pair #87's analysis used, so the numbers here and
-    the numbers there are comparable. build/derive-series-palette.py reproduces #87's eight
+    the numbers there are comparable. build/palette/derive.py reproduces #87's eight
     published figures to within 0.3, and this script agrees with it.
 
 .PARAMETER Root
@@ -335,7 +335,7 @@ if ($failures.Count -gt 0) {
     Write-Host ''
     Write-Host 'The last time an entry here changed for a good-looking reason, the palette quietly stopped' -ForegroundColor Yellow
     Write-Host 'separating for dichromats and stayed that way for three months (#87). Re-derive with' -ForegroundColor Yellow
-    Write-Host 'build/derive-series-palette.py rather than nudging a value until this passes.' -ForegroundColor Yellow
+    Write-Host 'build/palette/derive.py rather than nudging a value until this passes.' -ForegroundColor Yellow
     exit 1
 }
 
