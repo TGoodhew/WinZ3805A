@@ -77,7 +77,15 @@ public sealed partial class OverviewPage : Page
 
         _device = device;
         _invoker = new CommandInvoker(device.Session);
-        _model = new OverviewViewModel(device.Store) { Connection = device.Session.Status };
+        _model = new OverviewViewModel(device.Store)
+        {
+            Connection = device.Session.Status,
+
+            // P0-1's identity comes from the session rather than the store: it belongs to the link,
+            // not to the status screen, and is read once at connect.
+            Identity = device.Session.ParsedIdentity,
+            RawIdentity = device.Session.Identity,
+        };
         _model.PropertyChanged += (_, _) => DispatcherQueue.TryEnqueue(() =>
         {
             Render();
@@ -103,6 +111,16 @@ public sealed partial class OverviewPage : Page
             if (_model is OverviewViewModel model)
             {
                 model.Connection = e.Status;
+
+                // Re-read on every status change, not only on the first: a reconnect can find a
+                // different receiver on the port, and the session re-selects its driver for exactly
+                // that reason (§12). An identity card that kept the first unit's serial number
+                // would be wrong in the one situation where it matters.
+                if (_device is DeviceContext device)
+                {
+                    model.Identity = device.Session.ParsedIdentity;
+                    model.RawIdentity = device.Session.Identity;
+                }
             }
         });
 
@@ -144,6 +162,15 @@ public sealed partial class OverviewPage : Page
         HealthItems.ItemsSource = model.Health.Select(BuildHealthPill).ToList();
 
         OscillatorControl.Value = model.OscillatorControl;
+
+        // P0-1's identity card.
+        IdentityModelText.Text = model.IdentityModel;
+        IdentityManufacturerText.Text = model.IdentityManufacturer;
+        IdentitySerialText.Text = model.IdentitySerialNumber;
+        IdentityFirmwareText.Text = model.IdentityFirmware;
+
+        IdentityRawText.Text = model.UnparsedIdentity ?? string.Empty;
+        IdentityRawText.Visibility = model.UnparsedIdentity is null ? Visibility.Collapsed : Visibility.Visible;
 
         FooterText.Text = model.AgeDescription;
 
