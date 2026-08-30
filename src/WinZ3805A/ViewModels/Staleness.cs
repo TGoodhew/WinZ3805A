@@ -1,4 +1,4 @@
-using WinZ3805A.Controls;
+﻿using WinZ3805A.Controls;
 
 namespace WinZ3805A.ViewModels;
 
@@ -36,6 +36,30 @@ public static class Staleness
         TimeSpan value when value >= CriticalThreshold => Severity.Critical,
         TimeSpan value when value >= CautionThreshold => Severity.Caution,
         _ => Severity.Neutral,
+    };
+
+    /// <summary>
+    /// The word the footer's <c>SeverityPill</c> carries, or null when there is nothing to say.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// §9.4.3 requires colour <b>and</b> shape <b>and</b> text, so the pill needs a word of its
+    /// own. The age is already in the footer line beside it — <em>updated 47 seconds ago</em> — and
+    /// repeating it here would give the pill no channel that the sentence does not already have.
+    /// What the colour was carrying is the <i>judgement</i> about that age, and these are the two
+    /// judgements: past 15 seconds the poll is late, and past 60 the reading should not be trusted.
+    /// </para>
+    /// <para>
+    /// Fresh and never-updated get nothing. §9.11's rule is that a fresh reading has nothing to
+    /// say, and a pill reading "fresh" on a window meant to sit still for weeks is an alarm that
+    /// never stops going off.
+    /// </para>
+    /// </remarks>
+    public static string? LabelOf(Severity severity) => severity switch
+    {
+        Severity.Caution => "overdue",
+        Severity.Critical => "stale",
+        _ => null,
     };
 
     /// <summary>

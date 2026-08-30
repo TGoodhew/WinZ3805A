@@ -1546,7 +1546,7 @@ not a claim that it is wrong to raise it. If the deviation is ever judged unacce
 | **Empty** (e.g. no diagnostic log entries) | In-card centred: 32 px icon, `WzBodyStrongTextStyle` line, optional action | "No log entries yet. The receiver records power-on, mode changes, and faults here." | An invitation, never a shrug |
 | **Loading** | Nothing < 500 ms. 500 ms–2 s: `ProgressRing` 20 px inline in the card header. > 2 s: skeleton placeholders at final layout dimensions | — | Skeletons only where layout is known ahead of data; never a full-page spinner. The skeletons are **Not built** — noted 29 Aug 2026 (#316). **To build** — decided 30 Aug 2026 (#320) |
 | **Partial / streaming** | Render what has arrived; unresolved fields show `—` in `WzTextTertiaryBrush`; card header carries an inline `ProgressRing` | — | Applies to `:SYST:STAT?` mid-fetch |
-| **Stale** (poll overdue) | `WzCautionBrush` `SeverityPill` in the footer; values remain visible, dimmed to `WzTextSecondaryBrush` | "Last updated 47 seconds ago" | Per §10.3: amber > 15 s, critical > 60 s. **Never blank stale data** — an old reading with an honest timestamp beats an empty field. **Code disagrees** — noted 29 Aug 2026 (#316): `MainPage.xaml`'s `StalenessStates` set `FooterText.Foreground` and a bare `Path` (`FooterStalenessShape`, `WzShapeTriangle` / `WzShapeHexagon`) rather than a `SeverityPill`, and nothing dims the values. **To build** — decided 30 Aug 2026 (#320): the footer moves onto `SeverityPill` and the dimming is added, so severity keeps one renderer |
+| **Stale** (poll overdue) | `WzCautionBrush` `SeverityPill` in the footer; values remain visible, dimmed to `WzTextSecondaryBrush` | "Last updated 47 seconds ago" | Per §10.3: amber > 15 s, critical > 60 s. **Never blank stale data** — an old reading with an honest timestamp beats an empty field. **Built** 30 Aug 2026 (#320), both halves; see the note below |
 | **Error — recoverable** | `InfoBar` `Severity="Error"`, inline at the top of the affected card, with an action button | "Couldn't set antenna delay. The receiver returned error −222, data out of range. Enter a value between 0 and 999,999 ns." / **Try again** | |
 | **Error — blocking** | `ContentDialog` | Only when the user cannot continue without deciding | |
 | **Disconnected** | Main window: medallion → `WzNeutralBrush`, glyph `\uE8CD`, mode text "Disconnected". Details: `InfoBar` `Severity="Informational"` pinned below the title bar, all controls disabled | "Not connected. Choose a serial port to connect." / **Choose a port** | Distinct from *error*: an intentional disconnect is not a fault |
@@ -1554,6 +1554,29 @@ not a claim that it is wrong to raise it. If the deviation is ever judged unacce
 | **No permission** | `ContentDialog` | "Windows wouldn't let the app open COM3. Another program may have it open. Close it, then try again." | `UnauthorizedAccessException` — usually a terminal emulator still holding the port |
 | **Success — routine** | No UI. The value in the interface updates. | — | A setter that worked needs no toast |
 | **Success — consequential** | `InfoBar` `Severity="Success"`, auto-dismiss 5 s | "Started the position survey. This usually takes about two hours." | Tier C commands only |
+
+**The footer staleness, built 30 Aug 2026 (#320).** #316 recorded this row as *Code disagrees* on
+two counts, and both were real.
+
+The first: `MainPage.xaml`'s `StalenessStates` set `FooterText.Foreground` alongside a bare `Path`
+(`WzShapeTriangle` / `WzShapeHexagon`) rather than a `SeverityPill`. The shape was right and the
+route to it was not — §9.13 item 10 says every severity render goes through `SeverityPill`, and a
+hand-drawn `Path` beside a hand-set `Foreground` is a second renderer kept in step with the first by
+hand, across four setters in two states. It is a pill now. The pill needs §9.4.3's third channel, so
+`Staleness.LabelOf` gives it one: **overdue** past 15 seconds, **stale** past 60. Not the age — that
+is in the sentence beside it already, and repeating it would add a renderer without adding a channel.
+Fresh says nothing, because a window meant to sit still for weeks must not carry a badge that never
+goes out.
+
+The second: *"values remain visible, dimmed"* had never been built at all. A reading a minute old was
+drawn in exactly the ink of one that arrived this second, and only the footer sentence said
+otherwise. `ReadoutTile`'s value brush is a `TemplateBinding` now rather than a literal in the
+template, so the state can dim it without reaching inside the control. The label and the unit keep
+their own brushes — they are not the reading — and **the merit pills are deliberately not dimmed**,
+being severity renders whose §9.4.3 colour a text brush would destroy. `FooterText` keeps its
+tertiary brush for the same reason the `Path` went: colouring the sentence too would put the second
+renderer straight back.
+
 
 **Interruption ladder — the rule for choosing a surface:**
 
@@ -1633,7 +1656,7 @@ The implementation must avoid these. Each is reviewable.
 7. **Animation as decoration.** No animation without a row in §9.8.2. Nothing pulses, glows, breathes, or draws attention to itself. Specifically: the medallion does not pulse in holdover — it changes colour and shape, which is louder because everything else is still.
 8. **Web idioms.** No drop shadows on cards, no gradient hero blocks, no oversized rounded cards, no full-width coloured banners as page headers, no `Opacity` fades used as elevation. These read as foreign on the desktop and immediately mark an app as a port.
 9. **Counting-up numbers.** No `Storyboard` targets a readout value. Per §9.1 and §9.8.2.
-10. **Colour-only severity.** Every severity render goes through `SeverityPill` (§9.10.2). A bare coloured `Ellipse` or a `Foreground`-only state cue is a defect. **Code disagrees** in one place — the main window's footer staleness, which uses a `Foreground` plus a bare `Path`; see §9.11's *Stale* row (noted 29 Aug 2026, #316). **To build** — decided 30 Aug 2026 (#320). The rule stands and the footer is what changes.
+10. **Colour-only severity.** Every severity render goes through `SeverityPill` (§9.10.2). A bare coloured `Ellipse` or a `Foreground`-only state cue is a defect. The one place the code disagreed — the main window's footer staleness, a `Foreground` plus a bare `Path` (noted 29 Aug 2026, #316) — was **fixed 30 Aug 2026 (#320)**: the rule stood and the footer changed. See §9.11's *Stale* row.
 
 ### 9.14 Open design questions
 
