@@ -208,6 +208,45 @@ $runtime = Get-ChildItem $runtimeSource -Filter '*.msix' -ErrorAction SilentlyCo
     Select-Object -First 1
 
 if (-not $runtime) {
+    # Visual Studio's MSBuild stages the dependency into AppPackages; the SDK's
+    # does not, so -UseSdkMSBuild (which is what CI uses) reaches here with an
+    # empty folder. Found by the guard below on the first CI dry run, which is
+    # exactly what it was for.
+    #
+    # Taken from the RESTORED package rather than a path written down here, so
+    # the runtime in the zip is always the one this build resolved. A literal
+    # version would go stale silently the first time Microsoft.WindowsAppSDK is
+    # bumped, and the symptom - shipping a runtime older than the app was built
+    # against - appears on a stranger's machine rather than on this one.
+    # Found rather than spelled out: restore writes it to obj\ for this project,
+    # but the exact path has moved between SDK versions and a wrong literal here
+    # would silently skip the fallback and re-raise the throw below - which reads
+    # like a build problem rather than a path problem.
+    $assets = (Get-ChildItem (Join-Path $repo 'src\WinZ3805A\obj') -Recurse -Filter 'project.assets.json' `
+            -ErrorAction SilentlyContinue | Select-Object -First 1).FullName
+
+    if ($assets) {
+        $packagesRoot = if ($env:NUGET_PACKAGES) { $env:NUGET_PACKAGES }
+                        else { Join-Path $env:USERPROFILE '.nuget\packages' }
+
+        $runtimePackage = ((Get-Content $assets -Raw | ConvertFrom-Json).libraries.PSObject.Properties.Name |
+            Where-Object { $_ -like 'Microsoft.WindowsAppSDK.Runtime/*' } | Select-Object -First 1)
+
+        if ($runtimePackage) {
+            $candidate = Join-Path $packagesRoot ((($runtimePackage -replace '/', '\')) +
+                '\tools\MSIX\win10-x64\Microsoft.WindowsAppRuntime.2.msix')
+
+            if (Test-Path $candidate) {
+                Write-Host "Staging the Windows App Runtime from $runtimePackage."
+                New-Item -ItemType Directory -Path $runtimeSource -Force | Out-Null
+                Copy-Item $candidate $runtimeSource -Force
+                $runtime = Get-ChildItem $runtimeSource -Filter '*.msix' | Select-Object -First 1
+            }
+        }
+    }
+}
+
+if (-not $runtime) {
     # A throw, not a warning: README.txt in the zip promises that the runtime comes from the
     # folder and nothing is downloaded, and a zip built without it would ship that promise
     # anyway. Stage the x64 dependency (a Release package build puts it there) and re-run.
