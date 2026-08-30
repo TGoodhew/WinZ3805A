@@ -39,6 +39,8 @@ WHAT GETS INSTALLED
 
   WinZ3805A itself, and the Windows App Runtime it needs if your machine does
   not already have it. Both come from this folder; nothing is downloaded.
+  The licences of the components the application uses are listed in
+  THIRD-PARTY-NOTICES.md, in this folder and inside the application.
 
 
 TO REMOVE IT
