@@ -274,4 +274,77 @@ public sealed class OverviewViewModelTests
         Assert.True(raised > 0);
         Assert.Equal(4, model.Tfom);
     }
+
+    // ---- Identity (P0-1) ---------------------------------------------------------------------
+
+    /// <remarks>
+    /// The live receiver's own answer, which is also the string every fixture's provenance is
+    /// recorded against.
+    /// </remarks>
+    private const string LiveIdentity = "SYMMETRICOM,Z3805A,3625A02931,1.01.03-A";
+
+    /// <summary>P0-1: the four fields the receiver answered are on screen, not only in the log.</summary>
+    [Fact]
+    public void TheIdentityIsBrokenIntoItsFourFields()
+    {
+        (OverviewViewModel model, _) = Connected(Status());
+        model.Identity = DeviceIdentity.Parse(LiveIdentity);
+        model.RawIdentity = LiveIdentity;
+
+        Assert.Equal("Z3805A", model.IdentityModel);
+        Assert.Equal("SYMMETRICOM", model.IdentityManufacturer);
+        Assert.Equal("3625A02931", model.IdentitySerialNumber);
+        Assert.Equal("1.01.03-A", model.IdentityFirmware);
+
+        // Parsed, so the raw line is not shown as well — that would be the same text twice.
+        Assert.Null(model.UnparsedIdentity);
+    }
+
+    /// <summary>
+    /// A receiver whose answer is not four fields shows what it did say, rather than four dashes.
+    /// </summary>
+    /// <remarks>
+    /// Four dashes read as "nothing is connected", which is a different statement from "a model
+    /// this build has not seen before". §11.1's rule is that an unreadable field is absent, not
+    /// that the evidence is discarded — and the raw string still identifies the unit to a person.
+    /// </remarks>
+    [Fact]
+    public void AnIdentityThatDoesNotParseIsStillShown()
+    {
+        (OverviewViewModel model, _) = Connected(Status());
+        model.Identity = null;
+        model.RawIdentity = "ACME GPSDO v2";
+
+        Assert.Equal(ReadoutFormatter.NoValue, model.IdentityModel);
+        Assert.Equal("ACME GPSDO v2", model.UnparsedIdentity);
+    }
+
+    /// <summary>Disconnected, the identity is a claim about a link that is not there.</summary>
+    [Fact]
+    public void ADisconnectedSessionShowsNoIdentity()
+    {
+        (OverviewViewModel model, _) = Connected(Status());
+        model.Identity = DeviceIdentity.Parse(LiveIdentity);
+        model.RawIdentity = LiveIdentity;
+
+        model.Connection = ConnectionStatus.Disconnected;
+
+        Assert.Equal(ReadoutFormatter.NoValue, model.IdentityModel);
+        Assert.Equal(ReadoutFormatter.NoValue, model.IdentitySerialNumber);
+        Assert.Null(model.UnparsedIdentity);
+    }
+
+    /// <summary>Setting it raises, so the card repaints when a reconnect finds another receiver.</summary>
+    [Fact]
+    public void ChangingTheIdentityRaises()
+    {
+        (OverviewViewModel model, _) = Connected(Status());
+        int raised = 0;
+        model.PropertyChanged += (_, _) => raised++;
+
+        model.Identity = DeviceIdentity.Parse(LiveIdentity);
+
+        Assert.True(raised > 0);
+        Assert.Equal("Z3805A", model.IdentityModel);
+    }
 }

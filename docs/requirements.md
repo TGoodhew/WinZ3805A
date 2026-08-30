@@ -1842,9 +1842,22 @@ any of that can be shown.
 │                  │  │      └──────────────────────────────────────┘     │ │
 │                  │  │       −6 h            −3 h             now        │ │
 │                  │  │  Current: −16.83 %        [1 h][6 h][24 h][7 d]   │ │
+│                  │  └──────────────────────
+│                  │                                                        │
+│                  │  ┌─ Receiver ──────────────────────
+│                  │  │  Model          Z3805A                            │ │
+│                  │  │  Manufacturer   SYMMETRICOM                       │ │
+│                  │  │  Serial number  3625A02931                        │ │
+│                  │  │  Firmware       1.01.03-A                         │ │
 │                  │  └───────────────────────────────────────────────────┘ │
 └──────────────────┴────────────────────────────────────────────────────────┘
 ```
+
+**The Receiver card** (added 30 Aug 2026, #320) carries P0-1's `*IDN?` answer, split into the four fields IEEE 488.2 defines. Values are set in the monospaced face: a serial number and a firmware revision are identifiers to be compared character by character against a label on a case, which is what §9.5.3 reserves that face for, and the serial and firmware rows are selectable so they can be copied into a note.
+
+It sits **last on the page** deliberately. §9.1's premise is that the medallion is what the eye goes to; this is reference material, read once when you want to know which unit is on the bench. Putting it higher would push live state down to make room for four fields that never change.
+
+A receiver whose answer is not four comma-separated fields shows **the raw answer instead**, rather than four dashes: four dashes say "nothing is connected", which is a different statement from "a model this build has not seen". §11.1 keeps the evidence. The card is re-read on every connection change, because a reconnect can find a different receiver on the port — the same reason §12 re-selects the driver.
 
 The Holdover Uncertainty card's *Duration* row shows `ReceiverStatus.HoldoverDuration` — the elapsed time the screen prints, parsed since 28 Aug 2026 — while in holdover, and *Not in holdover* otherwise. **The code disagrees with itself**: `OverviewViewModel.HoldoverDuration` still prints the present-uncertainty figure under that label, and says so in a comment; that is a code defect rather than a specification question, #319 item 8 (noted 29 Aug 2026, #316).
 
@@ -2798,7 +2811,7 @@ something might later branch on.
 
 | ID | Requirement | Acceptance criteria |
 |---|---|---|
-| P0-1 | Serial connection with manual and auto-detect settings | Given a Z3805A on COM3 at 9600-8-N-1, when the user selects auto-detect, then the app connects and displays the `*IDN?` string within 20 s. **Code disagrees** — noted 29 Aug 2026 (#316): the connection is made within the window, but no view displays the identity string (#319 item 14). **To build** — decided 30 Aug 2026 (#320). On an Overview card — a P0 is not met by a string that reaches only the log. |
+| P0-1 | Serial connection with manual and auto-detect settings | Given a Z3805A on COM3 at 9600-8-N-1, when the user selects auto-detect, then the app connects and displays the `*IDN?` string within 20 s. **Code disagrees** — noted 29 Aug 2026 (#316): the connection is made within the window, but no view displays the identity string (#319 item 14). **Built 30 Aug 2026 (#320):** the *Receiver* card at the foot of §10.4's Overview page shows the four `*IDN?` fields, or the raw answer when a receiver's is not four fields. A P0 is not met by a string that reaches only the log. |
 | P0-2 | Echo-tolerant line protocol | Given `FDUPlex ON`, when any command is sent, then the echoed line is discarded and only the response reaches the parser |
 | P0-3 | Main window showing mode + tracked count | Given the receiver transitions to holdover, when the next fast poll completes, then the main window shows red ⚠ Holdover within 2 s |
 | P0-4 | `:SYST:STAT?` parser with fixture tests | Every captured fixture — seven of §11.1's eight states across ten files; the health-monitor failure outstanding, `Fixtures/README.md` — parses with zero exceptions and correct field assertions, and `FixtureCorpusTests` runs its invariants over every capture at any depth (this said "all eight", which was unmeetable as written — corrected 29 Aug 2026, #316) |

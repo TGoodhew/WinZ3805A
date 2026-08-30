@@ -269,6 +269,82 @@
                 </StackPanel>
             </Border>
 
+            <!-- ============================== Receiver ================================= -->
+            <!--
+                P0-1: "displays the *IDN? string within 20 s". Nothing displayed it until #320 —
+                the identity reached the application log and stopped there, so the criterion was
+                met only somewhere nobody had open.
+
+                Last on the page deliberately. §9.1's premise is that the medallion is what the eye
+                goes to; this is reference material, read once when you want to know which unit is
+                on the bench and never glanced at again. Putting it above the readings would push
+                live state down the page to make room for four fields that never change.
+
+                Values in the mono style: a serial number and a firmware revision are identifiers
+                to be compared character by character against a label on a case, which is what
+                §9.5.3 reserves the monospaced face for.
+            -->
+            <Border Style="{ThemeResource WzCardStyle}">
+                <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Receiver" />
+
+                    <Grid RowSpacing="{ThemeResource WzSpaceXs}" ColumnSpacing="{ThemeResource WzSpaceXl}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" MinWidth="140" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Grid.Row="0" Grid.Column="0"
+                                   Style="{ThemeResource WzBodyTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   Text="Model" />
+                        <TextBlock x:Name="IdentityModelText" Grid.Row="0" Grid.Column="1"
+                                   Style="{ThemeResource WzMonoTextStyle}" />
+
+                        <TextBlock Grid.Row="1" Grid.Column="0"
+                                   Style="{ThemeResource WzBodyTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   Text="Manufacturer" />
+                        <TextBlock x:Name="IdentityManufacturerText" Grid.Row="1" Grid.Column="1"
+                                   Style="{ThemeResource WzMonoTextStyle}" />
+
+                        <TextBlock Grid.Row="2" Grid.Column="0"
+                                   Style="{ThemeResource WzBodyTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   Text="Serial number" />
+                        <TextBlock x:Name="IdentitySerialText" Grid.Row="2" Grid.Column="1"
+                                   Style="{ThemeResource WzMonoTextStyle}"
+                                   IsTextSelectionEnabled="True" />
+
+                        <TextBlock Grid.Row="3" Grid.Column="0"
+                                   Style="{ThemeResource WzBodyTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   Text="Firmware" />
+                        <TextBlock x:Name="IdentityFirmwareText" Grid.Row="3" Grid.Column="1"
+                                   Style="{ThemeResource WzMonoTextStyle}"
+                                   IsTextSelectionEnabled="True" />
+                    </Grid>
+
+                    <!--
+                        Only for a receiver whose answer was not the four fields IEEE 488.2 defines.
+                        The rows above would all read "—" then, which says "nothing connected" when
+                        what happened is "a model this build has not seen". §11.1 keeps the evidence.
+                    -->
+                    <TextBlock x:Name="IdentityRawText"
+                               Style="{ThemeResource WzMonoTextStyle}"
+                               Foreground="{ThemeResource WzTextSecondaryBrush}"
+                               TextWrapping="Wrap"
+                               IsTextSelectionEnabled="True"
+                               Visibility="Collapsed" />
+                </StackPanel>
+            </Border>
+
             <TextBlock x:Name="FooterText"
                        Style="{ThemeResource WzCaptionTextStyle}"
                        Foreground="{ThemeResource WzTextTertiaryBrush}" />

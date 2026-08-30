@@ -28,6 +28,8 @@ public sealed class OverviewViewModel : INotifyPropertyChanged
     private readonly ReceiverStateStore _store;
 
     private ConnectionStatus _connection = ConnectionStatus.Disconnected;
+    private DeviceIdentity? _identity;
+    private string? _rawIdentity;
 
     /// <summary>Creates a view model over the shared store.</summary>
     public OverviewViewModel(ReceiverStateStore store)
@@ -56,6 +58,84 @@ public sealed class OverviewViewModel : INotifyPropertyChanged
     }
 
     private ReceiverStatus? Status => _store.Status;
+
+    // ---- Receiver identity (P0-1) ----------------------------------------------------------
+
+    /// <summary>
+    /// What the receiver answered <c>*IDN?</c> with, parsed, or <see langword="null"/> when there
+    /// is no link or the answer was not the four fields IEEE 488.2 defines.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Set by the page from the session, the way <see cref="Connection"/> is: the identity belongs
+    /// to the link rather than to the status screen, so it does not arrive through the store.
+    /// </para>
+    /// <para>
+    /// <b>P0-1 requires this to be displayed</b> and nothing did until #320. The string reached the
+    /// application log and stopped there — <c>DeviceSessionService.Identity</c> and
+    /// <c>ParsedIdentity</c> were read by no view at all, so a P0 acceptance criterion was met only
+    /// in a log file nobody had open.
+    /// </para>
+    /// </remarks>
+    public DeviceIdentity? Identity
+    {
+        get => _identity;
+        set
+        {
+            if (_identity != value)
+            {
+                _identity = value;
+                RaiseAll();
+            }
+        }
+    }
+
+    /// <summary>
+    /// The identity exactly as the receiver sent it, for the case where the four fields did not
+    /// parse — better than a row of dashes, because the raw text still identifies the unit.
+    /// </summary>
+    public string? RawIdentity
+    {
+        get => _rawIdentity;
+        set
+        {
+            if (_rawIdentity != value)
+            {
+                _rawIdentity = value;
+                RaiseAll();
+            }
+        }
+    }
+
+    /// <summary>The receiver's model, or the §11.1 dash.</summary>
+    public string IdentityModel => Field(Identity?.Model);
+
+    /// <summary>Who made it, or the §11.1 dash.</summary>
+    public string IdentityManufacturer => Field(Identity?.Manufacturer);
+
+    /// <summary>The unit's serial number, or the §11.1 dash.</summary>
+    public string IdentitySerialNumber => Field(Identity?.SerialNumber);
+
+    /// <summary>The firmware revision, or the §11.1 dash.</summary>
+    public string IdentityFirmware => Field(Identity?.FirmwareRevision);
+
+    /// <summary>
+    /// Shown only when the receiver answered something that is not four comma-separated fields.
+    /// </summary>
+    /// <remarks>
+    /// The four rows above would all read <c>—</c> in that case, which says "no receiver" when what
+    /// happened is "a receiver this build has not seen before". §11.1's rule is that an unreadable
+    /// field is absent, not that the evidence is thrown away.
+    /// </remarks>
+    public string? UnparsedIdentity =>
+        Connection == ConnectionStatus.Connected && Identity is null && !string.IsNullOrWhiteSpace(RawIdentity)
+            ? RawIdentity
+            : null;
+
+    private string Field(string? value) =>
+        Connection == ConnectionStatus.Connected && !string.IsNullOrWhiteSpace(value)
+            ? value
+            : ReadoutFormatter.NoValue;
 
     // ---- Synchronisation card -------------------------------------------------------------
 
