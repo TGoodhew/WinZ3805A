@@ -1,4 +1,5 @@
-using WinZ3805A.Controls;
+﻿using WinZ3805A.Device.Drivers;
+using WinZ3805A.Device.Models;
 using WinZ3805A.Services;
 
 namespace WinZ3805A.Tests.Services;
@@ -27,6 +28,9 @@ namespace WinZ3805A.Tests.Services;
 /// </remarks>
 public class IncoherentReadingTests
 {
+
+    /// <summary>The shipped driver, whose table §10.3 tabulates and which now owns it (#304).</summary>
+    private static SmartClockDriver SmartClock() => new(TimeProvider.System);
     /// <summary>Everything the receiver actually reports (§7.3, §11.1).</summary>
     [Theory]
     [InlineData("LOCK")]
@@ -36,7 +40,7 @@ public class IncoherentReadingTests
     [InlineData("POW")]
     [InlineData("OFF")]
     public void EveryStateTheReceiverReportsIsAReading(string syncState) =>
-        Assert.NotEqual(ReceiverMode.Disconnected, ReceiverModes.FromSyncState(syncState));
+        Assert.NotEqual(ReceiverMode.Disconnected, SmartClock().InterpretSyncState(syncState));
 
     /// <summary>Whitespace and case are the receiver's, not ours (§7.2: replies carry a leading space).</summary>
     [Theory]
@@ -45,7 +49,7 @@ public class IncoherentReadingTests
     [InlineData("lock")]
     [InlineData(" Lock ")]
     public void TheReceiversOwnSpacingAndCaseStillCount(string syncState) =>
-        Assert.Equal(ReceiverMode.Locked, ReceiverModes.FromSyncState(syncState));
+        Assert.Equal(ReceiverMode.Locked, SmartClock().InterpretSyncState(syncState));
 
     /// <remarks>
     /// The value that was actually stored on 24 Aug, truncated at the front because the read began
@@ -58,7 +62,7 @@ public class IncoherentReadingTests
             + "LOG 215:20070108.12:04:16:  GPS LOCK STARTED\r\n"
             + "LOG 216:20070108.14:55:09:  HOLDOVER STARTED, NOT TRACKING GPS";
 
-        Assert.Equal(ReceiverMode.Disconnected, ReceiverModes.FromSyncState(what));
+        Assert.Equal(ReceiverMode.Disconnected, SmartClock().InterpretSyncState(what));
     }
 
     /// <remarks>
@@ -73,7 +77,7 @@ public class IncoherentReadingTests
     [InlineData(null)]
     [InlineData("LOG 222:20070108.22:40:38:  HOLDOVER STARTED")]
     public void NeitherIsAnythingElseThatArrivedInItsPlace(string? syncState) =>
-        Assert.Equal(ReceiverMode.Disconnected, ReceiverModes.FromSyncState(syncState));
+        Assert.Equal(ReceiverMode.Disconnected, SmartClock().InterpretSyncState(syncState));
 
     /// <remarks>
     /// <b>The cost of the rule, stated rather than discovered.</b> A state this application has not
@@ -86,7 +90,7 @@ public class IncoherentReadingTests
     [InlineData("ACQ")]
     [InlineData("SURV")]
     public void AStateThisApplicationHasNotBeenTaughtIsAlsoDropped(string syncState) =>
-        Assert.Equal(ReceiverMode.Disconnected, ReceiverModes.FromSyncState(syncState));
+        Assert.Equal(ReceiverMode.Disconnected, SmartClock().InterpretSyncState(syncState));
 
     // -------------------------------------------------------------------------------------
     // The slip that begins after the sync state has already been read (#237)
@@ -148,7 +152,7 @@ public class IncoherentReadingTests
     [Fact]
     public void AValidSyncStateDoesNotVouchForTheRestOfTheSweep()
     {
-        Assert.NotEqual(ReceiverMode.Disconnected, ReceiverModes.FromSyncState("LOCK"));
+        Assert.NotEqual(ReceiverMode.Disconnected, SmartClock().InterpretSyncState("LOCK"));
         Assert.False(ReadingPlausibility.IsPossibleTimeInterval(2e9));
     }
 

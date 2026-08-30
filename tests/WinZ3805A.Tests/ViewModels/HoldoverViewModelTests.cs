@@ -1,6 +1,7 @@
-using Microsoft.Extensions.Time.Testing;
+﻿using Microsoft.Extensions.Time.Testing;
 
 using WinZ3805A.Controls;
+using WinZ3805A.Device.Drivers;
 using WinZ3805A.Device.Models;
 using WinZ3805A.Services;
 using WinZ3805A.ViewModels;
@@ -12,6 +13,9 @@ namespace WinZ3805A.Tests.ViewModels;
 /// </summary>
 public sealed class HoldoverViewModelTests
 {
+
+    /// <summary>The shipped driver, which owns §10.3's token table since #304.</summary>
+    private static SmartClockDriver SmartClock() => new(TimeProvider.System);
     private static readonly DateTimeOffset Captured = new(2026, 8, 13, 19, 0, 0, TimeSpan.Zero);
 
     private static HoldoverViewModel Connected(
@@ -36,7 +40,7 @@ public sealed class HoldoverViewModelTests
 
         store.UpdateFast(syncState, 3, 0, -10.0, 1.0, 6);
 
-        return new HoldoverViewModel(store) { Connection = ConnectionStatus.Connected, PowerUp = powerUp };
+        return new HoldoverViewModel(store, SmartClock()) { Connection = ConnectionStatus.Connected, PowerUp = powerUp };
     }
 
     /// <remarks>

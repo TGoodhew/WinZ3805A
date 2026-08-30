@@ -215,6 +215,38 @@ public interface IReceiverDriver
     /// </remarks>
     SweepInterpretation InterpretSweep(IReadOnlyList<string?> answers);
 
+    /// <summary>
+    /// Which of the application's modes this family's sync token means (#304).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The token is the driver's word; the mode is the application's.</b> §10.3 tabulates six
+    /// modes against the SmartClock's <c>:SYNC:STAT?</c> answers, and until this existed that table
+    /// lived app-side in <c>Controls/ReceiverMode.cs</c> — so a family whose receiver says anything
+    /// else rendered as <see cref="ReceiverMode.Disconnected"/> on the medallion, the tray icon and
+    /// the taskbar badge while its sweep was being stored and trended perfectly well. Asking the
+    /// driver puts the one piece of receiver-specific knowledge in the interpretation where §12
+    /// says every receiver-specific fact belongs.
+    /// </para>
+    /// <para>
+    /// <b>The modes are a closed set and this method does not widen it.</b> A family whose states do
+    /// not map cleanly picks the nearest honest member and documents the choice — the NMEA driver
+    /// calls a fix <see cref="ReceiverMode.Locked"/> and no fix <see cref="ReceiverMode.PowerUp"/>,
+    /// because a GPS receiver with a fix is locked to GPS in the only sense it has. Adding a seventh
+    /// mode means a severity, a glyph and a label, which is §9's decision.
+    /// </para>
+    /// <para>
+    /// <b>Unrecognised means <see cref="ReceiverMode.Disconnected"/>, never a guess</b>, on §11.1's
+    /// reasoning: a mode the driver cannot name is one it cannot describe honestly, and showing
+    /// "Locked to GPS" on a maybe is the worst available default. It must never throw.
+    /// </para>
+    /// <para>
+    /// It answers about a bare token and not about the live link, so it is safe over a stored
+    /// reading: the trend charts colour history by calling it on rows read hours ago.
+    /// </para>
+    /// </remarks>
+    ReceiverMode InterpretSyncState(string? syncState);
+
     // ---- Added by #310, when the second family turned out not to speak when spoken to ----------
     //
     // The three members below have defaults, so a query/response driver written before them is

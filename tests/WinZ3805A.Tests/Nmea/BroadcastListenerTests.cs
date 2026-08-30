@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Time.Testing;
+﻿using Microsoft.Extensions.Time.Testing;
 
 using WinZ3805A.Device.Drivers;
 using WinZ3805A.Device.Drivers.Nmea;
@@ -274,5 +274,6 @@ public sealed class BroadcastListenerTests : IAsyncDisposable
         public TimeSpan TimeoutFor(string? mnemonic) => TimeSpan.FromSeconds(1);
         public Device.Models.ReceiverStatus Parse(string? response) => new();
         public SweepInterpretation InterpretSweep(IReadOnlyList<string?> answers) => new(new FastReadings(null, null, null, null, null, null), "empty");
+        public Device.Models.ReceiverMode InterpretSyncState(string? syncState) => Device.Models.ReceiverMode.Disconnected;
     }
 }

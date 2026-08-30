@@ -1,6 +1,7 @@
-using Microsoft.Extensions.Time.Testing;
+﻿using Microsoft.Extensions.Time.Testing;
 
 using WinZ3805A.Controls;
+using WinZ3805A.Device.Drivers;
 using WinZ3805A.Device.Models;
 using WinZ3805A.Services;
 using WinZ3805A.ViewModels;
@@ -12,6 +13,9 @@ namespace WinZ3805A.Tests.ViewModels;
 /// </summary>
 public sealed class OverviewViewModelTests
 {
+
+    /// <summary>The shipped driver, which owns §10.3's token table since #304.</summary>
+    private static SmartClockDriver SmartClock() => new(TimeProvider.System);
     private static readonly DateTimeOffset Captured = new(2026, 8, 13, 19, 0, 0, TimeSpan.Zero);
 
     private static (OverviewViewModel Model, ReceiverStateStore Store) Connected(
@@ -29,7 +33,7 @@ public sealed class OverviewViewModelTests
         store.UpdateFast(syncState, tfom: 3, ffom: 0, onePpsTiNanoseconds: -33.1,
             oscillatorControl: 4.2, trackedCount: 6);
 
-        return (new OverviewViewModel(store) { Connection = ConnectionStatus.Connected }, store);
+        return (new OverviewViewModel(store, SmartClock()) { Connection = ConnectionStatus.Connected }, store);
     }
 
     private static ReceiverStatus Status(Action<ReceiverStatusBuilder>? configure = null)
@@ -254,7 +258,7 @@ public sealed class OverviewViewModelTests
         ReceiverStateStore store = new(clock);
         store.UpdateFast("LOCK", 3, 0, -33.1, 4.2, trackedCount: 0);
 
-        OverviewViewModel model = new(store) { Connection = ConnectionStatus.Connected };
+        OverviewViewModel model = new(store, SmartClock()) { Connection = ConnectionStatus.Connected };
 
         Assert.True(model.IsCoasting);
     }
@@ -264,7 +268,7 @@ public sealed class OverviewViewModelTests
     {
         FakeTimeProvider clock = new(Captured);
         ReceiverStateStore store = new(clock);
-        OverviewViewModel model = new(store) { Connection = ConnectionStatus.Connected };
+        OverviewViewModel model = new(store, SmartClock()) { Connection = ConnectionStatus.Connected };
 
         int raised = 0;
         model.PropertyChanged += (_, _) => raised++;

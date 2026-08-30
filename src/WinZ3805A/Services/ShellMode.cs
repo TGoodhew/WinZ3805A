@@ -1,4 +1,5 @@
-using WinZ3805A.Controls;
+﻿using WinZ3805A.Device.Drivers;
+using WinZ3805A.Device.Models;
 
 namespace WinZ3805A.Services;
 
@@ -23,13 +24,24 @@ namespace WinZ3805A.Services;
 /// </remarks>
 public static class ShellMode
 {
-    /// <summary>The mode to show for a store and a connection state.</summary>
-    public static ReceiverMode For(ReceiverStateStore store, ConnectionStatus connection)
+    /// <summary>The mode to show for a driver, a store and a connection state.</summary>
+    /// <remarks>
+    /// The driver and not a static table since #304: the store keeps the receiver's own token, and
+    /// which mode that token means is the one receiver-specific fact in this expression. The driver
+    /// is required rather than nullable because <c>DeviceSessionService.Driver</c> always answers —
+    /// it falls back to the first registered driver when nothing recognises the identity — so a null
+    /// here would mean a caller that forgot, not a receiver nobody could name.
+    /// </remarks>
+    public static ReceiverMode For(
+        IReceiverDriver driver,
+        ReceiverStateStore store,
+        ConnectionStatus connection)
     {
+        ArgumentNullException.ThrowIfNull(driver);
         ArgumentNullException.ThrowIfNull(store);
 
         return connection == ConnectionStatus.Connected
-            ? ReceiverModes.FromSyncState(store.SyncState)
+            ? driver.InterpretSyncState(store.SyncState)
             : ReceiverMode.Disconnected;
     }
 }

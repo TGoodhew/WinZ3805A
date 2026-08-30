@@ -1,4 +1,6 @@
 ﻿using WinZ3805A.Controls;
+using WinZ3805A.Device.Drivers;
+using WinZ3805A.Device.Models;
 
 namespace WinZ3805A.Tests.Controls;
 
@@ -12,6 +14,9 @@ namespace WinZ3805A.Tests.Controls;
 /// </remarks>
 public class MedallionRingMathTests
 {
+
+    /// <summary>The shipped driver, whose table §10.3 tabulates and which now owns it (#304).</summary>
+    private static SmartClockDriver SmartClock() => new(TimeProvider.System);
     /// <summary>
     /// The floor is what makes the ring trustworthy. A receiver holding to a couple of nanoseconds
     /// has almost no spread, and a purely relative scale would amplify that into a ring full of
@@ -140,7 +145,7 @@ public class MedallionRingMathTests
     [InlineData("OFF", ReceiverMode.Off, Severity.Neutral)]
     public void EveryModeInTheTableMapsToItsSeverity(string keyword, ReceiverMode mode, Severity severity)
     {
-        Assert.Equal(mode, ReceiverModes.FromSyncState(keyword));
+        Assert.Equal(mode, SmartClock().InterpretSyncState(keyword));
         Assert.Equal(severity, ReceiverModes.SeverityOf(mode));
         Assert.False(string.IsNullOrWhiteSpace(ReceiverModes.TextOf(mode)));
         Assert.False(string.IsNullOrWhiteSpace(ReceiverModes.GlyphOf(mode)));
@@ -149,8 +154,8 @@ public class MedallionRingMathTests
     [Fact]
     public void TheKeywordIsReadThroughItsLeadingSpaceAndCase()
     {
-        Assert.Equal(ReceiverMode.Locked, ReceiverModes.FromSyncState(" LOCK"));
-        Assert.Equal(ReceiverMode.Locked, ReceiverModes.FromSyncState("lock"));
+        Assert.Equal(ReceiverMode.Locked, SmartClock().InterpretSyncState(" LOCK"));
+        Assert.Equal(ReceiverMode.Locked, SmartClock().InterpretSyncState("lock"));
     }
 
     /// <summary>
@@ -163,7 +168,7 @@ public class MedallionRingMathTests
     [InlineData("SOMETHING NEW")]
     public void AnUnrecognisedModeIsReportedAsDisconnectedRatherThanGuessed(string? keyword)
     {
-        Assert.Equal(ReceiverMode.Disconnected, ReceiverModes.FromSyncState(keyword));
+        Assert.Equal(ReceiverMode.Disconnected, SmartClock().InterpretSyncState(keyword));
         Assert.Equal(Severity.Neutral, ReceiverModes.SeverityOf(ReceiverMode.Disconnected));
     }
 

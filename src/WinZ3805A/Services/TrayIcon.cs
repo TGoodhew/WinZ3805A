@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Win32;
 
 using WinZ3805A.Controls;
+using WinZ3805A.Device.Models;
 
 namespace WinZ3805A.Services;
 

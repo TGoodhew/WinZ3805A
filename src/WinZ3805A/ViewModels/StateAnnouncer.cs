@@ -1,4 +1,5 @@
-using WinZ3805A.Controls;
+﻿using WinZ3805A.Controls;
+using WinZ3805A.Device.Models;
 using WinZ3805A.Services;
 
 namespace WinZ3805A.ViewModels;
