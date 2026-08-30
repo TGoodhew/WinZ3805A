@@ -95,8 +95,19 @@ public sealed class SerialPortInfoTests
     }
 
     /// <remarks>
+    /// <para>
     /// §6.1 singles ARM64 out because several USB-serial chipsets ship no driver for it, so an empty
     /// list there points at the driver rather than at the cable.
+    /// </para>
+    /// <para>
+    /// <b>This test binds the copy, not the caller, and cannot be made to bind the caller here.</b>
+    /// It passes an architecture directly; the defect #319 fixed was that the callers read
+    /// <c>ProcessArchitecture</c>, which an x64 package reports as <c>X64</c> even on an ARM64
+    /// machine, so the branch asserted below was unreachable in the running application. On x64
+    /// hardware — this machine and CI — <c>OSArchitecture</c> and <c>ProcessArchitecture</c> are
+    /// the same value, so no test run here can tell a correct caller from the broken one. What
+    /// guards it is the call sites saying which reading they take and why.
+    /// </para>
     /// </remarks>
     [Fact]
     public void NoPortsMessage_NamesTheDriverOnArm64AndTheCableElsewhere()

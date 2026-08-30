@@ -55,14 +55,14 @@ public sealed class SerialPortEnumerator : ISerialPortSource
 
     /// <summary>The copy for an empty list, which on ARM64 usually means a missing driver (§6.1).</summary>
     /// <remarks>
-    /// <b>The ARM64 copy is unreachable as written</b> (#316 audit finding). §6.1 ships x64 only,
-    /// and Windows on ARM runs that package under emulation, where
-    /// <c>RuntimeInformation.ProcessArchitecture</c> reports <c>X64</c> — the emulated process's
-    /// architecture, not the machine's. <c>RuntimeInformation.OSArchitecture</c> is the reading
-    /// that would select it. Left as found: the fix is a code change, not a comment.
+    /// <b><c>OSArchitecture</c>, not <c>ProcessArchitecture</c> (#319).</b> §6.1 ships x64 only and
+    /// Windows on ARM runs that package under emulation, where <c>ProcessArchitecture</c> reports
+    /// <c>X64</c> — the emulated process's architecture rather than the machine's. Reading it meant
+    /// the ARM64 copy could never be selected on the only machines it is written for, which is
+    /// every machine that would see it. <c>OSArchitecture</c> reports the machine.
     /// </remarks>
     public string EmptyMessage =>
-        SerialPortInfo.NoPortsMessage(RuntimeInformation.ProcessArchitecture);
+        SerialPortInfo.NoPortsMessage(RuntimeInformation.OSArchitecture);
 
     private static IEnumerable<string> SafePortNames()
     {
