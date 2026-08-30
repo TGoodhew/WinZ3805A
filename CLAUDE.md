@@ -92,13 +92,21 @@ with no free-text box (#55), so the log-the-attempt half was never built.
 - **`WinZ3805A.Device` never references `Microsoft.UI.*`.** All parsing, command
   classification, and transport lives there, and it is unit-tested headlessly
   against captured status screens in `tests/WinZ3805A.Tests/Fixtures/`. The
-  library currently references only `System.Runtime`, `System.IO.Ports`, and
-  `Microsoft.Extensions.Logging.Abstractions`. Keep it that way.
+  library currently **ships** only `System.Runtime`, `System.IO.Ports`, and
+  `Microsoft.Extensions.Logging.Abstractions`. Keep it that way. Build-time-only
+  references that produce no assembly — an analyzer with `PrivateAssets="all"`,
+  of which there is one — are not part of that set and do not widen it.
 - **No `DateTime.Now` / `DateTime.UtcNow` anywhere in the Device library.**
   Inject `TimeProvider` and call `provider.GetUtcNow()`. This is not stylistic:
   the GPS week-rollover logic (§7.4), staleness display, and poll scheduling are
   all clock-dependent, and fixture tests must be able to pin the clock. Tests use
   `FakeTimeProvider` from `Microsoft.Extensions.TimeProvider.Testing`.
+  **The compiler enforces this** since #320 — `BannedApiAnalyzers` reading
+  `src/WinZ3805A.Device/BannedSymbols.txt`, which also bans `Stopwatch`, whose
+  elapsed time comes from the same machine clock. Add a symbol there rather than
+  relying on review. Note the file wants `P:` for a property: `M:get_UtcNow` is
+  accepted silently and matches nothing, which is a rule file that enforces
+  nothing — test any addition against a deliberate violation.
 - **The parser never throws** (§11.1). Unparseable fields become `null` on the
   model and render as `—`. Nullable reference types with warnings-as-errors is
   what makes the compiler enforce that every consumer handles it.
