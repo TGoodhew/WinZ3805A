@@ -57,6 +57,9 @@ public sealed partial class AdvancedConsolePage : Page, ICsvExportSource
     {
         InitializeComponent();
 
+        // §9.7.4's right-click layer, on the transcript this page exports.
+        CopyMenu.AttachCsv(TranscriptCard, this);
+
         Unloaded += (_, _) =>
         {
             if (_transcript is CommandTranscript transcript)

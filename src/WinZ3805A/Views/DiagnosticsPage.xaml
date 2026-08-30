@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 <Page
     x:Class="WinZ3805A.Views.DiagnosticsPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -140,7 +140,7 @@
             </Border>
 
             <!-- ============================= Diagnostic log ============================= -->
-            <Border Style="{ThemeResource WzCardStyle}">
+            <Border x:Name="LogCard" Style="{ThemeResource WzCardStyle}">
                 <StackPanel Spacing="{ThemeResource WzSpaceSm}">
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -318,7 +318,8 @@
                                    Style="{ThemeResource WzBodyTextStyle}"
                                    Foreground="{ThemeResource WzTextSecondaryBrush}"
                                    Text="Power-on hours" />
-                        <TextBlock x:Name="PowerOnHoursText" Grid.Column="1"
+                        <TextBlock x:Name="PowerOnHoursText"
+                                   controls:CopyMenu.IsCopyable="True" Grid.Column="1"
                                    Style="{ThemeResource WzMonoTextStyle}" />
                     </Grid>
 

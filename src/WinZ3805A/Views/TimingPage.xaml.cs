@@ -71,6 +71,15 @@ public sealed partial class TimingPage : Page, ICsvExportSource
         // takes a length.
         _length = new NumberFieldValidator(LengthBox, LengthError, 0, 10000, "m");
 
+        // §9.7.4's right-click layer, on the trend CARD rather than on the charts inside it. What
+        // BuildCsv writes is the trend samples the charts plot; the stability figures below them
+        // are summary statistics over that same data rather than a second table to copy.
+        //
+        // The card also has a Background where a chart does not, and an element with no Background
+        // is not hit-testable at all — so a menu hung on the chart would have been unreachable in
+        // exactly the way §9.6.3's hit-target work recorded for Border.
+        CopyMenu.AttachCsv(TrendCard, this);
+
         // The velocity factor never reaches the receiver - it feeds the local calculation - but it
         // is still a number a user types and gets wrong, so it validates like the other two. It
         // used to rely on the NumberBox clamping to Minimum and Maximum instead, which replaced an

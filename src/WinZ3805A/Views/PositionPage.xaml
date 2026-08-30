@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 <Page
     x:Class="WinZ3805A.Views.PositionPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -90,7 +90,8 @@
                                  Visibility="Collapsed"
                                  AutomationProperties.Name="Survey progress" />
 
-                    <TextBlock x:Name="SurveyPercentText" Style="{ThemeResource WzMonoTextStyle}" />
+                    <TextBlock x:Name="SurveyPercentText"
+                               controls:CopyMenu.IsCopyable="True" Style="{ThemeResource WzMonoTextStyle}" />
 
                     <controls:SeverityPill x:Name="SurveyPill" Visibility="Collapsed" />
 

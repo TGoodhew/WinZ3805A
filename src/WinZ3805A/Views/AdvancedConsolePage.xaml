@@ -138,7 +138,7 @@
         </Border>
 
         <!-- ================================ Transcript ================================= -->
-        <Border Grid.Row="2" Style="{ThemeResource WzCardStyle}">
+        <Border x:Name="TranscriptCard" Grid.Row="2" Style="{ThemeResource WzCardStyle}">
             <Grid RowSpacing="{ThemeResource WzSpaceSm}">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />

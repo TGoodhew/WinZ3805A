@@ -87,12 +87,14 @@
                     Orientation="Horizontal"
                     Spacing="{StaticResource WzSpaceXxl}">
             <controls:ReadoutTile x:Name="Satellites"
+                                  controls:CopyMenu.IsCopyable="True"
                                   Label="satellites"
                                   Size="Large"
                                   DecimalPlaces="0"
                                   MaxIntegerDigits="2"
                                   AllowNegative="False" />
             <controls:ReadoutTile x:Name="TimeInterval"
+                                  controls:CopyMenu.IsCopyable="True"
                                   Label="1 PPS TI"
                                   Unit="ns"
                                   Size="Large"
@@ -116,6 +118,7 @@
                     Spacing="{StaticResource WzSpaceXxs}"
                     VerticalAlignment="Top">
             <TextBlock x:Name="ClockText"
+                       controls:CopyMenu.IsCopyable="True"
                        Style="{StaticResource WzMonoTextStyle}"
                        Foreground="{ThemeResource WzTextPrimaryBrush}" />
             <!--

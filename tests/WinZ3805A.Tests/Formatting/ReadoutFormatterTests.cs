@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using WinZ3805A.Controls;
 
 namespace WinZ3805A.Tests.Formatting;
@@ -262,4 +262,55 @@ public class ReadoutFormatterTests
     [InlineData(double.PositiveInfinity)]
     public void AnUnreadableIntervalHasNoUnit(double? seconds) =>
         Assert.Equal((ReadoutFormatter.NoValue, string.Empty), ReadoutFormatter.Seconds(seconds));
+
+    // -------------------------------------------------------------------------------------
+    // §9.7.4's copy layer: the typesetting undone, for a value leaving the application
+    // -------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// The one that matters. A readout shows U+2212 MINUS SIGN because a hyphen reads badly beside
+    /// lining figures; a spreadsheet handed U+2212 gets text rather than a number.
+    /// </summary>
+    [Fact]
+    public void CopyingANegativeGivesAnAsciiHyphen()
+    {
+        string copied = Assert.IsType<string>(
+            ReadoutFormatter.ToMachineText(ReadoutFormatter.Format(-2.9, 1)));
+
+        Assert.Equal("-2.9", copied);
+        Assert.Equal('-', copied[0]);
+        Assert.DoesNotContain(ReadoutFormatter.MinusSign, copied, StringComparison.Ordinal);
+    }
+
+    /// <remarks>
+    /// U+200A separates a value from its unit on screen and is invisible in a paste — which is the
+    /// problem, not the excuse: a cell holding "33.1<em>&#x200a;</em>ns" is text, and it looks
+    /// exactly like one holding a number.
+    /// </remarks>
+    [Fact]
+    public void CopyingDropsTheHairSpace() =>
+        Assert.Equal("33.1ns", ReadoutFormatter.ToMachineText($"33.1{ReadoutFormatter.HairSpace}ns"));
+
+    /// <remarks>
+    /// §11.1 makes the em dash mean <i>the device did not report one</i>. Pasting it would put a
+    /// character that looks like data where the absence of data was the fact, so the menu item is
+    /// disabled instead.
+    /// </remarks>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("—")]
+    public void NothingToCopyIsNull(string? text) => Assert.Null(ReadoutFormatter.ToMachineText(text));
+
+    /// <remarks>
+    /// Ordinary text passes through unchanged: the copy layer is not a sanitiser, and a device
+    /// string that happens to contain a hyphen or a word must arrive as the receiver wrote it.
+    /// </remarks>
+    [Theory]
+    [InlineData("Locked to GPS", "Locked to GPS")]
+    [InlineData("10:15:38 Pacific Daylight Time", "10:15:38 Pacific Daylight Time")]
+    [InlineData(" 3697A ", "3697A")]
+    public void OrdinaryTextIsUnchangedApartFromTrimming(string text, string expected) =>
+        Assert.Equal(expected, ReadoutFormatter.ToMachineText(text));
 }
