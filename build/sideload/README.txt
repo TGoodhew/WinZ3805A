@@ -60,10 +60,8 @@ TO REMOVE IT
 
 WHAT IT NEEDS
 
-  Windows 10 version 1809 or later, 64-bit.
+  Windows 10 version 1809 or later, on a 64-bit Intel or AMD processor.
   A serial port, or a USB-to-serial adapter, connected to the receiver.
-
-  Windows on ARM works: the 64-bit build runs under emulation.
 
 
 WHAT IT DOES NOT DO

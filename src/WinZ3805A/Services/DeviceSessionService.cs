@@ -226,7 +226,7 @@ public sealed class DeviceSessionService : IAsyncDisposable
     /// to: a port that answered nothing, and a port Windows would not open at all. This carries the
     /// distinction out without reintroducing the exception —
     /// <see cref="TransportFault.AccessDenied"/> is the "No permission" row, and
-    /// <see cref="TransportFault.PortNotFound"/> on ARM64 is usually the missing driver of §6.1.
+    /// <see cref="TransportFault.PortNotFound"/> is the port that stopped being there.
     /// </remarks>
     public TransportFault LastFault { get; private set; }
 

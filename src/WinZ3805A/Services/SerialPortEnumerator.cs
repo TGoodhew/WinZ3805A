@@ -1,5 +1,4 @@
 using System.IO.Ports;
-using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Microsoft.Win32;
 
@@ -53,16 +52,8 @@ public sealed class SerialPortEnumerator : ISerialPortSource
         return SerialPortInfo.Merge(names, FriendlyNames(cancellationToken));
     }
 
-    /// <summary>The copy for an empty list, which on ARM64 usually means a missing driver (§6.1).</summary>
-    /// <remarks>
-    /// <b><c>OSArchitecture</c>, not <c>ProcessArchitecture</c> (#319).</b> §6.1 ships x64 only and
-    /// Windows on ARM runs that package under emulation, where <c>ProcessArchitecture</c> reports
-    /// <c>X64</c> — the emulated process's architecture rather than the machine's. Reading it meant
-    /// the ARM64 copy could never be selected on the only machines it is written for, which is
-    /// every machine that would see it. <c>OSArchitecture</c> reports the machine.
-    /// </remarks>
-    public string EmptyMessage =>
-        SerialPortInfo.NoPortsMessage(RuntimeInformation.OSArchitecture);
+    /// <summary>The copy for an empty list (§9.11).</summary>
+    public string EmptyMessage => SerialPortInfo.NoPortsMessage();
 
     private static IEnumerable<string> SafePortNames()
     {

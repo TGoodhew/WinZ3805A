@@ -16,16 +16,15 @@
         pwsh build/Invoke-Wack.ps1
 
 .PARAMETER Platform
-    x64, which is the only architecture §6.1 requires as of 15 Aug 2026 and the
-    only value this accepts. The parameter is kept rather than removed so that
-    restoring ARM64 later means widening a ValidateSet rather than rediscovering
-    that this script ever had a notion of architecture.
+    x64, the only architecture §6.1 has and the only value this accepts. The
+    parameter is kept rather than removed because the packaging commands below
+    read it, and a script that names its architecture is clearer than one that
+    assumes it.
 
-    ARM64 was dropped because **WACK cannot cross-test**: it installs and runs
-    the package it certifies, so an ARM64 package has to be certified on an ARM64
-    machine and there is no host flag that changes that. Windows 11 on ARM runs
-    the x64 package under emulation, so ARM64 users are not left without an
-    application - they are left without a native one.
+    Worth knowing if a second architecture is ever proposed: **WACK cannot
+    cross-test.** It installs and runs the package it certifies, so certifying a
+    package for another architecture needs a machine of that architecture, and
+    there is no host flag that changes it.
 
 .PARAMETER SkipBuild
     Certify the package already in AppPackages rather than rebuilding.

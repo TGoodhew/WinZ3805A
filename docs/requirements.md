@@ -1,4 +1,4 @@
-﻿# WinZ3805A — Requirements Specification
+# WinZ3805A — Requirements Specification
 
 **Version:** 1.0
 **Date:** 11 August 2026
@@ -88,7 +88,7 @@ Users currently either screen-scrape `:SYST:STAT?` in a terminal emulator or run
 | Runtime | **.NET 10 (LTS)** — modern .NET, *not* .NET Framework 4.x | WinUI 3 cannot run on .NET Framework, so this is forced. Use the **LTS** release, not the newest STS or preview: Store apps have long tails and LTS gives 3 years of servicing. Do not adopt .NET 11 (Nov 2026, STS) on release. |
 | TFM | `net10.0-windows10.0.26100.0` | Confirm against the VS template default at project creation and prefer the template's value if it differs. |
 | Min platform | `10.0.17763.0` (Windows 10 1809) | WinUI 3's floor. Verify WinAppSDK 2.3.1 does not raise it; if it does, follow the SDK. |
-| Architectures | **x64 only** | No AnyCPU — Windows App SDK is native. Omit x86.<br>**Amended 15 Aug 2026.** This row required x64 *and* ARM64 and said to ship both in the bundle. It now requires x64 alone, for three reasons that compound. First, **WACK cannot cross-test**: it installs and runs the package it certifies, so an ARM64 submission has to be certified on ARM64 hardware, and there is none on this project. Shipping an architecture nobody can run the certification kit against is shipping an unverified binary. Second, **Windows 11 on ARM runs x64 applications under emulation**, so ARM64 machines still get a working application from the x64 package — the cost of dropping the native build is performance on a device this application spends its life idle on, waiting a second at a time for a serial reply. Third, the caveat this row already carried argued against the native build on its own: `System.IO.Ports` runs fine on ARM64, but third-party **USB-serial drivers frequently lack ARM64 builds** (Prolific PL2303 and CH340 clones especially; FTDI is generally fine), so a native ARM64 build is of limited use precisely where it would be used.<br>The driver caveat still applies under emulation, because it is a kernel-mode problem and the emulated application is not what is missing. The connection dialog must fail gracefully with a message naming the likely cause when zero ports enumerate on an ARM64 machine.<br>Restoring ARM64 is a small change — one entry in `Platforms`, one publish profile, one CI matrix row — and should be made when hardware to certify on exists, not before. |
+| Architectures | **x64 only** | No AnyCPU — Windows App SDK is native. Omit x86 and ARM64.<br>**Amended 15 Aug 2026**, when the row required x64 *and* ARM64 and said to ship both in the bundle. **Amended again 29 Aug 2026:** ARM64 is not a target of this project at all, and the specification no longer describes it as one — see the note below. |
 | IDE | Visual Studio 2026, *.NET desktop development* workload + Windows App SDK extension | |
 | MVVM | **Hand-written `INotifyPropertyChanged`** | **Amended 15 Aug 2026.** This row specified `CommunityToolkit.Mvvm` and its source-generated `ObservableProperty` / `RelayCommand`. The package was referenced and, across every one of the eleven view models built in §15 steps 7-10, **never used once** — the divergence was found by #125 rather than decided, and is settled here in favour of the code.<br>The reason it never got used is structural rather than accidental. These view models do not own their state: they project a `ReceiverStateStore` that is replaced wholesale on each poll, so each one raises *every* property together from a `RaiseAll()`, and again on a one-second staleness tick. `[ObservableProperty]` generates a property per backing field with per-property change detection, which is precisely the thing there is no use for here — there are no backing fields to generate from, and nothing to detect. Commands are the same story: tier C commands go through `CommandConfirmation.RunAsync` and a `CommandInvoker` built in `OnNavigatedTo`, not through an `ICommand` bound in XAML.<br>Adopting the toolkit would mean rewriting eleven working, tested view models to gain generated code for a pattern they do not use. The package is removed.<br>This is not a rule against the library. If a view model ever *does* own editable state per field, reintroducing it there is a one-line reference, and better than hand-writing what a generator does well. The P1-3 satellite manage dialog (#51) was named here as the likely first such case; it shipped without the toolkit (`SatelliteManagementDialog.xaml`), so nothing uses it today (corrected 29 Aug 2026, #316). |
 | DI | `Microsoft.Extensions.DependencyInjection` | **Amended 15 Aug 2026:** `Microsoft.Extensions.Hosting` removed, zero usages. §12's composition root builds a `ServiceProvider` directly in `App.Compose()` and never a host. The generic host exists to own configuration, logging and a hosted-service lifetime against a process it starts; a WinUI application's lifetime belongs to `Application.OnLaunched` and its windows, so the host would be a second lifetime model beside the real one. |
@@ -98,6 +98,34 @@ Users currently either screen-scrape `:SYST:STAT?` in a terminal emulator or run
 | Sky plot | Hand-drawn `Canvas` / `Path` geometry | No extra dependency. Win2D acceptable if antialiasing quality demands it. |
 | Help rendering | `Markdig` 1.3.2 | (added 29 Aug 2026 from the code, #316) The one third-party runtime dependency beyond the platform packages. `Services/HelpDocument.cs` parses `docs/how-to-use.md` into blocks that `Views/HelpWindow.xaml` lays out natively (#312); the guide is shipped as content, not as HTML. Listed in `THIRD-PARTY-NOTICES.md`. |
 | Tests | xUnit for parser and command-catalog logic | Parser and safety classifier must be in a UI-independent library so they are testable headlessly. |
+
+> **⚠ Amended 29 Aug 2026.** The Architectures row above kept ARM64 alive as a deferred
+> intention: it recorded why the native build had been dropped on 15 Aug, described restoring it
+> as "a small change … when hardware to certify on exists", and — the part that reached the
+> code — required that *"the connection dialog must fail gracefully with a message naming the
+> likely cause when zero ports enumerate on an ARM64 machine."*
+>
+> **That is now struck. ARM64 is not a target and no requirement in this document depends on
+> one.** Two reasons, and the second is the one that matters:
+>
+> - There is no ARM64 device on this project, so nothing written for that platform can be run,
+>   let alone verified. The diagnostic message the row required was written, shipped, and could
+>   never be reached on the machines it was written for — it asked the *process* architecture,
+>   which an x64 package reports as `X64` even on an ARM64 machine (#319 corrected the reading;
+>   this amendment removes the requirement instead). A requirement that cannot be tested here
+>   produces exactly that class of defect, and produced this one.
+> - The audience §4 describes is not an ARM64 audience. Carrying a second architecture's
+>   special cases through the connection dialog, the copy, the tests and the build for a
+>   platform with no device and no expected users is cost with nothing on the other side.
+>
+> **What this does not change:** the x64 package still installs and runs on Windows on ARM under
+> emulation, because Windows makes it so, not because this project arranges it. It is simply not
+> a supported configuration — untested, undocumented, and given no special copy. A user there
+> whose USB-serial adapter has no ARM64 driver now sees the same message as anyone else with no
+> ports, which names the adapter and Device Manager and is the right first step regardless.
+>
+> Restoring ARM64 would mean deciding to support it, acquiring hardware to certify and test on,
+> and amending this row — not uncommenting something.
 
 ### 6.2 Repository location and solution layout
 

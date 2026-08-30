@@ -167,10 +167,9 @@ jobs:
         run: ./build/Capture-Fixtures.ps1 -SelfTest
 
   # ---------------------------------------------------------------------------
-  # §6.1 as amended 15 Aug 2026 requires x64 only, and forbids AnyCPU. ARM64 was
-  # dropped because WACK cannot cross-test and there is no ARM64 hardware to
-  # certify a submission on; Windows 11 on ARM runs the x64 package under
-  # emulation. The matrix keeps its shape so restoring the row is one word.
+  # §6.1 requires x64 only and forbids AnyCPU, x86 and ARM64. The matrix keeps its
+  # shape for the two configurations, not for a second architecture: ARM64 is not a
+  # target of this project (§6.1, amended 29 Aug 2026).
   # ---------------------------------------------------------------------------
   build:
     name: Build ${{ matrix.configuration }} | ${{ matrix.platform }}

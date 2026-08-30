@@ -1,5 +1,4 @@
 using System.IO.Ports;
-using System.Runtime.InteropServices;
 using Microsoft.Extensions.Time.Testing;
 using WinZ3805A.Device.Transport;
 using WinZ3805A.Services;
@@ -381,20 +380,10 @@ public sealed class ConnectionViewModelTests
     public void EachFailureGetsItsOwnRowOfTheStateMatrix(TransportFault fault, string expected)
     {
         string message = ConnectionViewModel.FailureMessage(
-            fault, "COM3", autoDetect: true, settings: null, Architecture.X64);
+            fault, "COM3", autoDetect: true, settings: null);
 
         Assert.Contains("COM3", message, StringComparison.Ordinal);
         Assert.Contains(expected, message, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void AVanishedPortOnArm64PointsAtTheDriver()
-    {
-        string message = ConnectionViewModel.FailureMessage(
-            TransportFault.PortNotFound, "COM3", autoDetect: true, settings: null, Architecture.Arm64);
-
-        Assert.Contains("ARM64", message, StringComparison.Ordinal);
-        Assert.Contains("Device Manager", message, StringComparison.Ordinal);
     }
 
     /// <remarks>
@@ -407,7 +396,7 @@ public sealed class ConnectionViewModelTests
         SerialSettings tried = new() { BaudRate = 19200, DataBits = 7, Parity = Parity.Even };
 
         string message = ConnectionViewModel.FailureMessage(
-            TransportFault.None, "COM3", autoDetect: false, tried, Architecture.X64);
+            TransportFault.None, "COM3", autoDetect: false, tried);
 
         Assert.Contains("19200-7-E-1", message, StringComparison.Ordinal);
         Assert.Contains("Auto-detect", message, StringComparison.Ordinal);
@@ -422,7 +411,7 @@ public sealed class ConnectionViewModelTests
     public void NoFailureMessageApologises(TransportFault fault)
     {
         string message = ConnectionViewModel.FailureMessage(
-            fault, "COM3", autoDetect: true, settings: null, Architecture.X64);
+            fault, "COM3", autoDetect: true, settings: null);
 
         Assert.DoesNotContain("Sorry", message, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Oops", message, StringComparison.OrdinalIgnoreCase);
