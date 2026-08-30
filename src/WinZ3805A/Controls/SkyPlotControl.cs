@@ -1,4 +1,4 @@
-using Microsoft.UI.Xaml;
+﻿using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -453,12 +453,32 @@ public sealed class SkyPlotControl : Control
                 BorderBrush = satellite.Marker switch
                 {
                     SkyPlotMarkerKind.Tracked => Brush("WzStrokeDefaultBrush"),
-                    SkyPlotMarkerKind.BelowMask => Brush("WzTextTertiaryBrush"),
+                    SkyPlotMarkerKind.BelowMask or SkyPlotMarkerKind.Ignored => Brush("WzTextTertiaryBrush"),
+                    SkyPlotMarkerKind.Acquiring => Brush("WzTextPrimaryBrush"),
                     _ => Brush("WzTextSecondaryBrush"),
                 },
-                BorderThickness = new Thickness(tracked ? 1 : 1.5),
-                Opacity = satellite.Marker == SkyPlotMarkerKind.BelowMask ? 0.55 : 1,
+
+                // Stroke weight is §9.4.3's second channel for acquiring (#320): a heavier ring
+                // survives dichromacy, greyscale and high contrast where a hue would not, and the
+                // plot has no room for a word. The list view says "Acquiring" instead (A11Y-11).
+                BorderThickness = new Thickness(tracked ? 1 : satellite.Marker switch
+                {
+                    SkyPlotMarkerKind.Acquiring => 2.5,
+                    _ => 1.5,
+                }),
+
+                // Ignored dims with below-mask, and for the same reason: both are satellites the
+                // receiver is not going to try, so neither should compete with the ones it is.
+                Opacity = satellite.Marker is SkyPlotMarkerKind.BelowMask or SkyPlotMarkerKind.Ignored ? 0.55 : 1,
             };
+
+            // §10.5's dashed ring for an excluded satellite. Through the template's own state group
+            // rather than a second Style — see WzSkyPlotMarkerStyle for why, and for why a dash and
+            // not a hue.
+            VisualStateManager.GoToState(
+                marker,
+                satellite.Marker == SkyPlotMarkerKind.Ignored ? "Excluded" : "Included",
+                useTransitions: false);
 
             AutomationProperties.SetName(marker, satellite.Description);
             ToolTipService.SetToolTip(marker, satellite.Description);

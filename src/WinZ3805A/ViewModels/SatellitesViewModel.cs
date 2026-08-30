@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 
 using WinZ3805A.Controls;
 using WinZ3805A.Device.Models;
@@ -24,6 +24,8 @@ public sealed class SatellitesViewModel : INotifyPropertyChanged
     // The rows the tables hold, kept alive between reads - see EnsureRows.
     private ReceiverStatus? _rowsBuiltFrom;
     private int? _rowsBuiltForMask;
+    private IReadOnlySet<int> _excluded = new HashSet<int>();
+    private IReadOnlySet<int> _rowsBuiltForExclusions = new HashSet<int>();
     private IReadOnlyList<TrackedSatelliteRow> _tracked = [];
     private IReadOnlyList<PredictedSatelliteRow> _notTracked = [];
     private IReadOnlyList<SkyPlotSatellite> _skyPlot = [];
@@ -62,6 +64,35 @@ public sealed class SatellitesViewModel : INotifyPropertyChanged
 
     /// <summary>The elevation below which the receiver ignores satellites.</summary>
     public int? ElevationMaskDegrees => Status?.ElevationMaskDegrees;
+
+    /// <summary>
+    /// The PRNs the operator has excluded from tracking, for §10.5's <i>ignored</i> status (#320).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Set by the page from <c>:GPS:SAT:TRAC:IGN?</c> rather than parsed from the sweep, because the
+    /// status screen has no way to say it: from the screen's point of view an excluded satellite is
+    /// simply one that is not being tracked, which is exactly the confusion this column removes.
+    /// </para>
+    /// <para>
+    /// Read on navigation and after the Manage dialog closes, and not on a timer. The list changes
+    /// only when someone changes it, and putting a second query on the 1 s sweep to catch an event
+    /// that happens twice a year would be paying wire time for nothing (§7.3).
+    /// </para>
+    /// </remarks>
+    public IReadOnlySet<int> ExcludedPrns
+    {
+        get => _excluded;
+        set
+        {
+            IReadOnlySet<int> next = value ?? new HashSet<int>();
+            if (!_excluded.SetEquals(next))
+            {
+                _excluded = next;
+                RaiseAll();
+            }
+        }
+    }
 
     /// <summary>How many satellites are being tracked.</summary>
     public int TrackedCount => Status?.Tracked.Count ?? 0;
@@ -121,13 +152,16 @@ public sealed class SatellitesViewModel : INotifyPropertyChanged
     /// </remarks>
     private void EnsureRows()
     {
-        if (ReferenceEquals(_rowsBuiltFrom, Status) && _rowsBuiltForMask == ElevationMaskDegrees)
+        if (ReferenceEquals(_rowsBuiltFrom, Status)
+            && _rowsBuiltForMask == ElevationMaskDegrees
+            && _rowsBuiltForExclusions.SetEquals(_excluded))
         {
             return;
         }
 
         _rowsBuiltFrom = Status;
         _rowsBuiltForMask = ElevationMaskDegrees;
+        _rowsBuiltForExclusions = new HashSet<int>(_excluded);
 
         _tracked = Status is null
             ? []
@@ -135,7 +169,11 @@ public sealed class SatellitesViewModel : INotifyPropertyChanged
 
         _notTracked = Status is null
             ? []
-            : [.. Status.NotTracked.Select(satellite => new PredictedSatelliteRow(satellite, ElevationMaskDegrees))];
+            : [.. Status.NotTracked.Select(satellite => new PredictedSatelliteRow(satellite, ElevationMaskDegrees)
+            {
+                IsAcquiring = satellite.AttemptingToTrack,
+                IsIgnored = _excluded.Contains(satellite.Prn),
+            })];
 
         _skyPlot = BuildSkyPlot();
     }
@@ -199,7 +237,7 @@ public sealed class SatellitesViewModel : INotifyPropertyChanged
                     row.AzimuthDegrees,
                     null,
                     SignalStrengthKind.Unknown,
-                    row.IsBelowMask ? SkyPlotMarkerKind.BelowMask : SkyPlotMarkerKind.Predicted,
+                    row.Marker,
                     $"{row.Description}, not tracked"));
             }
 
@@ -362,17 +400,68 @@ public sealed class PredictedSatelliteRow
 
     /// <summary>Whether this satellite sits below the elevation mask.</summary>
     /// <remarks>
-    /// Derived, not reported. §10.5's wireframe shows a status column reading "acquiring", "below
-    /// mask" or "ignored", but the receiver's Not Tracking table prints only PRN, elevation and
-    /// azimuth — there is no status column on the wire. Below-mask is the one of the three that
-    /// follows from what is printed, and it is the one that explains most empty rows. The others
-    /// are not invented.
+    /// Derived rather than reported: the receiver's Not Tracking table prints only PRN, elevation
+    /// and azimuth, and there is no status column on the wire. It is the weakest of the three
+    /// answers below and the last one tried.
     /// </remarks>
     public bool IsBelowMask =>
         ElevationDegrees is int elevation && ElevationMaskDegrees is int mask && elevation < mask;
 
-    /// <summary>The status column, empty when nothing can be said.</summary>
-    public string StatusText => IsBelowMask ? "below mask" : string.Empty;
+    /// <summary>Whether the receiver says it is trying to acquire this one.</summary>
+    /// <remarks>
+    /// The receiver's own claim, not a derivation: the status screen prints an asterisk before the
+    /// PRN and its legend explains it as <c>*attempting to track</c>. Parsed since #4 and read by
+    /// nothing until #320.
+    /// </remarks>
+    public bool IsAcquiring { get; init; }
+
+    /// <summary>Whether the operator has excluded this one from tracking.</summary>
+    /// <remarks>
+    /// From <c>:GPS:SAT:TRAC:IGN?</c>, read alongside the sweep rather than parsed from it — the
+    /// screen has no way to say it, an excluded satellite being simply one that is not tracked.
+    /// </remarks>
+    public bool IsIgnored { get; init; }
+
+    /// <summary>
+    /// The status column §10.5 specifies, in full (#320).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Most authoritative answer first.</b> <i>Ignored</i> is a decision the operator made and
+    /// explains the row whatever else is true of it. <i>Acquiring</i> is the receiver's own
+    /// statement about what it is doing. <i>Below mask</i> is this application's inference from two
+    /// numbers, and comes last because it is the only one that could be wrong.
+    /// </para>
+    /// <para>
+    /// §10.5's wireframe lists <i>acquiring</i> and <i>✱ trying</i> as though they were separate
+    /// states. They are one state shown two ways — a word in the table, a marker on the plot — and
+    /// the receiver's own legend settles it by calling the asterisk "attempting to track".
+    /// </para>
+    /// <para>
+    /// Empty when none of the three applies, which is honest: the satellite is up, eligible, not
+    /// excluded, and the receiver has not said why it is not tracking it.
+    /// </para>
+    /// </remarks>
+    public string StatusText => this switch
+    {
+        { IsIgnored: true } => "ignored",
+        { IsAcquiring: true } => "acquiring",
+        { IsBelowMask: true } => "below mask",
+        _ => string.Empty,
+    };
+
+    /// <summary>How the sky plot draws this satellite.</summary>
+    /// <remarks>
+    /// The same precedence <see cref="StatusText"/> uses, so the plot and the table never disagree
+    /// about one satellite — which is the property #60 asks of the two views generally.
+    /// </remarks>
+    public SkyPlotMarkerKind Marker => this switch
+    {
+        { IsIgnored: true } => SkyPlotMarkerKind.Ignored,
+        { IsAcquiring: true } => SkyPlotMarkerKind.Acquiring,
+        { IsBelowMask: true } => SkyPlotMarkerKind.BelowMask,
+        _ => SkyPlotMarkerKind.Predicted,
+    };
 
     /// <summary>One sentence naming every column, for the row's automation name.</summary>
     public string Description
@@ -380,7 +469,14 @@ public sealed class PredictedSatelliteRow
         get
         {
             string basics = $"PRN {Prn}, elevation {Describe(ElevationDegrees)}, azimuth {Describe(AzimuthDegrees)}";
-            return IsBelowMask ? $"{basics}, below the elevation mask" : basics;
+
+            return this switch
+            {
+                { IsIgnored: true } => $"{basics}, excluded from tracking",
+                { IsAcquiring: true } => $"{basics}, the receiver is trying to acquire it",
+                { IsBelowMask: true } => $"{basics}, below the elevation mask",
+                _ => basics,
+            };
         }
     }
 

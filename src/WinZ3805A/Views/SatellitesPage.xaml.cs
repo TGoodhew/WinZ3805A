@@ -10,6 +10,7 @@ using Microsoft.UI.Xaml.Navigation;
 
 using WinZ3805A.Controls;
 using WinZ3805A.Device.Commands;
+using WinZ3805A.Device.Transport;
 using WinZ3805A.Services;
 using WinZ3805A.ViewModels;
 
@@ -120,6 +121,41 @@ public sealed partial class SatellitesPage : Page
         ApplySkyView();
         _stalenessTicker.Start();
         Render();
+
+        _ = ReadExclusionsAsync();
+    }
+
+    /// <summary>
+    /// Reads the receiver's exclusion list, for §10.5's <i>ignored</i> status (#320).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// On navigation, on reconnect, and after the Manage dialog — not on the sweep. The list changes
+    /// only when someone changes it, and a second query on the 1 s cadence to catch an event that
+    /// happens twice a year would be paying wire time for nothing (§7.3). The three moments it is
+    /// read are the three at which it can have changed without this page knowing.
+    /// </para>
+    /// <para>
+    /// A failure leaves the set empty, which means no row claims to be ignored. That is the safe
+    /// direction: an unread list must not make a satellite look excluded when it is not, and §11.1's
+    /// rule is that what could not be read says nothing rather than guessing.
+    /// </para>
+    /// </remarks>
+    private async Task ReadExclusionsAsync()
+    {
+        if (_device is not DeviceContext device ||
+            _model is not SatellitesViewModel model ||
+            device.Session.Status != ConnectionStatus.Connected ||
+            device.Driver.Find(":GPS:SAT:TRAC:IGN?") is not ScpiCommand query)
+        {
+            return;
+        }
+
+        Transaction reply = await device.Session.ExecuteAsync(query).ConfigureAwait(true);
+
+        model.ExcludedPrns = reply.Succeeded
+            ? SatelliteTrackingParser.ParsePrnList(reply.Lines)
+            : new HashSet<int>();
     }
 
     private void OnStatusChanged(object? sender, ConnectionStatusChanged e) =>
@@ -128,6 +164,11 @@ public sealed partial class SatellitesPage : Page
             if (_model is SatellitesViewModel model)
             {
                 model.Connection = e.Status;
+            }
+
+            if (e?.Status == ConnectionStatus.Connected)
+            {
+                _ = ReadExclusionsAsync();
             }
         });
 
@@ -349,6 +390,15 @@ public sealed partial class SatellitesPage : Page
         {
             _busy = false;
             Render();
+
+            // The dialog exists to change the exclusion list, so this is the one moment it is
+            // certain to be stale. In the finally and not after it: the loop above leaves only by
+            // returning, so anything written past the try is unreachable — the compiler said so.
+            //
+            // Re-read whether or not a command was sent. The user may have cancelled after changing
+            // the list from something else, and a read costs one transaction. Render has already run
+            // by then, so the rows correct themselves when the answer arrives rather than waiting.
+            await ReadExclusionsAsync().ConfigureAwait(true);
         }
     }
 

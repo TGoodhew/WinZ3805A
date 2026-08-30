@@ -208,6 +208,29 @@
                                     </VisualState>
                                     <VisualState x:Name="Disabled" />
                                 </VisualStateGroup>
+
+                                <!--
+                                    §10.5's "ignored" (#320), which needs a channel of its own.
+
+                                    An excluded satellite and one below the mask are both drawn
+                                    hollow and dimmed - they are equally not candidates - and that
+                                    made them the same pixels, which is precisely what §9.4.3
+                                    forbids. A dashed ring is the difference: it is the conventional
+                                    mark for "not participating", it survives greyscale and every
+                                    dichromacy, and it costs nothing that a colour would.
+
+                                    Switched by SkyPlotControl through GoToState rather than by a
+                                    second Style, because the alternative was forty duplicated lines
+                                    of template differing in one attribute.
+                                -->
+                                <VisualStateGroup x:Name="MarkerStates">
+                                    <VisualState x:Name="Included" />
+                                    <VisualState x:Name="Excluded">
+                                        <VisualState.Setters>
+                                            <Setter Target="Marker.StrokeDashArray" Value="2,1.5" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                </VisualStateGroup>
                             </VisualStateManager.VisualStateGroups>
                         </Ellipse>
                     </Grid>

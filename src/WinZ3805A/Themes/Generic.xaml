@@ -707,10 +707,18 @@
                         </Grid>
 
                         <!--
-                            §10.5's legend, minus its third entry. The wireframe offers
-                            "✱ trying", but the receiver's Not Tracking table carries no status
-                            column, so acquiring and trying are not on the wire - see
-                            SkyPlotMarkerKind. Below the mask is derivable and takes its place.
+                            §10.5's legend, complete as of 30 Aug 2026 (#320).
+
+                            It read three entries for a long time because the receiver's Not Tracking
+                            table carries no status column, so "acquiring" and "ignored" looked like
+                            things the wire could not say. Both were reachable: acquiring is the
+                            ASTERISK the screen already prints and whose meaning its own legend gives
+                            as "*attempting to track", parsed since #4 and read by nothing; ignored
+                            comes from :GPS:SAT:TRAC:IGN? alongside the sweep.
+
+                            Each entry differs from its neighbours in SHAPE as well as colour, per
+                            §9.4.3: filled, hollow, hollow-and-heavy, hollow-and-dimmed. Acquiring
+                            takes the heavy stroke because it is the one the reader wants to find.
                         -->
                         <StackPanel Orientation="Horizontal"
                                     Spacing="{ThemeResource WzSpaceMd}"
@@ -740,11 +748,35 @@
                             <StackPanel Orientation="Horizontal" Spacing="{ThemeResource WzSpaceXxs}">
                                 <Ellipse Width="10" Height="10"
                                          VerticalAlignment="Center"
+                                         Fill="{ThemeResource WzCardFillBrush}"
+                                         Stroke="{ThemeResource WzTextPrimaryBrush}"
+                                         StrokeThickness="2.5" />
+                                <TextBlock Text="acquiring"
+                                           Style="{ThemeResource WzCaptionTextStyle}"
+                                           Foreground="{ThemeResource WzTextSecondaryBrush}" />
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Spacing="{ThemeResource WzSpaceXxs}">
+                                <Ellipse Width="10" Height="10"
+                                         VerticalAlignment="Center"
                                          Opacity="0.55"
                                          Fill="{ThemeResource WzCardFillBrush}"
                                          Stroke="{ThemeResource WzTextTertiaryBrush}"
                                          StrokeThickness="1.5" />
                                 <TextBlock Text="below mask"
+                                           Style="{ThemeResource WzCaptionTextStyle}"
+                                           Foreground="{ThemeResource WzTextSecondaryBrush}" />
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Spacing="{ThemeResource WzSpaceXxs}">
+                                <Ellipse Width="10" Height="10"
+                                         VerticalAlignment="Center"
+                                         Opacity="0.55"
+                                         Fill="{ThemeResource WzCardFillBrush}"
+                                         Stroke="{ThemeResource WzTextTertiaryBrush}"
+                                         StrokeDashArray="2,1.5"
+                                         StrokeThickness="1.5" />
+                                <TextBlock Text="ignored"
                                            Style="{ThemeResource WzCaptionTextStyle}"
                                            Foreground="{ThemeResource WzTextSecondaryBrush}" />
                             </StackPanel>

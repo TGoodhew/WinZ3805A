@@ -1,4 +1,4 @@
-using WinZ3805A.Device.Models;
+﻿using WinZ3805A.Device.Models;
 
 namespace WinZ3805A.Controls;
 
@@ -27,6 +27,33 @@ public enum SkyPlotMarkerKind
 
     /// <summary>Predicted, and below the elevation mask — so not a candidate. Hollow and dimmed.</summary>
     BelowMask,
+
+    /// <summary>
+    /// The receiver is trying to acquire this one. Hollow, with a heavier stroke (§10.5, #320).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Not derived and not guessed: the status screen prints an asterisk before the PRN and its own
+    /// legend explains it as <c>*attempting to track</c>. §10.5's wireframe lists <i>acquiring</i>
+    /// and <i>✱ trying</i> as though they were two states; they are one, and the wireframe is
+    /// showing the same fact as a word in the table and as a marker on the plot.
+    /// </para>
+    /// <para>
+    /// The stroke weight is the second channel §9.4.3 requires — a heavier ring survives every
+    /// dichromacy, greyscale and high contrast, where a hue would not. The list view says the word
+    /// instead, which is what A11Y-11 asks of it.
+    /// </para>
+    /// </remarks>
+    Acquiring,
+
+    /// <summary>Excluded from tracking by the operator (§10.5's <i>ignored</i>). Hollow and dimmed.</summary>
+    /// <remarks>
+    /// From <c>:GPS:SAT:TRAC:IGN?</c> rather than from the sweep — the status screen has no way to
+    /// say it, because from the screen's point of view an excluded satellite is simply one that is
+    /// not being tracked. It takes precedence over <see cref="BelowMask"/> in the status column: the
+    /// operator's decision explains the row whatever the elevation happens to be.
+    /// </remarks>
+    Ignored,
 }
 
 /// <summary>
@@ -87,6 +114,8 @@ public sealed record SkyPlotSatellite(
         SkyPlotMarkerKind.Tracked => "Tracked",
         SkyPlotMarkerKind.Predicted => "Predicted",
         SkyPlotMarkerKind.BelowMask => "Below mask",
+        SkyPlotMarkerKind.Acquiring => "Acquiring",
+        SkyPlotMarkerKind.Ignored => "Ignored",
         _ => ReadoutFormatter.NoValue,
     };
 
