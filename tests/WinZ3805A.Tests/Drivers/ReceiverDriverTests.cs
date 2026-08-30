@@ -200,6 +200,13 @@ public class ReceiverDriverTests
     }
 
     /// <summary>A query/response family does not claim a talker — the SmartClock has no business with NMEA.</summary>
+    /// <remarks>
+    /// The line is built by the codec rather than typed. It was typed once, with the checksum
+    /// worked out by hand, and the checksum was wrong — the sentence this test fed a driver was
+    /// one no talker could have sent. It passed anyway, because a query/response driver refuses
+    /// every line whatever its checksum, so the defect could only ever be found by reading it
+    /// (#319, from the #316 audit). That is the tutorial's finding 3, one file over.
+    /// </remarks>
     [Theory]
     [MemberData(nameof(AllDrivers))]
     public void AQueryResponseDriverHearsNoOne(IReceiverDriver driver)
@@ -209,8 +216,11 @@ public class ReceiverDriverTests
             return;
         }
 
-        Assert.Null(driver.Overhear(["$GPRMC,120000.00,A,4737.2300,N,12220.9580,W,0.0,0.0,290826,,*6C"]));
-        Assert.Null(driver.ClassifyLine("$GPRMC,120000.00,A,4737.2300,N,12220.9580,W,0.0,0.0,290826,,*6C"));
+        string rmc = NmeaSentence.Format(
+            "GP", "RMC", "120000.00", "A", "4737.2300", "N", "12220.9580", "W", "0.0", "0.0", "290826", null, null);
+
+        Assert.Null(driver.Overhear([rmc]));
+        Assert.Null(driver.ClassifyLine(rmc));
     }
 
     /// <summary>

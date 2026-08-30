@@ -74,11 +74,42 @@ public sealed class BroadcastListener : IAsyncDisposable
         _discriminator = driver.Plan.FastTier[0];
     }
 
+    /// <summary>
+    /// The most claimed lines one cycle may hold before it is abandoned unfinished.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A cycle ends when the boundary key arrives, so a driver that claims lines from a talker
+    /// which never sends its boundary would accumulate for as long as the link stayed up. That is
+    /// not hypothetical: a driver's <c>Overhear</c> may claim on any sentence it understands while
+    /// its plan names one particular sentence as the boundary, and a talker configured without
+    /// that one satisfies the first and never the second. The silence timeout does not catch it —
+    /// lines <i>are</i> arriving — so before this cap the listener grew without bound and answered
+    /// <c>WholeCycle</c> with an ever-larger blob marked <c>Completed</c> (#319, from the #316
+    /// audit).
+    /// </para>
+    /// <para>
+    /// 512 is far above any real cycle — a GNSS talker's is a dozen sentences including its GSV
+    /// pages — so reaching it means the boundary is not coming rather than that the talker is
+    /// verbose. The cycle is dropped, <see cref="CyclesAbandoned"/> counts it and a warning names
+    /// the driver, which is what a driver author needs to see; answers then come from the last
+    /// complete cycle, or empty when there has never been one.
+    /// </para>
+    /// </remarks>
+    public const int MaximumCycleLines = 512;
+
     /// <summary>How many complete cycles have been heard.</summary>
     public int CyclesHeard { get; private set; }
 
     /// <summary>Lines the driver did not claim — noise, another talker, a wrong baud rate.</summary>
     public int LinesDiscarded { get; private set; }
+
+    /// <summary>
+    /// Cycles abandoned because <see cref="MaximumCycleLines"/> claimed lines arrived without the
+    /// boundary the driver's plan names. Non-zero means the driver is claiming a talker it cannot
+    /// serve; see the remarks on the constant.
+    /// </summary>
+    public int CyclesAbandoned { get; private set; }
 
     /// <summary>Whether the transport closed under the listener.</summary>
     public bool Ended => _ended;
@@ -321,6 +352,18 @@ public sealed class BroadcastListener : IAsyncDisposable
                 }
 
                 _current = [(key, line)];
+            }
+            else if (_current.Count >= MaximumCycleLines)
+            {
+                // The boundary is not coming. Drop the cycle rather than accumulate for the life of
+                // the link, and say so once per abandonment so a driver author sees the cause.
+                CyclesAbandoned++;
+                _logger.LogWarning(
+                    "The {Family} driver claimed {Count} lines without its cycle boundary {Boundary}; the cycle was abandoned.",
+                    _driver.Family,
+                    _current.Count,
+                    _discriminator);
+                _current = [];
             }
             else
             {
