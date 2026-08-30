@@ -1,3 +1,5 @@
+using System.Threading.Channels;
+
 using Microsoft.Extensions.Time.Testing;
 using WinZ3805A.Device.Commands;
 using WinZ3805A.Device.Transport;
@@ -546,7 +548,10 @@ public class DeviceSessionServiceTests
         // cannot fire on its own and the command stays genuinely in flight.
         receiver.Behaviour = TransportBehaviour.Silent;
         Task<Transaction> inFlight = session.ExecuteAsync(Status);
-        await Task.Delay(50);
+
+        // In flight means the command reached the wire, which the transport says — not that 50 ms
+        // went by, which was the old approximation of it (#326).
+        await receiver.NextWriteAsync(TestTimeout);
         Assert.False(inFlight.IsCompleted, "the command should still be in flight");
 
         await session.DisconnectAsync().WaitAsync(TestTimeout);
@@ -575,10 +580,12 @@ public class DeviceSessionServiceTests
 
         receiver.Behaviour = TransportBehaviour.Silent;
 
-        // The first occupies the pump; the second is left in the channel behind it.
+        // The first occupies the pump; the second is left in the channel behind it. Waiting for the
+        // first to reach the wire is what makes that true — the pump serves one at a time, so a
+        // command on the wire is a command the pump is still busy with (#326).
         Task<Transaction> inFlight = session.ExecuteAsync(Status);
         Task<Transaction> queued = session.ExecuteAsync(Status);
-        await Task.Delay(50);
+        await receiver.NextWriteAsync(TestTimeout);
 
         await session.DisconnectAsync().WaitAsync(TestTimeout);
 
@@ -607,7 +614,7 @@ public class DeviceSessionServiceTests
 
         first.Behaviour = TransportBehaviour.Silent;
         Task<Transaction> stranded = session.ExecuteAsync(Status);
-        await Task.Delay(50);
+        await first.NextWriteAsync(TestTimeout);
 
         await session.DisconnectAsync().WaitAsync(TestTimeout);
         await AssertReleasedAsync(stranded);
@@ -622,19 +629,78 @@ public class DeviceSessionServiceTests
     // The retry schedule §9.11's countdown needs, and its two actions (#248)
     // -------------------------------------------------------------------------------------
 
-    /// <summary>Drops a connected session into Reconnecting and returns it.</summary>
-    private static async Task<DeviceSessionService> ReconnectingSessionAsync(
+    /// <summary>
+    /// Records every change to <see cref="DeviceSessionService.NextRetryAt"/> so a test can await
+    /// the next one instead of sampling for it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The queue is what makes this race-free. The reconnect loop runs fire-and-forget, so a change
+    /// can happen before the test gets round to asking for it; buffering every transition means the
+    /// test reads one that has already occurred rather than waiting for one that never comes again.
+    /// Subscribing has to happen before the session is faulted, which is why
+    /// <see cref="ReconnectingSessionAsync"/> attaches it and hands it back.
+    /// </para>
+    /// <para>
+    /// This replaces three <c>Task.Delay(10)</c> polling loops with wall-clock budgets (#326). They
+    /// asserted the right properties and failed for the wrong reason: on a loaded machine the
+    /// background loop had not reached its wait inside the budget, which says nothing about the
+    /// schedule. Every flake this repository has had is that shape.
+    /// </para>
+    /// </remarks>
+    private sealed class RetrySchedule : IDisposable
+    {
+        private readonly DeviceSessionService _session;
+        private readonly Channel<DateTimeOffset?> _changes =
+            Channel.CreateUnbounded<DateTimeOffset?>(new UnboundedChannelOptions { SingleReader = true });
+
+        public RetrySchedule(DeviceSessionService session)
+        {
+            _session = session;
+            _session.RetryScheduleChanged += OnChanged;
+        }
+
+        /// <summary>The next change, whatever it is.</summary>
+        public async Task<DateTimeOffset?> NextChangeAsync()
+        {
+            using CancellationTokenSource giveUp = new(TestTimeout);
+            return await _changes.Reader.ReadAsync(giveUp.Token);
+        }
+
+        /// <summary>The next change that schedules an attempt, skipping any that clear one.</summary>
+        public async Task<DateTimeOffset> NextScheduledAsync()
+        {
+            while (true)
+            {
+                if (await NextChangeAsync() is DateTimeOffset due)
+                {
+                    return due;
+                }
+            }
+        }
+
+        public void Dispose() => _session.RetryScheduleChanged -= OnChanged;
+
+        private void OnChanged() => _changes.Writer.TryWrite(_session.NextRetryAt);
+    }
+
+    /// <summary>
+    /// Drops a connected session into Reconnecting and returns it with a watcher on its retry
+    /// schedule, subscribed before the fault so no transition can be missed.
+    /// </summary>
+    private static async Task<(DeviceSessionService Session, RetrySchedule Schedule)> ReconnectingSessionAsync(
         ControllableTransport transport,
         FakeTimeProvider clock)
     {
         DeviceSessionService session = new((_, _) => transport, clock) { StayConnected = true };
+        RetrySchedule schedule = new(session);
 
         await session.ConnectAsync("COM3", SerialSettings.Default).WaitAsync(TestTimeout);
         transport.Behaviour = TransportBehaviour.Faulting;
         await RunAndTolerateFailureAsync(session);
 
         Assert.Equal(ConnectionStatus.Reconnecting, session.Status);
-        return session;
+        return (session, schedule);
     }
 
     /// <summary>While it is waiting to retry, the session says when the next attempt is due.</summary>
@@ -647,20 +713,15 @@ public class DeviceSessionServiceTests
     public async Task WhileWaitingToRetryTheNextAttemptIsPublished()
     {
         FakeTimeProvider clock = new();
-        await using DeviceSessionService session = await ReconnectingSessionAsync(Receiver(), clock);
+        (DeviceSessionService session, RetrySchedule schedule) = await ReconnectingSessionAsync(Receiver(), clock);
+        await using DeviceSessionService _ = session;
+        using RetrySchedule watcher = schedule;
 
-        // The loop is fire-and-forget, so give it a moment to reach the wait and publish.
-        DateTimeOffset? due = null;
-        for (int i = 0; i < 50 && due is null; i++)
-        {
-            await Task.Delay(10);
-            due = session.NextRetryAt;
-        }
-
-        Assert.NotNull(due);
+        DateTimeOffset due = await watcher.NextScheduledAsync();
 
         // The first backoff is 2 s (§7.2), so the first attempt is due about then and never behind.
-        Assert.InRange(due!.Value - clock.GetUtcNow(), TimeSpan.Zero, TimeSpan.FromSeconds(2));
+        Assert.InRange(due - clock.GetUtcNow(), TimeSpan.Zero, TimeSpan.FromSeconds(2));
+        Assert.Equal(due, session.NextRetryAt);
     }
 
     /// <summary>Stop retrying leaves the link faulted rather than disconnected.</summary>
@@ -680,16 +741,28 @@ public class DeviceSessionServiceTests
     public async Task StopRetryingFaultsTheSessionAndEndsTheLoop()
     {
         FakeTimeProvider clock = new();
-        await using DeviceSessionService session = await ReconnectingSessionAsync(Receiver(), clock);
+        ControllableTransport receiver = Receiver();
+        (DeviceSessionService session, RetrySchedule schedule) = await ReconnectingSessionAsync(receiver, clock);
+        await using DeviceSessionService _ = session;
+        using RetrySchedule watcher = schedule;
 
+        int opensBefore = receiver.OpenCount;
         session.StopRetrying();
 
         Assert.Equal(ConnectionStatus.Faulted, session.Status);
         Assert.Null(session.NextRetryAt);
 
         // The loop is gone: winding well past the cap produces no further attempts and no change.
+        //
+        // A budget is the right instrument here and the wrong one above (#326). This asserts that
+        // something does NOT happen, so time can only make the test more thorough: too little and it
+        // misses a live loop, never too little and it fails a dead one. The waits this file used to
+        // open with were the opposite — they asserted something DOES happen, so running out of time
+        // failed a session that was merely slow.
         clock.Advance(TimeSpan.FromMinutes(2));
         await Task.Delay(50);
+
+        Assert.Equal(opensBefore, receiver.OpenCount);
 
         Assert.Equal(ConnectionStatus.Faulted, session.Status);
     }
@@ -705,7 +778,9 @@ public class DeviceSessionServiceTests
     public async Task StopRetryingLeavesTheReconnectPreferenceAlone()
     {
         FakeTimeProvider clock = new();
-        await using DeviceSessionService session = await ReconnectingSessionAsync(Receiver(), clock);
+        (DeviceSessionService session, RetrySchedule schedule) = await ReconnectingSessionAsync(Receiver(), clock);
+        await using DeviceSessionService _ = session;
+        using RetrySchedule watcher = schedule;
 
         session.StopRetrying();
 
@@ -722,30 +797,23 @@ public class DeviceSessionServiceTests
     public async Task RetryNowDoesNotWaitOutTheBackoff()
     {
         FakeTimeProvider clock = new();
-        await using DeviceSessionService session = await ReconnectingSessionAsync(Receiver(), clock);
+        (DeviceSessionService session, RetrySchedule schedule) = await ReconnectingSessionAsync(Receiver(), clock);
+        await using DeviceSessionService _ = session;
+        using RetrySchedule watcher = schedule;
 
-        DateTimeOffset? due = null;
-        for (int i = 0; i < 50 && due is null; i++)
-        {
-            await Task.Delay(10);
-            due = session.NextRetryAt;
-        }
-
-        Assert.NotNull(due);
-        Assert.True(due!.Value > clock.GetUtcNow(), "the wait should still be ahead of the clock");
+        DateTimeOffset pinned = clock.GetUtcNow();
+        DateTimeOffset due = await watcher.NextScheduledAsync();
+        Assert.True(due > pinned, "the wait should still be ahead of the clock");
 
         session.RetryNow();
 
-        // The clock is pinned, so nothing here can have reached the scheduled instant. The wait
-        // ending at all is the assertion.
-        bool woke = false;
-        for (int i = 0; i < 100 && !woke; i++)
-        {
-            await Task.Delay(10);
-            woke = session.NextRetryAt != due;
-        }
+        // Waking clears the schedule, so the very next change is the one Retry now caused.
+        Assert.Null(await watcher.NextChangeAsync());
 
-        Assert.True(woke, "Retry now should have woken the backoff wait");
+        // And it was the wake rather than the passage of time: nothing advanced the clock, so it
+        // never reached the instant the attempt was scheduled for.
+        Assert.Equal(pinned, clock.GetUtcNow());
+        Assert.True(due > clock.GetUtcNow());
     }
 
     /// <summary>Retry now on a session that is not retrying does nothing.</summary>
