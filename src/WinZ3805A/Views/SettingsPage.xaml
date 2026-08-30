@@ -193,8 +193,12 @@
                         acceptance asks for a discoverable, non-Task-Manager way out, and this is
                         the one that does not depend on shell behaviour nobody here controls.
                     -->
+                    <!--
+                        The label is set in code from Package.Current.DisplayName (§6.3): the
+                        product name is never hard-coded in XAML, because identity and display
+                        name are decoupled deliberately and a rename must stay a one-line change.
+                    -->
                     <Button x:Name="ExitButton"
-                            Content="Exit WinZ3805A"
                             Click="OnExitClicked"
                             ToolTipService.ToolTip="Stop monitoring and close the application" />
                 </StackPanel>

@@ -161,6 +161,13 @@
     <Compile Include="..\..\src\WinZ3805A\Services\PollingService.cs"
              Link="Services\PollingService.cs" />
 
+    <!-- #319: the one expression the notification area, the taskbar badge and the window all show
+         a mode through. It was declared at the bottom of TaskbarOverlayService.cs, which speaks
+         WinUI and cannot be linked here - so MainViewModel, which is linked, could not call it and
+         restated it instead. Its own file, linked, is what makes the single copy reachable. -->
+    <Compile Include="..\..\src\WinZ3805A\Services\ShellMode.cs"
+             Link="Services\ShellMode.cs" />
+
     <!-- §15 step 10's tier C path. The dialog stays in the app; what is linked is everything that
          decides what it says, whether the confirm button may enable at all (P0-8), what §7.2's
          error-queue read makes of the answer, and §10.8's power-up guard - none of which needs a

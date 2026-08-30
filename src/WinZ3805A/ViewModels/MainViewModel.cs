@@ -87,10 +87,14 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// A session that is not connected reports <see cref="ReceiverMode.Disconnected"/> whatever the
     /// store last held. The readings stay on screen and go stale honestly (§9.11), but the mode is
     /// a claim about *now* and must not outlive the link that justified it.
+    /// <para>
+    /// Through <see cref="ShellMode.For"/>, which the notification area and the taskbar badge also
+    /// call. This restated the expression instead until #319 — the third copy that type's own
+    /// remarks warn about, and the one that would have let the window disagree with the icon
+    /// beside it about the same receiver.
+    /// </para>
     /// </remarks>
-    public ReceiverMode Mode => Connection == ConnectionStatus.Connected
-        ? ReceiverModes.FromSyncState(_store.SyncState)
-        : ReceiverMode.Disconnected;
+    public ReceiverMode Mode => ShellMode.For(_store, Connection);
 
     /// <summary>The mode text beside the medallion (§10.3).</summary>
     public string ModeText => ReceiverModes.TextOf(Mode);

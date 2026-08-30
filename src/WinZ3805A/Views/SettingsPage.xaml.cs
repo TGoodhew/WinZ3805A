@@ -6,6 +6,8 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
 
+using Windows.ApplicationModel;
+
 using WinZ3805A.Controls;
 using WinZ3805A.Services;
 using WinZ3805A.ViewModels;
@@ -35,7 +37,16 @@ public sealed partial class SettingsPage : Page
     public static event EventHandler? AdvancedChanged;
 
     /// <summary>Creates the page.</summary>
-    public SettingsPage() => InitializeComponent();
+    public SettingsPage()
+    {
+        InitializeComponent();
+
+        // §6.3: read the display name from the manifest, never hard-code it in XAML. This button
+        // carried the literal "Exit WinZ3805A" until #319 — the one place in the application that
+        // had it, which is exactly how a rename would have shipped a window whose title said one
+        // thing and whose Exit button said another.
+        ExitButton.Content = $"Exit {Package.Current.DisplayName}";
+    }
 
     /// <summary>
     /// False until the stored value has been restored.

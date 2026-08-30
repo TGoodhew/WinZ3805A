@@ -116,26 +116,3 @@ public sealed class TaskbarOverlayService : IDisposable
         _overlay.Dispose();
     }
 }
-
-/// <summary>
-/// The mode a shell surface should be showing.
-/// </summary>
-/// <remarks>
-/// One expression, in one place, because two shell surfaces call it — the notification area and
-/// the taskbar badge — and the invariant that matters is that they agree with each other and with
-/// the window, whose <c>MainViewModel.Mode</c> restates this expression rather than calling it (a
-/// known duplication, #316). A mode is a claim about <i>now</i>, and a link that has dropped no
-/// longer justifies the last one the store happened to hold.
-/// </remarks>
-public static class ShellMode
-{
-    /// <summary>The mode to show for a store and a connection state.</summary>
-    public static ReceiverMode For(ReceiverStateStore store, ConnectionStatus connection)
-    {
-        ArgumentNullException.ThrowIfNull(store);
-
-        return connection == ConnectionStatus.Connected
-            ? ReceiverModes.FromSyncState(store.SyncState)
-            : ReceiverMode.Disconnected;
-    }
-}
