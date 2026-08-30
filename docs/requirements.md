@@ -2304,9 +2304,22 @@ The *Waiting reason* row shows the status screen's own mode detail, not an answe
 > user could adjust the editor, watch the reading above it never move, and be right to be confused:
 > they are two settings, one of which cannot be set at all.
 >
-> **Still to build:** the editor has no readback, because nothing reads `:SYNC:HOLD:DUR:THR?` —
-> the query sits in the catalog unused, and the box defaults to a hard-coded 1. Showing the
-> receiver's current duration limit belongs with the rest of #320's Holdover work.
+> **Built 30 Aug 2026 (#320).** The editor opens on the receiver's own limit: `:SYNC:HOLD:DUR:THR?`
+> is read on navigation and on every reconnect, and again after a successful Apply — the limit has
+> one-second resolution, so what the receiver took need not be what was sent, and the editor is the
+> only place that figure appears.
+>
+> **The hard-coded 1 was worse than an empty box.** It read as the receiver's answer and was not
+> one: on the unit this was verified against, the limit is **86 400 seconds**. A user adjusting from
+> "1" was working from a number wrong by nearly five orders of magnitude. So an unread field is now
+> empty — on a read that fails, on a driver whose catalog has no such query (the NMEA one has no
+> thresholds at all), and before the first read — and Apply stays disabled while it is, there being
+> nothing to apply.
+>
+> A re-read never overwrites a number the user is part way through typing. Whether the value is
+> theirs is decided by comparing against the last value the page itself wrote, rather than by a flag
+> around the assignment: when `ValueChanged` arrives relative to the setter is the control's
+> business, and a comparison does not depend on the answer.
 
 ### 10.9 Diagnostics page
 
