@@ -1368,10 +1368,38 @@ Rules:
 | Title bar (Details) | Refresh full status (`F5`), Export current view (`Ctrl+E`), Settings (`Ctrl+,`) |
 | Card header, inline | Commands scoped to that card: *Run test*, *Manage…*, *Clear*, *Apply* |
 | Inline with the field it affects | All *Apply* buttons — never in a page-level bar, so the affected values are always adjacent |
-| Right-click only | Copy value, copy as CSV on tables. Nothing unique lives here. **Not built** — no `ContextFlyout` exists anywhere in `src/`; noted 29 Aug 2026 (#316). **To build** — decided 30 Aug 2026 (#320). |
+| Right-click only | Copy value, copy as CSV on tables. Nothing unique lives here. **Built** 30 Aug 2026 (#320); see the note below |
 | Menu bar | **None.** Two-level hierarchy does not need one. |
 
 No page-level `CommandBar`. The commands are card-scoped and a page-level bar would separate them from their context.
+
+**The right-click layer, built 30 Aug 2026 (#320).** No `ContextFlyout` existed anywhere in `src/`
+(noted 29 Aug 2026, #316). `Controls/CopyMenu.cs` is now the one place it is expressed: an attached
+property, `CopyMenu.IsCopyable`, for a value, and `CopyMenu.AttachCsv` for a table. **Nothing unique
+lives here** remains the rule that makes the layer safe — every value a menu copies is on screen, and
+every table it copies is the document `Ctrl+E` already writes to a file, so a user who never
+discovers the right-click loses a keystroke and no capability.
+
+*Copy value* is on the 15 named readouts set in `WzMonoTextStyle` — §9.5.1's "what the machine said"
+fields — plus the two main-window `ReadoutTile`s and its clock. **Eight were deliberately skipped**
+because they already carry `IsTextSelectionEnabled` and with it a built-in *Copy*; adding a second
+one would have displaced an existing affordance, which is exactly what this placement may not do.
+
+*Copy table as CSV* is on the **card**, not on the rows, and that was measured rather than assumed. A
+`TextBlock` with text selection carries its own selection flyout, so right-clicking a log entry opens
+that one and a `ContextFlyout` on the `ItemsControl` above it never appears. That is the right
+outcome rather than a defeat: on a row you want that row's text, on the card around it you want the
+table, and the two menus divide the surface instead of one shadowing the other.
+
+Two traps this cost, both worth not rediscovering. **An element with no `Background` is not
+hit-testable**, so the menu on `ReadoutTile` was attached to something the pointer could never
+reach — the identical defect §9.6.3 recorded for `Border`, on a different control; the tile's
+template root is a template-bound `Transparent` now. And **a copied value is data leaving the
+application, not a readout**: §9.5.3 renders a negative with U+2212 and separates a unit with U+200A,
+and a spreadsheet handed either gets text rather than a number, so `ReadoutFormatter.ToMachineText`
+undoes both — verified live, the 1 PPS TI reading copies as `-2.9` with U+002D against the U+2212 on
+screen. `NoValue` copies as nothing at all and disables the item, §11.1's em dash being the absence
+of data rather than data.
 
 **Destructive commands** — every tier C command from §8.3 — use `WzDestructiveButtonStyle`: `WzCriticalBrush` foreground, `WzStrokeDefaultBrush` border, transparent fill, leading `\uE7BA` Warning glyph. **Never `AccentButtonStyle`.** Accent means "the safe thing to do next."
 

@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 <Page
     x:Class="WinZ3805A.Views.OverviewPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -111,6 +111,7 @@
                                    Foreground="{ThemeResource WzTextSecondaryBrush}"
                                    Text="Predicted (24 h)" />
                         <TextBlock x:Name="HoldoverPredictedText"
+                                   controls:CopyMenu.IsCopyable="True"
                                    Grid.Row="0" Grid.Column="1"
                                    Style="{ThemeResource WzMonoTextStyle}" />
 
@@ -119,6 +120,7 @@
                                    Foreground="{ThemeResource WzTextSecondaryBrush}"
                                    Text="Threshold" />
                         <TextBlock x:Name="HoldoverThresholdText"
+                                   controls:CopyMenu.IsCopyable="True"
                                    Grid.Row="1" Grid.Column="1"
                                    Style="{ThemeResource WzMonoTextStyle}" />
 
@@ -304,14 +306,16 @@
                                    Style="{ThemeResource WzBodyTextStyle}"
                                    Foreground="{ThemeResource WzTextSecondaryBrush}"
                                    Text="Model" />
-                        <TextBlock x:Name="IdentityModelText" Grid.Row="0" Grid.Column="1"
+                        <TextBlock x:Name="IdentityModelText"
+                                   controls:CopyMenu.IsCopyable="True" Grid.Row="0" Grid.Column="1"
                                    Style="{ThemeResource WzMonoTextStyle}" />
 
                         <TextBlock Grid.Row="1" Grid.Column="0"
                                    Style="{ThemeResource WzBodyTextStyle}"
                                    Foreground="{ThemeResource WzTextSecondaryBrush}"
                                    Text="Manufacturer" />
-                        <TextBlock x:Name="IdentityManufacturerText" Grid.Row="1" Grid.Column="1"
+                        <TextBlock x:Name="IdentityManufacturerText"
+                                   controls:CopyMenu.IsCopyable="True" Grid.Row="1" Grid.Column="1"
                                    Style="{ThemeResource WzMonoTextStyle}" />
 
                         <TextBlock Grid.Row="2" Grid.Column="0"

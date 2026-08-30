@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 
 namespace WinZ3805A.Controls;
 
@@ -41,6 +41,42 @@ public static class ReadoutFormatter
 
     /// <summary>What a field with no value shows (§11.1).</summary>
     public const string NoValue = "—";
+
+    /// <summary>
+    /// Undoes §9.5.3's typesetting, for a value on its way out of the application (§9.7.4).
+    /// </summary>
+    /// <returns>The machine-readable text, or null when the field holds nothing.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>A copied value is data leaving the application, not a readout</b> — the same distinction
+    /// <c>CsvDocument</c> draws, and for the same reason. A readout shows −33.1 with
+    /// <see cref="MinusSign"/> because a hyphen is optically too short beside lining figures, and
+    /// separates a unit with <see cref="HairSpace"/>; a spreadsheet handed either gets text rather
+    /// than a number. Verified on the live receiver: the 1 PPS TI reading copies as
+    /// <c>-2.9</c> with U+002D, against the U+2212 on screen.
+    /// </para>
+    /// <para>
+    /// <see cref="NoValue"/> comes back as null rather than as an em dash. §11.1 makes that glyph
+    /// mean <i>the device did not report one</i>, and pasting it would put a character that looks
+    /// like data where the absence of data was the fact.
+    /// </para>
+    /// </remarks>
+    public static string? ToMachineText(string? text)
+    {
+        if (text is null)
+        {
+            return null;
+        }
+
+        string plain = text
+            .Replace(MinusSign, "-", StringComparison.Ordinal)
+            .Replace(HairSpace, string.Empty, StringComparison.Ordinal)
+            .Trim();
+
+        return plain.Length == 0 || string.Equals(plain, NoValue, StringComparison.Ordinal)
+            ? null
+            : plain;
+    }
 
     /// <summary>An angle in whole degrees, or <see cref="NoValue"/>.</summary>
     /// <remarks>

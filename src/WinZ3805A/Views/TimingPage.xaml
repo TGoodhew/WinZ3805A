@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 <Page
     x:Class="WinZ3805A.Views.TimingPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -37,7 +37,8 @@
                                    Style="{ThemeResource WzBodyTextStyle}"
                                    Foreground="{ThemeResource WzTextSecondaryBrush}"
                                    Text="In use now" />
-                        <TextBlock x:Name="CurrentDelayText" Grid.Column="1"
+                        <TextBlock x:Name="CurrentDelayText"
+                                   controls:CopyMenu.IsCopyable="True" Grid.Column="1"
                                    Style="{ThemeResource WzMonoTextStyle}" />
                     </Grid>
 
@@ -174,7 +175,7 @@
             </Border>
 
             <!-- =========================== 1 PPS time interval ========================== -->
-            <Border Style="{ThemeResource WzCardStyle}">
+            <Border x:Name="TrendCard" Style="{ThemeResource WzCardStyle}">
                 <StackPanel Spacing="{ThemeResource WzSpaceSm}">
                     <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="1 PPS time interval" />
 
@@ -280,6 +281,7 @@
                                    MaxWidth="{ThemeResource WzProseMaxWidth}" />
 
                         <TextBlock x:Name="DriftNumbersText"
+                                   controls:CopyMenu.IsCopyable="True"
                                    Style="{ThemeResource WzMonoTextStyle}"
                                    Foreground="{ThemeResource WzTextSecondaryBrush}"
                                    TextWrapping="Wrap" />

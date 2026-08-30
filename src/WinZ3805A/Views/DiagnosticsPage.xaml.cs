@@ -10,6 +10,7 @@ using Windows.ApplicationModel;
 using Windows.Storage;
 using Windows.System;
 
+using WinZ3805A.Controls;
 using WinZ3805A.Device.Commands;
 using WinZ3805A.Device.Transport;
 using WinZ3805A.Services;
@@ -101,6 +102,18 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
         // the state someone is in when they are reading it to find out what a firmware revision
         // broke.
         device.Store.PropertyChanged += OnStoreChanged;
+
+        // §9.7.4's right-click layer, on the log's CARD and not on its rows.
+        //
+        // Measured, not assumed: a TextBlock with IsTextSelectionEnabled carries its own selection
+        // flyout, and right-clicking a log entry opens that one — a ContextFlyout on the ItemsControl
+        // above it never appears. Which is the right outcome rather than a defeat. On a row you want
+        // that row's text, and on the card around it you want the table; the two menus divide the
+        // surface between them instead of one shadowing the other.
+        //
+        // The card and not the whole page, because §9.7.4's "copy as CSV on tables" is a claim about
+        // a specific table — this page has five ItemsControls and BuildCsv builds exactly one of them.
+        CopyMenu.AttachCsv(LogCard, this);
 
         // §8.5's opt-in. Rows are created per page rather than shared: each holds its own last
         // answer, and two pages over one set would show each other's.

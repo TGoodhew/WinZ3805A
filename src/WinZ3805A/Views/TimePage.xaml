@@ -136,7 +136,8 @@
                                    Style="{ThemeResource WzBodyTextStyle}"
                                    Foreground="{ThemeResource WzTextSecondaryBrush}"
                                    Text="GPS − UTC" />
-                        <TextBlock x:Name="AccumulatedText" Grid.Row="0" Grid.Column="1"
+                        <TextBlock x:Name="AccumulatedText"
+                                   controls:CopyMenu.IsCopyable="True" Grid.Row="0" Grid.Column="1"
                                    Style="{ThemeResource WzMonoTextStyle}" />
 
                         <TextBlock x:Name="AnnouncedLabel" Grid.Row="1" Grid.Column="0"
@@ -144,7 +145,8 @@
                                    Foreground="{ThemeResource WzTextSecondaryBrush}"
                                    Visibility="Collapsed"
                                    Text="Announced for" />
-                        <TextBlock x:Name="AnnouncedDateText" Grid.Row="1" Grid.Column="1"
+                        <TextBlock x:Name="AnnouncedDateText"
+                                   controls:CopyMenu.IsCopyable="True" Grid.Row="1" Grid.Column="1"
                                    Style="{ThemeResource WzMonoTextStyle}"
                                    Visibility="Collapsed" />
                     </Grid>
@@ -185,7 +187,8 @@
                                    Style="{ThemeResource WzBodyTextStyle}"
                                    Foreground="{ThemeResource WzTextSecondaryBrush}"
                                    Text="Format" />
-                        <TextBlock x:Name="TimeCodeFormatText" Grid.Column="1"
+                        <TextBlock x:Name="TimeCodeFormatText"
+                                   controls:CopyMenu.IsCopyable="True" Grid.Column="1"
                                    Style="{ThemeResource WzMonoTextStyle}" />
                     </Grid>
 

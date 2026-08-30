@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 <Page
     x:Class="WinZ3805A.Views.HoldoverPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -42,14 +42,16 @@
                                    Style="{ThemeResource WzBodyTextStyle}"
                                    Foreground="{ThemeResource WzTextSecondaryBrush}"
                                    Text="Predicted 24 h uncertainty" />
-                        <TextBlock x:Name="PredictedText" Grid.Row="0" Grid.Column="1"
+                        <TextBlock x:Name="PredictedText"
+                                   controls:CopyMenu.IsCopyable="True" Grid.Row="0" Grid.Column="1"
                                    Style="{ThemeResource WzMonoTextStyle}" />
 
                         <TextBlock Grid.Row="1" Grid.Column="0"
                                    Style="{ThemeResource WzBodyTextStyle}"
                                    Foreground="{ThemeResource WzTextSecondaryBrush}"
                                    Text="Present time error" />
-                        <TextBlock x:Name="PresentErrorText" Grid.Row="1" Grid.Column="1"
+                        <TextBlock x:Name="PresentErrorText"
+                                   controls:CopyMenu.IsCopyable="True" Grid.Row="1" Grid.Column="1"
                                    Style="{ThemeResource WzMonoTextStyle}" />
 
                         <TextBlock Grid.Row="2" Grid.Column="0"
@@ -97,7 +99,8 @@
                                    Style="{ThemeResource WzBodyTextStyle}"
                                    Foreground="{ThemeResource WzTextSecondaryBrush}"
                                    Text="Uncertainty threshold" />
-                        <TextBlock x:Name="ThresholdText" Grid.Row="0" Grid.Column="1"
+                        <TextBlock x:Name="ThresholdText"
+                                   controls:CopyMenu.IsCopyable="True" Grid.Row="0" Grid.Column="1"
                                    Style="{ThemeResource WzMonoTextStyle}" />
 
                         <TextBlock Grid.Row="1" Grid.Column="0"

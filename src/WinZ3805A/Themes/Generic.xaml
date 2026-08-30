@@ -275,10 +275,19 @@
             caption that was already secondary would say nothing.
         -->
         <Setter Property="Foreground" Value="{ThemeResource WzTextPrimaryBrush}" />
+        <!--
+            TRANSPARENT AND NOT UNSET. An unset Background is null, which is not hit-testable at
+            all, so §9.7.4's right-click menu (#320) was attached to a control the pointer could
+            never reach — measured, not guessed: right-clicking the readout produced nothing while
+            the same menu on a plain TextBlock beside it opened. This is the identical trap the
+            §9.6.3 hit-target work recorded for Border, arriving on a different control.
+        -->
+        <Setter Property="Background" Value="Transparent" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="controls:ReadoutTile">
-                    <StackPanel Spacing="{ThemeResource WzSpaceXxs}">
+                    <StackPanel Background="{TemplateBinding Background}"
+                                Spacing="{ThemeResource WzSpaceXxs}">
 
                         <TextBlock x:Name="LabelText"
                                    Style="{ThemeResource WzCaptionTextStyle}"
