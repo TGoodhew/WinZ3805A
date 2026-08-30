@@ -140,6 +140,30 @@ public sealed class SerialTransport : ITransport
             throw;
         }
 
+        if (_disposed)
+        {
+            // Disposed while the open was in flight — a window that did not exist while the open
+            // was synchronous, and one that matters here: DisposeAsync has already exchanged
+            // _port away and found nothing, so assigning it below would leave an open port that
+            // nothing will ever close, holding the COM port against the next connect.
+            //
+            // Closed off this thread for the reason DisposeAsync gives: Dispose blocks, and on a
+            // port that has just failed to open properly it can block for a long time.
+            _ = Task.Run(() =>
+            {
+                try
+                {
+                    port.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    TransportLog.PortCloseFailed(_logger, Description, ex);
+                }
+            });
+
+            throw new ObjectDisposedException(nameof(SerialTransport));
+        }
+
         _port = port;
         _pipe = new Pipe();
         _pump = PumpAsync(port, _pipe.Writer);
