@@ -204,11 +204,28 @@ public sealed partial class HoldoverPage : Page
         ThresholdPill.Severity = model.ThresholdSeverity;
         ThresholdPill.Text = model.ThresholdExceededText;
 
+        // The sentence is on the card and on the pill (#345). Both, because they answer for
+        // different readers: the caption is what makes the row legible at a glance, and the tooltip
+        // is what a pointer asks of the pill itself.
+        ThresholdExplanationText.Text = model.ThresholdExplanation;
+        ToolTipService.SetToolTip(ThresholdPill, model.ThresholdExplanation);
+
+        // Both, and for the same reason as above: the caption is what makes the field legible
+        // without touching anything, and the tooltip is what the pointer asks of the control it is
+        // already over. The editor gets it too, not just the button - the question "what does this
+        // number do" is asked at the box.
+        DurationLimitExplanationText.Text = model.DurationLimitExplanation;
+        ToolTipService.SetToolTip(ThresholdBox, model.DurationLimitExplanation);
+
         PowerUpText.Text = model.PowerUpText;
         PowerUpPill.Severity = model.PowerUpSeverity;
         PowerUpPill.Text = model.PowerUpVerdictText;
 
-        ApplyThresholdButton.IsEnabled =
+        // "Too soon" without a horizon reads as a fault rather than a wait (#345), so the tooltip
+        // says when it stops being too soon.
+        ToolTipService.SetToolTip(PowerUpPill, model.PowerUpTooltip);
+
+        ApplyDurationLimitButton.IsEnabled =
             !_busy && _threshold is { IsValid: true } && model.Connection == ConnectionStatus.Connected;
 
         ForceHoldoverButton.IsEnabled = !_busy && model.CanForceHoldover;
