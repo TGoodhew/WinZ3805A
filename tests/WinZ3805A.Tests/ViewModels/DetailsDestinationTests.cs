@@ -180,15 +180,16 @@ public sealed class DetailsDestinationTests
         Assert.Equal(-1, DetailsDestinations.IndexOf(tag));
 
     /// <summary>
-    /// §9.9's custom icons reach the two destinations that have one, and no others (#320).
+    /// §9.9's custom icons reach the three destinations that have one, and no others (#320, #345).
     /// </summary>
     /// <remarks>
-    /// Satellites and Holdover borrowed stock Globe and Pause. The rest keep theirs: §9.9 names
-    /// four custom concepts and two of them are cards rather than destinations, so a third key
-    /// appearing here would mean the set had drifted past what the section sanctions.
+    /// Satellites and Holdover borrowed stock Globe and Pause; Position borrowed MapPin until #345
+    /// replaced it with the earth. The rest keep theirs, and asserting the whole map rather than
+    /// each entry is what makes a fourth key appearing here a test failure rather than a surprise:
+    /// §9.9 sanctions a named set, and a set that grows quietly is how two icon languages start.
     /// </remarks>
     [Fact]
-    public void OnlyTheTwoSpecifiedDestinationsCarryACustomIcon()
+    public void OnlyTheSpecifiedDestinationsCarryACustomIcon()
     {
         Dictionary<string, string> custom = DetailsDestinations.All
             .Where(destination => destination.IconGeometryKey is not null)
@@ -198,6 +199,7 @@ public sealed class DetailsDestinationTests
             new Dictionary<string, string>
             {
                 ["satellites"] = "WzIconSatellite",
+                ["position"] = "WzIconEarth",
                 ["holdover"] = "WzIconHoldover",
             },
             custom);

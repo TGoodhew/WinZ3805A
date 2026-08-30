@@ -29,59 +29,97 @@
     <x:String x:Key="WzShapeRing">F0 M 0,6 A 6,6 0 1 0 12,6 A 6,6 0 1 0 0,6 Z M 2.4,6 A 3.6,3.6 0 1 0 9.6,6 A 3.6,3.6 0 1 0 2.4,6 Z</x:String>
 
     <!--
-        §9.9's four custom icons, authored 30 Aug 2026 (#320). None of them existed; the Satellites
-        and Holdover nav items borrowed stock Globe and Pause, the medallion borrowed a generic
-        Warning for a specific state, and no sky-plot or oscillator glyph was drawn anywhere.
+        §9.9's custom icons, authored 30 Aug 2026 (#320) and retuned the same day against Tony's
+        review (#345). None of them existed; the Satellites and Holdover nav items borrowed stock
+        Globe and Pause, Position borrowed MapPin, the medallion borrowed a generic Warning for a
+        specific state, and no sky-plot or oscillator glyph was drawn anywhere.
 
-        DRAWN AS FILLED GEOMETRY, WHICH IS NOT THE SAME THING AS §9.9'S "1.5 px stroke".
-        PathIcon FILLS its Data with Foreground and cannot stroke it, so every stroke here is
-        authored as a 1.5-wide filled band - a ring is an outer circle with an inner one knocked out
-        by the even-odd rule, and a bar whose width equals twice its corner radius is a stadium. The
-        weight §9.9 asks for is preserved; only the means differ, and the means are forced by the
-        control. The alternative - a Path with Stroke inside a Viewbox - is not an IconElement and so
-        cannot be a NavigationViewItem's Icon, which is where three of the four are needed.
+        DRAWN AS FILLED GEOMETRY, WHICH IS NOT THE SAME THING AS A STROKE. PathIcon FILLS its Data
+        with Foreground and cannot stroke it, so every line here is authored as a filled band - a
+        ring is an outer circle with an inner one knocked out, and a bar whose width equals twice
+        its corner radius is a stadium. The alternative, a Path with Stroke inside a Viewbox, is not
+        an IconElement and so cannot be a NavigationViewItem's Icon, which is where four of the five
+        are needed.
 
-        16x16 with a 1 px safe margin, per §9.9. Terminals and joins are rounded at 0.75. Monochrome,
-        because the Foreground they inherit is what makes them recolour under theme and high
-        contrast. Optically rather than mathematically centred: the two circular glyphs run to 6.5
-        where a square one stops at 6, which is §9.9's ~2% correction.
+        1.0 AND NOT §9.9'S 1.5, ACROSS ALL FIVE. The section says 1.5 px at 16 px "matches Fluent's
+        optical weight so custom and stock icons in the same nav list do not read as two sets" - and
+        drawn at 1.5 they did read as two sets, heavier than the Segoe Fluent glyphs beside them.
+        Tony called it in review and then named the reference: the Overview glyph (#345).
 
-        Provisional as drawings. Tony asked for simple icons to tune later (#320), so these are built
-        to be legible at 16 and easy to replace rather than finished artwork; the wiring around them
-        is the part that is meant to last.
+        SO IT WAS MEASURED RATHER THAN JUDGED. Overview's strokes render as exactly 1.0 device pixel
+        at 16 px, crisply, with no antialiased spill - the font is grid-fitted at that size. 1.0 is
+        that measurement. §9.9 carries the amendment, and every icon here uses it, including the two
+        Tony did not name: a set whose members differ in weight is the thing the rule forbids.
+
+        WINDING, NOT EVEN-ODD. These use F1 (nonzero) so that overlapping figures MERGE: the earth's
+        equator crosses its meridian, and under the even-odd rule the crossing would cancel to a
+        hole. Rings are made by drawing the inner circle with the opposite sweep flag, which is what
+        turns it into a hole under nonzero.
+
+        16x16 with a 1 px safe margin, per §9.9. Terminals and joins rounded. Monochrome, because the
+        Foreground they inherit is what makes them recolour under theme and high contrast.
     -->
 
     <!--
-        Satellite: two panels, a body, and the arms between them.
+        Satellite: two solar panels, a body, and the arms between them. OUTLINE ONLY (#345) - it was
+        drawn solid first, which read as a much heavier object than anything around it. The lighter
+        stroke is what makes the outline possible at all: at 1.5 a 3.6-wide panel leaves a 0.6 hole,
+        which fills in at any scaling that is not exactly 100%; at 1.1 it leaves 1.4.
 
-        Each panel is TWO bars rather than one solid block, which is both the cell division a real
-        array has and the thing that brought this icon back to the stock glyphs' weight. Drawn solid
-        first and measured against the Fluent items above and below it in the pane, where it read as
-        a second, heavier set - exactly what §9.9's optical-weight rule exists to prevent. Outlining
-        the panels instead was not available: at 16 px a 3.5-wide panel with a 1.5 wall leaves a
-        0.5 hole, which fills in at any scaling that is not exactly 100%.
+        THE BOUNDING BOX SETS THE RENDERED LINE WEIGHT, and that is the whole reason this icon is
+        shaped as it is. PathIcon scales each geometry by ITS OWN bounds, so a wide, short drawing is
+        magnified more than a square one: at 14 x 5.2 units the satellite rendered into a 21 x 8 px
+        box and its 1.0 stroke came out at 1.45 px, against 1.14 for the stock glyphs beside it.
+        Tony saw it as too heavy before the measurement found it. Squaring the bounds - arrays
+        running the full height - brings the same 1.0 stroke to 1.07 px.
+
+        A CHEAPER FIX WAS TRIED AND DOES NOT WORK: zero-area anchor subpaths at the corners
+        ("M 1.5,1.5 Z M 14.5,14.5 Z") to pin the bounds while keeping a short drawing. Measured, the
+        box went straight back to 21 x 8 and the stroke to 1.41 - a degenerate figure contributes
+        nothing to the bounds PathIcon measures. If a future icon needs a non-square silhouette, the
+        stroke has to be pre-divided by its own aspect ratio instead.
+
+        FOUR PANELS, TWO PER WING, which is Tony's call and the right one (#345). Two tall
+        rectangles reached the correct weight and read as brackets around the bus; splitting each
+        wing in half is what a real array looks like and is what makes the silhouette legible at
+        16 px. It costs ink over a single tall panel and buys the whole metaphor.
     -->
-    <x:String x:Key="WzIconSatellite">M 2.25,5.75 H 4.25 A 0.75,0.75 0 0 1 5,6.5 V 6.875 A 0.75,0.75 0 0 1 4.25,7.625 H 2.25 A 0.75,0.75 0 0 1 1.5,6.875 V 6.5 A 0.75,0.75 0 0 1 2.25,5.75 Z M 2.25,8.375 H 4.25 A 0.75,0.75 0 0 1 5,9.125 V 9.5 A 0.75,0.75 0 0 1 4.25,10.25 H 2.25 A 0.75,0.75 0 0 1 1.5,9.5 V 9.125 A 0.75,0.75 0 0 1 2.25,8.375 Z M 11.75,5.75 H 13.75 A 0.75,0.75 0 0 1 14.5,6.5 V 6.875 A 0.75,0.75 0 0 1 13.75,7.625 H 11.75 A 0.75,0.75 0 0 1 11,6.875 V 6.5 A 0.75,0.75 0 0 1 11.75,5.75 Z M 11.75,8.375 H 13.75 A 0.75,0.75 0 0 1 14.5,9.125 V 9.5 A 0.75,0.75 0 0 1 13.75,10.25 H 11.75 A 0.75,0.75 0 0 1 11,9.5 V 9.125 A 0.75,0.75 0 0 1 11.75,8.375 Z M 7.25,6.5 H 8.75 A 0.75,0.75 0 0 1 9.5,7.25 V 8.75 A 0.75,0.75 0 0 1 8.75,9.5 H 7.25 A 0.75,0.75 0 0 1 6.5,8.75 V 7.25 A 0.75,0.75 0 0 1 7.25,6.5 Z M 5,7.25 H 6.5 V 8.75 H 5 Z M 9.5,7.25 H 11 V 8.75 H 9.5 Z</x:String>
+    <x:String x:Key="WzIconSatellite">F1 M 1.0,2.5 H 5.0 V 7.6 H 1.0 Z M 2.0,3.5 V 6.6 H 4.0 V 3.5 Z M 1.0,8.4 H 5.0 V 13.5 H 1.0 Z M 2.0,9.4 V 12.5 H 4.0 V 9.4 Z M 11.0,2.5 H 15.0 V 7.6 H 11.0 Z M 12.0,3.5 V 6.6 H 14.0 V 3.5 Z M 11.0,8.4 H 15.0 V 13.5 H 11.0 Z M 12.0,9.4 V 12.5 H 14.0 V 9.4 Z M 6.4,6.4 H 9.6 V 9.6 H 6.4 Z M 7.4,7.4 V 8.6 H 8.6 V 7.4 Z M 5.0,7.5 H 6.4 V 8.5 H 5.0 Z M 9.6,7.5 H 11.0 V 8.5 H 9.6 Z</x:String>
+
+    <!--
+        Earth: a stylized globe for §10.6, added 30 Aug 2026 at Tony's request (#345). It replaces
+        stock MapPin, and it is a FIFTH custom icon where §9.9's table names four - the amendment is
+        recorded there.
+
+        A pin says "a place on a map". This page is about the receiver's own surveyed position on the
+        planet, held to a metre over hours of averaging, and a globe with a meridian and an equator
+        says that where a pin says the opposite - one point, chosen, provisional.
+    -->
+    <x:String x:Key="WzIconEarth">F1 M 1.5,8 A 6.5,6.5 0 1 0 14.5,8 A 6.5,6.5 0 1 0 1.5,8 Z M 2.5,8 A 5.5,5.5 0 1 1 13.5,8 A 5.5,5.5 0 1 1 2.5,8 Z M 5.3,8 A 2.7,5.5 0 1 0 10.7,8 A 2.7,5.5 0 1 0 5.3,8 Z M 6.3,8 A 1.7,4.5 0 1 1 9.7,8 A 1.7,4.5 0 1 1 6.3,8 Z M 2.5,7.5 H 13.5 V 8.5 H 2.5 Z</x:String>
 
     <!--
         Sky plot: the polar grid itself - an azimuth ring, an elevation ring, and the zenith at the
-        centre. Two rings and a dot, which is the drawing SkyPlotControl actually makes.
+        centre, which is the drawing SkyPlotControl actually makes. Lightened and thinned out at
+        Tony's review (#345): it had four concentric rings plus a dot, which at 16 px is a target
+        rather than a plot.
     -->
-    <x:String x:Key="WzIconSkyPlot">F0 M 1.5,8 A 6.5,6.5 0 1 0 14.5,8 A 6.5,6.5 0 1 0 1.5,8 Z M 3,8 A 5,5 0 1 0 13,8 A 5,5 0 1 0 3,8 Z M 4.75,8 A 3.25,3.25 0 1 0 11.25,8 A 3.25,3.25 0 1 0 4.75,8 Z M 6.25,8 A 1.75,1.75 0 1 0 9.75,8 A 1.75,1.75 0 1 0 6.25,8 Z M 7,8 A 1,1 0 1 0 9,8 A 1,1 0 1 0 7,8 Z</x:String>
+    <x:String x:Key="WzIconSkyPlot">F1 M 1.5,8 A 6.5,6.5 0 1 0 14.5,8 A 6.5,6.5 0 1 0 1.5,8 Z M 2.5,8 A 5.5,5.5 0 1 1 13.5,8 A 5.5,5.5 0 1 1 2.5,8 Z M 4.5,8 A 3.5,3.5 0 1 0 11.5,8 A 3.5,3.5 0 1 0 4.5,8 Z M 5.5,8 A 2.5,2.5 0 1 1 10.5,8 A 2.5,2.5 0 1 1 5.5,8 Z M 7.1,8 A 0.9,0.9 0 1 0 8.9,8 A 0.9,0.9 0 1 0 7.1,8 Z</x:String>
 
     <!--
         Oscillator: §9.9 names the form exactly - a sine in a rounded square. The wave is two
         half-period bands rather than one path, because a band that crosses its own inflection cannot
         be written as a single offset arc pair; at 16 px the join is invisible and the shape reads.
     -->
-    <x:String x:Key="WzIconOscillator">F0 M 4.5,1.5 H 11.5 A 3,3 0 0 1 14.5,4.5 V 11.5 A 3,3 0 0 1 11.5,14.5 H 4.5 A 3,3 0 0 1 1.5,11.5 V 4.5 A 3,3 0 0 1 4.5,1.5 Z M 4.5,3 H 11.5 A 1.5,1.5 0 0 1 13,4.5 V 11.5 A 1.5,1.5 0 0 1 11.5,13 H 4.5 A 1.5,1.5 0 0 1 3,11.5 V 4.5 A 1.5,1.5 0 0 1 4.5,3 Z M 3.25,8 A 2.75,2.75 0 0 1 8.75,8 L 7.25,8 A 1.25,1.25 0 0 0 4.75,8 Z M 7.25,8 A 2.75,2.75 0 0 0 12.75,8 L 11.25,8 A 1.25,1.25 0 0 1 8.75,8 Z</x:String>
+    <x:String x:Key="WzIconOscillator">F0 M 4.5,1.5 H 11.5 A 3,3 0 0 1 14.5,4.5 V 11.5 A 3,3 0 0 1 11.5,14.5 H 4.5 A 3,3 0 0 1 1.5,11.5 V 4.5 A 3,3 0 0 1 4.5,1.5 Z M 4.5,2.5 H 11.5 A 2,2 0 0 1 13.5,4.5 V 11.5 A 2,2 0 0 1 11.5,13.5 H 4.5 A 2,2 0 0 1 2.5,11.5 V 4.5 A 2,2 0 0 1 4.5,2.5 Z M 3.5,8 A 2.5,2.5 0 0 1 8.5,8 L 7.5,8 A 1.5,1.5 0 0 0 4.5,8 Z M 7.5,8 A 2.5,2.5 0 0 0 12.5,8 L 11.5,8 A 1.5,1.5 0 0 1 8.5,8 Z</x:String>
 
     <!--
-        Holdover: §9.9's pause inside a clock face. This one is the reason the set was authored -
-        the medallion had been borrowing a generic Warning glyph for a state that is specific, and
-        "something is wrong" is not what holdover means. The oscillator is still disciplining; it is
-        doing it from memory.
+        Holdover: §9.9's pause inside a clock face, lightened at Tony's review (#345) while keeping
+        the pause, which he confirmed reads correctly.
+
+        This one is the reason the set was authored. The medallion had been borrowing a generic
+        Warning glyph for a state that is specific, and "something is wrong" is not what holdover
+        means. The oscillator is still disciplining; it is doing it from memory.
     -->
-    <x:String x:Key="WzIconHoldover">F0 M 1.5,8 A 6.5,6.5 0 1 0 14.5,8 A 6.5,6.5 0 1 0 1.5,8 Z M 3,8 A 5,5 0 1 0 13,8 A 5,5 0 1 0 3,8 Z M 6.25,6.25 A 0.75,0.75 0 0 1 7.75,6.25 V 9.75 A 0.75,0.75 0 0 1 6.25,9.75 Z M 8.25,6.25 A 0.75,0.75 0 0 1 9.75,6.25 V 9.75 A 0.75,0.75 0 0 1 8.25,9.75 Z</x:String>
+    <x:String x:Key="WzIconHoldover">F1 M 1.5,8 A 6.5,6.5 0 1 0 14.5,8 A 6.5,6.5 0 1 0 1.5,8 Z M 2.5,8 A 5.5,5.5 0 1 1 13.5,8 A 5.5,5.5 0 1 1 2.5,8 Z M 6.5,6.3 A 0.5,0.5 0 0 1 7.5,6.3 V 9.7 A 0.5,0.5 0 0 1 6.5,9.7 Z M 8.5,6.3 A 0.5,0.5 0 0 1 9.5,6.3 V 9.7 A 0.5,0.5 0 0 1 8.5,9.7 Z</x:String>
 
 </ResourceDictionary>
