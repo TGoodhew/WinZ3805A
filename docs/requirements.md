@@ -1484,7 +1484,15 @@ The three `Instant` rows are the thesis made testable: a reviewer can confirm th
 | Oscillator (sine in a rounded square) | EFC card, oscillator health |
 | Holdover (pause inside a clock face) | Holdover nav item and state |
 
-**Not built** — none of the four exists; noted 29 Aug 2026 (#316). **To build** — decided 30 Aug 2026 (#320). All four are to be authored, and the holdover one is the reason: the medallion currently borrows a generic Warning glyph for a specific state. Stock glyphs stand in: the Satellites nav item uses `` Globe and the Holdover nav item `` Pause (`ViewModels/DetailsDestination.cs`); the holdover *state* on the medallion uses `` Warning (`Controls/ReceiverMode.cs`, §10.3). No sky-plot or oscillator glyph is drawn anywhere.
+**Built 30 Aug 2026 (#320)**; all four live in `Themes/Shapes.xaml` beside §9.4.3's severity shapes. Satellite and holdover reach the nav items through `DetailsDestination.IconGeometryKey`, holdover also reaches the medallion centre through `ReceiverModes.GeometryKeyOf`, and sky plot and oscillator sit in their card headers on §10.5 and §10.4 / §10.7.
+
+**The holdover one was the reason.** The medallion had been drawing a generic Warning glyph for it, which says *something is wrong* — and that is not what holdover means. The receiver is still producing a disciplined 10 MHz; it is doing it from the oscillator's memory rather than from GPS, and a pause inside a clock face says that where an exclamation mark says the opposite.
+
+**The stock glyph stays behind each custom one.** §9.9 makes the Fluent font the baseline and the custom set the exception, so every destination and every mode still names one: a geometry key that does not resolve — a typo, a dictionary not merged — costs an item its upgrade rather than its icon.
+
+**Drawn as filled geometry, which is not the same thing as the "1.5 px stroke" below.** `PathIcon` *fills* its `Data` with `Foreground` and cannot stroke it, so every stroke is authored as a 1.5-wide filled band: a ring is an outer circle with an inner one knocked out by the even-odd rule, and a bar whose width equals twice its corner radius is a stadium. The weight the rule asks for is preserved; the means are forced by the control, because the alternative — a `Path` with `Stroke` inside a `Viewbox` — is not an `IconElement` and so cannot be a `NavigationViewItem.Icon`, which is where three of the four are needed.
+
+**The drawings are provisional and the wiring is not.** Tony asked for simple icons to tune later (#320), so these are built to be legible at 16 px and easy to replace. One tuning note already earned: the satellite was drawn with solid panels first and read as a second, heavier set beside the stock items in the same pane — exactly what the optical-weight rule below exists to prevent — so each panel became two bars, which is both lighter and the cell division a real array has.
 
 Construction rules:
 

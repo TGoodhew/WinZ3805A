@@ -1,4 +1,4 @@
-using WinZ3805A.ViewModels;
+﻿using WinZ3805A.ViewModels;
 
 namespace WinZ3805A.Tests.ViewModels;
 
@@ -178,4 +178,37 @@ public sealed class DetailsDestinationTests
     [InlineData(null)]
     public void SomethingThatIsNotADestinationHasNoIndex(string? tag) =>
         Assert.Equal(-1, DetailsDestinations.IndexOf(tag));
+
+    /// <summary>
+    /// §9.9's custom icons reach the two destinations that have one, and no others (#320).
+    /// </summary>
+    /// <remarks>
+    /// Satellites and Holdover borrowed stock Globe and Pause. The rest keep theirs: §9.9 names
+    /// four custom concepts and two of them are cards rather than destinations, so a third key
+    /// appearing here would mean the set had drifted past what the section sanctions.
+    /// </remarks>
+    [Fact]
+    public void OnlyTheTwoSpecifiedDestinationsCarryACustomIcon()
+    {
+        Dictionary<string, string> custom = DetailsDestinations.All
+            .Where(destination => destination.IconGeometryKey is not null)
+            .ToDictionary(destination => destination.Tag, destination => destination.IconGeometryKey!);
+
+        Assert.Equal(
+            new Dictionary<string, string>
+            {
+                ["satellites"] = "WzIconSatellite",
+                ["holdover"] = "WzIconHoldover",
+            },
+            custom);
+    }
+
+    /// <remarks>
+    /// Every destination keeps a stock glyph, custom icon or not — §9.9's baseline is the font, and
+    /// a geometry key that does not resolve must cost an item its upgrade rather than its icon.
+    /// </remarks>
+    [Fact]
+    public void EveryDestinationStillHasAStockGlyph() =>
+        Assert.All(DetailsDestinations.All, destination =>
+            Assert.False(string.IsNullOrWhiteSpace(destination.Glyph)));
 }

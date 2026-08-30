@@ -189,7 +189,22 @@
             <!-- ========================== Oscillator control =========================== -->
             <Border Style="{ThemeResource WzCardStyle}">
                 <StackPanel Spacing="{ThemeResource WzSpaceSm}">
-                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Oscillator control (EFC)" />
+                    <!--
+                        §9.9's custom oscillator icon (#320) - a sine in a rounded square,
+                        which is the concept the section names and which no Fluent glyph has.
+                        Raw to assistive technology: the heading beside it already says what
+                        the card is, and an icon that repeats it aloud is noise.
+                    -->
+                    <StackPanel Orientation="Horizontal" Spacing="{ThemeResource WzSpaceXs}">
+                        <PathIcon Data="{StaticResource WzIconOscillator}"
+                                  Width="16" Height="16"
+                                  VerticalAlignment="Center"
+                                  Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                  AutomationProperties.AccessibilityView="Raw" />
+                        <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}"
+                                   VerticalAlignment="Center"
+                                   Text="Oscillator control (EFC)" />
+                    </StackPanel>
 
                     <controls:ReadoutTile x:Name="OscillatorControl"
                                           Label="Current"

@@ -475,6 +475,25 @@
                                    Text="&#xE8CD;" />
 
                         <!--
+                            §9.9's custom holdover icon, which is the one mode with no adequate
+                            Fluent glyph (#320). Sized and shown by UpdateCentre rather than by a
+                            visual state: that method already sets Glyph.Visibility as a LOCAL
+                            value to swap in the satellite count, and a local value beats a
+                            VisualState setter - so a state that tried to hide the font glyph here
+                            would be silently overruled the moment the centre updated.
+
+                            Stretch Uniform and not None, because the geometry is authored on
+                            §9.9's 16 px grid while the medallion draws it at 22, 34 or 56.
+                        -->
+                        <Path x:Name="GlyphPath"
+                              HorizontalAlignment="Center"
+                              VerticalAlignment="Center"
+                              Stretch="Uniform"
+                              Visibility="Collapsed"
+                              Fill="{ThemeResource WzNeutralBrush}"
+                              AutomationProperties.AccessibilityView="Raw" />
+
+                        <!--
                             §9.6.2's tracked-satellite count, shown INSTEAD of the glyph in compact
                             (#279). G1 asks for mode and count legible at two metres, and §9.5.3's
                             token table already describes this centre as holding a value.
@@ -526,6 +545,7 @@
                                     <VisualState.Setters>
                                         <Setter Target="Glyph.Text" Value="&#xE7BA;" />
                                         <Setter Target="Glyph.Foreground" Value="{ThemeResource WzCriticalBrush}" />
+                                        <Setter Target="GlyphPath.Fill" Value="{ThemeResource WzCriticalBrush}" />
                                         <Setter Target="Count.Foreground" Value="{ThemeResource WzCriticalBrush}" />
                                         <Setter Target="PART_Ring.Stroke" Value="{ThemeResource WzCriticalBrush}" />
                                     </VisualState.Setters>

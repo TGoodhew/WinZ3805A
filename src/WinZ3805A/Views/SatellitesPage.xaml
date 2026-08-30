@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 <Page
     x:Class="WinZ3805A.Views.SatellitesPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -61,10 +61,30 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
-                        <TextBlock x:Name="SkyCardHeading" Grid.Column="0"
-                                   Style="{ThemeResource WzBodyStrongTextStyle}"
-                                   VerticalAlignment="Center"
-                                   Text="Sky plot" />
+                        <!--
+                            §9.9's custom sky-plot icon (#320): the polar grid itself, which is the
+                            drawing SkyPlotControl below actually makes and which no Fluent glyph
+                            has. Raw to assistive technology - the heading beside it already says
+                            what the card is, and an icon repeating it aloud is noise.
+
+                            The heading keeps its name and its column; the StackPanel around it is
+                            what moved, because SatellitesPage.xaml.cs sets SkyCardHeading.Text as
+                            the view toggle changes.
+                        -->
+                        <StackPanel Grid.Column="0"
+                                    Orientation="Horizontal"
+                                    Spacing="{ThemeResource WzSpaceXs}"
+                                    VerticalAlignment="Center">
+                            <PathIcon Data="{StaticResource WzIconSkyPlot}"
+                                      Width="16" Height="16"
+                                      VerticalAlignment="Center"
+                                      Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                      AutomationProperties.AccessibilityView="Raw" />
+                            <TextBlock x:Name="SkyCardHeading"
+                                       Style="{ThemeResource WzBodyStrongTextStyle}"
+                                       VerticalAlignment="Center"
+                                       Text="Sky plot" />
+                        </StackPanel>
 
                         <!--
                             RadioButtons rather than a ToggleSwitch, matching the Timing page's range
