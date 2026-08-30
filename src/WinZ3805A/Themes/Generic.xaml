@@ -782,9 +782,22 @@
                             </StackPanel>
 
                             <StackPanel Orientation="Horizontal" Spacing="{ThemeResource WzSpaceXxs}">
-                                <Rectangle Width="14" Height="2"
-                                           VerticalAlignment="Center"
-                                           Fill="{ThemeResource WzCautionBrush}" />
+                                <!--
+                                    DASHED, because the mask circle on the plot is dashed (#345).
+                                    This was a solid filled Rectangle, so the legend described a line
+                                    the plot does not draw - and a legend that disagrees with its own
+                                    plot is worse than no legend, because it is read as authoritative.
+
+                                    A Line with a Stroke rather than a Rectangle with a Fill: a fill
+                                    cannot be dashed. The thickness and the dash array are the ones
+                                    SkyPlotControl gives the circle, so the two move together or not
+                                    at all.
+                                -->
+                                <Line X1="0" Y1="0" X2="14" Y2="0"
+                                      VerticalAlignment="Center"
+                                      Stroke="{ThemeResource WzCautionBrush}"
+                                      StrokeThickness="1.5"
+                                      StrokeDashArray="4,3" />
                                 <TextBlock x:Name="PART_MaskLabel"
                                            Text="elevation mask"
                                            Style="{ThemeResource WzCaptionTextStyle}"
