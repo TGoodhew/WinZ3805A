@@ -303,9 +303,15 @@ public static class CommandCatalog
                 "Excluded every satellite from tracking.",
                 acknowledge: true),
 
+            // The confirmation here read "Exclude the selected satellites from tracking?" until
+            // #320 — the sentence belonging to :IGNore <PRN…>, which is the opposite operation.
+            // This command *clears* the exclusion list. §8.3 requires the sentence to say what
+            // actually happens, and the dialog is the safety mechanism, so a dialog naming the
+            // reverse of what it is about to do is the one kind of wrong text that matters.
+            // §8.3 specified that sentence for this command too, and is corrected with it.
             NeedsConfirmation(":GPS:SAT:TRAC:IGNore NONE", "Exclude no satellites",
                 "Clears the exclusion list so no satellite is excluded.",
-                "Exclude the selected satellites from tracking?",
+                "Clear the exclusion list? Every satellite becomes eligible for tracking again.",
                 "Cleared the exclusion list."),
 
             NeedsConfirmation(":GPS:SAT:TRAC:INCLude", "Include satellites",
@@ -338,11 +344,20 @@ public static class CommandCatalog
                 "Forced holdover. The receiver will not discipline to GPS until you recover it.",
                 acknowledge: true),
 
-            NeedsConfirmation(":SYNC:HOLD:DUR:THReshold", "Set holdover threshold",
+            // "Holdover duration limit", not "holdover threshold": §10.8 has two thresholds and
+            // only this one can be set — the other is the uncertainty figure the status screen
+            // prints, which no command changes. Naming them apart is what stops the page reading
+            // as one setting with a readout that never moves (#320).
+            // Deliberately a bare question with no {0}: the dialog then shows the value separately
+            // as "Duration limit: 3600 s" and fills its explanation from the description above,
+            // which is the shape CommandConfirmationViewModel is built around. Naming the value in
+            // the sentence would move this command out of that case for nothing — the user sees the
+            // figure either way.
+            NeedsConfirmation(":SYNC:HOLD:DUR:THReshold", "Set holdover duration limit",
                 "Sets how long holdover may run before it is reported as exceeded.",
-                "Set holdover threshold?",
-                "Set the holdover threshold to {0} s.",
-                parameters: [new ParameterSpec("Threshold", ParameterKind.Decimal, Unit: "s", Minimum: 0)]),
+                "Set the holdover duration limit?",
+                "Set the holdover duration limit to {0} s.",
+                parameters: [new ParameterSpec("Duration limit", ParameterKind.Decimal, Unit: "s", Minimum: 0)]),
 
             NeedsConfirmation(":SYNC:IMMediate", "Force resynchronisation",
                 "Resynchronises immediately rather than steering gradually.",
