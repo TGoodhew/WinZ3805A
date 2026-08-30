@@ -14,11 +14,52 @@
         §15 step 10 has to build alongside the dialog.
     -->
     <ScrollViewer HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
-        <StackPanel controls:CardEntrance.IsEnabled="True"
+        <StackPanel x:Name="PageRoot"
+                    controls:CardEntrance.IsEnabled="True"
                     Padding="{ThemeResource WzPageMarginThickness}"
                     MaxWidth="{ThemeResource WzContentMaxWidth}"
                     HorizontalAlignment="Left"
                     Spacing="{ThemeResource WzSpaceXl}">
+                <VisualStateManager.VisualStateGroups>
+                    <!--
+                        §9.6.1's page margin: WzSpaceXl (24) at Medium and Wide, WzSpaceMd (16) at
+                        Compact. WzPageMarginCompactThickness had existed in Spacing.xaml with no
+                        consumer since the token layer was written (#316); this is that consumer.
+
+                        AN ADAPTIVE TRIGGER AND NOT CODE. §9.6.1's instruction not to hand-roll
+                        breakpoint logic is aimed at NavigationView, which implements its own — but
+                        the reasoning carries: a margin decided in a SizeChanged handler is a
+                        breakpoint that no longer appears in the markup it governs, and the next
+                        person to read this page would have no way to know one existed.
+
+                        The Compact state's threshold is WzExpandedModeThresholdWidth (1024), the
+                        same number NavigationView is configured with, so the rail and the margin
+                        change together rather than a few pixels apart.
+
+                        NOT REACHABLE ON EVERY MACHINE. §9.6.2 sets the Details minimum at 1024 as a
+                        CONTENT size clamped to the display work area, so on a wide monitor at 100%
+                        scaling this state cannot be entered by dragging the window - it is for high
+                        display scaling, where the same 1024 of content is fewer effective pixels.
+                        Which is exactly why it is declarative: a state that cannot be exercised on
+                        the hardware to hand must at least be readable.
+                    -->
+                    <VisualStateGroup x:Name="WidthStates">
+                        <VisualState x:Name="WideLayout">
+                            <VisualState.StateTriggers>
+                                <AdaptiveTrigger MinWindowWidth="{ThemeResource WzExpandedModeThresholdWidth}" />
+                            </VisualState.StateTriggers>
+                        </VisualState>
+                        <VisualState x:Name="CompactLayout">
+                            <VisualState.StateTriggers>
+                                <AdaptiveTrigger MinWindowWidth="0" />
+                            </VisualState.StateTriggers>
+                            <VisualState.Setters>
+                                <Setter Target="PageRoot.Padding" Value="{ThemeResource WzPageMarginCompactThickness}" />
+                            </VisualState.Setters>
+                        </VisualState>
+                    </VisualStateGroup>
+                </VisualStateManager.VisualStateGroups>
+
 
             <TextBlock Style="{ThemeResource WzTitleTextStyle}" Text="Holdover" />
 

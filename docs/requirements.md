@@ -1177,7 +1177,7 @@ This is the part that separates a careful instrument app from a sloppy one, and 
 | `WzSpace3Xl` | 40 | Page header to first card |
 | `WzSpace4Xl` | 48 | Empty-state vertical rhythm |
 
-Page margin `WzSpaceXl` (24) at Medium and Wide, `WzSpaceMd` (16) at Compact. The Compact margin is **Not built** — `WzPageMarginCompactThickness` exists in `Spacing.xaml` with no consumer; noted 29 Aug 2026 (#316). **To build** — decided 30 Aug 2026 (#320).
+Page margin `WzSpaceXl` (24) at Medium and Wide, `WzSpaceMd` (16) at Compact. **Built 30 Aug 2026 (#320)** as a `WidthStates` group on every page's root panel — `WzPageMarginCompactThickness` had sat in `Spacing.xaml` with no consumer since the token layer was written, and this is that consumer. An `AdaptiveTrigger` rather than a `SizeChanged` handler: §9.6.1's instruction below not to hand-roll breakpoint logic is aimed at `NavigationView`, but the reasoning carries — a margin decided in code is a breakpoint that no longer appears in the markup it governs. Its threshold is `WzExpandedModeThresholdWidth`, the same number `NavigationView` is configured with, so the rail and the margin change together rather than a few pixels apart.
 
 Each step also exists as a `Thickness` token (`WzSpaceXxsThickness` … `WzSpace4XlThickness`) for `Margin` and `Padding`, alongside `WzPageMarginThickness` and `WzPageMarginCompactThickness`; the widths below are `WzContentMaxWidth`, `WzProseMaxWidth` (§9.5.3's 72-character cap), `WzCompactModeThresholdWidth` and `WzExpandedModeThresholdWidth` (§9.6.1), and the 1 px card stroke is `WzHairlineThickness` — all in `Themes/Spacing.xaml` (added 29 Aug 2026 from the code, #316).
 
@@ -1188,9 +1188,43 @@ Each step also exists as a `Thickness` token (`WzSpaceXxsThickness` … `WzSpace
 | Name | Width | NavigationView | Content grid | Behaviour |
 |---|---|---|---|---|
 | **Minimal** | < 640 | `Minimal` (hamburger; the pane opens as an overlay over the content) | 1 column | As Compact, except that the pane is not persistently visible and every destination is reached through the hamburger. Not reachable by dragging a window: it exists because §9.6.2's minimum is a *content* size and the work-area clamp may lower it below 640 at high display scaling. |
-| **Compact** | 640 – 1023 | `LeftCompact` (48 px icon rail, flyout on expand) | 1 column | Sky plot and satellite table stack vertically; the plot caps at 360 px. Inspectors become full-width `ContentDialog`. Table columns beyond PRN / El / Az / signal collapse into an expander per row. **Not built** (the stack, the 360 px cap, the dialog inspectors and the per-row expander) — noted 29 Aug 2026 (#316). **To build** — decided 30 Aug 2026 (#320). |
+| **Compact** | 640 – 1023 | `LeftCompact` (48 px icon rail, flyout on expand) | 1 column | Sky plot and satellite table stack vertically; the plot caps at 360 px. Inspectors become full-width `ContentDialog`. Table columns beyond PRN / El / Az / signal collapse into an expander per row. **Read against the code 30 Aug 2026 (#320) and largely already true, for a reason that inverts the row** — see below. |
 | **Medium** | 1024 – 1439 | `Left` (pane 260 px, user-collapsible) | 2 columns | Default target. Sky plot beside table. |
 | **Wide** | ≥ 1440 | `Left` | 2 columns within 1320 max-width, centred | A third inspector column may appear on the Satellites page for per-satellite history; it is an addition, not a redistribution. |
+
+> **⚠ The Compact row, read against the code on 30 Aug 2026 (#320).** #316 recorded four of its
+> behaviours as *Not built*. Three of them turn out to be **already true at every width**, and the
+> fourth describes something that does not exist — which means the piece actually missing is not in
+> this row at all.
+>
+> - **"Sky plot and satellite table stack vertically."** They already do, and always have:
+>   `SatellitesPage` is a single-column `StackPanel` at every width. What is unbuilt is the **Medium
+>   and Wide two-column arrangement** the rows below assert — *Sky plot beside table*. The page is
+>   permanently in the Compact arrangement, so this row's behaviour is the default rather than an
+>   adaptation.
+> - **"The plot caps at 360 px."** Also already true at every width: `MaxPlotSize="360"` is set
+>   unconditionally on `SkyPlotControl`. It is not a Compact behaviour; it is the only size the plot
+>   has ever had, which is the other half of why the page has never needed a second column.
+> - **"Inspectors become full-width `ContentDialog`."** **There are no inspectors.** The Wide row
+>   below introduces the concept as one that *may appear* on the Satellites page, and it never has —
+>   nothing in `src/` is named or shaped like one. A Compact adaptation of an unbuilt surface cannot
+>   be built, and inventing one would fix its design by accident.
+> - **"Table columns beyond PRN / El / Az / signal collapse into an expander per row."** The Tracked
+>   table has exactly those four columns and nothing beyond them. Only the plot's A11Y-11 list
+>   alternate carries a fifth — *State*, one word wide — and a per-row expander to hide one word
+>   costs a tap and a control to save nothing.
+>
+> **What this leaves for Tony.** The two-column Medium and Wide layout is a real and unbuilt piece of
+> §9.6.1, and it is the opposite of what #316 filed. It is not built here because it is a design
+> decision rather than a gap: it means giving the sky plot more than 360 px, or leaving it at 360 and
+> putting the tables beside it, and those are different pages. The page margin above **is** built,
+> being unambiguous.
+>
+> **Compact cannot be exercised on the hardware this project owns.** §9.6.2 sets the Details minimum
+> at 1024 as a *content* size clamped to the display work area, so on a wide monitor at 100 % scaling
+> the state is unreachable by dragging the window — it is for high display scaling, where the same
+> 1024 of content is fewer effective pixels. That is why the margin is declarative: a state that
+> cannot be entered on the machine to hand must at least be readable in the markup it governs.
 
 `NavigationView` is set to `Auto` display mode with these thresholds configured via `CompactModeThresholdWidth="640"` and `ExpandedModeThresholdWidth="1024"` — do not hand-roll breakpoint logic where the control already implements it. `Minimal` is what `Auto` selects below the compact threshold; the row above states what the app expects there rather than adding logic.
 
