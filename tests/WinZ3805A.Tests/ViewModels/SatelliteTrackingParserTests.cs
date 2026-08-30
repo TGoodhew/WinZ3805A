@@ -253,6 +253,32 @@ public sealed class SatelliteCommandCeremonyTests
         Assert.Contains("holdover", Find(mnemonic).ConfirmationText!, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
+    /// Clearing the exclusion list is confirmed by a sentence about clearing it, and not by the
+    /// one belonging to the command that excludes.
+    /// </summary>
+    /// <remarks>
+    /// <c>:IGNore NONE</c> carried <c>:IGNore</c>'s sentence — *"Exclude the selected satellites
+    /// from tracking?"* — until #320, in the catalog and in §8.3 alike, for the command that makes
+    /// every satellite eligible again. The dialog is the safety mechanism, so a dialog naming the
+    /// reverse of what it is about to do is the one kind of wrong copy that matters: a user reading
+    /// it carefully would have been misled precisely because they read it.
+    /// <para>
+    /// The two sentences are asserted different rather than merely checked for a keyword, because
+    /// the fault was that they were identical.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void ClearingTheExclusionListDoesNotBorrowTheExcludeSentence()
+    {
+        string clear = Find(":GPS:SAT:TRAC:IGNore NONE").ConfirmationText!;
+        string exclude = Find(":GPS:SAT:TRAC:IGNore").ConfirmationText!;
+
+        Assert.NotEqual(exclude, clear);
+        Assert.Contains("Clear the exclusion list", clear, StringComparison.Ordinal);
+        Assert.DoesNotContain("Exclude the selected", clear, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// And the four that do not drive holdover neither claim it nor demand the tick, so the
     /// ceremony still distinguishes them.
     /// </summary>

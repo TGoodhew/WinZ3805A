@@ -188,7 +188,7 @@ public class CommandConfirmationViewModelTests
     {
         CommandConfirmationViewModel model = new(Command(":SYNC:HOLD:DUR:THReshold"));
 
-        Assert.Equal("Set holdover threshold?", model.Message);
+        Assert.Equal("Set the holdover duration limit?", model.Message);
         Assert.Equal("Sets how long holdover may run before it is reported as exceeded.", model.Explanation);
     }
 
@@ -202,7 +202,7 @@ public class CommandConfirmationViewModelTests
         CommandConfirmationViewModel model = new(
             Command(":SYNC:HOLD:DUR:THReshold"), argument: "3600", displayValue: "3600");
 
-        Assert.Equal("Threshold: 3600 s", model.ValueSummary);
+        Assert.Equal("Duration limit: 3600 s", model.ValueSummary);
     }
 
     /// <summary>And where §8.3's sentence already names it, repeating it would be the redundancy.</summary>
