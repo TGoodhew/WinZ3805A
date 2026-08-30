@@ -23,10 +23,10 @@ Users currently either screen-scrape `:SYST:STAT?` in a terminal emulator or run
 |---|---|---|
 | G1 | A glanceable primary window showing lock mode and tracked-satellite count, suitable for leaving open on a second monitor all day | Main window ≤ 420 × 260 px, mode and count legible at 2 m, updates ≤ 2 s after state change |
 | G2 | Full receiver status presented as a modern WinUI 3 surface, **not** a reproduction of the 80×24 terminal screen | No fixed-pitch reproduction of the source screen anywhere in the details UI; `WzMonoTextStyle` used only for device-literal text per §9.5.1; all data rendered through the §9.10 component inventory |
-| G6 | The app has a visual identity of its own while remaining native to Windows | The §9 token set is implemented in full; §9.13 anti-patterns audit passes; no `SystemAccentColor` used as brand |
 | G3 | Complete coverage of the safe, documented SCPI surface through task-oriented dialogs | Every command in §8 tier S/C reachable from the UI |
-| G4 | Destructive commands are unreachable — not merely warned about | Blocked commands (§8.3) absent from the shipped command catalog; no free-text command path can emit them |
+| G4 | Destructive commands are unreachable — not merely warned about | Blocked commands (§8.4) absent from the shipped command catalog; no free-text command path can emit them |
 | G5 | Ships to the Microsoft Store as an MSIX package | Passes Windows App Certification Kit; installs from Store on a clean x64 machine |
+| G6 | The app has a visual identity of its own while remaining native to Windows | The §9 token set is implemented in full; §9.13 anti-patterns audit passes; no `SystemAccentColor` used as brand |
 
 ---
 
@@ -90,12 +90,13 @@ Users currently either screen-scrape `:SYST:STAT?` in a terminal emulator or run
 | Min platform | `10.0.17763.0` (Windows 10 1809) | WinUI 3's floor. Verify WinAppSDK 2.3.1 does not raise it; if it does, follow the SDK. |
 | Architectures | **x64 only** | No AnyCPU — Windows App SDK is native. Omit x86.<br>**Amended 15 Aug 2026.** This row required x64 *and* ARM64 and said to ship both in the bundle. It now requires x64 alone, for three reasons that compound. First, **WACK cannot cross-test**: it installs and runs the package it certifies, so an ARM64 submission has to be certified on ARM64 hardware, and there is none on this project. Shipping an architecture nobody can run the certification kit against is shipping an unverified binary. Second, **Windows 11 on ARM runs x64 applications under emulation**, so ARM64 machines still get a working application from the x64 package — the cost of dropping the native build is performance on a device this application spends its life idle on, waiting a second at a time for a serial reply. Third, the caveat this row already carried argued against the native build on its own: `System.IO.Ports` runs fine on ARM64, but third-party **USB-serial drivers frequently lack ARM64 builds** (Prolific PL2303 and CH340 clones especially; FTDI is generally fine), so a native ARM64 build is of limited use precisely where it would be used.<br>The driver caveat still applies under emulation, because it is a kernel-mode problem and the emulated application is not what is missing. The connection dialog must fail gracefully with a message naming the likely cause when zero ports enumerate on an ARM64 machine.<br>Restoring ARM64 is a small change — one entry in `Platforms`, one publish profile, one CI matrix row — and should be made when hardware to certify on exists, not before. |
 | IDE | Visual Studio 2026, *.NET desktop development* workload + Windows App SDK extension | |
-| MVVM | **Hand-written `INotifyPropertyChanged`** | **Amended 15 Aug 2026.** This row specified `CommunityToolkit.Mvvm` and its source-generated `ObservableProperty` / `RelayCommand`. The package was referenced and, across every one of the eleven view models built in §15 steps 7-10, **never used once** — the divergence was found by #125 rather than decided, and is settled here in favour of the code.<br>The reason it never got used is structural rather than accidental. These view models do not own their state: they project a `ReceiverStateStore` that is replaced wholesale on each poll, so each one raises *every* property together from a `RaiseAll()`, and again on a one-second staleness tick. `[ObservableProperty]` generates a property per backing field with per-property change detection, which is precisely the thing there is no use for here — there are no backing fields to generate from, and nothing to detect. Commands are the same story: tier C commands go through `CommandConfirmation.RunAsync` and a `CommandInvoker` built in `OnNavigatedTo`, not through an `ICommand` bound in XAML.<br>Adopting the toolkit would mean rewriting eleven working, tested view models to gain generated code for a pattern they do not use. The package is removed.<br>This is not a rule against the library. If a view model ever *does* own editable state per field — the P1-3 satellite manage dialog (#51) is the likely first — reintroducing it there is a one-line reference, and better than hand-writing what a generator does well. |
+| MVVM | **Hand-written `INotifyPropertyChanged`** | **Amended 15 Aug 2026.** This row specified `CommunityToolkit.Mvvm` and its source-generated `ObservableProperty` / `RelayCommand`. The package was referenced and, across every one of the eleven view models built in §15 steps 7-10, **never used once** — the divergence was found by #125 rather than decided, and is settled here in favour of the code.<br>The reason it never got used is structural rather than accidental. These view models do not own their state: they project a `ReceiverStateStore` that is replaced wholesale on each poll, so each one raises *every* property together from a `RaiseAll()`, and again on a one-second staleness tick. `[ObservableProperty]` generates a property per backing field with per-property change detection, which is precisely the thing there is no use for here — there are no backing fields to generate from, and nothing to detect. Commands are the same story: tier C commands go through `CommandConfirmation.RunAsync` and a `CommandInvoker` built in `OnNavigatedTo`, not through an `ICommand` bound in XAML.<br>Adopting the toolkit would mean rewriting eleven working, tested view models to gain generated code for a pattern they do not use. The package is removed.<br>This is not a rule against the library. If a view model ever *does* own editable state per field, reintroducing it there is a one-line reference, and better than hand-writing what a generator does well. The P1-3 satellite manage dialog (#51) was named here as the likely first such case; it shipped without the toolkit (`SatelliteManagementDialog.xaml`), so nothing uses it today (corrected 29 Aug 2026, #316). |
 | DI | `Microsoft.Extensions.DependencyInjection` | **Amended 15 Aug 2026:** `Microsoft.Extensions.Hosting` removed, zero usages. §12's composition root builds a `ServiceProvider` directly in `App.Compose()` and never a host. The generic host exists to own configuration, logging and a hosted-service lifetime against a process it starts; a WinUI application's lifetime belongs to `Application.OnLaunched` and its windows, so the host would be a second lifetime model beside the real one. |
-| Logging | `Microsoft.Extensions.Logging` → rolling file under `Environment.SpecialFolder.LocalApplicationData` | **Amended 15 Aug 2026, and the destination was dangerous as written.** This row said `ApplicationData.Current.LocalFolder`. **Reading `ApplicationData.Current` terminates this process uncatchably** — no managed exception, no first-chance notification, the window simply never appears. It cost a debugging session to find, and every preference store in the application was moved to a plain file under `LocalApplicationData` because of it. A specification that keeps pointing at that API will send the next reader into the same hole, so the destination is corrected here even though the feature behind it does not exist yet.<br>**The feature does not exist yet.** `ILogger` is injected into `SerialTransport`, `LineProtocol`, `DeviceSessionService` and `PollingService`, and `Transport/TransportLog.cs` holds real `LoggerMessage` source-generated instrumentation — but **nothing ever registers a provider**, `ILoggerFactory` is resolved with `GetService` and comes back null, and every one of those call sites resolves to `NullLogger`. The plumbing is real and the log is thrown away. On a tool whose whole job is a serial protocol, that is a gap rather than a tidy-up; it is filed as **#127** rather than fixed here, because adding a logging provider is a feature and #125 was a removal. |
+| Logging | `Microsoft.Extensions.Logging` → rolling file under `Environment.SpecialFolder.LocalApplicationData` | **Amended 15 Aug 2026, and the destination was dangerous as written.** This row said `ApplicationData.Current.LocalFolder`. **Reading `ApplicationData.Current` terminates this process uncatchably** — no managed exception, no first-chance notification, the window simply never appears. It cost a debugging session to find, and every preference store in the application was moved to a plain file under `LocalApplicationData` because of it. A specification that keeps pointing at that API will send the next reader into the same hole, so the destination is corrected here.<br>**Built (#127, closed 19 Aug 2026; corrected 29 Aug 2026, #316).** When this row was amended on 15 Aug the feature did not exist: `ILogger` was injected into `SerialTransport`, `LineProtocol`, `DeviceSessionService` and `PollingService`, and `Transport/TransportLog.cs` held real `LoggerMessage` source-generated instrumentation, but nothing registered a provider and every call site resolved to `NullLogger`. That gap was filed as #127 rather than fixed by #125 (a removal), and #127 closed it: `App.xaml.cs` registers `Services/FileLoggerProvider.cs` at Information level, and `Services/FileLogWriter.cs` rolls the file at 1 MB keeping four rolled files. Diagnostics carries a *Show log folder* card (§10.9). |
 | Serial I/O | `System.IO.Ports` (NuGet) | Works in a full-trust packaged desktop app. |
-| Charts (P1) | `LiveChartsCore.SkiaSharpView.WinUI` | Verify current WinAppSDK 2.x compatibility before committing; fall back to a hand-drawn `Canvas` renderer if it lags. |
+| Charts (P1) | Hand-drawn `Controls/TrendChart.cs` | **Corrected 29 Aug 2026 (#316).** This row named `LiveChartsCore.SkiaSharpView.WinUI` with a hand-drawn `Canvas` renderer as the fallback. OQ-5 (#38, closed 19 Aug 2026) rejected LiveCharts on the §12 point budget — it has no downsampling and materialised 1.65 GB when handed the raw series — so the "fallback" is the design: `TrendChart` with `Controls/TrendDecimation.cs`. No charting package is referenced. |
 | Sky plot | Hand-drawn `Canvas` / `Path` geometry | No extra dependency. Win2D acceptable if antialiasing quality demands it. |
+| Help rendering | `Markdig` 1.3.2 | (added 29 Aug 2026 from the code, #316) The one third-party runtime dependency beyond the platform packages. `Services/HelpDocument.cs` parses `docs/how-to-use.md` into blocks that `Views/HelpWindow.xaml` lays out natively (#312); the guide is shipped as content, not as HTML. Listed in `THIRD-PARTY-NOTICES.md`. |
 | Tests | xUnit for parser and command-catalog logic | Parser and safety classifier must be in a UI-independent library so they are testable headlessly. |
 
 ### 6.2 Repository location and solution layout
@@ -108,31 +109,57 @@ Users currently either screen-scrape `:SYST:STAT?` in a terminal emulator or run
 C:\Users\Tony\source\WinZ3805A\
 ├── WinZ3805A.sln
 ├── CLAUDE.md                          Agent conventions; points at docs/requirements.md
+├── README.md                          With LICENSE (MIT) and THIRD-PARTY-NOTICES.md beside it
+├── Directory.Build.props              Nullable + warnings-as-errors (§6.4), shared by every project
+├── global.json                        Pins the .NET SDK
+├── .github/workflows/ci.yml           Runs every build/ gate first, then builds and tests
+├── build/                             Test-*.ps1 — the eleven CI gates (§8.4, §9.12, §9.13);
+│   │                                  Capture-Fixtures.ps1 (the §11.1 harness); the sideload
+│   │                                  packager, Invoke-Wack.ps1, New-AppAssets.ps1;
+│   │                                  fluent-stock-colours.txt (§9.4.1's measured stock values)
+│   ├── palette/                       The §9.4.4 palette derivation and its validator (#87)
+│   └── sideload/                      Installer script and README shipped with a sideload package
 ├── docs/
-│   └── requirements.md                This document
+│   ├── requirements.md                This document
+│   ├── how-to-use.md                  The user's guide; the Help window renders it in-app (#312)
+│   ├── adding-a-receiver.md           Driver author's guide (#287), with tutorial-nmea-driver.md (#310)
+│   ├── manual-qa.md                   The release checklist §6.4 and §9.12 point at
+│   ├── privacy.md, store-listing.md   Privacy policy and listing copy for the Store (OQ-6)
+│   ├── lady-heather-comparison.md, index.md, _config.yml   GitHub Pages site
+│   └── images/                        Screenshots the user's guide embeds
 ├── src/
 │   ├── WinZ3805A/                     WinUI 3 app, single-project MSIX
-│   │   ├── Views/                     XAML pages, windows, dialogs
+│   │   ├── Views/                     XAML pages, windows (Main, Details, Help), dialogs
 │   │   ├── ViewModels/
 │   │   ├── Controls/                  StatusMedallion, SkyPlotControl, ReadoutTile,
-│   │   │                              SeverityPill, SatelliteStrengthBar,
-│   │   │                              ConnectionStatusPill, TrendChart
-│   │   ├── Themes/                    Colors.xaml, Typography.xaml, Spacing.xaml,
-│   │   │                              Motion.xaml, Controls.xaml — §9 token set,
-│   │   │                              each with Light/Dark/HighContrast dictionaries
-│   │   ├── Services/                  DeviceSessionService, PollingService,
-│   │   │                              SettingsService, WzMotionService
-│   │   ├── Assets/                    Store logos, custom PathIcon geometry
+│   │   │                              SeverityPill, SatelliteStrengthBar, FieldErrorText,
+│   │   │                              ConnectionStatusPill, TrendChart, AllanDeviation
+│   │   ├── Themes/                    Colors.xaml (the one file with Light/Dark/HighContrast
+│   │   │                              dictionaries), Typography.xaml, Spacing.xaml, Shapes.xaml,
+│   │   │                              Motion.xaml, Controls.xaml, Generic.xaml — §9 token set
+│   │   ├── Services/                  DeviceSessionService, PollingService, TrendStore,
+│   │   │                              *Preferences + JsonPreferenceFile (settings),
+│   │   │                              FileLoggerProvider, WzMotionService, SurveyLog
+│   │   ├── Assets/                    Store logos, AppIcon.ico
 │   │   │   └── Fonts/                 CascadiaMono.ttf (OFL 1.1) + licence notice
+│   │   ├── Properties/PublishProfiles/  win-x64.pubxml (§6.3)
 │   │   └── Package.appxmanifest
 │   └── WinZ3805A.Device/              Class library — NO UI references
-│       ├── Transport/                 SerialTransport, ITransport, LineProtocol
-│       ├── Commands/                  ScpiCommand, CommandCatalog, SafetyTier
-│       ├── Parsing/                   StatusScreenParser, ScalarParsers
-│       └── Models/                    ReceiverStatus, Satellite, Position, HealthState
-└── tests/
-    └── WinZ3805A.Tests/               xUnit; captured .txt status screens as fixtures
+│       ├── Transport/                 SerialTransport, ITransport, LineProtocol, BroadcastListener
+│       ├── Commands/                  ScpiCommand, CommandCatalog, SafetyTier, BlockedCommands
+│       ├── Drivers/                   IReceiverDriver, LinkStyle, SmartClockDriver (#287)
+│       │   └── Nmea/                  NmeaDriver, NmeaSentence, NmeaStatusParser (#310)
+│       ├── Parsing/                   StatusScreenParser, ScalarParsers, DiagnosticLogParser
+│       └── Models/                    ReceiverStatus, Satellite, Position, ModelProfile
+├── tests/
+│   └── WinZ3805A.Tests/               xUnit; folders mirror the source
+│       └── Fixtures/                  Captured .txt status screens (§11.1) with README.md
+│           └── captured/              The 27–28 Aug sitting, one file per state, and its log
+└── tools/
+    └── NmeaSimulator/                 Console NMEA talker for driving the §7 seam without hardware (#310)
 ```
+
+*(Tree regenerated from the working copy on 29 Aug 2026, #316. The original named a `SettingsService` and a `HealthState` model, neither of which exists: settings are the `*Preferences` records persisted through `JsonPreferenceFile`, and health is carried on `ReceiverStatus` as its health items and `ClockAdvisory`.)*
 
 The `Device` library must have zero dependency on `Microsoft.UI.*`. All parsing and safety classification lives there and is unit-tested against captured status-screen text files.
 
@@ -158,9 +185,9 @@ The `Device` library must have zero dependency on `Microsoft.UI.*`. All parsing 
   ```
   This is the template default and is what permits `System.IO.Ports` (which opens `\\.\COMn` via Win32). `runFullTrust` is a restricted capability requiring justification at submission; it is routinely approved for desktop apps. Justification text to use: *"Desktop application requiring Win32 serial port access to communicate with user-attached RS-232 laboratory instruments."*
 - **Do not** declare the `serialcommunication` DeviceCapability. That is for the UWP `Windows.Devices.SerialCommunication` API, which this app does not use. Declaring unnecessary capabilities adds certification friction.
-- **Port enumeration** uses `SerialPort.GetPortNames()`, optionally enriched with friendly names read from `HKLM\HARDWARE\DEVICEMAP\SERIALCOMM` and WMI `Win32_PnPEntity`. Registry read is the primary path; treat WMI as best-effort and never block the UI on it.
+- **Port enumeration** uses `SerialPort.GetPortNames()`, merged with `HKLM\HARDWARE\DEVICEMAP\SERIALCOMM` (a port in the device map but missing from the framework's list is still openable), and enriched with friendly names read from the device tree under `HKLM\SYSTEM\CurrentControlSet\Enum`. **WMI is not used** (corrected 29 Aug 2026, #316): this bullet originally allowed `Win32_PnPEntity` as a best-effort second source, but `Services/SerialPortEnumerator.cs` reads the same `FriendlyName` from the registry without a `System.Management` dependency and without WMI's first-query cost, which on a cold service is seconds rather than milliseconds — the very thing that must never block the UI. Nothing in the enumerator throws; an unreadable key costs that device its description, not the user the port list.
 - **Identity:** `Package/Identity/@Name`, `@Publisher`, and `Properties/PublisherDisplayName` must be replaced with the values Partner Center issues. Leave clear `TODO:` markers in the manifest.
-- **Privacy policy:** the app collects and transmits no user data. State this plainly; a privacy policy URL is still required by Store policy for most listings — leave a `TODO:`.
+- **Privacy policy:** the app collects and transmits no user data. State this plainly; a privacy policy URL is still required by Store policy for most listings. The policy is [`docs/privacy.md`](privacy.md), published by GitHub Pages, and the listing copy is [`docs/store-listing.md`](store-listing.md) (OQ-6, #39, closed 21 Aug 2026). The URL is entered in the Partner Center listing rather than declared in the manifest, which carries a comment saying so rather than a `TODO:` (corrected 29 Aug 2026, #316).
 - **Trademark position.** The listing name, package name, and display name must **not** contain "HP", "Hewlett-Packard", "Agilent", "Keysight", or "Symmetricom" — those are company marks and using one implies affiliation. `WinZ3805A` contains a *model designation* rather than a company mark, which is a materially weaker claim and is defensible as nominative descriptive use: the app genuinely is for that device and there is no concise way to say so otherwise. That is the position this project takes.
 
   Two practical hedges follow from it:
@@ -185,11 +212,11 @@ The device is plain RS-232 with no vendor driver SDK, no COM interop, and no P/I
 | `PeriodicTimer` | Fast and full poll cadences | Async-native, no reentrancy hazard, cancels cleanly. Replaces `DispatcherTimer` / `System.Timers.Timer`. |
 | `TimeProvider` (abstract, injected) | Poller, staleness calculation, week-rollover detection | **Important for testability.** The rollover logic in §7.4 compares device time to system time; injecting `TimeProvider` lets the fixture tests assert the 2006→2026 correction deterministically instead of depending on wall clock. Use `FakeTimeProvider` from `Microsoft.Extensions.TimeProvider.Testing` in tests. |
 | `FrozenDictionary` / `FrozenSet` | `CommandCatalog` lookups | The catalog is built once and read constantly. Frozen collections give the best read performance and make the immutability of the allowlist structural rather than conventional. |
-| `IAsyncEnumerable<T>` | Streaming multi-line responses, log paging | |
+| `IAsyncEnumerable<T>` | Streaming multi-line responses, log paging | **Not used** (corrected 29 Aug 2026, #316): zero occurrences in the source. Multi-line responses are read whole under their §7.2 timeout class — the diagnostic log has one of its own — and there is no paging. |
 | Records, `required` members, primary constructors, collection expressions | Models throughout | `ReceiverStatus` (§11.2) is a `record` with `init` accessors by design. |
 | **Nullable reference types enabled, warnings as errors** | Entire solution | Directly serves the "parser never throws" requirement — unparseable fields are typed `null`, and the compiler enforces that every consumer handles it. Set `<Nullable>enable</Nullable>` and `<TreatWarningsAsErrors>true</TreatWarningsAsErrors>` in `Directory.Build.props`. |
-| Source generators: `CommunityToolkit.Mvvm`, `System.Text.Json` (`JsonSerializerContext`), `LoggerMessage` | ViewModels, settings, logging | Reflection-free, and keeps startup fast. |
-| `System.Diagnostics.Metrics` | Transport instrumentation | Counters for transactions, timeouts, parse warnings. Surfaced in Diagnostics; not exported anywhere.<br>**Not built. Amended 15 Aug 2026** to say so, because this table is read as a description of the code. Deferred at §15 step 1 and never picked back up; zero occurrences in the source. It shares a cause with §6.1's logging row — both are observability, and neither survived the first implementation pass. See #127. |
+| Source generators: `LoggerMessage` | Logging (`Transport/TransportLog.cs`) | Reflection-free, and keeps startup fast. **Corrected 29 Aug 2026 (#316):** this row also named `CommunityToolkit.Mvvm` (removed 15 Aug, §6.1) and `System.Text.Json`'s `JsonSerializerContext`. Only `LoggerMessage` is real. The preference files use the reflection-based `JsonSerializer` (`Services/JsonPreferenceFile.cs`), which is fine precisely because trimming is forbidden below — the generator's reason for existing does not apply here. |
+| `System.Diagnostics.Metrics` | Transport instrumentation | Counters for transactions, timeouts, parse warnings. Surfaced in Diagnostics; not exported anywhere.<br>**Not built. Amended 15 Aug 2026** to say so, because this table is read as a description of the code. Deferred at §15 step 1 and never picked back up; zero occurrences in the source. It shares a cause with §6.1's logging row — both are observability, and neither survived the first implementation pass. #127 closed the logging half on 19 Aug 2026 without building this one, and no issue tracks it — noted 29 Aug 2026 (#316); decision on #320. |
 
 **Do not use these, despite being available:**
 
@@ -222,7 +249,9 @@ The device is plain RS-232 with no vendor driver SDK, no COM interop, and no P/I
 | Handshake | None | None only |
 | DTR / RTS | Assert both on open | — |
 
-Z3805A ships 9600-8-N-1. Sibling units differ — **the Z3801A leaves the factory at 19200-7-O-1** — so all parameters must be user-settable, and the connection dialog must offer an **Auto-detect** that walks the eight most likely combinations sending `*IDN?` until a valid identity string returns.
+*(added 29 Aug 2026 from the code, #316)* The DTR / RTS row is not a per-device parameter but the transport's unconditional policy: `Transport/SerialTransport.cs` asserts both lines on every open, before any driver has been selected, because the SmartClock's line driver will not transmit to a dead DTR on some cable assemblies. That is right for the SmartClock family and was found to be wrong for at least one other receiver — the BG7TBL unit went silent with DTR asserted (#309) — so #304 item 4 asks for the modem-line policy to become driver-supplied.
+
+Z3805A ships 9600-8-N-1. Sibling units differ — **the Z3801A leaves the factory at 19200-7-O-1** — so all parameters must be user-settable, and the connection dialog must offer an **Auto-detect** that walks the union of every registered driver's most likely combinations — ten today: the SmartClock family's eight, listed in order in §10.12, plus 4800-8-N-1 and 38400-8-N-1 for an NMEA talker (#310) — listening first at each, and sending `*IDN?` only when nothing claims what it hears, until a valid identity returns (corrected 29 Aug 2026, #316: this said *eight* and *sending `*IDN?`*, which described one family and no listen).
 
 > **⚠ Corrected 28 Aug 2026 (#64).** This said the Z3801A is "commonly 19200-7-**E**-1", and so did §10.12's auto-detect order and Appendix B. The Z3801A user guide gives the factory default as **odd** parity, twice: *"Baud Rate: 19200 / Parity: Odd / Data Bits: 7/char / Stop Bits: 1"*, and again as *"19200 — 7 data bits, 1 start bit, 1 stop bit, odd parity"*. The even-parity spelling had no source.
 >
@@ -234,7 +263,7 @@ Z3805A ships 9600-8-N-1. Sibling units differ — **the Z3801A leaves the factor
 
 This is the fiddliest part of the implementation. Get it right before building any UI.
 
-> **Scope, stated 29 Aug 2026 (#310).** Everything in this section is the SmartClock family's link — a receiver that speaks only when spoken to, behind a prompt. It is one of two link styles the driver contract now names (§12, *Receiver readiness*): a **broadcast** family, such as an NMEA 0183 talker, has no prompt, no echo, no error queue and no commands; it is recognised by what it says during the synchronise step below and served from a listener, never written to. Nothing in this section applies to it except the synchronise step's listen, and the `*CLS` that step sends is the one write such a family ever receives.
+> **Scope, stated 29 Aug 2026 (#310).** Everything in this section is the SmartClock family's link — a receiver that speaks only when spoken to, behind a prompt. It is one of two link styles the driver contract now names (§12, *Receiver readiness*): a **broadcast** family, such as an NMEA 0183 talker, has no prompt, no echo, no error queue and no commands; it is recognised by what it says during the synchronise step below — steps 1 and 2 of the connect sequence — and served from a listener. **It is never written to after recognition; one `*CLS`, sent by step 2 before recognition, is the only write such a family ever receives.** Nothing else in this section applies to it. *(This sentence is the canonical wording; §12's* Receiver readiness *defers to it — reconciled 29 Aug 2026, #316.)*
 
 > **⚠ Corrected 21 Aug 2026 (#78).** Everything below was rewritten against
 > `SYMMETRICOM,Z3805A,3625A02931,1.01.03-A` at 9600-8-N-1. The original text described a receiver
@@ -303,24 +332,29 @@ This is the fiddliest part of the implementation. Get it right before building a
 
 - **Connect sequence — three steps, in order, before any command whose answer matters.** Asserting
   DTR on open has two separate effects, and skipping either step corrupts the session silently
-  rather than failing:
+  rather than failing. Steps 1 and 2 together are the **synchronise step** the scope note above
+  refers to (`LineProtocol.SynchroniseAsync`; labelled 29 Aug 2026, #316):
 
   1. **Absorb the banner.** The receiver emits its identity string and a prompt with nothing asked
      of it. The announcement arrives late enough to land *after* a first command has gone out, so a
      client that transacts immediately reads the banner as its first response and every reply
      afterwards is one behind — with nothing reporting an error, because every transaction still
-     completes.
-  2. **Spend the framing glitch.** The same DTR assertion reaches the receiver as a character. It
-     answers the next thing it is asked with `-362`, "Framing error in program message", having
-     dropped that command unexecuted. The first command after opening must therefore be one whose
-     response nobody wants. During auto-detect the alternative is losing the identity query that
-     decides whether a receiver is present at all.
+     completes. What is heard during this listen is also handed to every registered driver's
+     `Overhear`, which is how a broadcast family is recognised (#310).
+  2. **Spend the framing glitch — the command is `*CLS`.** The same DTR assertion reaches the
+     receiver as a character. It answers the next thing it is asked with `-362`, "Framing error in
+     program message", having dropped that command unexecuted. The first command after opening must
+     therefore be one whose response nobody wants: `*CLS`, which has no response body and clears the
+     status registers at the same time. `LineProtocol` sends it a second time when the first is not
+     answered. During auto-detect the alternative is losing the identity query that decides whether
+     a receiver is present at all. (The command was never named here although the scope note
+     depends on it — corrected 29 Aug 2026, #316.)
   3. **Then transact.**
 
   The glitch is directly observable: open the port and send `*IDN?` first and it answers `E-362> `
   with no identity string; send anything else first and `*IDN?` answers normally.
 - **Read strategy:** a transaction completes when the stream yields the prompt sentinel, or on timeout. Never rely on `ReadLine()` alone — `:SYST:STAT?` is a multi-line block of ~1900 bytes that will span many reads. Implement with `PipeReader` over `SerialPort.BaseStream` and `SequenceReader<byte>` for sentinel detection (§6.4); this handles the straddling-buffer case for free and avoids the manual compaction bugs that plague hand-rolled versions.
-- **Timeouts:** 3000 ms default; 15000 ms for `:SYST:STAT?` (≈1900 bytes at 9600 baud ≈ 2 s of wire time, plus device latency); 30000 ms for `*TST?` and `:DIAG:TEST?`.
+- **Timeouts — six classes** (`Transport/TransactionTimeouts.cs`; the three measured since the original three were added 29 Aug 2026, #316): **3000 ms** default for every scalar query and setter; **15000 ms** for `:SYST:STAT?` (≈1900 bytes at 9600 baud ≈ 2 s of wire time, plus device latency; 3521 ms measured end to end); **30000 ms** for `*TST?` and `:DIAG:TEST?` (the `GPS` subsystem alone reached 24.0 s on the bench, #53); **60000 ms** for `:DIAG:LOG:READ:ALL?` (a full 222-entry log is ≈15 kB, about 16 s at 9600 baud — measured after the default timed out on it); **2000 ms** per transaction of the auto-detect walk (§10.12); **30000 ms** for the three `:GPS:POSition…` setters that commit a position (`:GPS:POS`, `LAST`, `SURVey` — 9.67 s measured to a clean prompt, #256; they tear down a running survey before answering). Matching is exact against every legal SCPI spelling, never by prefix, so `:SYST:STAT:LENG?` keeps the default.
 - **Concurrency:** the device is strictly one-transaction-at-a-time. `DeviceSessionService` owns a single-consumer `Channel<PendingCommand>`; all callers `await` their turn. No exceptions to this.
 - **Error checking:** after every command in safety tier **C** (§8), automatically issue `:SYST:ERR?` and surface any non-zero error to the user. Do not do this after tier-S queries — it doubles traffic for no benefit.
 - **Reconnect:** on `IOException` or timeout ×3 consecutive, transition to `Disconnected`, close the port, and retry with exponential backoff (2 s, 4 s, 8 s, capped 30 s) while the user has "stay connected" enabled.
@@ -329,14 +363,18 @@ This is the fiddliest part of the implementation. Get it right before building a
 
 Two independent cadences:
 
-| Tier | Interval (default, user-settable) | Commands |
+| Tier | Interval (fixed — §10.13) | Commands |
 |---|---|---|
 | **Fast** | 1 s | `:SYNC:STAT?`, `:SYNC:TFOM?`, `:SYNC:FFOM?`, `:SYNC:TINT?`, `:DIAG:ROSC:EFC:REL?`, `:GPS:SAT:TRAC:COUN?` |
 | **Full** | 10 s | `:SYST:STAT?` |
 
+*(The column header said "default, user-settable" — corrected 29 Aug 2026, #316. §10.13 is the later decision: the cadences are deliberately not offered, and `PollingService` takes them from the driver's `Cadence` as `init`-only values.)*
+
+> **Scope (added 29 Aug 2026 from the code, #316).** This schedule is the SmartClock family's. The cadence and the sweep are properties of the driver, not of the app — `IReceiverDriver.Cadence` and `IReceiverDriver.Plan` (#287). The NMEA driver's cadence is 1 s / 5 s, its full-status read is the whole of the last complete broadcast cycle (`PollPlan.WholeCycle`, the `*` pseudo-entry in its catalog) rather than a screen, and its plan has no refusable query, so §7.3.1 does not arise for it.
+
 Rationale: the satellite El/Az/(C-N) table has **no individual query** — it exists only inside `:SYST:STAT?`. Everything else has a cheap scalar query. Fast tier drives the main window and trend charts; full tier drives the satellite table, position, and health sections.
 
-At 9600 baud the full screen consumes ~2 s of the 10 s window. The scheduler must never let the two tiers overlap — they share the same command channel, so the fast tier will naturally stall behind a full-screen fetch. That is acceptable; do not attempt to interleave.
+At 9600 baud the full screen consumes **3521 ms measured** of the 10 s window (this said ~2 s, which was the wire time alone — corrected 29 Aug 2026, #316). The scheduler must never let the two tiers overlap — they share the same command channel, so the fast tier will naturally stall behind a full-screen fetch. That is acceptable; do not attempt to interleave.
 
 #### 7.3.1 A reading the receiver will not give
 
@@ -379,8 +417,10 @@ pre-date the user's action and attributing them to it is the defect.
 
 Compute `delta = SystemUtcNow - DeviceReportedUtc`. If `delta` is within ±7 days of a multiple of 1024 weeks (7168 days), set `ReceiverStatus.WeekRolloverEpochs = round(delta / 7168 days)` and expose:
 
-- `DeviceReportedDate` — as returned.
-- `CorrectedDate` — device date + (epochs × 7168 days).
+- `DeviceDateTime` — as returned.
+- `CorrectedDateTime` — device date + (epochs × 7168 days).
+
+*(These were named `DeviceReportedDate` and `CorrectedDate` here while §11.2 and `Models/ReceiverStatus.cs` use the names above — corrected 29 Aug 2026, #316.)*
 
 The UI shows the corrected date prominently with an info badge explaining the offset, and the raw device date in the tooltip. **Do not** silently substitute — the user must be able to see what the hardware actually said. Time-of-day and the 1 PPS itself are unaffected; the badge text must say so, because users reasonably panic when they see the wrong year.
 
@@ -413,7 +453,9 @@ public sealed record ScpiCommand(
 
 > **⚠ Corrected 21 Aug 2026 (#85).** The record carries four more members than this section originally declared, and three are safety-relevant. `RequiresAcknowledgement` keeps §9.7.4’s four strong-variant commands in the catalog rather than as a hard-coded list in the dialog layer — a second home for a safety fact, in the layer least able to test it. `IsExperimental` keeps §8.5’s opt-in queries out of `CommandCatalog.Safe`, so they cannot reach a poll timer or the everyday command surface. The remaining two carry §9.7.4’s success text and §10.6’s composite value label.
 
-**Blocked commands are not present in the catalog at all.** They are not entries with a flag; they do not exist as data. The `SafetyTier.Blocked` value exists only so the validator in the Advanced Console can reject a user-typed string by pattern match and log the attempt. A blocked command must never appear in any list, picker, autocomplete, help text, or log the user can see.
+**Blocked commands are not present in the catalog at all.** They are not entries with a flag; they do not exist as data. The `SafetyTier.Blocked` value is assigned to no entry, and a test asserts that. The exclusion predicate is reachable as `CommandCatalog.IsBlocked(string)` and, through the driver seam, as `IReceiverDriver.IsBlocked`; it has **no production caller today**, because the Advanced Console shipped as a picker over the allowlist with no free-text path (#55, §10.11), so there is no typed string to validate and no attempt to log. It binds any typed path that §10.11 might later admit (corrected 29 Aug 2026, #316: this sentence described a validator that was never built). A blocked command must never appear in any list, picker, autocomplete, help text, or log the user can see.
+
+> **Scope (added 29 Aug 2026 from the code, #316).** This section is the SmartClock family's catalog. A second family's catalog may be **reads-only** — the NMEA driver's is (`Drivers/Nmea/NmeaDriver.cs`), so its `IsBlocked` legitimately answers `false` for every header, there being nothing it can write — and a broadcast family's poll plan may carry `PollPlan.WholeCycle` (`*`) as a catalogued read, so that the session's point-of-send allowlist check and the console picker see the whole-cycle read as the read it is.
 
 ### 8.2 Tier S — Safe (execute on click, no confirmation)
 
@@ -474,8 +516,8 @@ All queries plus non-disruptive actions.
 | `:GPS:POS:SURV:STAT:POWerup <ON\|OFF>` | "Change power-up behaviour?" |
 | `:GPS:INIT:DATE` / `:GPS:INIT:TIME` / `:GPS:INIT:POSition` | "Send initial acquisition aid? Only valid before the first satellite is tracked; the receiver will return error −221 otherwise." |
 | `:GPS:SAT:TRAC:EMANgle <deg>` | "Set elevation mask to *n*°? Values above 15° during survey may prevent position determination; above 40° severely limits availability." |
-| `:GPS:SAT:TRAC:IGNore <PRN…>` / `:IGN:ALL` / `:IGN:NONE` | "Exclude the selected satellites from tracking?" — `:IGN:ALL` gets a stronger variant: "Exclude **all** satellites? The receiver will lose lock and enter holdover." |
-| `:GPS:SAT:TRAC:INCLude <PRN…>` / `:INCL:ALL` / `:INCL:NONE` | "Update the tracking inclusion list?" — `:INCL:NONE` gets the strong variant. |
+| `:GPS:SAT:TRAC:IGNore <PRN…>` / `:IGN:ALL` / `:IGN:NONE` | "Exclude the selected satellites from tracking?" — `:IGN:ALL` gets a stronger variant: "Exclude **all** satellites? The receiver will lose lock and enter holdover." **Code disagrees** — noted 29 Aug 2026 (#316): the catalog (`CommandCatalog.cs`, the `:IGNore NONE` entry) reproduces this sentence verbatim for `:IGN:NONE`, which *clears* the exclusion list — so in both places the sentence is wrong for the operation it confirms. Decision on #320. |
+| `:GPS:SAT:TRAC:INCLude <PRN…>` / `:INCL:ALL` / `:INCL:NONE` | "Update the tracking inclusion list?" — `:INCL:NONE` gets the strong variant. **Code disagrees** — noted 29 Aug 2026 (#316): the catalog's sentence for `:INCL:NONE` is *"Track no satellites? The receiver will lose lock and enter holdover."* (`CommandCatalog.cs`, changed by #51 when the manage dialog put the two side by side) — the same consequence as `:IGN:ALL`'s sentence, but not that sentence. Decision on #320. |
 | `:SYNC:HOLDover:INITiate` | "Force manual holdover? The receiver will stop disciplining to GPS until you explicitly recover. **Do not do this within the first 24 hours after power-up** — it corrupts SmartClock oscillator learning." |
 | `:SYNC:HOLD:DUR:THReshold <s>` | "Set holdover threshold?" |
 | `:SYNC:IMMediate` | "Force immediate resynchronisation? This causes a step change in the 1 PPS output." |
@@ -509,7 +551,7 @@ All queries plus non-disruptive actions.
 
 **Dialog construction, button roles, styling and focus behaviour are specified in §9.7.4**, which is the authority for them. The rule that stood here previously — destructive action on the *secondary* button, styled `AccentButtonStyle` — was superseded by §9.7.4 and is removed rather than left 450 lines from its own correction (#84). It mattered: §9.7.4 puts the destructive action on the **PrimaryButton** styled `WzDestructiveButtonStyle` with Cancel as the `CloseButton` and `DefaultButton`, precisely because *accent means the safe thing to do next*. Anyone reading §8 in order and implementing from it would have built the opposite.
 
-The four commands needing an additional "I understand" tick are named in §9.7.4 and carried in the catalog by `RequiresAcknowledgement` (see §8.1), not by a list held in the dialog layer. **§8.3’s confirmation-text table below is untouched by that amendment** — §9.7.4 changes button roles only.
+The four commands needing an additional "I understand" tick are named in §9.7.4 and carried in the catalog by `RequiresAcknowledgement` (see §8.1), not by a list held in the dialog layer. **§8.3’s confirmation-text table above is untouched by that amendment** — §9.7.4 changes button roles only.
 
 ### 8.4 Tier B — Blocked (absent from catalog; never displayed)
 
@@ -526,7 +568,7 @@ Plus, categorically:
 - **Any undocumented node in set form.** The Z3801A firmware string table contains parser keywords with no published documentation (`TCOefficient`, `PSTARTUP`, `DOUTput`, `RESTricted`, `OUTPut:PINS:PIN1..PIN8`, `SOURce`, `IREFerence`, `EGRESPONSE`, and others). Query forms of a small subset may be enabled per §8.5. **Set forms are permanently blocked with no override.**
 - `:SYSTem:LANGuage?` — query only, harmless, but omitted anyway so the `LANGuage` node never appears in any UI surface. Its value is not useful to the target users.
 
-The blocked list is **private to the `WinZ3805A.Device` assembly**, held in one file as regex patterns, and reachable from outside only as a predicate — `CommandCatalog.IsBlocked(string)`, which answers one bool about one candidate. Nothing can enumerate it, bind to it, or render it into a list. Its only caller is the Advanced Console validator, which rejects a typed string and logs the attempt.
+The blocked list is **private to the `WinZ3805A.Device` assembly**, held in one file as regex patterns, and reachable from outside only as a predicate — `CommandCatalog.IsBlocked(string)`, and through the driver seam as `IReceiverDriver.IsBlocked` (`SmartClockDriver` re-exposes the same verdict) — which answers one bool about one candidate. Nothing can enumerate it, bind to it, or render it into a list. It has no production caller today: the Advanced Console shipped as a picker over the allowlist with no free-text path (#55), so there is no validator and no attempt to log; the predicate stands ready to bind any typed path §10.11 might later admit (corrected 29 Aug 2026, #316).
 
 > **⚠ Corrected 21 Aug 2026 (#85).** This paragraph previously named the list `CommandCatalog.BlockedPatterns` and then required, in the same sentence, that it "must not be enumerable through any public API that a view binds to". A public member of that name is enumerable by definition. **The requirement wins over the name.** `build/Test-NoBlockedCommands.ps1` enforces that the one file stays the only place these names occur.
 
@@ -640,7 +682,7 @@ Three consequences follow, and they govern everything below:
 
 The main window's primary element is a circular medallion: a mode glyph at the centre, wrapped by a ring that is a **live 60-second radial sparkline of 1 PPS time interval**. One object answers both questions a glance is asking — *what state is it in* (discrete, from the glyph and colour) and *how well is it behaving* (continuous, from whether the ring is smooth or ragged). A calm ring means a calm loop. A ring that suddenly grows teeth means the loop is hunting, and you see it before TFOM changes. At the 64 px compact size the ring is uniform rather than a sparkline (§9.10.2, #307): that small, marks of differing length cost the circle its shape, and the shape is what this paragraph is about.
 
-The ring is **qualitative by design**. It is not a chart and must never be read for values; the precise TI figure is always set adjacent to it in `WzReadoutMedium`. Circles are reserved exclusively for the medallion — every other surface in the app uses a 4 px or 8 px radius (§9.3). That reservation is what makes it read as an instrument face rather than one card among many.
+The ring is **qualitative by design**. It is not a chart and must never be read for values; the precise TI figure is set adjacent to it wherever the readout row is on screen — `WzReadoutLarge` on the main window (`MainPage.xaml`), `WzReadoutMedium` on Overview — and is absent in the collapsed layouts where the count takes the medallion's centre (§9.6.2; corrected 29 Aug 2026, #316: this said *always* and *Medium*). Circles are reserved exclusively for the medallion — every other surface in the app uses a 4 px or 8 px radius (§9.3). That reservation is what makes it read as an instrument face rather than one card among many.
 
 **Thesis sanity check.** The first direction was a conventional metrics dashboard: KPI tiles, system accent, a line chart above the fold. That is what this brief would produce for a server monitor, a battery analyser, or a network appliance — the subject was doing no work. Three things were changed and are load-bearing:
 
@@ -700,7 +742,7 @@ All colour is declared in `Themes/Colors.xaml` as three `ResourceDictionary` ent
 | `WzPageBackgroundFallbackBrush` | `#F3F3F3` | `#202020` | `SystemColorWindowColor` | Solid backdrop when Mica is unavailable |
 | `WzLayerFillBrush` | → `LayerFillColorDefaultBrush` | → same | `SystemColorWindowColor` | L1 page region |
 | `WzCardFillBrush` | → `CardBackgroundFillColorDefaultBrush` | → same | `SystemColorWindowColor` | L2 card |
-| `WzCardFillSecondaryBrush` | → `CardBackgroundFillColorSecondaryBrush` | → same | `SystemColorWindowColor` | L2 card, recessed row |
+| `WzCardFillSecondaryBrush` | → `CardBackgroundFillColorSecondaryBrush` | → same | `SystemColorWindowColor` | L2 card, recessed row. **Code disagrees** — noted 29 Aug 2026 (#316): `Themes/Colors.xaml` has defined the high-contrast value as `SystemColorHighlightColor` since 12 Aug with no recorded reason; the token has no consumer, and adopting the value in this row would fail `build/Test-HighContrastLegibility.ps1`, which forbids a fill token from *being* the window colour. Decision on #320. |
 | `WzOverlayFillBrush` | → `SolidBackgroundFillColorBaseBrush` | → same | `SystemColorWindowColor` | L3 transient |
 | `WzStrokeSubtleBrush` | → `CardStrokeColorDefaultBrush` | → same | `SystemColorWindowTextColor` | Card hairline |
 | `WzStrokeDefaultBrush` | → `ControlStrokeColorDefaultBrush` | → same | `SystemColorWindowTextColor` | Input borders, dividers |
@@ -744,7 +786,7 @@ Mapping to stock WinUI resources rather than redefining them is deliberate: it m
 
 #### 9.4.2 Brand accent ramp
 
-**Strategy: brand accent by default, system accent as an explicit opt-in** (Settings → Appearance → "Use my Windows accent colour", default off).
+**Strategy: brand accent by default, system accent as an explicit opt-in** (Settings → Appearance → "Use my Windows accent colour", default off). **Code disagrees** — noted 29 Aug 2026 (#316): `SettingsPage.xaml` labels the switch *"Use the Windows accent colour"*, with `OnContent` *Windows* and `OffContent` *This app's own*. Decision on #320.
 
 > **⚠ Amended 28 Aug 2026 (#45, OQ-D4 resolved).** The accent is **kept**: `#0E7C86`. OQ-D4 recorded the
 > constraint to preserve as "≥ 60° hue separation from Windows blue and from every semantic colour"
@@ -790,9 +832,11 @@ High contrast: `WzAccentFillBrush` → `SystemColorHighlightColor`, accent text 
 Measured contrast (WCAG relative luminance, computed not estimated):
 
 - `#0B6C74` on `#FFFFFF` → **6.16 : 1** ✓ passes AA for body text
-- `#3FB8C4` on `#272727` → **6.31 : 1** ✓ passes AA for body text
+- `#3FB8C4` on `#272727` → **6.31 : 1** ✓ passes AA for body text — but `#272727` is no token of this document's; on the Dark `WzPageBackgroundFallbackBrush`, `#202020`, the figure is **6.88 : 1** (corrected 29 Aug 2026, #316)
 
 Both exceed the 4.5:1 floor with margin, so accent-coloured text is permitted at body size. Accent as a *fill* behind white text: `#0B6C74` with `#FFFFFF` foreground = 6.16:1 ✓.
+
+**Tokens `Themes/Colors.xaml` defines that this section did not name** (added 29 Aug 2026 from the code, #316). Every ramp step above also exists as a brush alias — `WzAccentDark3Brush` … `WzAccentDark1Brush`, `WzAccentBaseBrush`, `WzAccentLight1Brush` … `WzAccentLight3Brush`, seven in all — so a control can reference a step by key. `WzAccentFillHoverBrush` and `WzAccentFillPressedBrush` are the hover and pressed states of the resolved accent (`WzAccentDark2` / `WzAccentDark3` in Light, `WzAccentLight1` / `WzAccentLight3` in Dark, `SystemColorHighlightColor` in HighContrast). `WzAccentForegroundBrush` is the text on an accent fill — the "accent text" the high-contrast line above describes without naming — `#FFFFFF` in Light, `#000000` in Dark, `SystemColorHighlightTextColor` in HighContrast. `WzSurfaceHoverBrush` and `WzSurfacePressedBrush` map to `SubtleFillColorSecondary` and `SubtleFillColorTertiary` (both `SystemColorHighlightColor` in HighContrast) for pointer feedback on non-accent surfaces. `WzMedallionPlainRingThickness` is a `Double`, 0 in Light and Dark and 2 in HighContrast: the width of the plain ring §9.10.2 draws in place of the sparkline when the ring cannot carry state.
 
 #### 9.4.3 Semantic colours and severity shapes
 
@@ -802,11 +846,13 @@ Both exceed the 4.5:1 floor with margin, so accent-coloured text is permitted at
 | `WzCautionBrush` | `#8A5300` | `#F2B155` | ▲ triangle | `\uE7BA` Warning | Recovering, waiting, reduced accuracy, stale data |
 | `WzCriticalBrush` | `#B22B2B` | `#FF6B6B` | ⬢ hexagon | `\uEA39` ErrorBadge | Holdover, hardware failure, disconnected with error |
 | `WzInfoBrush` | `WzAccentDark1` | `WzAccentLight2` | ⬤ circle-i | `\uE946` Info | Neutral advisory, rollover notice |
-| `WzNeutralBrush` | `#616161` | `#9A9A9A` | ○ ring | `\uE7BA`/none | Unknown, power-up, not applicable |
+| `WzNeutralBrush` | `#616161` | `#9A9A9A` | ○ ring | `\uE823` Clock (power-up); PowerButton (off); DisconnectDrive (disconnected) — `Controls/ReceiverMode.cs` | Unknown, power-up, not applicable |
+
+*(The neutral row's glyph cell named the Warning glyph, which is the caution row's — corrected 29 Aug 2026, #316. `ReceiverMode.cs` also draws the Holdover mode with that Warning glyph today, standing in for §10.3's custom holdover icon; see §10.3.)*
 
 **Meaning is never carried by colour alone.** Every severity indication is a triple: **colour + shape + text label**. The shape channel is what makes the app usable under deuteranopia and protanopia, where `WzSuccessBrush` and `WzCriticalBrush` converge — a circle and a hexagon do not. This is implemented once in the `SeverityPill` control (§9.10) and every severity surface uses that control rather than hand-rolling a coloured dot.
 
-The four severity shapes are drawn as `Path` geometry, not as glyphs from a font, so they render identically under high contrast where they resolve to `SystemColorWindowTextColor` outlines with a hairline fill distinction.
+The five severity shapes (corrected from "four" 29 Aug 2026, #316 — the table has five rows) are drawn as `Path` geometry, not as glyphs from a font, so they render identically under high contrast where they resolve to `SystemColorWindowTextColor` outlines with a hairline fill distinction. The geometries are the `WzShapeCircle`, `WzShapeTriangle`, `WzShapeHexagon`, `WzShapeInfo` and `WzShapeRing` strings in `Themes/Shapes.xaml`, each drawn on a 12 × 12 box (added 29 Aug 2026 from the code, #316).
 
 > **One stated exception, added 29 Aug 2026 (#279) and widened the same day (#307): the medallion
 > centre whenever the readout row is off the screen.**
@@ -910,23 +956,26 @@ Charting colour is a separate concern from UI colour and must not reuse semantic
 > with.
 >
 > **Amended 29 Aug 2026, closing #87.** That issue found four pairs collapsing under simulated
-> dichromacy — series 1 against 7 at **3.1 ΔE₀₀** under deuteranopia, which is one colour to a
-> deuteranope. The palette was re-derived on 22 Aug and the gate now measures every one of the 28
-> pairs in both themes under three vision models, worst case **10.4 ΔE₀₀**. What #87 could not
-> settle by re-derivation was high contrast, and this paragraph is that answer.
+> dichromacy — series 1 against 7 at **3.1 ΔE₀₀** under deuteranopia in Dark (4.6 in Light), which
+> is one colour to a deuteranope. The palette was re-derived on 22 Aug and the gate now measures
+> every one of the 28 pairs in both themes under three vision models, worst case **10.4 ΔE₀₀** in
+> Dark and 10.8 in Light (the figures the gate prints; corrected 29 Aug 2026, #316). What #87
+> could not settle by re-derivation was high contrast, and this paragraph is that answer.
 
 Assign by index in a stable order (PRN ascending), never by hash — a satellite must keep its colour across sessions. A hue belongs to an index in **both** themes, so series 5 is the teal one wherever it is drawn; a satellite must not change identity when the desktop theme does.
 
+**Token keys** (added 29 Aug 2026 from the code, #316 — this section gave values and never the names): the categorical ramp is `WzSeries1Brush` … `WzSeries8Brush`; the sequential ramp below is `WzSequential1Brush` … `WzSequential7Brush`; the diverging ramp is `WzDivergingNegativeStrongBrush`, `WzDivergingNegativeBrush`, `WzDivergingZeroBrush`, `WzDivergingPositiveBrush`, `WzDivergingPositiveStrongBrush`. Under **HighContrast every sequential step is `SystemColorWindowTextColor`** — the ramp flattens to one value, because #218 found steps 1 and 2 defined as the window colour, which drew every satellite below C/N 35 in the page background; `build/Test-HighContrastLegibility.ps1` now forbids a foreground token from being a surface.
+
 > **⚠ Why this ramp replaced the Okabe–Ito one, 22 Aug 2026 (#87, #177).**
 >
-> **The old ramp was not Okabe–Ito.** Three of its eight entries — olive, violet and graphite — had been substituted for values that read better as thin lines. That was a defensible change, and it silently gave up the one property Okabe–Ito had been chosen for: **series 1 and 7 measured 4.5 ΔE₀₀ apart under deuteranopia**, which is not two colours. Two entries were also under §9.4.5's 3:1 chart-line floor. Both defects survived three months of review because nothing in the repository computed either number.
+> **The old ramp was not Okabe–Ito.** Three of its eight entries — olive, violet and graphite — had been substituted for values that read better as thin lines. That was a defensible change, and it silently gave up the one property Okabe–Ito had been chosen for: **series 1 and 7 measured 4.6 ΔE₀₀ apart under deuteranopia in Light and 3.1 in Dark** (#87's table; this said 4.5 — corrected 29 Aug 2026, #316), which is not two colours. Two entries were also under §9.4.5's 3:1 chart-line floor. Both defects survived three months of review because nothing in the repository computed either number.
 >
 > **The two were solved together**, because they share the same eight values and fixing either alone re-breaks the other.
 >
 > | | old | this ramp |
 > |---|---|---|
-> | Light — worst pair, all three vision models | 2.8 | **10.6** |
-> | Dark — worst pair | 3.1 | **10.5** |
+> | Light — worst pair, all three vision models | 2.8 | **10.8** |
+> | Dark — worst pair | 3.1 | **10.4** |
 > | Light — worst contrast, all four §9.4.1 surfaces | 2.23, two failing | **3.52, all passing** |
 > | Dark — worst contrast | 2.73, one failing | **5.08, all passing** |
 > | Closest approach to a §9.4.3 semantic colour | 6.4 | 10.2 |
@@ -997,6 +1046,8 @@ Enforced in every theme, no exceptions:
 
 No display or brand face is introduced. The type personality comes from the **Segoe / Cascadia split** and from the readout scale, not from a third family. A decorative face here would fight the instrument thesis.
 
+The three faces are the `FontFamily` tokens `WzTextFontFamily`, `WzDisplayFontFamily` and `WzMonoFontFamily` in `Themes/Typography.xaml`, each carrying its fallback chain (added 29 Aug 2026 from the code, #316).
+
 #### 9.5.2 Ramp
 
 | Token key | Face | Size / line height | Weight | Tracking | Use |
@@ -1009,7 +1060,7 @@ No display or brand face is introduced. The type personality comes from the **Se
 | `WzTitleLargeTextStyle` | Variable Display | 40 / 52 | Semibold | −0.015 em | Empty-state headline |
 | `WzDisplayTextStyle` | Variable Display | 68 / 80 | Semibold | −0.02 em | Reserved; not used in v1 |
 
-Each maps to a WinUI stock style where one exists (`BodyTextBlockStyle`, `SubtitleTextBlockStyle`, `TitleTextBlockStyle`) with only the documented deltas applied.
+Each of the seven is `BasedOn` its WinUI stock style — `CaptionTextBlockStyle`, `BodyTextBlockStyle`, `BodyStrongTextBlockStyle`, `SubtitleTextBlockStyle`, `TitleTextBlockStyle`, `TitleLargeTextBlockStyle`, `DisplayTextBlockStyle` — with only the documented deltas applied (`Themes/Typography.xaml`; this said "where one exists" and named three — corrected 29 Aug 2026, #316).
 
 **`WzCaptionTextStyle` is small text, and that decides its colour.** At 12 px it is under every
 threshold in §9.4.5's 3 : 1 row, so it carries the 4.5 : 1 floor wherever it appears — including
@@ -1087,7 +1138,9 @@ This is the part that separates a careful instrument app from a sloppy one, and 
 | `WzSpace3Xl` | 40 | Page header to first card |
 | `WzSpace4Xl` | 48 | Empty-state vertical rhythm |
 
-Page margin `WzSpaceXl` (24) at Medium and Wide, `WzSpaceMd` (16) at Compact.
+Page margin `WzSpaceXl` (24) at Medium and Wide, `WzSpaceMd` (16) at Compact. The Compact margin is **Not built** — `WzPageMarginCompactThickness` exists in `Spacing.xaml` with no consumer; noted 29 Aug 2026 (#316); decision on #320.
+
+Each step also exists as a `Thickness` token (`WzSpaceXxsThickness` … `WzSpace4XlThickness`) for `Margin` and `Padding`, alongside `WzPageMarginThickness` and `WzPageMarginCompactThickness`; the widths below are `WzContentMaxWidth`, `WzProseMaxWidth` (§9.5.3's 72-character cap), `WzCompactModeThresholdWidth` and `WzExpandedModeThresholdWidth` (§9.6.1), and the 1 px card stroke is `WzHairlineThickness` — all in `Themes/Spacing.xaml` (added 29 Aug 2026 from the code, #316).
 
 **Content max-width: 1320 px.** Beyond that the content region centres in the available space rather than gaining columns. Rationale: the satellite table and the trend charts are the only things that benefit from extra width, and both have a natural maximum useful size. Stretching cards to 2400 px on an ultrawide produces label-value pairs separated by a hand's width — measurably worse for scanning. Charts *within* the 1320 grid do stretch to fill their column.
 
@@ -1096,7 +1149,7 @@ Page margin `WzSpaceXl` (24) at Medium and Wide, `WzSpaceMd` (16) at Compact.
 | Name | Width | NavigationView | Content grid | Behaviour |
 |---|---|---|---|---|
 | **Minimal** | < 640 | `Minimal` (hamburger; the pane opens as an overlay over the content) | 1 column | As Compact, except that the pane is not persistently visible and every destination is reached through the hamburger. Not reachable by dragging a window: it exists because §9.6.2's minimum is a *content* size and the work-area clamp may lower it below 640 at high display scaling. |
-| **Compact** | 640 – 1023 | `LeftCompact` (48 px icon rail, flyout on expand) | 1 column | Sky plot and satellite table stack vertically; the plot caps at 360 px. Inspectors become full-width `ContentDialog`. Table columns beyond PRN / El / Az / signal collapse into an expander per row. |
+| **Compact** | 640 – 1023 | `LeftCompact` (48 px icon rail, flyout on expand) | 1 column | Sky plot and satellite table stack vertically; the plot caps at 360 px. Inspectors become full-width `ContentDialog`. Table columns beyond PRN / El / Az / signal collapse into an expander per row. **Not built** (the stack, the 360 px cap, the dialog inspectors and the per-row expander) — noted 29 Aug 2026 (#316); decision on #320. |
 | **Medium** | 1024 – 1439 | `Left` (pane 260 px, user-collapsible) | 2 columns | Default target. Sky plot beside table. |
 | **Wide** | ≥ 1440 | `Left` | 2 columns within 1320 max-width, centred | A third inspector column may appear on the Satellites page for per-satellite history; it is an addition, not a redistribution. |
 
@@ -1193,7 +1246,7 @@ Fixed floors that no mode may reduce:
 - `NavigationView` Top would put nine items in a horizontal strip that overflows at the Compact breakpoint, and would compete with the custom title bar for the top band.
 - A custom shell buys nothing. The design differentiation is in the medallion and the readouts, not in reinventing navigation chrome — and a custom shell would forfeit the free accessibility and breakpoint behaviour.
 
-Pane is **user-collapsible**, state persisted. Selection is rendered with the WinUI stock indicator (a 3 px accent pill on the leading edge) plus `WzBodyStrongTextStyle` on the selected label — colour plus weight, per §9.4.3.
+Pane is **user-collapsible**, state persisted. Selection is rendered with the WinUI stock indicator (a 3 px accent pill on the leading edge) plus `WzBodyStrongTextStyle` on the selected label — colour plus weight, per §9.4.3. The weight half is **Not built** — nothing in `DetailsWindow` sets the selected label's weight; noted 29 Aug 2026 (#316); decision on #320.
 
 **Hierarchy depth is capped at two.** Window → page. Anything that would be a third level is a dialog or an inline expander, never a nested page. There are therefore no breadcrumbs, and each page carries a `WzTitleTextStyle` header in the content region that names the destination. A user always knows where they are because there is only one place to be.
 
@@ -1201,7 +1254,7 @@ Pane is **user-collapsible**, state persisted. Selection is rendered with the Wi
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ ⬤ WinZ3805A    [● Locked · COM3]        ⟳  ⇱  ⚙       ─  □  ✕     │  48 px custom title bar
+│ ⬤ WinZ3805A    [● Locked · COM3]      ⟳  ⇱  ⚙  ?     ─  □  ✕     │  48 px title bar (? = Help, #312)
 ├──────────────┬──────────────────────────────────────────────────────────────┤  ← WzStrokeSubtleBrush
 │              │                                                              │
 │  ☰           │   Satellites                                     ← Title      │  WzSpace3Xl (40) below
@@ -1226,7 +1279,7 @@ Pane is **user-collapsible**, state persisted. Selection is rendered with the Wi
 
 ```
 ┌───────────────────────────────────────────────────┐
-│ ⬤ WinZ3805A  [● Locked]  ⟳ ⚙   ─ □ ✕     │
+│ ⬤ WinZ3805A  [● Locked]  ⟳ ⇱ ⚙ ?  ─ □ ✕   │
 ├────┬──────────────────────────────────────────────┤
 │ ☰  │  Satellites                                  │
 │    │                                              │
@@ -1272,7 +1325,7 @@ Rules:
 | Title bar (Details) | Refresh full status (`F5`), Export current view (`Ctrl+E`), Settings (`Ctrl+,`) |
 | Card header, inline | Commands scoped to that card: *Run test*, *Manage…*, *Clear*, *Apply* |
 | Inline with the field it affects | All *Apply* buttons — never in a page-level bar, so the affected values are always adjacent |
-| Right-click only | Copy value, copy as CSV on tables. Nothing unique lives here. |
+| Right-click only | Copy value, copy as CSV on tables. Nothing unique lives here. **Not built** — no `ContextFlyout` exists anywhere in `src/`; noted 29 Aug 2026 (#316); decision on #320. |
 | Menu bar | **None.** Two-level hierarchy does not need one. |
 
 No page-level `CommandBar`. The commands are card-scoped and a page-level bar would separate them from their context.
@@ -1288,7 +1341,7 @@ No page-level `CommandBar`. The commands are card-scoped and a page-level bar wo
 | `Ctrl+Shift+C` | Connect / disconnect |
 | `Ctrl+D` | Open Receiver details |
 | `F5` | Refresh full status now |
-| `Ctrl+1` … `Ctrl+9` | Jump to nav destination 1–9. There is no `Ctrl+10`: §10.2's cap is twelve destinations but only the first nine can carry an accelerator, so the pane's order decides which are one keystroke away. |
+| `Ctrl+1` … `Ctrl+9` | Jump to nav destination 1–9 — **`Ctrl+1` … `Ctrl+8` today**, because eight destinations are numbered (`DetailsDestinations.Numbered`: Overview, Satellites, Position, Timing, Holdover, Time, Registers, Diagnostics) and `MaxAccelerated = 9` caps the count (corrected 29 Aug 2026, #316). There is no `Ctrl+10`: §10.2's cap is twelve destinations but only the first nine can carry an accelerator, so the pane's order decides which are one keystroke away. |
 | `Ctrl+E` | Export current view |
 | `Ctrl+,` | Settings |
 | `Ctrl+Shift+M` | Toggle main window compact mode |
@@ -1296,6 +1349,8 @@ No page-level `CommandBar`. The commands are card-scoped and a page-level bar wo
 | `Esc` | Cancel dialog, close flyout, exit compact mode |
 
 Declared as `KeyboardAccelerator` on the command, with `KeyboardAcceleratorPlacementMode="Auto"` so the shortcut renders in the tooltip automatically. Icon-only buttons must show accelerator text in their tooltip.
+
+> **⚠ Amended 29 Aug 2026 (#316).** The accelerators are attached to the main window's content root (`Views/MainWindow.xaml.cs`, `AddAccelerators`) and to the Details window's `NavigationView` (`Views/DetailsWindow.xaml.cs`), not to the commands, and the code records why: `Window` has no accelerator collection of its own, and §9.6.2's compact mode collapses the footer that hosts the Connect button, so an accelerator attached to that button would vanish with it — precisely the state a keyboard-only user would need it in. `KeyboardAcceleratorPlacementMode="Auto"` therefore has nothing to render from, and the tooltips carry the key by hand (`ToolTipFor`). The requirement on the tooltip is unchanged; the mechanism differs. Revert or keep is #320's call.
 
 ### 9.8 Motion
 
@@ -1316,26 +1371,30 @@ Declared as `KeyboardAccelerator` on the command, with `KeyboardAcceleratorPlace
 | `WzEaseDecelerate` | `0.1,0.9 0.2,1` | Entrances |
 | `WzEaseAccelerate` | `0.7,0 1,0.5` | Exits |
 
+`WzStaggerIntervalMilliseconds` (30) is the card-enter stagger below, held as a token in `Themes/Motion.xaml` for a row that is not yet built (added 29 Aug 2026 from the code, #316).
+
 #### 9.8.2 Motion spec
 
 | Moment | Animation | Duration | Easing | Reduced-motion fallback |
 |---|---|---|---|---|
-| Nav page change | `SlideNavigationTransitionInfo` with `FromBottom` — **one direction, always** | `Normal` | `WzEaseStandard` | `SuppressNavigationTransitionInfo` |
-
-> **⚠ Corrected 21 Aug 2026 (#120).** This row named two APIs the Windows App SDK does not have, failing in opposite directions. **`SlideNavigationTransitionEffect` has no `FromTop`** — it never has, in UWP or WinUI — so the "by index direction" rule was half-unbuildable, and the two effects that do exist besides `FromBottom` are horizontal, which this section’s own *Directional consistency* paragraph forbids four lines further down. So the transition is one direction, always. **`EntranceNavigationTransitionInfo` cannot be reduced to opacity**: WinUI 3 dropped the `FromHorizontalOffset` and `FromVerticalOffset` properties UWP carried, leaving nothing to zero. That one is the worse of the two — it compiles, and then animates anyway, which is the opposite of what a reduced-motion fallback is for. `SuppressNavigationTransitionInfo` is what actually suppresses motion.
-| Main → Details window | `ConnectedAnimation` on the medallion → Overview medallion | `Normal` | `WzEaseDecelerate` | No connected animation; Details opens directly |
-| Card enter on page load | Implicit show, opacity + 8 px translate up, 30 ms stagger, max 4 cards | `Normal` | `WzEaseDecelerate` | Opacity only, no stagger, no translate |
-| `Expander` toggle | Stock expand/collapse | `Normal` | `WzEaseStandard` | Instant height change |
+| Nav page change | `SlideNavigationTransitionInfo` with `FromBottom` — **one direction, always** | stock, not settable | stock, not settable | `SuppressNavigationTransitionInfo` |
+| Main → Details window | **None.** Amended 29 Aug 2026 (#316) from *`ConnectedAnimation` on the medallion → Overview medallion*: `ConnectedAnimationService` is per-view and §10.2 makes Main and Details separate top-level windows, so the animation is impossible across them and the reduced-motion fallback is what is built — `Views/OverviewPage.xaml` records why. Revert or keep is #320's call. | — | — | Details opens directly |
+| Card enter on page load | Implicit show, opacity + 8 px translate up, 30 ms stagger, max 4 cards. **Not built** — noted 29 Aug 2026 (#316); decision on #320. | `Normal` | `WzEaseDecelerate` | Opacity only, no stagger, no translate |
+| `Expander` toggle | Stock expand/collapse. **Not built** — no `Expander` exists (§9.10.1); noted 29 Aug 2026 (#316); decision on #320. | `Normal` | `WzEaseStandard` | Instant height change |
 | `InfoBar` appear / dismiss | Height + opacity | `Normal` | `WzEaseDecelerate` / `WzEaseAccelerate` | Instant |
 | `ContentDialog` | Stock | stock | stock | Stock reduced behaviour |
-| Satellite row reorder | `ItemsRepeater` implicit reposition, offset only | `Fast` | `WzEaseStandard` | Instant reposition |
-| Hover / pressed / focus | Brush + scale (pressed 0.98) | `Fast` | `WzEaseStandard` | Brush change only, no scale |
+| Satellite row reorder | `ItemsRepeater` implicit reposition, offset only. **Not built** — the satellite tables are `ListView` (§9.10.1) and nothing animates reorder; noted 29 Aug 2026 (#316); decision on #320. | `Fast` | `WzEaseStandard` | Instant reposition |
+| Hover / pressed / focus | Brush + scale (pressed 0.98). The scale is **Not built** — no scale transform exists anywhere; noted 29 Aug 2026 (#316); decision on #320. | `Fast` | `WzEaseStandard` | Brush change only, no scale |
 | Loading > 500 ms | `ProgressRing` indeterminate | — | — | `ProgressRing` continues; it is status, not decoration |
 | **Readout value change** | **none** | `Instant` | — | Same — already instant |
 | **Medallion ring redraw** | **none** | `Instant` | — | Same |
 | **Severity state change** | **none** | `Instant` | — | Same |
 
-**Directional consistency.** Navigation is a vertical list, so page transitions move vertically and in the direction of travel in that list. Flyouts and dialogs scale from their invoking control. Nothing slides horizontally anywhere in the app, because nothing in the navigation model is horizontal.
+> **⚠ Corrected 21 Aug 2026 (#120).** The nav row named two APIs the Windows App SDK does not have, failing in opposite directions. **`SlideNavigationTransitionEffect` has no `FromTop`** — it never has, in UWP or WinUI — so the "by index direction" rule was half-unbuildable, and the two effects that do exist besides `FromBottom` are horizontal, which this section’s own *Directional consistency* paragraph forbids four lines further down. So the transition is one direction, always. **`EntranceNavigationTransitionInfo` cannot be reduced to opacity**: WinUI 3 dropped the `FromHorizontalOffset` and `FromVerticalOffset` properties UWP carried, leaving nothing to zero. That one is the worse of the two — it compiles, and then animates anyway, which is the opposite of what a reduced-motion fallback is for. `SuppressNavigationTransitionInfo` is what actually suppresses motion.
+>
+> *Moved below the table on 29 Aug 2026 (#316): a blockquote inside a table ends it, and every row after this note failed to render. The same pass corrected the nav row's duration and easing cells — `SlideNavigationTransitionInfo` exposes neither, so `WzDurationNormal` and `WzEaseStandard` cannot reach it (`Themes/Motion.xaml`).*
+
+**Directional consistency.** Navigation is a vertical list, so page transitions move vertically — and, per the #120 correction above, always from the bottom, because `SlideNavigationTransitionEffect` offers no `FromTop` (reconciled 29 Aug 2026, #316: this said "in the direction of travel in that list", which the row above had already ruled out). Flyouts and dialogs scale from their invoking control. Nothing slides horizontally anywhere in the app, because nothing in the navigation model is horizontal.
 
 **Reduced motion is mandatory, not best-effort.** Read `UISettings.AnimationsEnabled` at startup and subscribe to changes. Expose it as `WzMotionService.AnimationsEnabled` and bind `Storyboard`/transition selection to it. Every fallback above is a cross-fade or an instant state change — **no fallback may produce a different layout**, only a different path to the same layout.
 
@@ -1354,6 +1413,8 @@ The three `Instant` rows are the thesis made testable: a reviewer can confirm th
 | Oscillator (sine in a rounded square) | EFC card, oscillator health |
 | Holdover (pause inside a clock face) | Holdover nav item and state |
 
+**Not built** — none of the four exists; noted 29 Aug 2026 (#316); decision on #320. Stock glyphs stand in: the Satellites nav item uses `` Globe and the Holdover nav item `` Pause (`ViewModels/DetailsDestination.cs`); the holdover *state* on the medallion uses `` Warning (`Controls/ReceiverMode.cs`, §10.3). No sky-plot or oscillator glyph is drawn anywhere.
+
 Construction rules:
 
 - Designed on a **16 × 16 grid** with a 1 px safe margin, scaled by `Viewbox` to 20 and 24.
@@ -1365,12 +1426,12 @@ Construction rules:
 | Context | Size |
 |---|---|
 | Inline with body text, table cells | 16 |
-| `NavigationView` items, buttons | 20 |
+| `NavigationView` items, buttons | 16 — amended 29 Aug 2026 (#316) from 20, to the code: every `FontIcon` in the application is 16 px, deliberately. `Themes/Controls.xaml` records why for the destructive button: the glyph is set inline with the button's label rather than being the button's icon, and 20 px beside a 14 px label reads as a mismatch; `DetailsWindow` sizes its title-bar and nav glyphs the same way. Revert or keep is #320's call. |
 | Card headers, `InfoBar` | 24 |
 | Empty state | 32 |
-| Medallion centre glyph | 40 (compact) / 56 (standard) |
+| Medallion centre glyph | Diameter × 56⁄160 (`MedallionRingMath.GlyphSize`): **22 at 64 px** (compact), **34 at 96 px** (`MedallionSize.Standard`, beside a page heading), **56 at 160 px** (the main window's full layout). Corrected 29 Aug 2026 (#316): this read "40 (compact) / 56 (standard)", where *standard* meant 160 while §9.10.2 and the code use *Standard* for 96 — one name per size from here on. |
 
-**An icon may appear without a visible label only when** it is in the title bar or a card header command position, has a `ToolTip` containing the label and accelerator, and has an `AutomationProperties.Name`. All three, no exceptions. Nav items always carry labels in `Left` mode and expose them via tooltip in `LeftCompact`.
+**An icon may appear without a visible label only when** it is in the title bar or a card header command position, has a `ToolTip` containing the label and accelerator, and has an `AutomationProperties.Name`. All three, no exceptions. Nav items always carry labels in `Left` mode and expose them via tooltip in `LeftCompact`. **Code disagrees** — noted 29 Aug 2026 (#316): `MainPage.xaml`'s `AlwaysOnTopButton` (the pin, ``) is icon-only in the main window's footer, which is neither position; it carries the tooltip and automation name the rule requires. Decision on #320.
 
 **Illustration: none.** Empty and first-run states are set in type and a single 32 px icon. A house illustration style would need light, dark, and high-contrast variants, would date faster than the rest of the UI, and would sit oddly in an app whose thesis is instrument restraint. A well-set `WzTitleLargeTextStyle` headline over `WzBodyTextStyle` guidance and a primary action is better here and cheaper to maintain.
 
@@ -1380,26 +1441,29 @@ Construction rules:
 
 | Surface | Controls |
 |---|---|
-| Shell | `NavigationView`, `Frame`, `AppWindowTitleBar` (custom), `MicaBackdrop` |
-| Cards | `Border` with L2 treatment; `Expander` for collapsible sections |
-| Settings-style rows | `SettingsCard`, `SettingsExpander` (WinUI Community Toolkit) — Timing, Holdover, Settings pages |
-| Tables | `ItemsRepeater` inside `ScrollViewer` with a sticky header row. **Not `DataGrid`** — the Community Toolkit `DataGrid` is heavier than needed and its default styling is hard to bring in line with these tokens for a ≤ 32-row table. |
+| Shell | `NavigationView`, `Frame`, the WinUI `TitleBar` control (per §9.7.3's #226 amendment; this said `AppWindowTitleBar` (custom) — corrected 29 Aug 2026, #316), `MicaBackdrop` |
+| Cards | `Border` with L2 treatment (`WzCardStyle`, `WzFeatureCardStyle`); `Expander` for collapsible sections — **Not built**, no `Expander` appears; noted 29 Aug 2026 (#316); decision on #320 |
+| Settings-style rows | `SettingsCard`, `SettingsExpander` (WinUI Community Toolkit) — Timing, Holdover, Settings pages. **Not built** — the `SettingsControls` package is referenced and unused; noted 29 Aug 2026 (#316); decision on #320 |
+| Tables | `ListView` for selectable tables — the three satellite tables (`SatellitesPage.xaml`), with `WzDenseListItemStyle`, which §9.10.2's #307 row-height amendment depends on; `ItemsRepeater` for read-only lists (the Overview health items, the manage dialog's PRN grid). Corrected 29 Aug 2026 (#316) from "`ItemsRepeater` inside `ScrollViewer` with a sticky header row". **Not `DataGrid`** — the Community Toolkit `DataGrid` is heavier than needed and its default styling is hard to bring in line with these tokens for a ≤ 32-row table. |
 | Status messaging | `InfoBar`, `TeachingTip`, `ContentDialog` — selection rules in §9.11 |
-| Inputs | `NumberBox` (all numeric entry, `SpinButtonPlacementMode="Compact"`, `ValidationMode="InvalidInputOverwritten"`), `ComboBox`, `ToggleSwitch`, `Slider` (elevation mask only), `CheckBox` |
+| Inputs | `NumberBox` (all numeric entry, `SpinButtonPlacementMode="Compact"`, `ValidationMode="Disabled"` — amended 29 Aug 2026 (#316) from `InvalidInputOverwritten`, to the code: `Controls/NumberFieldValidator.cs` records that `InvalidInputOverwritten` silently reverts an out-of-range entry to the last good value, which cannot coexist with §9.11's error text — there is nothing left to put a message under — so the bounds are enforced by refusing to *send*; revert or keep is #320's call), `ComboBox`, `ToggleSwitch`, `Slider` (elevation mask only — **Not built**, the mask is a `NumberBox`; noted 29 Aug 2026 (#316); decision on #320), `CheckBox` |
 | Progress | `ProgressRing` (indeterminate), `ProgressBar` (survey percentage — determinate and meaningful) |
-| Commands | `Button`, `HyperlinkButton`, `DropDownButton`, `MenuFlyout` |
+| Commands | `Button`; `HyperlinkButton`, `DropDownButton`, `MenuFlyout` — **Not built**, none appears; noted 29 Aug 2026 (#316); decision on #320 |
 
 #### 9.10.2 Custom and templated controls
 
 | Control | Must do |
 |---|---|
-| **`StatusMedallion`** | Circular. Centre: mode glyph + optional value. Ring: 60-sample radial sparkline of 1 PPS TI, redrawn on each fast poll with **no animation**, autoscaled to ±3σ of the window with a fixed floor of ±50 ns so a calm loop does not amplify into noise. Ring colour = current severity token. Sizes 64 / 96 / 160 px. **The sparkline is drawn at 96 and 160 px; at 64 px the ring is uniform** — sixty marks of one length in every slot, in the severity colour, from the first second — because marks of differing length make a circle that small read as misshapen, and the circle is the one shape the eye finds without focusing (§9.7) *(amended 29 Aug 2026, #307)*. Exposes `AutomationProperties.Name` as a full sentence, e.g. *"Locked to GPS, stabilising frequency, 6 satellites tracked, time interval −33.1 nanoseconds."* Ring is decorative to assistive tech (`AccessibilityView="Raw"`) since the numeric value is announced. Under high contrast: ring drawn as a 2 px `SystemColorWindowTextColor` stroke, severity conveyed by the glyph and the accompanying label. |
-| **`ReadoutTile`** | Label + value + unit + optional severity. Enforces §9.5.3 rules 1–4 and 6 so no page can get numeric typesetting wrong locally. Width reserved from a `MaxDigits` property. |
+| **`StatusMedallion`** | Circular. Centre: mode glyph + optional value. Ring: 60-sample radial sparkline of 1 PPS TI, redrawn on each fast poll with **no animation**, autoscaled to ±3σ of the window with a fixed floor of ±50 ns so a calm loop does not amplify into noise. Ring colour = current severity token. Sizes 64 / 96 / 160 px. **The sparkline is drawn at 96 and 160 px; at 64 px the ring is uniform** — sixty marks of one length in every slot, in the severity colour, from the first second — because marks of differing length make a circle that small read as misshapen, and the circle is the one shape the eye finds without focusing (§9.3) *(amended 29 Aug 2026, #307)*. Exposes `AutomationProperties.Name` as a full sentence, e.g. *"Locked to GPS, stabilising frequency, 6 satellites tracked, time interval −33.1 nanoseconds."* Ring is decorative to assistive tech (`AccessibilityView="Raw"`) since the numeric value is announced. Under high contrast: ring drawn as a 2 px `SystemColorWindowTextColor` stroke, severity conveyed by the glyph and the accompanying label. |
+| **`ReadoutTile`** | Label + value + unit + optional severity. Enforces §9.5.3 rules 1–4 and 6 so no page can get numeric typesetting wrong locally. Width reserved from the `MaxIntegerDigits`, `DecimalPlaces` and `AllowNegative` properties — the dependency properties are `Label`, `Value`, `Unit`, `DecimalPlaces`, `MaxIntegerDigits`, `AllowNegative` and `Size` (`Controls/ReadoutTile.cs`; this said `MaxDigits` — corrected 29 Aug 2026, #316). The optional severity is **Not built** — no severity property exists; noted 29 Aug 2026 (#316); decision on #320. |
 | **`SeverityPill`** | Colour + `Path` shape + text. The *only* way severity is rendered anywhere in the app. Takes a `Severity` enum, never a brush. |
 | **`SkyPlotControl`** | Polar plot per §10.5. North up, 0° elevation at rim, 90° at centre. Dashed elevation-mask circle. Marker area scales with signal strength; fill from the sequential ramp (§9.4.4). Keyboard: arrow keys move a focus ring between markers in PRN order, Enter selects. Exposes each marker as an automation peer with name *"PRN 19, elevation 65 degrees, azimuth 52 degrees, carrier to noise 49, tracked."* Provides a `ListView` alternate view toggle for users who cannot use the spatial form. |
 | **`SatelliteStrengthBar`** | Bar + numeric. **Scale-aware**: reads `SignalStrengthKind` and maps C/N (26–55) or SS (0–255) to its own domain. Must never render the two scales against a shared axis. |
 | **`ConnectionStatusPill`** | Title-bar element. Severity shape + state text + port name. Click opens the connection dialog. Does not dim on window deactivation. |
-| **`TrendChart`** | Fallback if OQ-5 rejects LiveCharts. Line series, time x-axis, range selector. **Two y-axis modes:** zero-anchored with the §9.4.4 diverging fill for TI, and framed on the window's own data with a minimum span and a single categorical stroke for EFC (§10.7.1). Axis carries three labels — the two bounds and the midpoint — snapped to a round step, at a decimal precision fixed per chart (§9.11 item 6). Must support 604 800 points via decimation without dropping excursions — decimate by min/max per pixel column, never by sampling, or a 1-second glitch vanishes at the 7-day range. |
+| **`TrendChart`** | Hand-drawn — OQ-5 (#38) rejected LiveCharts, so this is the design rather than a fallback (corrected 29 Aug 2026, #316). Line series, time x-axis, range selector. **Two y-axis modes:** zero-anchored with the §9.4.4 diverging fill for TI, and framed on the window's own data with a minimum span and a single categorical stroke for EFC (§10.7.1). Axis carries three labels — the two bounds and the midpoint — snapped to a round step, at a decimal precision fixed per chart (§9.5.3 item 6). Must support 604 800 points via decimation without dropping excursions — decimate by min/max per pixel column, never by sampling, or a 1-second glitch vanishes at the 7-day range. |
+| **`FieldErrorText`** | (added 29 Aug 2026 from the code, #316) The §9.11 error line under an invalid field: `WzCaptionTextStyle` in `WzCriticalBrush` preceded by a 16 px glyph, announced as a live region (A11Y-9). A templated control with its style in `Themes/Generic.xaml`, like `SeverityPill` and for the same reason — its brushes must be `{ThemeResource}` so they re-resolve on a theme change. |
+
+`Themes/Controls.xaml` carries the shared styles the rows above name — `WzCardStyle`, `WzFeatureCardStyle`, `WzDestructiveButtonStyle`, `WzDenseListItemStyle`, `WzSkyPlotMarkerStyle` — and A11Y-5's 32 px pointer floor is declared on the `SeverityPill` style in `Themes/Generic.xaml` rather than at any call site, so every pill carries it (added 29 Aug 2026 from the code, #316).
 
 **`SkyPlotControl` is A11Y-5’s one recorded exception, and the specification names the compliant path (#117).**
 A marker is 8–18 px across and **its position is the data** — it is the satellite’s actual position in the sky and
@@ -1441,9 +1505,9 @@ not a claim that it is wrong to raise it. If the deviation is ever judged unacce
 |---|---|---|---|
 | **First run** | Full-page centred: 32 px icon, `WzTitleLargeTextStyle` headline, one line of `WzBodyTextStyle`, primary button | "Connect your receiver" / "This app talks to HP and Symmetricom GPS receivers over a serial port. Pick the port your receiver is on to begin." / **Choose a port** | No tour, no carousel, no dismissible tips |
 | **Empty** (e.g. no diagnostic log entries) | In-card centred: 32 px icon, `WzBodyStrongTextStyle` line, optional action | "No log entries yet. The receiver records power-on, mode changes, and faults here." | An invitation, never a shrug |
-| **Loading** | Nothing < 500 ms. 500 ms–2 s: `ProgressRing` 20 px inline in the card header. > 2 s: skeleton placeholders at final layout dimensions | — | Skeletons only where layout is known ahead of data; never a full-page spinner |
+| **Loading** | Nothing < 500 ms. 500 ms–2 s: `ProgressRing` 20 px inline in the card header. > 2 s: skeleton placeholders at final layout dimensions | — | Skeletons only where layout is known ahead of data; never a full-page spinner. The skeletons are **Not built** — noted 29 Aug 2026 (#316); decision on #320 |
 | **Partial / streaming** | Render what has arrived; unresolved fields show `—` in `WzTextTertiaryBrush`; card header carries an inline `ProgressRing` | — | Applies to `:SYST:STAT?` mid-fetch |
-| **Stale** (poll overdue) | `WzCautionBrush` `SeverityPill` in the footer; values remain visible, dimmed to `WzTextSecondaryBrush` | "Last updated 47 seconds ago" | Per §10.3: amber > 15 s, critical > 60 s. **Never blank stale data** — an old reading with an honest timestamp beats an empty field |
+| **Stale** (poll overdue) | `WzCautionBrush` `SeverityPill` in the footer; values remain visible, dimmed to `WzTextSecondaryBrush` | "Last updated 47 seconds ago" | Per §10.3: amber > 15 s, critical > 60 s. **Never blank stale data** — an old reading with an honest timestamp beats an empty field. **Code disagrees** — noted 29 Aug 2026 (#316): `MainPage.xaml`'s `StalenessStates` set `FooterText.Foreground` and a bare `Path` (`FooterStalenessShape`, `WzShapeTriangle` / `WzShapeHexagon`) rather than a `SeverityPill`, and nothing dims the values. Decision on #320 |
 | **Error — recoverable** | `InfoBar` `Severity="Error"`, inline at the top of the affected card, with an action button | "Couldn't set antenna delay. The receiver returned error −222, data out of range. Enter a value between 0 and 999,999 ns." / **Try again** | |
 | **Error — blocking** | `ContentDialog` | Only when the user cannot continue without deciding | |
 | **Disconnected** | Main window: medallion → `WzNeutralBrush`, glyph `\uE8CD`, mode text "Disconnected". Details: `InfoBar` `Severity="Informational"` pinned below the title bar, all controls disabled | "Not connected. Choose a serial port to connect." / **Choose a port** | Distinct from *error*: an intentional disconnect is not a fault |
@@ -1473,14 +1537,20 @@ Testable statements. Each is verified by the stated method, not by inspection al
 | ID | Criterion | Verified by |
 |---|---|---|
 | A11Y-1 | Every interactive element is reachable and operable by keyboard alone; tab order follows visual reading order on every page | Manual keyboard-only pass per page, recorded in the PR |
-| A11Y-2 | The focus visual is visible on every focusable element in all three themes, with ≥ 3:1 contrast against both adjacent surfaces, including on accent-filled buttons. **The focus visual is judged as the two-tone assembly Fluent draws, not stroke by stroke**: for each adjacent surface, at least one stroke must clear 3:1 (#187) | Accessibility Insights colour contrast tool at each focus stop |
-| A11Y-3 | No icon-only control lacks both `AutomationProperties.Name` and a `ToolTip` | Automated XAML scan in CI: fail the build on any `Button`/`ToggleButton` whose content is only an icon and which lacks both |
+| A11Y-2 | The focus visual is visible on every focusable element in all three themes, with ≥ 3:1 contrast against both adjacent surfaces, including on accent-filled buttons. **The focus visual is judged as the two-tone assembly Fluent draws, not stroke by stroke**: for each adjacent surface, at least one stroke must clear 3:1 (#187) | Accessibility Insights colour contrast tool at each focus stop; and in CI, `build/Test-FocusVisualCoverage.ps1` (#22, added here 29 Aug 2026, #316), which checks that the assembly's two strokes cover the whole luminance range — one near black, one near white — because the surface behind the ring is the end user's accent colour and cannot be measured from source |
+| A11Y-3 | No icon-only control lacks **either** `AutomationProperties.Name` or a `ToolTip` — §9.9 requires both (this said *both*, which the gate does not implement — corrected 29 Aug 2026, #316) | `build/Test-IconOnlyButtons.ps1` in CI: parses XAML as XML and fails any `Button`-like control whose content is only an icon and which is missing either, and enforces A11Y-5's 32 px floor on it |
 | A11Y-4 | All text meets §9.4.5 contrast floors in Light, Dark, and HighContrast | **Light and Dark: `build/Test-ContrastFloor.ps1`, which gates CI** — added 21 Aug 2026 (#24). It composites each token over what sits beneath it, because almost every stock Fluent colour is semi-transparent and reading one as opaque gives a confident wrong answer. **HighContrast stays a manual Accessibility Insights pass** and cannot be otherwise: its tokens resolve to `SystemColor*`, which are the user’s own choices. The manual pass also remains the only way to measure the Mica case, where the true backdrop is a live blur of the wallpaper. |
-| A11Y-5 | Pointer targets ≥ 32 × 32 px **at all times**; touch targets ≥ 40 × 40 px **in touch-optimised modes, of which the application currently has none** (#186). **`SkyPlotControl`’s markers are an exception, recorded in §9.10.2** | Accessibility Insights target-size check, which will flag the sky plot markers — §9.10.2 is the answer to that flag |
+| A11Y-5 | Pointer targets ≥ 32 × 32 px **at all times**; touch targets ≥ 40 × 40 px **in touch-optimised modes, of which the application currently has none** (#186). **`SkyPlotControl`’s markers are an exception, recorded in §9.10.2** | Accessibility Insights target-size check, which will flag the sky plot markers — §9.10.2 is the answer to that flag. In CI (#25, added here 29 Aug 2026, #316): `build/Test-IconOnlyButtons.ps1` for `Button`-like controls and `build/Test-PointerTargets.ps1` for every other declared hit target — a `Border`, a `TextBlock`, a custom control — reading tooltips set in code as well as in XAML, and requiring the floor to be declared rather than inherited from a stock style |
 | A11Y-6 | At 200% text scaling, no text clips and no control overlaps, at every breakpoint | Manual pass at 100 / 150 / 200% text scale × three breakpoints |
-| A11Y-7 | At 100–225% display scaling, layout remains usable and the title bar drag region stays correct | Manual pass at 100 / 150 / 200 / 225% |
+| A11Y-7 | At 100–225% display scaling, layout remains usable and the title bar drag region stays correct | Manual pass at 100 / 150 / 200 / 225% — see the #27 amendment below the table |
+| A11Y-8 | High contrast is a first-class theme: no hard-coded brush survives, the medallion remains legible, severity is distinguishable | Manual pass in all four Windows HC themes; and in CI (#218, added here 29 Aug 2026, #316), `build/Test-ThemeDictionaryParity.ps1` — every token defined in all three theme dictionaries with the same type — and `build/Test-HighContrastLegibility.ps1` — no foreground token may *be* one of the four surface colours, which parity alone cannot catch |
+| A11Y-9 | Mode changes, connection changes, and command results are announced as live regions | Narrator pass: force each transition, confirm announcement |
+| A11Y-10 | `StatusMedallion` and `SkyPlotControl` expose complete automation peers per §9.10.2 | Accessibility Insights tree inspection |
+| A11Y-11 | `SkyPlotControl` offers a non-spatial `ListView` alternate carrying the same data | Manual |
+| A11Y-12 | No information is conveyed by colour alone anywhere in the app | Greyscale screenshot review of every page and state. For the §9.4.4 chart series specifically, **`build/Test-SeriesSeparation.ps1` gates CI** — added 22 Aug 2026 (#87, #177) — checking all 28 pairs in both themes under deuteranopia and protanopia as well as normal vision. It does **not** discharge this requirement: under HighContrast the series alternate between two `SystemColor*` values, so eight traces cannot be separated by colour there at all, and a second channel (dash pattern plus direct labelling) is required regardless. The greyscale review stays the check for everything that is not a chart series. For visual states, `build/Test-NoColourOnlyStates.ps1` gates CI (#32, added here 29 Aug 2026, #316): within a `VisualStateGroup`, the properties its states set must include at least one that is not a brush — it cannot judge whether the second channel is a good one, but it makes a foreground-only state impossible. |
+| A11Y-13 | With animations disabled system-wide, no animation runs and no layout differs from the animated path | Manual pass with the system setting off |
 
-> **⚠ Amended 28 Aug 2026 (#27).** The ceiling was 350 %, with the pass at 100 / 150 / 200 / 250 / 350 %.
+> **⚠ Amended 28 Aug 2026 (#27).** A11Y-7's ceiling was 350 %, with the pass at 100 / 150 / 200 / 250 / 350 %.
 > **Windows does not offer those percentages on the reference display.** Its scaling list is derived
 > from the panel's size and resolution, and on the 5120 × 1440 monitor this is developed and tested on
 > it stops at 225 %. Reaching 250 % or 350 % needs *Custom scaling*, which applies system-wide,
@@ -1506,14 +1576,10 @@ Testable statements. Each is verified by the stated method, not by inspection al
 > still protects that case; it is simply no longer claimed to be verified. If the application is ever
 > run on a high-DPI laptop that offers 250 % or 350 % in the ordinary dropdown, that is the machine to
 > check it on.
-| A11Y-8 | High contrast is a first-class theme: no hard-coded brush survives, the medallion remains legible, severity is distinguishable | Manual pass in all four Windows HC themes |
-| A11Y-9 | Mode changes, connection changes, and command results are announced as live regions | Narrator pass: force each transition, confirm announcement |
-| A11Y-10 | `StatusMedallion` and `SkyPlotControl` expose complete automation peers per §9.10.2 | Accessibility Insights tree inspection |
-| A11Y-11 | `SkyPlotControl` offers a non-spatial `ListView` alternate carrying the same data | Manual |
-| A11Y-12 | No information is conveyed by colour alone anywhere in the app | Greyscale screenshot review of every page and state. For the §9.4.4 chart series specifically, **`build/Test-SeriesSeparation.ps1` gates CI** — added 22 Aug 2026 (#87, #177) — checking all 28 pairs in both themes under deuteranopia and protanopia as well as normal vision. It does **not** discharge this requirement: under HighContrast the series alternate between two `SystemColor*` values, so eight traces cannot be separated by colour there at all, and a second channel (dash pattern plus direct labelling) is required regardless. The greyscale review stays the check for everything that is not a chart series. |
-| A11Y-13 | With animations disabled system-wide, no animation runs and no layout differs from the animated path | Manual pass with the system setting off |
+>
+> *Moved below the table on 29 Aug 2026 (#316): it sat between the A11Y-7 and A11Y-8 rows, and a blockquote inside a table ends it, so A11Y-8 to A11Y-13 did not render.*
 
-A11Y-3 and A11Y-4 run in CI. The rest are a release checklist item, in [`docs/manual-qa.md`](manual-qa.md) section 4.
+**Six criteria have CI gates** — A11Y-2, A11Y-3, A11Y-4, A11Y-5, A11Y-8 and A11Y-12 — through the eleven `build/Test-*.ps1` scripts `.github/workflows/ci.yml` runs before any build (this said "A11Y-3 and A11Y-4 run in CI" — corrected 29 Aug 2026, #316). No gate discharges its criterion entirely; the manual half of each, and the rest, are a release checklist item, in [`docs/manual-qa.md`](manual-qa.md) section 4.
 
 ### 9.13 Anti-patterns
 
@@ -1522,25 +1588,25 @@ The implementation must avoid these. Each is reviewable.
 1. **Default template palette.** No `SystemAccentColor` as the app's brand, no untouched `Blank App` styling, no WinUI Gallery sample colours left in place.
 2. **Hard-coded colour.** No literal hex outside `Themes/Colors.xaml`. CI greps control styles and pages for `#` colour literals and fails on a hit.
 3. **Opaque full-bleed panels.** No `SolidColorBrush` background spanning the content region — it defeats Mica Alt. L1 uses `LayerFillColorDefault`, which is translucent.
-4. **Mixed radii and off-scale spacing.** Only 4 / 8 / circle (§9.3) and only the §9.6 spacing scale. A `Margin="13,7,13,9"` anywhere is a defect.
+4. **Mixed radii and off-scale spacing.** Only 4 / 8 / circle (§9.3) and only the §9.6 spacing scale. A `Margin="13,7,13,9"` anywhere is a defect. Enforced in CI by `build/Test-SpacingScale.ps1`, which checks spacing and corner-radius values under `src/` against the scale, with XML comments stripped first; `BorderThickness` is deliberately out of scope, a stroke width being §9.2's business (added 29 Aug 2026, #316).
 5. **Icon-only buttons without tooltip and automation name.** Enforced by A11Y-3.
 6. **Dialogs for information.** A `ContentDialog` that has only a dismiss button and conveys no decision belongs in an `InfoBar`.
 7. **Animation as decoration.** No animation without a row in §9.8.2. Nothing pulses, glows, breathes, or draws attention to itself. Specifically: the medallion does not pulse in holdover — it changes colour and shape, which is louder because everything else is still.
 8. **Web idioms.** No drop shadows on cards, no gradient hero blocks, no oversized rounded cards, no full-width coloured banners as page headers, no `Opacity` fades used as elevation. These read as foreign on the desktop and immediately mark an app as a port.
 9. **Counting-up numbers.** No `Storyboard` targets a readout value. Per §9.1 and §9.8.2.
-10. **Colour-only severity.** Every severity render goes through `SeverityPill` (§9.10.2). A bare coloured `Ellipse` or a `Foreground`-only state cue is a defect.
+10. **Colour-only severity.** Every severity render goes through `SeverityPill` (§9.10.2). A bare coloured `Ellipse` or a `Foreground`-only state cue is a defect. **Code disagrees** in one place — the main window's footer staleness, which uses a `Foreground` plus a bare `Path`; see §9.11's *Stale* row (noted 29 Aug 2026, #316; decision on #320).
 
 ### 9.14 Open design questions
 
 | ID | Question | Assumption made | Owner | Blocking |
 |---|---|---|---|---|
-| **OQ-D1** | Does WinUI 3 expose `Microsoft.UI.Xaml.Documents.Typography.NumeralAlignment` as an attached property on `TextBlock`? UWP does; WinUI 3 parity needs confirming. | Assumed available. Fallback if not: Segoe UI Variable's lining figures are near-tabular, so combine fixed-width containers (§9.5.3 rule 2) with right alignment — visually equivalent for readouts, slightly worse mid-sentence. **Verify in a spike before building `ReadoutTile`.** | Engineering | Blocks `ReadoutTile` |
-| **OQ-D2** | Is embedding Cascadia Mono in the MSIX acceptable to the product owner given the ~700 KB package increase? | Assumed yes; OFL 1.1 permits it and Windows 10 cannot be relied on to have it. Alternative is Consolas-only, which is less refined but zero cost. | Product | No |
-| **OQ-D3** | Should the medallion ring show 1 PPS TI, or EFC? TI is the more diagnostic signal for loop behaviour; EFC is the better long-term ageing indicator but barely moves minute to minute. | Assumed **TI**, since the medallion serves the two-second glance and EFC is well served by the Overview trend chart. Worth a user check. | Product | No |
+| **OQ-D1** | Does WinUI 3 expose `Microsoft.UI.Xaml.Documents.Typography.NumeralAlignment` as an attached property on `TextBlock`? UWP does; WinUI 3 parity needs confirming. | **Resolved 12 Aug 2026 (#42): available.** The spike confirmed the attached property in WinUI 3 and `ReadoutTile` sets it; the fallback (fixed-width containers per §9.5.3 rule 2 with right alignment) was not needed. | Engineering | No — was "Blocks `ReadoutTile`" |
+| **OQ-D2** | Is embedding Cascadia Mono in the MSIX acceptable to the product owner given the ~700 KB package increase? | **Resolved 12 Aug 2026 (#43): yes.** The font ships in the package as `Assets/Fonts/CascadiaMono.ttf` with its OFL 1.1 notice beside it and in `THIRD-PARTY-NOTICES.md`. | Product | No |
+| **OQ-D3** | Should the medallion ring show 1 PPS TI, or EFC? TI is the more diagnostic signal for loop behaviour; EFC is the better long-term ageing indicator but barely moves minute to minute. | **Resolved 12 Aug 2026 (#44): TI.** The medallion was built on the 60-sample 1 PPS TI window (P0-18); EFC has the Overview trend chart (§10.4). | Product | No |
 | **OQ-D4** | Does the brand teal read as "medical device" to any reviewer? It was chosen for distance from Windows blue and from all four semantic hues. | **Resolved 28 Aug 2026: keep `#0E7C86`.** The ≥ 60° separation is measured in **CIE LCH**, which §9.4.2 now states — it was unmeasurable as written. | Product | No |
 | **OQ-D5** | Should the main window support Windows 11 Snap layouts and multi-instance for users with several receivers? | **Resolved 28 Aug 2026: single instance, and now *enforced* (#46).** A second launch redirects to the running one instead of opening a window that can never hold the port. §12 is untouched — this is about windows, not architecture. | Product | No |
 | **OQ-D6** | Does `SkyPlotControl` need a printable/exportable form for calibration records? | **Resolved 28 Aug 2026: yes — image export ships in v1 (#47).** This *overturns* the recorded assumption. A CSV of azimuth and elevation is not a record of what the sky looked like, and an obstruction argument is made with a picture. See §10.4. | Product | No |
-| **OQ-D7** | High-contrast rendering of the medallion ring loses the severity colour channel, leaving glyph and label to carry state. Is that sufficient, or should the ring change stroke *pattern* (solid / dashed / dotted) by severity in HC? | Assumed glyph plus label is sufficient, matching how the rest of the app behaves in HC. Pattern-coding is the fallback if user testing disagrees. | Design | No |
+| **OQ-D7** | High-contrast rendering of the medallion ring loses the severity colour channel, leaving glyph and label to carry state. Is that sufficient, or should the ring change stroke *pattern* (solid / dashed / dotted) by severity in HC? | **Resolved 28 Aug 2026 (#48, PR #228): yes — once the glyph is the size §10.3 states.** #48 measured the high-contrast glyph at 31 ink pixels inside a 186 px circle, 2.3 % of what the medallion draws in Light, so the glyph was carrying state and nobody could see it; the fix was size (`MedallionRingMath.GlyphSize`, diameter × 56⁄160), not pattern-coding. | Design | No |
 
 ---
 
@@ -1554,6 +1620,7 @@ Two behavioural principles remain here because they are functional rather than v
 
 - **Progressive disclosure.** Main window → Details window → task dialog. Nothing destructive is more than one confirmation away, and nothing catastrophic is reachable at all (§8).
 - **State, not events.** Every surface reflects last-known state with an explicit staleness indicator when polling has failed. Stale data is dimmed and timestamped, never blanked (§9.11).
+- **The pages are SmartClock-shaped, and a talker fills what it can.** When the connected family is a broadcast talker (§7.2's scope note, #310), every field it does not supply is `null` on the model and renders as `—` under §11.1's rule, and a write its reads-only catalog does not carry is refused at the point of send (§8.1); whether whole pages or cards should be hidden by family is #304's call (added 29 Aug 2026 from the code, #316).
 
 > **⚠ Supersedes the previous §10.1.** The earlier "design principles" list (Fluent not terminal; Mica backdrop; accessibility as a Store gate; colour never alone) has been removed. Every item is now specified concretely and testably in §9: Mica Alt and layering in §9.2, the colour-plus-shape severity rule in §9.4.3, and accessibility as thirteen verifiable criteria in §9.12. The one item with no direct successor — "the details view must not reproduce the 80×24 layout" — is now carried by G2 and by the component inventory in §9.10, which contains no fixed-pitch surface other than `WzMonoTextStyle` for device-literal text.
 
@@ -1564,6 +1631,7 @@ Two behavioural principles remain here because they are functional rather than v
 | Main | `Window`, resizable | 380×240 (compact mode 380×144) | Content sizes, per §9.6.2. Status medallion. Optional always-on-top. |
 | Receiver Details | `Window` | **1024×720** | `NavigationView` `Left`, per §9.6.1–9.6.2 |
 | Connection | `ContentDialog` on Main | — | Port, baud, auto-detect |
+| Overview | Page in Details, destination 1 | — | §10.4 (`Views/OverviewPage.xaml`; the row was missing from this inventory — added 29 Aug 2026, #316) |
 | Position & Survey | Page in Details | — | |
 | Satellite Tracking | Page in Details | — | |
 | Timing & Antenna | Page in Details | — | |
@@ -1573,7 +1641,9 @@ Two behavioural principles remain here because they are functional rather than v
 | Diagnostics | Page in Details | — | |
 | Settings | Page in Details | — | |
 | Advanced Console | Page in Details, hidden unless enabled | — | Allowlist-validated |
-| About / Device Info | `ContentDialog` | — | |
+| Help | `Window`, owned by Main | — | `Views/HelpWindow.xaml` (#312): the user's guide, `docs/how-to-use.md`, rendered natively. Opened by `F1` from either window and by the Help button in the Details title bar (§9.7.3). Replaces the *About / Device Info* `ContentDialog` this row named, which was never built — corrected 29 Aug 2026, #316 |
+| Satellite management | `ContentDialog` on Details | — | §10.5's *Manage…*: PRN 1–32 with include / ignore, tier C (`Views/SatelliteManagementDialog.xaml`, #51; added to this inventory 29 Aug 2026, #316) |
+| Command confirmation | `ContentDialog` on Details | — | Every tier C command's §8.3 / §9.7.4 dialog (`Views/CommandConfirmationDialog.xaml`; added 29 Aug 2026, #316) |
 
 > **⚠ Amended.** Details window minimum raised from 1000×700 to **1024×720**; rationale in §9.6.2.
 >
@@ -1624,7 +1694,7 @@ Two behavioural principles remain here because they are functional rather than v
 │ ⬤ WinZ3805A            ─  □  ✕        │
 ├────────────────────────────────────────────────┤
 │    ╭─────╮                                     │
-│   │   ✓   │   Locked to GPS      6 satellites  │  medallion 64 px, glyph 40 px
+│   │   ✓   │   Locked to GPS      6 satellites  │  medallion 64 px, glyph 22 px (§9.9)
 │    ╰─────╯                                     │
 └────────────────────────────────────────────────┘
 ```
@@ -1638,20 +1708,21 @@ Two behavioural principles remain here because they are functional rather than v
   | `LOCK` | `WzSuccessBrush` ● | `\uE73E` CheckMark | Locked to GPS |
   | `REC` | `WzCautionBrush` ▲ | `\uE72C` Refresh | Recovering |
   | `WAIT` | `WzCautionBrush` ▲ | `\uE769` Pause | Waiting to recover |
-  | `HOLD` | `WzCriticalBrush` ⬢ | custom Holdover icon | Holdover |
+  | `HOLD` | `WzCriticalBrush` ⬢ | custom Holdover icon — **Code disagrees**, noted 29 Aug 2026 (#316): the Warning glyph stands in (`Controls/ReceiverMode.cs`), the custom set being §9.9's not-built one; decision on #320 | Holdover |
   | `POW` | `WzNeutralBrush` ○ | `\uE823` Clock | Power-up |
   | `OFF` | `WzNeutralBrush` ○ | `\uE7E8` PowerButton | Diagnostic / off |
   | *(no connection)* | `WzNeutralBrush` ○ | `\uE8CD` DisconnectDrive | Disconnected |
 
   Severity is always the triple colour + shape + text (§9.4.3). The medallion changes all three at once; it never pulses or animates (§9.8.2, §9.13 item 7).
 
-- When mode is `HOLD`, the sub-line carries the reason from `:SYNC:HOLD:WAIT?`.
+- When mode is `HOLD`, the sub-line carries the reason from `:SYNC:HOLD:WAIT?`. The query is **Not built** — nothing sends it, the §7.3 sweep being six commands and this not one of them; what the sub-line shows is the status screen's own mode detail (`MainViewModel.ModeDetail`; `HoldoverViewModel.WaitingReasonText` on §10.8), which carries the same sentence when the receiver prints one. Noted 29 Aug 2026 (#316); decision on #320.
 - **Locked with zero satellites** renders a `WzCautionBrush` `SeverityPill` beside the count reading "coasting", with tooltip *"Locked but tracking no satellites. The receiver is coasting on a 1 PPS it can no longer verify."* This condition appears in real units with antenna or bias-tee faults and is the single most useful diagnostic the app surfaces — it is the reason the satellite count shares top billing with the mode.
 - Date shows the rollover-corrected value with a trailing `\uE946` Info glyph when `WeekRolloverEpochs != 0`; the raw device date is in the tooltip (§7.4).
+- A second badge sits on the same clock line while the device time is **provisional** (#245; added 29 Aug 2026 from the code, #316): a caution-coloured glyph in a 32 px hit target (`MainPage.xaml`, `ProvisionalBadge`) whose tooltip explains that this is power-up time the receiver has not yet corrected from GPS. It is caution rather than info because a rollover correction is a known quantity already applied, while a provisional reading may be wrong by any amount and nothing on the screen says by how much. §11.2's amendment records why there are two badges; §10.14 carries the same fact as a card.
 - Footer staleness per §9.11: `WzTextTertiaryBrush` normally, `WzCautionBrush` past 15 s, `WzCriticalBrush` past 60 s, always with the elapsed time in words.
 - Always-on-top toggle; size, position, and compact state persist across launches — and so does the standard layout's size while the window is compact, so a launch straight into compact still knows what to leave to (#307).
 - Compact mode toggles on double-click of the medallion or `Ctrl+Shift+M`. Type sizes, targets, and focus visuals are unchanged (§9.6.3). **Entering compact resizes the window to §9.6.2's compact minimum, and leaving it restores the standard-layout size the window had** *(amended 29 Aug 2026, #307: the toggle changed the content and left the frame, so compact arrived without the smallness that is its point)*.
-- Opening Details runs a `ConnectedAnimation` on the medallion into the Overview page medallion (§9.8.2).
+- Opening Details runs no `ConnectedAnimation` into the Overview page medallion — amended 29 Aug 2026 (#316) to the code: the two are separate top-level windows and `ConnectedAnimationService` is per-view, so §9.8.2's reduced-motion fallback is the only achievable path (`Views/OverviewPage.xaml` records why). Revert or keep is #320's call.
 
 #### 10.3.1 Closing, and staying alive (#280)
 
@@ -1663,9 +1734,11 @@ user who leaves this docked beside a spectrum analyser for weeks.
 
 | Behaviour | Default | Where |
 |---|---|---|
-| Close hides rather than exits | **On** | Settings → Advanced, *Keep running when I close the window* |
-| Start with no window | Off | Settings → Advanced, *Start in the notification area* |
-| Exit | — | Settings → Advanced, and the notification icon's right-click menu |
+| Close hides rather than exits | **On** | Settings → *Running in the background*, *Keep running when I close the window* |
+| Start with no window | Off | Settings → *Running in the background*, *Start in the notification area* |
+| Exit | — | Settings → *Running in the background*, and the notification icon's right-click menu |
+
+*(The three lived under "Settings → Advanced" here; `SettingsPage.xaml` gives them a card of their own, titled* Running in the background *— corrected 29 Aug 2026, #316. §10.13 lists the cards.)*
 
 **The user is told once.** Silently turning close into hide is the well-known way to annoy people,
 so the first close shows a dialog naming what happened and offering the exit they may have meant.
@@ -1678,8 +1751,8 @@ leaves the user just as surprised.
 > a newly registered notification icon.** It goes to the hidden overflow, and a user who has not
 > dragged it out cannot right-click what they cannot see. An application whose only exit is an
 > invisible icon is quittable in principle and by Task Manager in practice, which is what §13's
-> acceptance forbids. So Settings → Advanced carries an **Exit** button that depends on no shell
-> behaviour.
+> acceptance forbids. So Settings → *Running in the background* carries an **Exit** button that depends
+> on no shell behaviour.
 
 **No confirmation on exit.** Polling is not a transaction and `trend.db` commits as it goes, so
 there is nothing to lose by stopping. A prompt would be the second interruption in a job whose first
@@ -1734,7 +1807,9 @@ any of that can be shown.
 └──────────────────┴────────────────────────────────────────────────────────┘
 ```
 
-Health items map from `:STAT:OPER:HARD:COND?` where bit meanings are known, and otherwise from parsing the HEALTH MONITOR line of `:SYST:STAT?`. See Open Question OQ-1.
+The Holdover Uncertainty card's *Duration* row shows `ReceiverStatus.HoldoverDuration` — the elapsed time the screen prints, parsed since 28 Aug 2026 — while in holdover, and *Not in holdover* otherwise. **The code disagrees with itself**: `OverviewViewModel.HoldoverDuration` still prints the present-uncertainty figure under that label, and says so in a comment; that is a code defect rather than a specification question, #319 item 8 (noted 29 Aug 2026, #316).
+
+Health items come from the parsed HEALTH MONITOR block of `:SYST:STAT?`, in the order the receiver prints them and however many it prints — the wireframe names six, the screen decides (`OverviewViewModel.Health`). The `:STAT:OPER:HARD:COND?` bit meanings this sentence once deferred to OQ-1 for are now known (#34, answered 14 Aug 2026 from Command Reference 5-36 to 5-39; `Models/StatusRegisterMap.cs`) and drive the Status Registers page (§10.10), not this card (corrected 29 Aug 2026, #316).
 
 ### 10.5 Satellites page
 
@@ -1768,6 +1843,7 @@ Health items map from `:STAT:OPER:HARD:COND?` where bit meanings are known, and 
 
   > **⚠ Corrected 21 Aug 2026 (#116).** This line previously read "colour green ≥ 40, amber 35–39, red < 35". That is the semantic triple — `WzSuccessBrush` / `WzCautionBrush` / `WzCriticalBrush` — and §9.4.4 forbids reusing semantic tokens for charting in its opening sentence, with the reason: *a trace coloured `WzCriticalBrush` implies an alarm that is not being asserted*. A C/N of 34 is an ordinary satellite low in the sky; painting it the red the medallion uses for a lost lock asserts a fault nobody raised. §9.10.2 already specified the sequential ramp for this control, so two sections agreed against one, and both of those gave a reason. Appendix A records §10 being "reconciled" when §9 was added; this reads as a line missed in that pass.
 - Data comes exclusively from `:SYST:STAT?` parsing (§11) — there is no per-satellite query.
+- The not-tracked table's status column: only *below mask* is derived (elevation under the mask in force, `SatellitesViewModel`), because the wire carries no status column at all. *Acquiring*, *ignored* and the `✱` *trying* marker are **Not built** — `PredictedSatellite.AttemptingToTrack` is parsed from the screen's asterisk (#4) but read by nothing in the application; noted 29 Aug 2026 (#316); decision on #320.
 - **Manage…** opens a dialog listing PRN 1–32 with include/ignore toggles, backed by `:GPS:SAT:TRAC:IGNore` / `:INCLude`. All writes are tier C.
 - **Save image** writes the sky card — plot, heading, and the selection line — to a PNG the user names.
 
@@ -1813,7 +1889,7 @@ Health items map from `:STAT:OPER:HARD:COND?` where bit meanings are known, and 
 │                                                                          │
 │  ┌─ Survey ───────────────────────────────────────────────────────────┐  │
 │  │  ████████████████░░░░░░░░░░░░░░  57.3 %                            │  │
-│  │  Estimated 51 min remaining · needs ≥ 4 satellites                 │  │
+│  │  Suspended: fewer than 4 satellites (the receiver's reason)        │  │
 │  │                                                                    │  │
 │  │  [ Start survey ]   [ Adopt computed position ]   [ Cancel ]       │  │
 │  │                                                                    │  │
@@ -1824,10 +1900,14 @@ Health items map from `:STAT:OPER:HARD:COND?` where bit meanings are known, and 
 │  │  Lat [N▾] [47]° [31]′ [18.822]″                                    │  │
 │  │  Lon [W▾] [122]° [12]′ [22.152]″                                   │  │
 │  │  Height [ 38.00 ] m         ⓘ same datum the receiver reports         │  │
-│  │                                              [ Apply position ]    │  │
+│  │  [ Fill from the receiver ]                  [ Apply position ]    │  │
 │  └────────────────────────────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
+
+> **⚠ Amended 29 Aug 2026 (#316).** The survey line read *"Estimated 51 min remaining · needs ≥ 4 satellites"*. No remaining-time estimate is shown, and `ViewModels/PositionViewModel.cs` records why: the receiver reports a percentage and nothing else — there is no rate on the wire — so a remaining time computed from a single percentage would be a guess presented as a measurement. What the line carries instead is the suspension reason, which the receiver does report (§11.3). Revert or keep is #320's call.
+>
+> The *Set position manually* card also carries **Fill from the receiver** (`Views/PositionPage.xaml`; added here 29 Aug 2026 from the code, #316), which copies the position the receiver is holding into the fields — enabled only while it holds one — so a user adjusting a surveyed position starts from the receiver's own figures rather than retyping them.
 
 > **⚠ Corrected 21 Aug 2026 (#114).** This field was annotated "WGS-84, GPS ellipsoid". The 58503B manual is
 > not consistent with itself about the same command: its syntax line, printed four times, takes
@@ -1861,7 +1941,7 @@ Health items map from `:STAT:OPER:HARD:COND?` where bit meanings are known, and 
 >
 > **So the amendment is to the copy, not to §8.2.** The command stays as specified — it is correct
 > for the 58503A models the catalog also serves, and changing it would be a model-conditional change
-> belonging to §6.5’s auto-profiles. What changes is that a −300 on this button must be reported
+> belonging to §8.6’s auto-profiles. What changes is that a −300 on this button must be reported
 > with the reason and the route attached, rather than as a bare device error the user can do nothing
 > with. The advice is attached to **−300 only**: a timeout or any other code gets the receiver’s own
 > words and nothing added, because −300 is device-specific by definition and the receiver has not
@@ -1920,10 +2000,11 @@ Validation before send: lat degrees 0–90, lon degrees 0–180, minutes 0–59,
 > **⚠ The wireframe above was redrawn on 26 Aug 2026** to match what §10.7.1 now specifies. It had
 > shown the oscillator-control chart with a zero-anchored `+25 % / 0 % / −25 %` axis and the drift
 > advisory in per cent, both of which #183 and #182 replaced. §10.4's Overview wireframe was redrawn
-> in the same pass and for a stronger reason: **the chart it draws is not built yet** (P1-1, blocked
-> on OQ-5), and a wireframe showing a zero-anchored EFC axis is precisely what led the Timing page's
-> implementation to give EFC the 1 PPS treatment in the first place. A picture is a specification
-> whether or not it is labelled as one.
+> in the same pass and for a stronger reason: **the chart it draws was not built yet** when this was
+> written (P1-1; it shipped 29 Aug 2026 as #285 / PR #294 in `Views/OverviewPage.xaml`, and OQ-5 had
+> closed on 19 Aug, #38 — corrected 29 Aug 2026, #316), and a wireframe showing a zero-anchored EFC
+> axis is precisely what led the Timing page's implementation to give EFC the 1 PPS treatment in the
+> first place. A picture is a specification whether or not it is labelled as one.
 >
 > Figures in both are the 22–24 Aug 2026 capture, so the two wireframes and §10.7.1's amendments now
 > describe the same receiver.
@@ -1944,13 +2025,16 @@ Validation before send: lat degrees 0–90, lon degrees 0–180, minutes 0–59,
 > beside the span because a deviation over 3,000 readings and one over 12 are not the same figure.
 > It falls back to the 60-sample ring where no trend store exists.
 
-Cable presets, delay per metre (from the vendor cable tables in the 58503B manual):
+Cable presets, delay per metre. The 58503A/B guide's cable table (p. 2-12) gives two cables, RG-213 and Belden 9913; LMR-400 is this section's substitution for a modern installation, at velocity factor 0.85, and the code offers all three plus Custom (`Models/AntennaCable.cs`; the Belden 9913 row was missing here and LMR-400 was attributed to the manual — corrected 29 Aug 2026, #316):
 
-| Cable | ns/m |
-|---|---|
-| RG-213 / Belden 8267 | 5.05 |
-| LMR-400 | 3.93 |
-| Custom (enter velocity factor) | `3.3356 / VF` ns/m |
+| Cable | ns/m | Source |
+|---|---|---|
+| RG-213 / Belden 8267 | 5.05 | 58503A guide, 1.54 ns/ft |
+| Belden 9913 | 3.94 | 58503A guide, 1.2 ns/ft |
+| LMR-400 | 3.93 | §10.7, velocity factor 0.85 |
+| Custom (enter velocity factor) | `3.3356 / VF` ns/m | — |
+
+**The CSV export is not a button on the card.** It is the Details title bar's *Export* (`Ctrl+E`, §9.7.4), which asks the current page for its rows through `ICsvExportSource`; `TimingPage` implements it for the trend series. The wireframe's `[ Export CSV… ]` is kept as the intent and the title-bar command is how it is met — amended 29 Aug 2026 (#316); revert or keep is #320's call.
 
 #### 10.7.1 The trends and the drift advisory
 
@@ -2003,7 +2087,7 @@ the reading count are unaffected: they are what the user is looking at.
 > drawing the converter's least significant bit rather than the oscillator.
 >
 > Axis labels are fixed at **2 decimal places** for this chart. One is not enough to separate −16.86
-> from −16.80, and §9.11 item 6 forbids a precision that varies with the range rather than one that
+> from −16.80, and §9.5.3 item 6 forbids a precision that varies with the range rather than one that
 > differs between quantities.
 
 **The drift advisory reports what the fit can support and refuses what it cannot.** It states the
@@ -2021,7 +2105,7 @@ so in ppm would be arithmetic for its own sake.
   enough to tell them apart. Below a day of data the fit drops to a plain line and says so, rather
   than reporting a daily amplitude of zero — which would be a measurement.
 
-> **⚠ Amends this section and §9.11 item 6** (#182). The advisory reported its figures as
+> **⚠ Amends this section and §9.5.3 item 6** (#182). The advisory reported its figures as
 > percentages, and on a good oscillator every one of them rounded away. Measured on the 22–24 Aug
 > 2026 capture: a secular drift of **−0.00086 %/day**, a diurnal amplitude of **0.00034 %** and a
 > residual rms of **0.00324 %** printed as `−0.001 %/day`, `±0.00 %` and `0.00 %`. The arithmetic
@@ -2030,7 +2114,7 @@ so in ppm would be arithmetic for its own sake.
 > data rather than below one. A double-oven oscillator holding 0.05 % of range across two days is
 > the *good* case, and the card could not say so.
 >
-> **The unit changed rather than the precision**, because §9.11 item 6's reason — a reader cannot
+> **The unit changed rather than the precision**, because §9.5.3 item 6's reason — a reader cannot
 > compare two lines whose precision differs — does not stop being true for a card. The same three
 > figures counted in ppm of range are **−8.6 ppm/day**, **±3.4 ppm** and **32.4 ppm**, all readable
 > at the one decimal place item 6 already required.
@@ -2048,6 +2132,45 @@ so in ppm would be arithmetic for its own sake.
 **Read-only.** Nothing on this card writes to the receiver. Adjusting the oscillator is not something
 this application does, and nothing here may imply it could.
 
+#### 10.7.2 Stability (Allan deviation)
+
+> **Added 29 Aug 2026 from the code (#316).** The card shipped as P2-3 (#63) with no section
+> describing it — the same kind of §10.x gap that #111, #142 and #146 record for other surfaces.
+> Described here from `Controls/AllanDeviation.cs`, `ViewModels/StabilityViewModel.cs` and
+> `Views/TimingPage.xaml`.
+
+A card on this page, below the trends: **overlapping Allan deviation** over the logged 1 PPS
+time-interval series — the standard stability measure for this class of instrument, answering the
+question the chart cannot: whether the loop is noisier at one averaging time than another. The table
+has three columns:
+
+| Column | Rule |
+|---|---|
+| *Averaging time τ* | Seconds throughout, never switching to minutes down the column — a curve is read by comparing rows, and a column that changes unit halfway is what §9.5.3 rule 6 is about |
+| *σy(τ)* | Scientific notation with a fixed two-decimal mantissa and a U+2212 exponent sign. σy is **dimensionless**, so where rule 6 would change the unit, the exponent does that job and the mantissa stays comparable |
+| *Differences averaged* | How many second differences the estimate averaged. Confidence goes roughly as 1/√N, so this is part of the reading rather than a footnote |
+
+Rules the implementation records and this section makes normative:
+
+- **Overlapping, not plain.** Both estimators are correct; the overlapping form uses every available
+  second difference at each τ, so its confidence at large τ holds on a capture of the length this
+  application collects — on a 47-hour series the difference at long τ is between an estimate and a
+  rumour.
+- **Gap-aware, because the logged series is not uniform.** The store writes a row per poll and the
+  poll cadence moves with the connection state, so the estimator pairs samples by their recorded
+  times: a gap contributes nothing, rather than being silently treated as adjacent seconds — which
+  would not fail, and would return a number about the gaps instead of the oscillator.
+- **Fed the raw series, never the decimated one.** §9.10.2's decimation keeps each pixel column's
+  extremes, which is right for drawing a shape and wrong for a statistic: a second difference taken
+  across a bucket's extremes measures the decimation (#63).
+- **Phase in, deviation out.** The receiver reports 1 PPS time interval, which is phase; the second
+  difference converts it, so nothing here may be handed a frequency series.
+- **A τ the series cannot support is dropped, not dashed.** Unlike a field the receiver declined to
+  answer, a τ with no estimate is not a hole in the data — it is a question this series cannot speak
+  to at all, and a row of dashes would imply otherwise. When the series is too short for any τ, the
+  card's summary sentence says so in words.
+- **Read-only**, like the rest of §10.7.
+
 ### 10.8 Holdover page
 
 ```
@@ -2064,7 +2187,7 @@ this application does, and nothing here may imply it could.
 │  └────────────────────────────────────────────────────────────────────┘  │
 │                                                                          │
 │  ┌─ Threshold ────────────────────────────────────────────────────────┐  │
-│  │  Enter holdover when 1 PPS TI exceeds  [ 1.000 ] µs                │  │
+│  │  Enter holdover when 1 PPS TI exceeds  [ 1.000 ] µs                │  │  ← code takes seconds, see below
 │  │  Currently exceeded:  No                        [ Apply ]          │  │
 │  └────────────────────────────────────────────────────────────────────┘  │
 │                                                                          │
@@ -2079,7 +2202,11 @@ this application does, and nothing here may imply it could.
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
-The "time since power-up" guard is computed from app-observed uptime plus `:DIAG:LOG:READ:ALL?` power-on entries. If it cannot be determined, show "unknown" and require the extra "I understand" tick on the confirmation.
+The "time since power-up" guard is computed from app-observed uptime plus `:DIAG:LOG:READ:ALL?` power-on entries. If it cannot be determined, show "unknown" and require the extra "I understand" tick on the confirmation. The log half is **Not built** — `Services/PowerUpGuard.cs` records that no captured power-on log entry exists, so the guard would be keying a safety decision on a string nobody has seen the receiver print; until a capture exists it degrades to *unknown*, which is what the previous sentence specifies for exactly this case. Noted 29 Aug 2026 (#316); decision on #320.
+
+The *Waiting reason* row shows the status screen's own mode detail, not an answer to `:SYNC:HOLD:WAIT?`, which nothing sends — see §10.3 (**Not built** for the query; #316, #320).
+
+The threshold field: **Code disagrees** — noted 29 Aug 2026 (#316): `Views/HoldoverPage.xaml` takes *New threshold (seconds)* in a `NumberBox`, where this wireframe takes microseconds. Decision on #320.
 
 ### 10.9 Diagnostics page
 
@@ -2114,6 +2241,12 @@ The "time since power-up" guard is computed from app-observed uptime plus `:DIAG
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
+**The self-test card shows one result, not eleven.** Amended 29 Aug 2026 (#316) to the code: `:DIAG:TEST:RES?` reports one `<code>,<subsystem>` pair for whichever test ran last, so the wireframe's eleven simultaneous ticks are not obtainable — filling the others in from an `ALL` run would assert results the receiver never sent. A row shows `—` until that subsystem has been tested in this session, and the twelve subsystem keywords were probed against the live receiver rather than taken on trust (`Views/DiagnosticsPage.xaml`, #53). Revert or keep is #320's call.
+
+**The Lifetime card is Not built** — nothing reads a power-on count and no query for one is sent; noted 29 Aug 2026 (#316); decision on #320.
+
+**Two cards the wireframe omits** (added 29 Aug 2026 from the code, #316): **Application log**, with *Show log folder* and the path — what this application saw: the port opening, the settings auto-detect settled on, every connection change, and the receiver's mode and satellite count whenever they move (#127, §6.1); and **Undocumented queries**, §8.5's fixed list of six with a *Run* per row and the result shown raw, present only while the Settings switch is on (#56).
+
 Log entries carry severity as **shape and colour together**, never colour alone: power/mode transitions neutral, holdover amber with §9.4.3's triangle, hardware failure / self-test failure red with its hexagon. The shape leads the line, in a fixed-width cell so the monospace column stays aligned.
 
 > **⚠ Amended 27 Aug 2026 (#225).** This read *"Log entries are colour-coded by severity"* and named three colours and nothing else, which **A11Y-12 forbids** — neutral, amber and red is information by colour alone. It is also the pair §9.4.3 singles out: amber and red converge under protanopia and deuteranopia, and under high contrast `WzCautionBrush` and `WzCriticalBrush` are *both* `SystemColorWindowTextColor`, so two of the three states would render identically. The same defect was fixed in §10.3's footer staleness on the same day (#223).
@@ -2140,12 +2273,13 @@ Log entries carry severity as **shape and colour together**, never colour alone:
 │                                                                          │
 │   Raw   CONDition +13   EVENt +4   ENABle +7   PTR +7   NTR +4           │
 │                                                                          │
-│   ⓘ Bit meanings are partially documented. Unmapped bits show raw state. │
-│                                             [ Apply mask changes ]       │
+│   ⓘ Bit meanings from Command Reference 5-36 to 5-39. Unmapped bits     │
+│     show raw state.                                                      │
+│                       [ Discard changes ]   [ Apply mask changes ]       │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
-Register selector covers Operation, Operation:Hardware, Operation:Holdover, Operation:Powerup, Questionable. Where a bit meaning is unknown, show the raw state and "(see documentation)" rather than inventing a label. See OQ-1.
+Register selector covers Operation, Operation:Hardware, Operation:Holdover, Operation:Powerup, Questionable. Where a bit meaning is unknown, show the raw state and "(see documentation)" rather than inventing a label. OQ-1 was answered on 14 Aug 2026 (#34): `Models/StatusRegisterMap.cs` transcribes all five registers from the guide's Command Reference 5-36 to 5-39, so the fallback is now the exception — Hardware bit 5 is documented as not used — rather than most of the page (this said "partially documented" and "See OQ-1"; corrected 29 Aug 2026, #316). *Discard changes* beside *Apply* puts the mask checkboxes back to what the receiver reported (`Views/StatusRegistersPage.xaml`; added 29 Aug 2026 from the code, #316).
 
 ### 10.11 Advanced Console (hidden by default)
 
@@ -2157,7 +2291,7 @@ Enabled in Settings → Advanced. Provides a command *picker*, not a text box:
 ├──────────────────────────────────────────────────────────────────────────┤
 │  Command  [ :GPS:SAT:TRAC:EMANgle                              ▾ ]       │
 │           ⌕ filter…                                                      │
-│  Parameter  [ 10 ] degrees   (0 – 89)                                    │
+│  Parameter  [ 10 ] degrees   (0 – 90)                                    │
 │                                                                          │
 │  Will send:  :GPS:SAT:TRAC:EMAN 10                    [ Send ]           │
 │                                                                          │
@@ -2171,11 +2305,11 @@ Enabled in Settings → Advanced. Provides a command *picker*, not a text box:
 ```
 
 - The dropdown is populated **from the catalog**. Blocked commands are not in the catalog and therefore cannot be selected.
-- Parameter entry is typed and range-validated per `ParameterSpec`.
+- Parameter entry is typed and range-validated per `ParameterSpec` — **one editor per parameter**, in the receiver's order, the values comma-joined (the form the 58503A programming guide gives, e.g. `:GPS:INIT:DATE 1994,7,4`). An optional parameter may be omitted only from the end, because a positional list cannot skip its middle without shifting every value after it; every value goes through the same validator a single value does, so the console cannot accept what the Position page would reject, and the first refusal names its field (`ViewModels/AdvancedConsole.cs`, #147; the multi-parameter form stated 29 Aug 2026, #316 — the mask's range is 0–90, not 0–89).
 - Tier-C commands selected here still raise their confirmation dialog.
 - The transcript shows all traffic including polling, with a toggle to hide poll traffic.
 
-If a future version adds free-text entry, it must run every submission through `CommandCatalog.Validate(string)` which (a) requires a catalog match on the normalised mnemonic and (b) rejects any `BlockedPatterns` match, logging the attempt. Anything not matching the catalog is rejected — allowlist semantics, not blocklist.
+If a future version adds free-text entry, it must run every submission through a validator that (a) requires a catalog match on the normalised mnemonic and (b) rejects anything `CommandCatalog.IsBlocked(string)` — or, through the driver seam, `IReceiverDriver.IsBlocked` — answers true for, logging the attempt. Anything not matching the catalog is rejected — allowlist semantics, not blocklist. (This named `CommandCatalog.Validate(string)` and a `BlockedPatterns` match; neither member exists, the latter having been renamed away by #85 for the reason §8.4 gives, and the predicate is the surface — corrected 29 Aug 2026, #316.)
 
 ### 10.12 Connection dialog
 
@@ -2186,9 +2320,9 @@ If a future version adds free-text entry, it must run every submission through `
 │  Port    [ COM3 — USB Serial Port      ▾ ]   │
 │                                  [ Refresh ] │
 │                                              │
-│  ○ Auto-detect settings                      │
-│  ● Manual                                    │
-│      Baud     [ 9600  ▾ ]                    │
+│  ● Auto-detect settings                      │  ← fresh-install default
+│  ○ Manual                                    │
+│      Baud     [ 9600  ▾ ]                    │  six rates, §7.1
 │      Data     [ 8     ▾ ]                    │
 │      Parity   [ None  ▾ ]                    │
 │      Stop     [ 1     ▾ ]                    │
@@ -2200,7 +2334,7 @@ If a future version adds free-text entry, it must run every submission through `
 └──────────────────────────────────────────────┘
 ```
 
-Auto-detect tries, in order: 9600-8-N-1, **19200-7-O-1**, 19200-7-E-1, 9600-7-E-1, 19200-8-N-1, 2400-8-N-1, 1200-8-N-1, 9600-7-O-1. Each attempt sends `*IDN?` with a 2 s timeout. Show progress and allow cancel. (Order corrected 28 Aug 2026 — see §7.1.)
+Auto-detect walks the **union of every registered driver's sequence, in registration order, first appearance winning** — ten combinations today. The SmartClock's eight, in order: 9600-8-N-1, **19200-7-O-1**, 19200-7-E-1, 9600-7-E-1, 19200-8-N-1, 2400-8-N-1, 1200-8-N-1, 9600-7-O-1 (`SerialSettings.AutoDetectSequence`); then the NMEA driver's 4800-8-N-1 and 38400-8-N-1 (its 9600-8-N-1 is already first). At each combination the session **listens first** — a talker is claimed by a driver's `Overhear` before any question is asked — and sends `*IDN?` only when nothing claims what it heard; every transaction of the walk has a 2 s timeout (§7.2), so a combination at the wrong rate costs about 8 s. Show progress and allow cancel. The dialog opens on Auto-detect on a fresh install (`ConnectionPreferences.AutoDetect = true`), and the manual baud picker offers §7.1's six rates. (Order corrected 28 Aug 2026 — see §7.1. The union, the listen and the default restated 29 Aug 2026, #316: this said eight combinations each sending `*IDN?`, and drew Manual selected.)
 
 ### 10.13 Settings page
 
@@ -2228,9 +2362,38 @@ Auto-detect tries, in order: 9600-8-N-1, **19200-7-O-1**, 19200-7-E-1, 9600-7-E-
 │  │  Adds a page below Settings offering every command in the          │  │
 │  │  catalog as a picker, with a transcript of everything sent         │  │
 │  │  and received.                                                     │  │
+│  │                                                                    │  │
+│  │  Undocumented read-only queries   [ ━━○ Hidden ]                   │  │
+│  │  Adds a card to Diagnostics (§8.5). Six queries, nothing else.     │  │
+│  └────────────────────────────────────────────────────────────────────┘  │
+│                                                                          │
+│  ┌─ Appearance ───────────────────────────────────────────────────────┐  │
+│  │  Use the Windows accent colour    [ ━━○ This app's own ]           │  │
+│  └────────────────────────────────────────────────────────────────────┘  │
+│                                                                          │
+│  ┌─ Alerts ───────────────────────────────────────────────────────────┐  │
+│  │  Tell me when the receiver loses GPS lock    [ ●━━ On ]            │  │
+│  └────────────────────────────────────────────────────────────────────┘  │
+│                                                                          │
+│  ┌─ Running in the background ────────────────────────────────────────┐  │
+│  │  Keep running when I close the window        [ ●━━ On ]            │  │
+│  │  Start in the notification area              [ ━━○ Off ]           │  │
+│  │                                                     [ Exit ]       │  │
 │  └────────────────────────────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
+
+**Four cards, and their defaults** (added 29 Aug 2026 from the code, #316 — the wireframe had shown the Advanced card alone; `Views/SettingsPage.xaml`, `Services/AdvancedPreferences.cs`, `Services/AppearancePreferences.cs`):
+
+| Card | Switch | Default | Why that default |
+|---|---|---|---|
+| Advanced | Advanced Console (§10.11) | Off | Reveals a surface a user has to go looking for |
+| Advanced | Undocumented read-only queries (§8.5, P1-8 #56) | Off | The same; and it can never reach a set form, which §8.4 excludes permanently |
+| Appearance | Use the Windows accent colour (§9.4.2, P1-11) | Off | The brand accent is chosen for hue separation from the severity colours; a default that abandoned that would make the guarantee depend on a control-panel setting nobody thinks of as safety-critical |
+| Alerts | Tell me when the receiver loses GPS lock (P1-9) | **On** | Exists precisely for the user who is *not* looking; safe to default on only because `LockWatch` stays quiet through the flapping a real receiver's log is full of |
+| Running in the background | Keep running when I close the window (§10.3.1, #280) | **On** | §9.1's user leaves this docked for weeks; a close that stopped polling would stop it exactly when the window was being got out of the way |
+| Running in the background | Start in the notification area (#280) | Off | An application that starts with no window is indistinguishable from one that failed to start |
+| Running in the background | Exit | — | A button, so the application is quittable without the tray (§10.3.1) |
 
 **Advanced Console (§10.11).** Off on a fresh install. The switch adds and removes the destination
 from the pane; it does not merely hide it, so a disabled console is not an item a keyboard user can
@@ -2256,14 +2419,14 @@ one of these files.
 | Display time zone | Main window clock, and §10.14 | Built (#95) |
 | Poll cadences | Nowhere — fixed by §7.3 | **See below** |
 | Units | Nowhere | Not specified |
-| Experimental §8.5 queries | Nowhere | P1-8 (#56) |
+| Experimental §8.5 queries | This page, Advanced card; the card they enable is on Diagnostics (§10.9) | Built (P1-8, #56; row corrected 29 Aug 2026, #316) |
 
 **Poll cadences are deliberately not offered.** §7.3 fixes them at 1 s and 10 s and §12 gives the
 poller sole ownership of both. A settings page that offered to change them would contradict two
 sections rather than implement one, so making them user-visible is an amendment to §7.3 and §12 and
 must be argued there first.
 
-The other three rows are unbuilt rather than refused. The page states plainly on screen that they are
+The other two rows (this said three until #56 shipped; corrected 29 Aug 2026, #316) are unbuilt rather than refused. The page states plainly on screen that they are
 not there yet; §9.11's rule against a control that looks like it works and does nothing applies to a
 settings page more than to most.
 
@@ -2286,6 +2449,10 @@ settings page more than to most.
 │  │  Reported by receiver   04 Jan 2007 19:29:09                       │  │
 │  └────────────────────────────────────────────────────────────────────┘  │
 │                                                                          │
+│  ┌─ Power-up time ────────────────────────────────────────────────────┐  │  shown only while the
+│  │  ▲ Provisional — the receiver has not yet corrected this from GPS  │  │  clock row carries (?)
+│  └────────────────────────────────────────────────────────────────────┘  │  (#245, §11.2)
+│                                                                          │
 │  ┌─ Week rollover correction ─────────────────────────────────────────┐  │
 │  │  ⬤ Corrected by 1 epoch of 1024 weeks                              │  │
 │  │  GPS transmits the week number in ten bits, so it wraps            │  │
@@ -2296,8 +2463,9 @@ settings page more than to most.
 │                                                                          │
 │  ┌─ Leap second ──────────────────────────────────────────────────────┐  │
 │  │  ⬤ None announced                                                  │  │
-│  │  GPS − UTC   +18 s accumulated                                     │  │
-│  └────────────────────────────────────────────────────────────────────┘  │
+│  │  GPS − UTC       +18 s accumulated                                 │  │
+│  │  Announced for   —                                                 │  │  date and direction,
+│  └────────────────────────────────────────────────────────────────────┘  │  only while STAT? = 1 (#149)
 │                                                                          │
 │  ┌─ Time code output ─────────────────────────────────────────────────┐  │
 │  │  Format      F2 — messages begin T2                                │  │
@@ -2306,6 +2474,8 @@ settings page more than to most.
 │  └────────────────────────────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
+
+*(The Power-up time card and the Announced-for row were added to the wireframe on 29 Aug 2026 from the code, #316 — `Views/TimePage.xaml`; both had been built, by #245 and #149, without the picture catching up.)*
 
 **The receiver's clock, in the zone the user chose.** The corrected instant in the display zone, with
 the zone always named — never an unlabelled wall-clock time (§11.2, #95). The time scale the receiver
@@ -2396,7 +2566,7 @@ two places to set it — which is a duplicated control, not duplicated state.
 - **Header-relative column detection.** Do not hard-code character offsets. Locate the header row (`PRN  El  Az  C/N` or `PRN  El  Az  SS`) and derive column start/end from the token positions in that header. This is what makes the parser survive across the Z3801A / Z3805A / 58503A/B / 59551A variants, which differ in column labels and widths.
 - **Two satellite column groups.** The not-tracking table may occupy two side-by-side PRN/El/Az groups. Detect by counting `PRN` occurrences in the header row.
 - **Model-variant labels.** The signal-strength column is `C/N` on 58503B-class units (range 26–55, ≥ 35 good) and `SS` on 59551A-class units (range 0–255, 20–30 weak). Record which label was seen in `ReceiverStatus.SignalStrengthKind` and scale the UI bars accordingly. Do not assume the two scales are interchangeable.
-- **Fixture-driven tests.** Store captured status screens in `tests/WinZ3805A.Tests/Fixtures/` covering: power-up (0 tracked), acquiring, locked, holdover, survey in progress, position hold, week-rollover date, and a health-monitor failure. Each fixture gets an assertion set.
+- **Fixture-driven tests.** Store captured status screens in `tests/WinZ3805A.Tests/Fixtures/` covering: power-up (0 tracked), acquiring, locked, holdover, survey in progress, position hold, week-rollover date, and a health-monitor failure. Each fixture gets an assertion set. **Seven of the eight states are captured**, across ten files from two sittings (`Fixtures/README.md` maps each file to its states and its tests); the health-monitor failure is outstanding, taken opportunistically by `build/Capture-Fixtures.ps1` whenever the health line is not `[ OK ]` (noted 29 Aug 2026, #316).
 
 ### 11.2 Model
 
@@ -2404,8 +2574,8 @@ two places to set it — which is a duplicated control, not duplicated state.
 public sealed record ReceiverStatus
 {
     // SYNCHRONIZATION
-    public OutputValidity Outputs { get; init; }          // Invalid | ValidReduced | Valid
-    public SmartClockMode Mode { get; init; }             // Locked|Recovery|Holdover|PowerUp
+    public OutputValidity Outputs { get; init; }          // Unknown = 0 | Invalid | ValidReduced | Valid
+    public SmartClockMode Mode { get; init; }             // Unknown = 0 | Locked|Recovery|Holdover|PowerUp
     public string? ModeDetail { get; init; }              // "stabilizing frequency"
     public int? Tfom { get; init; }
     public int? Ffom { get; init; }
@@ -2420,10 +2590,10 @@ public sealed record ReceiverStatus
     public IReadOnlyList<TrackedSatellite> Tracked { get; init; }
     public IReadOnlyList<PredictedSatellite> NotTracked { get; init; }
     public int? ElevationMaskDegrees { get; init; }
-    public SignalStrengthKind SignalStrengthKind { get; init; }   // CarrierToNoise | SignalStrength
+    public SignalStrengthKind SignalStrengthKind { get; init; }   // Unknown = 0 | CarrierToNoise | SignalStrength
 
     // TIME
-    public TimeScale TimeScale { get; init; }             // Gps|Utc|LocalGps|Local
+    public TimeScale TimeScale { get; init; }             // Unknown = 0 | Gps|Utc|LocalGps|Local
     public DateTimeOffset? DeviceDateTime { get; init; }
     public bool DeviceTimeIsProvisional { get; init; }    // added 28 Aug 2026, #245
     public int WeekRolloverEpochs { get; init; }
@@ -2433,12 +2603,12 @@ public sealed record ReceiverStatus
     public LeapSecondPending LeapPending { get; init; }   // None|Plus|Minus
 
     // POSITION
-    public PositionMode PositionMode { get; init; }       // Hold|Survey
+    public PositionMode PositionMode { get; init; }       // Unknown = 0 | Hold|Survey
     public double? SurveyPercentComplete { get; init; }
-    public SurveySuspendedReason SurveySuspendedReason { get; init; }  // §11.3
+    public SurveySuspendedReason SurveySuspendedReason { get; init; }  // §11.3; None = 0
     public GeoPosition? Position { get; init; }
-    public PositionQualifier PositionQualifier { get; init; }  // Init|Average|Held
-    public HeightDatum HeightDatum { get; init; }         // GpsEllipsoid | Msl
+    public PositionQualifier PositionQualifier { get; init; }  // Unknown = 0 | Init|Average|Held
+    public HeightDatum HeightDatum { get; init; }         // Unknown = 0 | GpsEllipsoid | Msl
 
     // HEALTH
     public bool HealthOk { get; init; }
@@ -2447,7 +2617,35 @@ public sealed record ReceiverStatus
     public DateTimeOffset CapturedAt { get; init; }
     public IReadOnlyList<string> ParseWarnings { get; init; }
 }
+
+// The three records the model references, previously undefined in this document
+// (added 29 Aug 2026 from the code, #316 — Models/Satellite.cs, Models/Position.cs).
+// Every member but Prn is nullable because the parser never throws (§11.1).
+public sealed record TrackedSatellite                 // the tracked column group of the acquisition table
+{
+    public required int Prn { get; init; }
+    public int? ElevationDegrees { get; init; }
+    public int? AzimuthDegrees { get; init; }
+    public int? SignalStrength { get; init; }         // a bare number on whichever scale SignalStrengthKind names
+}
+
+public sealed record PredictedSatellite               // the "Not Tracking" group, which has no signal column
+{
+    public required int Prn { get; init; }
+    public int? ElevationDegrees { get; init; }
+    public int? AzimuthDegrees { get; init; }
+    public bool AttemptingToTrack { get; init; }      // the screen's "*attempting to track" marker; seen only while acquiring (#4)
+}
+
+public sealed record GeoPosition                      // signed decimal degrees; the DMS conversion is the parser's
+{
+    public double? LatitudeDegrees { get; init; }     // positive north
+    public double? LongitudeDegrees { get; init; }    // positive east
+    public double? HeightMetres { get; init; }        // against ReceiverStatus.HeightDatum
+}
 ```
+
+*Every enum whose comment above begins `Unknown = 0` carries that member in the code as its default, so a field the parser could not read is distinguishable from one it read; the comments had omitted it (`ReceiverStatus.cs`, `Position.cs`; added 29 Aug 2026, #316). `LeapSecondPending`, `ClockAdvisory` and `SurveySuspendedReason` use `None = 0` instead, meaning nothing announced, printed or suspended.*
 
 > **⚠ Amended 28 Aug 2026 (#245): `DeviceTimeIsProvisional` added.** The clock row may carry a
 > power-up marker — `(?)` on this unit, `[?]` in the Z3801A user guide's Figure 3-1 — between the
@@ -2476,14 +2674,15 @@ public sealed record ReceiverStatus
 > and is read from the `GPS 1PPS …` line two rows below; this is a property of the time-of-day
 > reading. It is also independent of `WeekRolloverEpochs`: a provisional time still gets §7.4's
 > correction applied on top, and a power-up screen has **both** caveats in force at once, which is
-> why §10.3 and §10.2 show them as two badges rather than one.
+> why §10.3 shows them as two badges rather than one and §10.14 carries the provisional caveat as a
+> card (this said §10.2, the window inventory — corrected 29 Aug 2026, #316).
 >
 > The same pass taught the pattern the **year-first date order** the 58503A and Z3801A manuals print
 > — `GPS 03:56:44 1994 DEC 01` — against the `d MMM yyyy` every screen captured from this unit uses.
 > Latent on this hardware, and exactly the cross-model difference §11.1's header-relative parsing
 > exists to survive.
 
-`ParseWarnings` is surfaced in Diagnostics so field reports about odd firmware revisions are actionable.
+`ParseWarnings` is surfaced in Diagnostics so field reports about odd firmware revisions are actionable. **Not built** — today the warnings reach only the application log, and at Debug (`Services/PollingService.cs`), below the Information level the application ships at, so they reach nobody; noted 29 Aug 2026 (#316); decision on #320.
 
 ### 11.3 Known advisory strings
 
@@ -2517,18 +2716,19 @@ something might later branch on.
 
 - `DeviceSessionService` is a singleton owning the transport, the command channel, and connection state. It exposes `IObservable`-style events (or `INotifyPropertyChanged` on an observable state object) rather than letting view models touch the port.
 - `PollingService` owns the two cadences and writes into a `ReceiverStateStore`. View models bind to the store, never to the poller.
-- Trend data (EFC, 1 PPS TI, TFOM) lands in a ring buffer sized for 7 days at 1 s (604 800 samples × ~16 bytes ≈ 10 MB — acceptable; downsample to 10 s beyond 24 h to cut this to ~1 MB).
-- Persist trends to a SQLite file under `LocalApplicationData` so restarts do not lose history. `Microsoft.Data.Sqlite` is packaged-app safe. **The reference was removed on 15 Aug 2026** and P1-2 (#50) restores it: it was carrying 1.89 MB of native `e_sqlite3.dll` into every package for a feature no code path could reach. Note the folder — not `ApplicationData.Current.LocalFolder`, for the reason given against §6.1's logging row.
+- Trend data (EFC, 1 PPS TI, TFOM) lands in two places: a **60-sample in-memory ring** in `ReceiverStateStore` (`TimeIntervalWindow`), which feeds the medallion's sparkline (§9.10.2); and the SQLite **`TrendStore`**, which keeps **24 h at full resolution**, thins to one sample per **10 s** beyond that, and retains **eight weeks (56 days)** — long enough for #137's drift slope to mean something, and a few megabytes once compaction has run (`Services/TrendStore.cs`). **Code disagrees** with this bullet as originally written — noted 29 Aug 2026 (#316): it specified a ring buffer sized for 7 days at 1 s (604 800 samples × ~16 bytes ≈ 10 MB, downsampled to 10 s beyond 24 h); the coarsening matches, the 7-day horizon and the in-memory ring do not, and nothing records why 56 days was chosen over 7 beyond `TrendStore`'s remark on the drift slope. The 604 800-point budget still binds `TrendChart` (§9.10.2). Decision on #320.
+- Persist trends to a SQLite file under `LocalApplicationData` so restarts do not lose history. `Microsoft.Data.Sqlite` is packaged-app safe. **The reference was removed on 15 Aug 2026** and P1-2 (#50) restored it (`WinZ3805A.csproj`; tense corrected 29 Aug 2026, #316): it had been carrying 1.89 MB of native `e_sqlite3.dll` into every package for a feature no code path could reach, and `TrendStore` is that code path. Note the folder — not `ApplicationData.Current.LocalFolder`, for the reason given against §6.1's logging row.
+- **The survey writes its own history to the log** (P0-12, #12; added 29 Aug 2026 from the code, #316). `Services/SurveyLog.cs` subscribes to the store and `SurveyWatch` — pure, and tested against a replayed two-hour run — decides what is worth a line, at Information because that is the level the application ships at. A survey takes two hours and nobody watches it; before this, a run made with the Position page closed left no record of whether it advanced steadily or stalled for forty minutes at the two-thirds mark, which are very different outcomes.
 - **Multi-device readiness:** `DeviceSessionService` must be instantiable per device and resolved from a keyed DI registration, even though v1 creates exactly one. Do not use static state for connection or device identity.
-- **Receiver readiness (added 29 Aug 2026, #122; completed 29 Aug 2026, #287):** the device-specific knowledge sits behind `IReceiverDriver` — the command allowlist, §8.4's exclusions, §7.2's timeouts, §7.3's poll plan and cadence, the auto-detect sequence, and both parsers (the fast sweep's and the status response's). The application consumes all of it through the seam: no code outside the Device library reaches the SmartClock's static catalog, the poller sweeps the driver's plan, and every page resolves its commands through the connected device's driver. Drivers are registered in the composition root in priority order; the session probes `*IDN?` neutrally — the probe phase belongs to no driver — then selects the first registered driver whose `Recognises` claims the parsed identity, falling back to the first registered when none does (with a logged warning when more than one driver is registered — a single-driver build stays silent, the fallback being the driver that would have served it regardless), and re-selects on every connect because the receiver on the port can have been swapped while the link was down. Auto-detect walks the union of every registered driver's sequence in registration order, first appearance winning, so §10.12's walk is unchanged while one family is registered and can only ever be appended to. `SmartClockDriver` is the shipped implementation; a second, fictional family in the test project runs the contract tests and the real connect and poll paths, so the seam is exercised against something that is not the SmartClock. **`docs/adding-a-receiver.md` is the walkthrough** (the README links it).
-  **Amended 29 Aug 2026 (#310): a second real family, and two link styles.** `NmeaDriver` serves any NMEA 0183 GNSS talker, and a talker is the opposite shape to the SmartClock — it speaks unprompted and is never written to — so the contract gained three defaulted members and the session a second way of serving a driver. `LinkStyle Link` says whether a family answers questions (`QueryResponse`, the default and the SmartClock's) or talks (`Broadcast`). `Overhear(lines)` recognises a family by what the synchronise step heard before anything was asked — the session hands every driver those lines, the first to claim them is selected, and `*IDN?` is never sent to a receiver claimed that way. `ClassifyLine(line)` names the plan key a heard line belongs to, and `Transport/BroadcastListener` sorts a talker's lines into cycles delimited by the plan's first fast-tier entry and answers each key from the last complete cycle, reporting a talker that has gone quiet as a timeout so the reconnect logic applies unchanged; `PollPlan.WholeCycle` (`*`) is the full-status key that hands `Parse` the cycle entire. A broadcast family has no error queue and no tier C commands, so the `:SYST:ERR?` requirement binds query/response families only. The simulator that stands in for a talker lives under `tools/NmeaSimulator`, apart from the driver, so a driver author takes one folder and never sees it. **`docs/tutorial-nmea-driver.md` is the worked example**, finding by finding.
+- **Receiver readiness (added 29 Aug 2026, #122; completed 29 Aug 2026, #287):** the device-specific knowledge sits behind `IReceiverDriver` — the command allowlist, §8.4's exclusions, §7.2's timeouts, §7.3's poll plan and cadence, the auto-detect sequence, and both parsers (the fast sweep's and the status response's). The application consumes all of it through the seam: no code outside the Device library reaches the SmartClock's static catalog, the poller sweeps the driver's plan, and every page resolves its commands through the connected device's driver. Drivers are registered in the composition root in priority order; the session probes `*IDN?` neutrally — the probe phase belongs to no driver — then selects the first registered driver whose `Recognises` claims the parsed identity, falling back to the first registered when none does (with a logged warning when more than one driver is registered — a single-driver build stays silent, the fallback being the driver that would have served it regardless), and re-selects on every connect because the receiver on the port can have been swapped while the link was down. Auto-detect walks the union of every registered driver's sequence in registration order, first appearance winning, so §10.12's walk was unchanged while one family was registered and can only ever be appended to — two are registered since #310, and the walk is ten (§10.12; noted 29 Aug 2026, #316). `SmartClockDriver` is the shipped implementation; a second, fictional family in the test project runs the contract tests and the real connect and poll paths, so the seam is exercised against something that is not the SmartClock. **`docs/adding-a-receiver.md` is the walkthrough** (the README links it).
+  **Amended 29 Aug 2026 (#310): a second real family, and two link styles.** `NmeaDriver` serves any NMEA 0183 GNSS talker, and a talker is the opposite shape to the SmartClock — it speaks unprompted and is never written to after recognition, the one `*CLS` before it being §7.2's synchronise step (§7.2's scope note is the canonical wording; reconciled 29 Aug 2026, #316) — so the contract gained three defaulted members and the session a second way of serving a driver. `LinkStyle Link` says whether a family answers questions (`QueryResponse`, the default and the SmartClock's) or talks (`Broadcast`). `Overhear(lines)` recognises a family by what the synchronise step heard before anything was asked — the session hands every driver those lines, the first to claim them is selected, and `*IDN?` is never sent to a receiver claimed that way. `ClassifyLine(line)` names the plan key a heard line belongs to, and `Transport/BroadcastListener` sorts a talker's lines into cycles delimited by the plan's first fast-tier entry and answers each key from the last complete cycle, reporting a talker that has gone quiet as a timeout so the reconnect logic applies unchanged; `PollPlan.WholeCycle` (`*`) is the full-status key that hands `Parse` the cycle entire. A broadcast family has no error queue and no tier C commands, so the `:SYST:ERR?` requirement binds query/response families only. The simulator that stands in for a talker lives under `tools/NmeaSimulator`, apart from the driver, so a driver author takes one folder and never sees it. **`docs/tutorial-nmea-driver.md` is the worked example**, finding by finding.
 
   > **⚠ The specification has not followed the code here, and that is a known gap rather than an oversight.** §7, §8 and §11 are written throughout in terms of one receiver family and name SmartClock behaviour as *the* behaviour — the 80×24 status screen in §11.1, the SCPI command tree in §8.1, the timeout classes in §7.2. All of it is correct for the Z3805A and none of it is stated as being *about* the Z3805A.
   >
   > Generalising that prose is a large edit with no second receiver to check it against, and #122's own note says to raise the amendment rather than let code and document drift apart. **This is that raise.** Until it is done, read §7, §8 and §11 as describing the SmartClock driver specifically, and `IReceiverDriver` as the contract any other would have to meet.
   >
   > The one part that must not wait for it is §8.4: exclusions are per-device by nature, the interface exposes a verdict and never the patterns, and a test asserts that against the interface by reflection so the rule binds every future driver rather than only the existing one.
-- **No `DateTime.Now` / `DateTime.UtcNow` anywhere in the Device library.** Inject `TimeProvider` and call `provider.GetUtcNow()`. This is not stylistic — the week-rollover logic (§7.4), staleness display, and poll scheduling are all clock-dependent, and fixture tests must be able to pin the clock. Enforce with a Roslyn analyzer rule or a code-review checklist item.
+- **No `DateTime.Now` / `DateTime.UtcNow` anywhere in the Device library.** Inject `TimeProvider` and call `provider.GetUtcNow()`. This is not stylistic — the week-rollover logic (§7.4), staleness display, and poll scheduling are all clock-dependent, and fixture tests must be able to pin the clock. Enforced by the code-review checklist — the *Architecture boundaries* section of `CLAUDE.md`; there is no analyzer (this offered either; corrected 29 Aug 2026, #316).
 
 ---
 
@@ -2538,12 +2738,12 @@ something might later branch on.
 
 | ID | Requirement | Acceptance criteria |
 |---|---|---|
-| P0-1 | Serial connection with manual and auto-detect settings | Given a Z3805A on COM3 at 9600-8-N-1, when the user selects auto-detect, then the app connects and displays the `*IDN?` string within 20 s |
+| P0-1 | Serial connection with manual and auto-detect settings | Given a Z3805A on COM3 at 9600-8-N-1, when the user selects auto-detect, then the app connects and displays the `*IDN?` string within 20 s. **Code disagrees** — noted 29 Aug 2026 (#316): the connection is made within the window, but no view displays the identity string (#319 item 14). Decision on #320. |
 | P0-2 | Echo-tolerant line protocol | Given `FDUPlex ON`, when any command is sent, then the echoed line is discarded and only the response reaches the parser |
 | P0-3 | Main window showing mode + tracked count | Given the receiver transitions to holdover, when the next fast poll completes, then the main window shows red ⚠ Holdover within 2 s |
-| P0-4 | `:SYST:STAT?` parser with fixture tests | All eight fixtures in §11.1 parse with zero exceptions and correct field assertions |
+| P0-4 | `:SYST:STAT?` parser with fixture tests | Every captured fixture — seven of §11.1's eight states across ten files; the health-monitor failure outstanding, `Fixtures/README.md` — parses with zero exceptions and correct field assertions, and `FixtureCorpusTests` runs its invariants over every capture at any depth (this said "all eight", which was unmeetable as written — corrected 29 Aug 2026, #316) |
 | P0-5 | Receiver Details window with Overview, Satellites, Position, Timing, Holdover, Time, Diagnostics pages | Every field in the source status screen is represented somewhere in the details UI |
-| P0-6 | Command catalog with tier enforcement | Unit test: `CommandCatalog.All` contains zero entries matching `BlockedPatterns` |
+| P0-6 | Command catalog with tier enforcement | Unit test: `CommandCatalog.All` contains zero entries for which `CommandCatalog.IsBlocked` answers true, and none at `SafetyTier.Blocked` (`BlockedPatterns` was renamed away by #85, §8.4 — corrected 29 Aug 2026, #316) |
 | P0-7 | No blocked command is reachable or visible | Manual audit: search the built binary's string table for `DOWNL`, `ERAS`, `LANGuage` — only the validator regex may match |
 | P0-8 | Tier-C confirmation dialogs | Given the user clicks *Force holdover*, when the dialog appears, then the confirm button is disabled until "I understand" is ticked |
 | P0-9 | Sky plot | Given six tracked satellites, when the Satellites page renders, then six markers appear at correct polar positions, sized by signal strength and filled from the §9.4.4 sequential ramp, with the elevation-mask circle drawn |
@@ -2553,40 +2753,44 @@ something might later branch on.
 | P0-13 | Diagnostic log read, filter, export, clear | Clear is tier C; export writes UTF-8 CSV |
 | P0-14 | Graceful disconnect and auto-reconnect | Given the USB adapter is unplugged, then the app shows Disconnected within 10 s and reconnects within **45 s** of replug. **⚠ Amended 28 Aug 2026 (#14).** Was 30 s, which §7.2's own backoff makes unreachable: the cap *is* 30 s, so an adapter returning just after a failed attempt waits the full interval and then needs ~2.2 s to open the port and finish auto-detect — ≈32 s, measured. The two clauses could not both hold. 45 s leaves headroom over the 30 s cap without weakening the requirement to nothing, and the reconnect stays event-driven within a poll of the adapter reappearing. Reaching ~2 s regardless of backoff needs arrival detection (`WM_DEVICECHANGE` / `DBT_DEVICEARRIVAL`) rather than a timer, which is not required here. Found by the 28 Aug manual QA run, which passed every other clause. |
 | ~~P0-15~~ | ~~MSIX package passing WACK~~ | **Deferred 21 Aug 2026 (#15, #39).** Store submission is not the goal for this version; the goal is that a **non-developer can install the package**, which is a different problem and shipped as #164. WACK is a submission gate rather than a quality gate, and tests little this project’s five CI gates do not already cover. The MSIX itself is unaffected — a sideloaded install uses the same package — so the single-project MSIX, the framework-dependent deployment, the lone `runFullTrust` capability, the 53 generated assets and the third-party notices all stand. `build/Invoke-Wack.ps1` still works if the Store returns. |
-| P0-16 | Accessibility criteria A11Y-1 through A11Y-13 (§9.12) | Each by its stated verification method; A11Y-3 and A11Y-4 gate CI |
-| P0-17 | The §9 token set is implemented in `Themes/` with Light, Dark, and HighContrast dictionaries for every token | CI greps `Views/` and `Controls/` for hex colour literals and fails on any hit (§9.13 item 2) |
+| P0-16 | Accessibility criteria A11Y-1 through A11Y-13 (§9.12) | Each by its stated verification method; six gate CI — A11Y-2, 3, 4, 5, 8 and 12, as §9.12 lists them (this said "A11Y-3 and A11Y-4" — corrected 29 Aug 2026, #316) |
+| P0-17 | The §9 token set is implemented in `Themes/` with Light, Dark, and HighContrast dictionaries for every token | `build/Test-NoHexLiterals.ps1` scans every `*.xaml` under `src/` except `Themes/Colors.xaml`, plus `*.cs` under any `Views/` or `Controls/` folder, and fails on any hex colour literal (§9.13 item 2; the gate's scope restated 29 Aug 2026, #316 — this said "greps `Views/` and `Controls/`"). `build/Test-ThemeDictionaryParity.ps1` checks the three-dictionary half |
 | P0-18 | `StatusMedallion` renders the 60-second radial TI sparkline, updating with no animation | Given a fast poll delivers a new TI value, then the ring redraws within one frame and no `Storyboard` targets the geometry (§9.8.2) |
 | P0-19 | Every severity indication in the app renders through `SeverityPill` | Greyscale screenshot of every page and state remains unambiguous (A11Y-12); no bare coloured `Ellipse` in any view |
 | P0-20 | Numeric readouts use tabular figures, fixed decimals, U+2212 minus, and reserved width | Given TI steps from −33.1 to −9.8, then no glyph shifts horizontally (§9.5.3) |
 
 ### P1 — fast follow
 
-| ID | Requirement |
-|---|---|
-| P1-1 | EFC and 1 PPS TI trend charts with 1 h/6 h/24 h/7 d ranges and CSV export |
-| P1-2 | SQLite trend persistence across restarts |
-| P1-3 | Satellite include/ignore management dialog |
-| P1-4 | Status register page with mask editing |
-| P1-5 | Self-test with per-subsystem selection |
-| P1-6 | Compact main-window mode and always-on-top |
-| P1-11 | System accent opt-in with the ΔE₀₀ collision warning (§9.4.2) |
-| P1-12 | `SkyPlotControl` non-spatial `ListView` alternate view (A11Y-11) |
-| P1-7 | Advanced Console (catalog picker + transcript) |
-| P1-8 | Experimental read-only queries, opt-in |
-| P1-9 | Windows notification on holdover entry / lock loss |
-| P1-10 | System tray icon reflecting lock state |
-| P1-13 | Taskbar overlay badge reflecting lock state (§9.4.3.1) |
-| P1-14 | Close-to-tray, start minimised, and an exit that does not need the tray (§10.3.1) |
+*(All fourteen have shipped. Status column added, and P1-11/P1-12 moved into numeric order, 29 Aug 2026, #316 — dates are the issues' closure dates, UTC.)*
+
+| ID | Requirement | Status |
+|---|---|---|
+| P1-1 | EFC and 1 PPS TI trend charts with 1 h/6 h/24 h/7 d ranges and CSV export | Shipped (#49, 20 Aug 2026; the Overview chart followed as #285, 29 Aug) |
+| P1-2 | SQLite trend persistence across restarts | Shipped (#50, 20 Aug 2026) |
+| P1-3 | Satellite include/ignore management dialog | Shipped (#51, 20 Aug 2026) |
+| P1-4 | Status register page with mask editing | Shipped (#52, 20 Aug 2026) |
+| P1-5 | Self-test with per-subsystem selection | Shipped (#53, 29 Aug 2026) |
+| P1-6 | Compact main-window mode and always-on-top | Shipped (in code — §10.3; #307 refined the compact resize) |
+| P1-7 | Advanced Console (catalog picker + transcript) | Shipped (#55, 20 Aug 2026) |
+| P1-8 | Experimental read-only queries, opt-in | Shipped (#56, 20 Aug 2026) |
+| P1-9 | Windows notification on holdover entry / lock loss | Shipped (#57, 21 Aug 2026) |
+| P1-10 | System tray icon reflecting lock state | Shipped (in code — §9.4.3.1) |
+| P1-11 | System accent opt-in with the ΔE₀₀ collision warning (§9.4.2) | Shipped (in code — §10.13's Appearance card) |
+| P1-12 | `SkyPlotControl` non-spatial `ListView` alternate view (A11Y-11) | Shipped (#60, 20 Aug 2026) |
+| P1-13 | Taskbar overlay badge reflecting lock state (§9.4.3.1) | Shipped (#274, 29 Aug 2026) |
+| P1-14 | Close-to-tray, start minimised, and an exit that does not need the tray (§10.3.1) | Shipped (#280, 29 Aug 2026) |
 
 ### P2 — designed for, not built
 
-| ID | Requirement |
-|---|---|
-| P2-1 | Multiple simultaneous receivers with a device switcher |
-| P2-2 | Z3805A Port 2 time-of-day packet decode as a second data source (15-byte binary, 9600-8-N-1, fixed format) |
-| P2-3 | Allan deviation computation from logged TI data |
-| P2-4 | Model auto-profiles for 58503A/B, 59551A, Z3801A, Z3816A with per-model command masking |
-| P2-5 | Widget / Windows lock-screen status |
+*(Two of the five have since been built and one withdrawn — status column added 29 Aug 2026, #316.)*
+
+| ID | Requirement | Status |
+|---|---|---|
+| P2-1 | Multiple simultaneous receivers with a device switcher | Not built; §12's per-device readiness stands |
+| ~~P2-2~~ | ~~Z3805A Port 2 time-of-day packet decode as a second data source (15-byte binary, 9600-8-N-1, fixed format)~~ | **Withdrawn 28 Aug 2026 (#62).** The Z3805A has one serial port; `:SYST:COMM:SER2:BAUD?` answers `-113`, and the 15-byte packet appears in no manual. OQ-2, §8.6 and §16 record it |
+| P2-3 | Allan deviation computation from logged TI data | **Built (#63)** — the Stability card, §10.7.2; `Controls/AllanDeviation.cs`, `ViewModels/StabilityViewModel.cs` |
+| P2-4 | Model auto-profiles for 58503A/B, 59551A, Z3801A, Z3816A with per-model command masking | **Built 28 Aug 2026 (#64)** — `Models/ModelProfile.cs`, one row per model from §8.6's list |
+| P2-5 | Widget / Windows lock-screen status | Not built |
 
 ---
 
@@ -2594,38 +2798,40 @@ something might later branch on.
 
 | ID | Question | Owner | Blocking? |
 |---|---|---|---|
-| OQ-1 | Bit assignments for `:STAT:OPER:*` and `:STAT:QUES:*` registers are not in the fetched portion of the manual. Chapter 5 pp. 5-48 to 5-70 of 097-58503-13 contains the full status-reporting section. **Retrieve and transcribe these before implementing §10.10.** Until then, ship the register page showing raw values with unmapped bits. | Engineering | Blocks P1-4 only |
+| OQ-1 | ~~Bit assignments for `:STAT:OPER:*` and `:STAT:QUES:*` registers are not in the fetched portion of the manual. Chapter 5 pp. 5-48 to 5-70 of 097-58503-13 contains the full status-reporting section. Retrieve and transcribe these before implementing §10.10.~~ **Resolved 14 Aug 2026 (#34).** The guide reached the manual library; `Models/StatusRegisterMap.cs` transcribes all five registers from Command Reference 5-36 to 5-39 ("Status Reporting System", Figure 5-1), and §10.10's raw-value fallback is now the exception rather than the page. | Engineering | Closed |
 | OQ-2 | Does the Z3805A accept `:SYST:COMM:SER2:*`? | **Resolved 28 Aug 2026 (#62): no, and the premise was wrong.** `:SYST:COMM:SER2:BAUD?` returns `-113,"Undefined header"` — the node does not exist — and the unit has **one** serial port, so there is no second port to be broadcast-only. §8.6 corrected. | Engineering | No |
-| OQ-3 | Is there a documented `PROMpt` node (`:SYST:COMM:SER1:PROM OFF`) to suppress the `scpi>` prompt? The keyword appears in the firmware string table and GPSCon requires the prompt *on*, implying it is settable. If it exists and works, it simplifies the read loop — but treat it as tier C and keep prompt-tolerant parsing regardless. | Engineering | No |
+| OQ-3 | Is there a documented `PROMpt` node (`:SYST:COMM:SER1:PROM OFF`) to suppress the `scpi>` prompt? The keyword appears in the firmware string table and GPSCon requires the prompt *on*, implying it is settable. If it exists and works, it simplifies the read loop — but treat it as tier C and keep prompt-tolerant parsing regardless. **Resolved 28 Aug 2026 (#36): do not suppress it.** §7.2's rewrite made the prompt the frame terminator and the carrier of the `E-xxx>` error-queue state, so suppressing it would remove the one reliable end-of-transaction signal and the free error-queue signal at once; `FDUPlex OFF` was declined on the same reasoning. Neither is catalogued. | Engineering | Closed |
 | OQ-4 | ~~Exact `:PTIM:TCOD?` response format and its 20–980 ms lead relative to the 1 PPS.~~ **Answered 21 Aug 2026 (#37).** The bench receiver is in **T2**, not the documented T1 default — read `:PTIM:TCOD:FORM?` and branch, never assume. The message is 23 characters, its checksum is the sum of the 21 preceding characters mod 256 (verified on 103/103 samples), and it is emitted on the receiver’s own 1 Hz cadence **509 ms** before the 1 PPS it names, jitter ≤ 2.4 ms. It does **not** answer on demand. Worked decode in #37; the format query is now catalogued (§8.2, §10.14). | Engineering | Closed |
-| OQ-5 | Confirm `LiveChartsCore.SkiaSharpView.WinUI` supports Windows App SDK 2.3.x. If not, hand-roll the trend renderer on `Canvas`. | Engineering | Blocks P1-1 |
+| OQ-5 | ~~Confirm `LiveChartsCore.SkiaSharpView.WinUI` supports Windows App SDK 2.3.x. If not, hand-roll the trend renderer on `Canvas`.~~ **Resolved 19 Aug 2026 (#38): hand-rolled.** LiveCharts builds and renders on WinAppSDK 2.3.x, and was rejected on §12's 604 800-point budget — it has no downsampling and materialised 1.65 GB when handed the raw series. `Controls/TrendChart.cs` with `TrendDecimation` is the renderer (§6.1, §9.10.2). | Engineering | Closed |
 | ~~OQ-6~~ | ~~Publisher identity and privacy policy URL from Partner Center.~~ **Closed 21 Aug 2026 (#39), deferred with P0-15.** The Partner Center identity values, the reserved name and the privacy URL are all Store-submission artefacts, and the manifest `TODO:` markers stay as placeholders that a sideloaded install never reads. `docs/privacy.md` is written and committed; **GitHub Pages is deliberately not enabled**, because the only thing that required the URL to resolve was submission. | Product | Closed |
-| OQ-8 | Does `WinZ3805A` survive Store certification as a display name, or should the display name be descriptive (e.g. *"GPSDO Monitor for Z3805A"*) with `WinZ3805A` kept only as package identity and assembly name? See §6.3. Decide before first submission, not before first commit — the two are deliberately decoupled. | Product | No |
-| OQ-7 | Should the app expose `:SYST:PRESet` at all? It is recoverable but wipes antenna delay and position — arguably the most annoying non-destructive command. Recommend keeping it, tier C with the "I understand" tick. | Product | No |
+| OQ-7 | Should the app expose `:SYST:PRESet` at all? It is recoverable but wipes antenna delay and position — arguably the most annoying non-destructive command. Recommend keeping it, tier C with the "I understand" tick. **Resolved 28 Aug 2026 (#40): kept**, tier C with acknowledgement — one of §9.7.4's four strong variants, carried in the catalog by `RequiresAcknowledgement` (`CommandCatalog.cs`). | Product | Closed |
+| ~~OQ-8~~ | ~~Does `WinZ3805A` survive Store certification as a display name, or should the display name be descriptive (e.g. *"GPSDO Monitor for Z3805A"*) with `WinZ3805A` kept only as package identity and assembly name? See §6.3. Decide before first submission, not before first commit — the two are deliberately decoupled.~~ **Closed 21 Aug 2026 (#41), deferred with the Store**, as OQ-6 was: it is a submission question and there is no submission. §6.3's decoupling of display name from package identity stands so that it can be answered in one line when there is. | Product | Closed |
 
-**Design questions are tracked separately in §9.14** as OQ-D1 through OQ-D7, to keep design and engineering decisions reviewable by their respective owners. Two carry into this table because they gate engineering work:
+*(OQ-7 and OQ-8 were listed in the other order; corrected 29 Aug 2026, #316.)*
+
+**Design questions are tracked separately in §9.14** as OQ-D1 through OQ-D7, to keep design and engineering decisions reviewable by their respective owners. Two carried into this table because they gated engineering work; both are resolved, and nothing in §14 gates code now (corrected 29 Aug 2026, #316):
 
 | ID | Question | Owner | Blocking? |
 |---|---|---|---|
-| OQ-D1 | `Typography.NumeralAlignment` availability in WinUI 3 (§9.5.3, §9.14) | Engineering | Blocks `ReadoutTile`, P0-20 |
-| OQ-D3 | Medallion ring shows 1 PPS TI or EFC (§9.14) | Product | Blocks P0-18 |
+| OQ-D1 | `Typography.NumeralAlignment` availability in WinUI 3 (§9.5.3, §9.14) — **Resolved 12 Aug 2026 (#42): available** | Engineering | No — was "Blocks `ReadoutTile`, P0-20" |
+| OQ-D3 | Medallion ring shows 1 PPS TI or EFC (§9.14) — **Resolved 12 Aug 2026 (#44): TI**, and P0-18 shipped on it | Product | No — was "Blocks P0-18" |
 
 ---
 
 ## 15. Implementation Sequence
 
 1. **Device library first.** `SerialTransport` + `LineProtocol` + echo/prompt handling, built on `PipeReader` (§6.4), with a `FakeTransport` that replays fixture files through the same pipe. Inject `TimeProvider` from the start — retrofitting it later touches every timing path. Prove the transaction loop against fixtures before touching hardware.
-2. **`StatusScreenParser`** with the eight fixtures and full assertion coverage. This is the highest-risk component; do it while there is no UI to distract.
-3. **`CommandCatalog`** with tier classification and the `BlockedPatterns` unit test (P0-6).
+2. **`StatusScreenParser`** with the §11.1 fixtures and full assertion coverage — seven of the eight states are captured, `Fixtures/README.md` tracks the eighth (corrected 29 Aug 2026, #316). This is the highest-risk component; do it while there is no UI to distract.
+3. **`CommandCatalog`** with tier classification and the `IsBlocked` unit test (P0-6; this said `BlockedPatterns` — see §8.4, corrected 29 Aug 2026, #316).
 4. **`DeviceSessionService` + `PollingService`**, verified against real hardware.
 5. **Design foundation before any view.** Implement `Themes/` in full — colour, typography, spacing, radius, elevation, and motion tokens with Light, Dark, and HighContrast dictionaries (§9.4–§9.8) — plus the shared controls `SeverityPill` and `ReadoutTile`. Resolve OQ-D1 with a spike first. Land the CI hex-literal check (P0-17) at the same time, so the rule is enforced from the first view rather than retrofitted. **Do not build a page before this step exists**; retrofitting tokens onto finished XAML is where design systems die.
 6. **`StatusMedallion`** (P0-18) — the signature element, built and reviewed in isolation against a fixture-driven TI stream before it is placed in a window.
 7. **Main window** (P0-3) — smallest useful vertical slice, proves the whole stack end to end.
-8. **Details window shell**: custom title bar (§9.7.3), `NavigationView` with the §9.6.1 breakpoints, then pages in order: Overview → Satellites → Position → Timing → Holdover → Diagnostics → Time.
+8. **Details window shell**: custom title bar (§9.7.3), `NavigationView` with the §9.6.1 breakpoints, then pages in order: Overview → Satellites → Position → Timing → Holdover → Diagnostics → Time. This is the *build* order and not the pane order — §9.7.1 and §10.2 also require Status Registers, Settings and the Console as destinations, and `ViewModels/DetailsDestination.cs` notes that the two lists differ (clause added 29 Aug 2026, #316).
 9. **`SkyPlotControl`** including its keyboard model and automation peers (A11Y-10, A11Y-11).
 10. **Confirmation dialog infrastructure** per §9.7.4, then wire every tier-C command through it.
 11. **Accessibility pass** against A11Y-1 to A11Y-13, and the §9.13 anti-pattern audit.
-12. **MSIX manifest, assets, WACK**, submission dry run.
+12. **MSIX manifest, assets, WACK**, submission dry run — the manifest and assets shipped with the sideload package (#164); WACK and the submission dry run are deferred with P0-15 (#15, #39), `build/Invoke-Wack.ps1` standing ready if the Store returns (annotated 29 Aug 2026, #316).
 13. P1 items in listed order.
 
 ---
