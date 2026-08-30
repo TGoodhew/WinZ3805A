@@ -157,8 +157,9 @@ removes the certificate and is what puts a test machine back to clean.
 
 ### Build
 
-MSBuild is not on `PATH` by default. Resolve it with `vswhere`, or use the full
-path:
+This section owns the build, run and test commands; the copy in `CLAUDE.md` is
+for agents and follows this one. MSBuild is not on `PATH` by default. Resolve it
+with `vswhere`, or use the full path:
 
 ```powershell
 $msb = 'C:\Program Files\Microsoft Visual Studio\18\Enterprise\MSBuild\Current\Bin\MSBuild.exe'
@@ -287,7 +288,27 @@ the desk.
 - **[CLAUDE.md](CLAUDE.md)** carries the working conventions for the repository,
   including every CI gate with what it guards and why it exists.
 
-Both are linked rather than restated here, so there is one authority per fact.
+**One fact, one owner.** The table says which document owns which kind of fact.
+Every other document links to the owner, or — where a reader will not follow a
+link, as in the user's guide or the sideload README — restates it in words
+without the number. Where this README restates something (the build commands,
+the platform floor, the x64 decision), the owner is named beside it.
+
+| Kind of fact | Owner |
+|---|---|
+| What the application does and every figure in it — timeouts, cadences, baud rates, sizes, thresholds, the status model, the safety tiers | [docs/requirements.md](docs/requirements.md), by `§` |
+| Platform, repository layout, naming and packaging decisions | §6 of the specification |
+| Design tokens, components, motion and the accessibility criteria | §9 of the specification |
+| How to build, run and test on this machine | this README, [Building from source](#building-from-source) |
+| The CI gates — what each guards and why it exists — and the agent conventions | [CLAUDE.md](CLAUDE.md) |
+| The receiver contract and how to add a driver | [docs/adding-a-receiver.md](docs/adding-a-receiver.md); the tutorial is that guide followed once, and links rather than restates |
+| What the user sees and presses | [docs/how-to-use.md](docs/how-to-use.md), in the user's words; the behaviour behind it is the specification's |
+| Which checks need a person, a receiver or a machine setting | [docs/manual-qa.md](docs/manual-qa.md) |
+| Which fixtures exist and which test reads each | [tests/WinZ3805A.Tests/Fixtures/README.md](tests/WinZ3805A.Tests/Fixtures/README.md); their provenance is `captured/capture-log.md` |
+| What ships in the package, and under which licence | [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md), regenerated from the project files |
+| The Store decisions and the privacy position | [docs/store-listing.md](docs/store-listing.md), [docs/privacy.md](docs/privacy.md) |
+| Where this stands against the incumbent tool | [docs/lady-heather-comparison.md](docs/lady-heather-comparison.md) |
+
 The rest of `docs/`, and the other documents worth knowing about:
 
 - [docs/how-to-use.md](docs/how-to-use.md) — the user's guide: every window and
@@ -325,7 +346,8 @@ hard-coded (§6.3).
 The name contains a model designation rather than a company mark. This project is
 not affiliated with, endorsed by, or sponsored by HP, Hewlett-Packard, Agilent,
 Keysight, or Symmetricom; those names appear here only to describe the hardware
-the application talks to.
+the application talks to. §6.3 owns that position and its two hedges;
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) is the notice that ships.
 
 ## Licence
 
