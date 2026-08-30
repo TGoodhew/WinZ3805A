@@ -190,7 +190,15 @@
                                   IsEnabled="False"
                                   Click="OnPowerUpSurveyClicked" />
 
-                        <controls:CommandOutcomeBar x:Name="SurveyOutcome" />
+                        <TextBlock x:Name="SurveyUnsupportedText"
+                               Style="{ThemeResource WzCaptionTextStyle}"
+                               Foreground="{ThemeResource WzTextSecondaryBrush}"
+                               MaxWidth="{ThemeResource WzProseMaxWidth}"
+                               HorizontalAlignment="Left"
+                               TextWrapping="Wrap"
+                               Visibility="Collapsed" />
+
+                    <controls:CommandOutcomeBar x:Name="SurveyOutcome" />
                     </StackPanel>
                 </Border>
 
@@ -300,7 +308,15 @@
                                 ToolTipService.ToolTip="Copy the position the receiver is holding into these fields"
                                 Click="OnFillFromReceiverClicked" />
 
-                        <controls:CommandOutcomeBar x:Name="PositionOutcome" />
+                        <TextBlock x:Name="PositionUnsupportedText"
+                               Style="{ThemeResource WzCaptionTextStyle}"
+                               Foreground="{ThemeResource WzTextSecondaryBrush}"
+                               MaxWidth="{ThemeResource WzProseMaxWidth}"
+                               HorizontalAlignment="Left"
+                               TextWrapping="Wrap"
+                               Visibility="Collapsed" />
+
+                    <controls:CommandOutcomeBar x:Name="PositionOutcome" />
 
                         <Button x:Name="ApplyPositionButton"
                                 HorizontalAlignment="Right"

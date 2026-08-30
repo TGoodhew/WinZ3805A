@@ -521,6 +521,18 @@
                                     Click="OnApplyMaskClicked" />
                         </Grid>
 
+                        <!--
+                            §9.11's rule for a capability the receiver may not have (#304): disabled
+                            and explained, never hidden.
+                        -->
+                        <TextBlock x:Name="MaskUnsupportedText"
+                                   Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}"
+                                   HorizontalAlignment="Left"
+                                   TextWrapping="Wrap"
+                                   Visibility="Collapsed" />
+
                         <controls:CommandOutcomeBar x:Name="MaskOutcome" />
 
                         <TextBlock Style="{ThemeResource WzCaptionTextStyle}"
@@ -546,6 +558,14 @@
                                 Content="Manage…"
                                 HorizontalAlignment="Left"
                                 Click="OnManageClicked" />
+
+                        <TextBlock x:Name="ManageUnsupportedText"
+                                   Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}"
+                                   HorizontalAlignment="Left"
+                                   TextWrapping="Wrap"
+                                   Visibility="Collapsed" />
 
                         <controls:CommandOutcomeBar x:Name="ManageOutcome" />
                     </StackPanel>

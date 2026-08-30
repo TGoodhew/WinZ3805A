@@ -66,12 +66,19 @@ public sealed partial class MainPage : Page
         _ports = services.GetRequiredService<SerialPortEnumerator>();
         _preferences = services.GetRequiredService<IConnectionPreferenceStore>();
 
-        _model = new MainViewModel(_device.Store, services.GetRequiredService<TimeProvider>());
+        _model = new MainViewModel(
+            _device.Store, services.GetRequiredService<TimeProvider>(), _device.Driver);
 
         _model.PropertyChanged += (_, _) => DispatcherQueue.TryEnqueue(Render);
         _device.Session.StatusChanged += (_, e) => DispatcherQueue.TryEnqueue(() =>
         {
             _model.Connection = e.Status;
+
+            // Re-set on every connect, not captured once: the session re-selects a driver each time
+            // the link comes up (#287), and the medallion's mode is that driver's reading of the
+            // receiver's token (#304).
+            _model.Driver = _device.Driver;
+
             if (e.Status == ConnectionStatus.Connected)
             {
                 _model.PortDescription = $"{_device.Session.PortName} · {_device.Session.Settings}";

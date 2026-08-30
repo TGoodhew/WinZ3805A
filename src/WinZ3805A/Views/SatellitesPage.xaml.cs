@@ -10,6 +10,7 @@ using Microsoft.UI.Xaml.Navigation;
 
 using WinZ3805A.Controls;
 using WinZ3805A.Device.Commands;
+using WinZ3805A.Device.Drivers;
 using WinZ3805A.Device.Transport;
 using WinZ3805A.Services;
 using WinZ3805A.ViewModels;
@@ -46,6 +47,10 @@ public sealed partial class SatellitesPage : Page
     /// </summary>
     private NumberFieldValidator? _mask;
     private bool _busy;
+
+    /// <summary>What the connected receiver's driver offers (#304), decided once per navigation.</summary>
+    private bool _canSetMask;
+    private bool _canManage;
 
     /// <summary>The last value this page wrote into the mask editor.</summary>
     /// <remarks>
@@ -118,17 +123,12 @@ public sealed partial class SatellitesPage : Page
         _invoker = new CommandInvoker(device.Session);
 
         // §8.3's elevation mask, with its 0-90 range taken from the driver's catalog.
-        ParameterSpec maskRange =
-            CommandConfirmation.Require(device.Driver, ":GPS:SAT:TRAC:EMANgle").Parameters[0];
-
-        _mask = new NumberFieldValidator(MaskBox, MaskError, maskRange);
+        // A talker has none of §10.5's commands (#304), so the spec is looked up rather than
+        // required and the controls are disabled below instead of the navigation throwing.
+        _mask = new NumberFieldValidator(MaskBox, MaskError, minimum: null, maximum: null);
         _mask.ValidityChanged += (_, _) => Render();
 
-        // §9.10.1's slider takes its bounds from the same catalog entry the validator does, rather
-        // than restating 0 and 90 in XAML where the two could drift apart. A slider physically
-        // cannot leave its range, which is why the error text below it is for typed entry only.
-        MaskSlider.Minimum = maskRange.Minimum ?? 0;
-        MaskSlider.Maximum = maskRange.Maximum ?? 90;
+        BindDriver();
 
         MaskBox.ValueChanged += (_, args) =>
         {
@@ -201,9 +201,46 @@ public sealed partial class SatellitesPage : Page
 
             if (e?.Status == ConnectionStatus.Connected)
             {
+                // The receiver on the port can have been swapped while the link was down, so the
+                // session re-selects a driver on every connect (#287) and this page's answer to
+                // "what may I offer" has to be asked again rather than kept from navigation (#304).
+                BindDriver();
+                Render();
+
                 _ = ReadExclusionsAsync();
             }
         });
+
+    /// <summary>
+    /// Re-reads everything this page takes from the connected receiver's driver (#304).
+    /// </summary>
+    /// <remarks>
+    /// Called at navigation and again on every connect. Nothing here subscribes or allocates a
+    /// validator: <see cref="NumberFieldValidator.Rebind"/> exists so the bounds can move without
+    /// a second validator being left listening to the same field.
+    /// </remarks>
+    private void BindDriver()
+    {
+        IReceiverDriver? driver = _device?.Driver;
+
+        _canSetMask = Capability.Offers(driver, ":GPS:SAT:TRAC:EMANgle");
+        _canManage = Capability.Offers(
+            driver,
+            ":GPS:SAT:TRAC:INCLude",
+            ":GPS:SAT:TRAC:INCLude ALL",
+            ":GPS:SAT:TRAC:INCLude NONE",
+            ":GPS:SAT:TRAC:IGNore ALL",
+            ":GPS:SAT:TRAC:IGNore NONE");
+
+        ParameterSpec? maskRange = Capability.SpecFor(driver, ":GPS:SAT:TRAC:EMANgle");
+        _mask?.Rebind(maskRange);
+
+        // §9.10.1's slider takes its bounds from the same catalog entry the validator does, rather
+        // than restating 0 and 90 in XAML where the two could drift apart. A slider physically
+        // cannot leave its range, which is why the error text below it is for typed entry only.
+        MaskSlider.Minimum = maskRange?.Minimum ?? 0;
+        MaskSlider.Maximum = maskRange?.Maximum ?? 90;
+    }
 
     private void Render()
     {
@@ -274,8 +311,22 @@ public sealed partial class SatellitesPage : Page
 
         SkyPlotSelectionText.Text = DescribeSelection();
 
-        ApplyMaskButton.IsEnabled =
-            !_busy && _mask is { IsValid: true } && model.Connection == ConnectionStatus.Connected;
+        // Capability first, then state (#304).
+        MaskBox.IsEnabled = _canSetMask;
+        MaskSlider.IsEnabled = _canSetMask;
+        MaskUnsupportedText.Text = _canSetMask
+            ? string.Empty
+            : Capability.NotOffered(_device?.Driver, "an elevation mask");
+        MaskUnsupportedText.Visibility = _canSetMask ? Visibility.Collapsed : Visibility.Visible;
+
+        ApplyMaskButton.IsEnabled = _canSetMask
+            && !_busy && _mask is { IsValid: true } && model.Connection == ConnectionStatus.Connected;
+
+        ManageButton.IsEnabled = _canManage && !_busy;
+        ManageUnsupportedText.Text = _canManage
+            ? string.Empty
+            : Capability.NotOffered(_device?.Driver, "choosing which satellites to track");
+        ManageUnsupportedText.Visibility = _canManage ? Visibility.Collapsed : Visibility.Visible;
 
         FooterText.Text = $"Satellite table {model.AgeDescription}";
     }

@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 
 using Microsoft.Extensions.DependencyInjection;
 
@@ -9,6 +9,7 @@ using Microsoft.UI.Xaml.Navigation;
 
 using WinZ3805A.Controls;
 using WinZ3805A.Device.Commands;
+using WinZ3805A.Device.Models;
 using WinZ3805A.Services;
 using WinZ3805A.ViewModels;
 
@@ -77,7 +78,7 @@ public sealed partial class OverviewPage : Page
 
         _device = device;
         _invoker = new CommandInvoker(device.Session);
-        _model = new OverviewViewModel(device.Store)
+        _model = new OverviewViewModel(device.Store, device.Driver)
         {
             Connection = device.Session.Status,
 
@@ -111,6 +112,12 @@ public sealed partial class OverviewPage : Page
             if (_model is OverviewViewModel model)
             {
                 model.Connection = e.Status;
+
+                // Re-set on every connect, not captured once (#287, #304).
+                if (_device is DeviceContext current)
+                {
+                    model.Driver = current.Driver;
+                }
 
                 // Re-read on every status change, not only on the first: a reconnect can find a
                 // different receiver on the port, and the session re-selects its driver for exactly
@@ -174,7 +181,16 @@ public sealed partial class OverviewPage : Page
 
         FooterText.Text = model.AgeDescription;
 
-        RunTestButton.IsEnabled = !_testRunning && model.Connection == ConnectionStatus.Connected;
+        // Capability first, then state (#304).
+        bool canSelfTest = Capability.Offers(_device?.Driver, "*TST?");
+
+        RunTestButton.IsEnabled =
+            canSelfTest && !_testRunning && model.Connection == ConnectionStatus.Connected;
+
+        SelfTestUnsupportedText.Text = canSelfTest
+            ? string.Empty
+            : Capability.NotOffered(_device?.Driver, "a self test");
+        SelfTestUnsupportedText.Visibility = canSelfTest ? Visibility.Collapsed : Visibility.Visible;
     }
 
     /// <summary>
@@ -193,7 +209,13 @@ public sealed partial class OverviewPage : Page
         SelfTestOutcome.Clear();
 
         // The one tier C command on this page (§8.3), resolved through the driver (#287).
-        ScpiCommand selfTest = CommandConfirmation.Require(device.Driver, "*TST?");
+        // A talker has no self-test (#304). The button is gated in Render, so reaching here with the
+        // command absent would be a gating bug - but the handler is async void and an exception in
+        // one has nowhere to go, so it returns instead of asserting.
+        if (device.Driver.Find("*TST?") is not ScpiCommand selfTest)
+        {
+            return;
+        }
 
         try
         {
@@ -297,9 +319,13 @@ public sealed partial class OverviewPage : Page
                 efc.Add(new TrendSample(record.Ticks, value));
             }
 
+            // The stored token read by the driver that is on the port now (#304). History from a
+            // different family would be read in the wrong vocabulary, which is the honest limit of
+            // colouring a chart by mode: the token is what was recorded, not the mode.
             states.Add(new TrendSample(
                 record.Ticks,
-                (double)ReceiverModes.FromSyncState(record.SyncState)));
+                (double)(_device?.Driver.InterpretSyncState(record.SyncState)
+                    ?? ReceiverMode.Disconnected)));
         }
 
         EfcTrend.FromTicks = from;

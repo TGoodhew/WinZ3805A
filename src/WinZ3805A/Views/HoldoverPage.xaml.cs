@@ -6,6 +6,7 @@ using Microsoft.UI.Xaml.Navigation;
 
 using WinZ3805A.Controls;
 using WinZ3805A.Device.Commands;
+using WinZ3805A.Device.Drivers;
 using WinZ3805A.Device.Transport;
 using WinZ3805A.Services;
 using WinZ3805A.ViewModels;
@@ -27,6 +28,16 @@ public sealed partial class HoldoverPage : Page
     /// </summary>
     private NumberFieldValidator? _threshold;
     private bool _busy;
+
+    /// <summary>What the connected receiver's driver offers (#304), decided once per navigation.</summary>
+    /// <remarks>
+    /// Fields rather than properties on the view model, because these are facts about the DRIVER and
+    /// the view model is about the receiver's state. A talker has none of §10.8's commands, and the
+    /// page has to read as a different instrument rather than as a broken one.
+    /// </remarks>
+    private bool _canSetDurationLimit;
+    private bool _canForceHoldover;
+    private bool _canRecover;
 
     /// <summary>Whether the value in the editor came from the user rather than from the receiver.</summary>
     /// <remarks>
@@ -87,14 +98,15 @@ public sealed partial class HoldoverPage : Page
         _device = device;
         _invoker = new CommandInvoker(device.Session);
 
-        // §8.3's holdover threshold, with its range taken from the driver's catalog.
-        _threshold = new NumberFieldValidator(
-            ThresholdBox,
-            ThresholdError,
-            CommandConfirmation.Require(device.Driver, ":SYNC:HOLD:DUR:THReshold").Parameters[0]);
+        // §8.3's holdover duration limit, with its range taken from the driver's catalog when the
+        // driver has one. A talker has none of these commands (#304), so the spec is looked up
+        // rather than required and the field is disabled below instead of the navigation throwing.
+        _threshold = new NumberFieldValidator(ThresholdBox, ThresholdError, minimum: null, maximum: null);
         _threshold.ValidityChanged += (_, _) => Render();
 
-        _model = new HoldoverViewModel(device.Store)
+        BindDriver();
+
+        _model = new HoldoverViewModel(device.Store, device.Driver)
         {
             Connection = device.Session.Status,
             PowerUp = device.PowerUp,
@@ -114,13 +126,44 @@ public sealed partial class HoldoverPage : Page
             if (_model is HoldoverViewModel model)
             {
                 model.Connection = e.Status;
+
+                // Re-set on every connect, not captured once (#287, #304).
+                if (_device is DeviceContext current)
+                {
+                    model.Driver = current.Driver;
+                }
             }
 
             if (e?.Status == ConnectionStatus.Connected)
             {
+                // The receiver on the port can have been swapped while the link was down, so the
+                // session re-selects a driver on every connect (#287) and this page's answer to
+                // "what may I offer" has to be asked again rather than kept from navigation (#304).
+                BindDriver();
+                Render();
+
                 _ = ReadThresholdAsync();
             }
         });
+
+    /// <summary>
+    /// Re-reads everything this page takes from the connected receiver's driver (#304).
+    /// </summary>
+    /// <remarks>
+    /// Called at navigation and again on every connect. Nothing here subscribes or allocates a
+    /// validator: <see cref="NumberFieldValidator.Rebind"/> exists so the bounds can move without
+    /// a second validator being left listening to the same field.
+    /// </remarks>
+    private void BindDriver()
+    {
+        IReceiverDriver? driver = _device?.Driver;
+
+        _canSetDurationLimit = Capability.Offers(driver, ":SYNC:HOLD:DUR:THReshold");
+        _canForceHoldover = Capability.Offers(driver, ":SYNC:HOLDover:INITiate");
+        _canRecover = Capability.Offers(driver, ":SYNC:HOLD:REC:INIT", ":SYNC:HOLD:REC:LIM:IGN");
+
+        _threshold?.Rebind(Capability.SpecFor(driver, ":SYNC:HOLD:DUR:THReshold"));
+    }
 
     /// <summary>Notes that the number in the editor is the user's and not the receiver's.</summary>
     /// <remarks>
@@ -226,12 +269,27 @@ public sealed partial class HoldoverPage : Page
         PowerUpExplanationText.Text = model.PowerUpExplanation;
         ToolTipService.SetToolTip(PowerUpPill, model.PowerUpExplanation);
 
-        ApplyDurationLimitButton.IsEnabled =
-            !_busy && _threshold is { IsValid: true } && model.Connection == ConnectionStatus.Connected;
+        // Capability first, then state (#304). A receiver that cannot be told to hold over should
+        // show the control disabled with a reason rather than enabled and failing on click.
+        ThresholdBox.IsEnabled = _canSetDurationLimit;
+        MaskUnsupportedText.Text = _canSetDurationLimit
+            ? string.Empty
+            : Capability.NotOffered(_device?.Driver, "a holdover duration limit");
+        MaskUnsupportedText.Visibility = _canSetDurationLimit ? Visibility.Collapsed : Visibility.Visible;
 
-        ForceHoldoverButton.IsEnabled = !_busy && model.CanForceHoldover;
-        RecoverButton.IsEnabled = !_busy && model.CanRecover;
-        IgnoreLimitButton.IsEnabled = !_busy && model.CanRecover;
+        ApplyDurationLimitButton.IsEnabled = _canSetDurationLimit
+            && !_busy && _threshold is { IsValid: true } && model.Connection == ConnectionStatus.Connected;
+
+        ManualUnsupportedText.Text = _canForceHoldover || _canRecover
+            ? string.Empty
+            : Capability.NotOffered(_device?.Driver, "manual holdover");
+        ManualUnsupportedText.Visibility = _canForceHoldover || _canRecover
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+
+        ForceHoldoverButton.IsEnabled = _canForceHoldover && !_busy && model.CanForceHoldover;
+        RecoverButton.IsEnabled = _canRecover && !_busy && model.CanRecover;
+        IgnoreLimitButton.IsEnabled = _canRecover && !_busy && model.CanRecover;
 
         FooterText.Text = model.AgeDescription;
     }

@@ -249,6 +249,15 @@
                                     Click="OnApplyMasksClicked" />
                         </StackPanel>
 
+                        <!-- §9.11: absent is disabled and explained, never hidden (#304). -->
+                        <TextBlock x:Name="MasksUnsupportedText"
+                                   Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}"
+                                   HorizontalAlignment="Left"
+                                   TextWrapping="Wrap"
+                                   Visibility="Collapsed" />
+
                         <TextBlock x:Name="PendingText"
                                    Style="{ThemeResource WzCaptionTextStyle}"
                                    Foreground="{ThemeResource WzTextTertiaryBrush}"

@@ -128,7 +128,21 @@ public sealed partial class StatusRegistersPage : Page
         ReadingRing.IsActive = model.IsReading;
         RefreshButton.IsEnabled = model.CanRead;
 
-        ApplyMasksButton.IsEnabled = !_busy && model.CanApplyMasks;
+        // Capability first, then state (#304). All three writable fields, because §10.10 applies the
+        // changed masks as three separate commands and offering the button with two of them present
+        // would stop the run halfway.
+        bool canApply = Capability.Offers(
+            _device?.Driver,
+            $":STAT:{model.Register.Node}:ENABle",
+            $":STAT:{model.Register.Node}:NTRansition",
+            $":STAT:{model.Register.Node}:PTRansition");
+
+        ApplyMasksButton.IsEnabled = canApply && !_busy && model.CanApplyMasks;
+
+        MasksUnsupportedText.Text = canApply
+            ? string.Empty
+            : Capability.NotOffered(_device?.Driver, "writing this register’s masks");
+        MasksUnsupportedText.Visibility = canApply ? Visibility.Collapsed : Visibility.Visible;
         DiscardMasksButton.IsEnabled = !_busy && model.IsDirty;
         PendingText.Text = model.PendingText;
 
@@ -177,9 +191,15 @@ public sealed partial class StatusRegistersPage : Page
         {
             foreach ((RegisterMask mask, int value) in model.PendingWrites)
             {
-                ScpiCommand command = CommandConfirmation.Require(
-                    device.Driver,
-                    $":STAT:{model.Register.Node}:{RegisterMaskEdit.Field(mask)}");
+                // §10.10's masks are per-register SCPI nodes a talker does not have (#304). The
+                // apply button is gated below, so reaching here with one absent would be a gating
+                // bug - but this is an async void handler, where an exception has nowhere to go, so
+                // it stops cleanly instead.
+                if (device.Driver.Find($":STAT:{model.Register.Node}:{RegisterMaskEdit.Field(mask)}")
+                    is not ScpiCommand command)
+                {
+                    break;
+                }
 
                 string formatted = value.ToString(CultureInfo.InvariantCulture);
 

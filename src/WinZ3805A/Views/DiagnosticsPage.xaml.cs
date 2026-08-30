@@ -12,6 +12,7 @@ using Windows.System;
 
 using WinZ3805A.Controls;
 using WinZ3805A.Device.Commands;
+using WinZ3805A.Device.Drivers;
 using WinZ3805A.Device.Transport;
 using WinZ3805A.Services;
 using WinZ3805A.Device.Parsing;
@@ -49,6 +50,10 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
     /// back. Two one-shot timers would encode the same thresholds a second time, in the place most
     /// likely to drift from them.
     /// </remarks>
+    /// <summary>What the connected receiver's driver offers (#304).</summary>
+    private bool _canSelfTest;
+    private bool _canClearLog;
+
     private readonly DispatcherTimer _loadingTimer = new() { Interval = TimeSpan.FromMilliseconds(100) };
 
     /// <summary>When the read in flight started, for the ladder above.</summary>
@@ -144,6 +149,8 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
         // broke.
         device.Store.PropertyChanged += OnStoreChanged;
 
+        BindDriver();
+
         // §9.7.4's right-click layer, on the log's CARD and not on its rows.
         //
         // Measured, not assumed: a TextBlock with IsTextSelectionEnabled carries its own selection
@@ -156,12 +163,7 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
         // a specific table — this page has five ItemsControls and BuildCsv builds exactly one of them.
         CopyMenu.AttachCsv(LogCard, this);
 
-        // §8.5's opt-in. Rows are created per page rather than shared: each holds its own last
-        // answer, and two pages over one set would show each other's.
-        _experimental = ExperimentalQueries.Create(device.Driver);
-        ExperimentalRows.ItemsSource = _experimental;
         SettingsPage.AdvancedChanged += OnAdvancedChanged;
-        ApplyExperimentalVisibility();
 
         _ready = true;
         Render();
@@ -172,7 +174,51 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
     }
 
     private void OnStatusChanged(object? sender, ConnectionStatusChanged e) =>
-        DispatcherQueue.TryEnqueue(() => _model?.RaiseAll());
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            _model?.RaiseAll();
+
+            if (e?.Status == ConnectionStatus.Connected)
+            {
+                // The receiver on the port can have been swapped while the link was down, so the
+                // session re-selects a driver on every connect (#287) and this page's answer to
+                // "what may I offer" has to be asked again rather than kept from navigation (#304).
+                BindDriver();
+                Render();
+            }
+        });
+
+    /// <summary>
+    /// Re-reads everything this page takes from the connected receiver's driver (#304).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// §10.9's two tier C commands. A talker offers neither, so the controls are disabled with a
+    /// reason rather than throwing when they are clicked.
+    /// </para>
+    /// <para>
+    /// §8.5's card is rebuilt here too, because an undocumented node is a claim about one firmware
+    /// family — a row list kept from navigation would offer a talker queries in a language it does
+    /// not speak. Rows are created per page rather than shared: each holds its own last answer, and
+    /// two pages over one set would show each other's. Rebuilding discards those answers, which is
+    /// correct: they came from a receiver that may no longer be on the port.
+    /// </para>
+    /// </remarks>
+    private void BindDriver()
+    {
+        IReceiverDriver? driver = _device?.Driver;
+
+        _canSelfTest = Capability.Offers(driver, ":DIAG:TEST?");
+        _canClearLog = Capability.Offers(driver, ":DIAG:LOG:CLEar");
+
+        if (driver is not null)
+        {
+            _experimental = ExperimentalQueries.Create(driver);
+            ExperimentalRows.ItemsSource = _experimental;
+        }
+
+        ApplyExperimentalVisibility();
+    }
 
     private void OnAdvancedChanged(object? sender, EventArgs e) =>
         DispatcherQueue.TryEnqueue(ApplyExperimentalVisibility);
@@ -322,9 +368,16 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
         if (_selfTest is SelfTestViewModel selfTest)
         {
             RunTestButton.Content = selfTest.RunLabel;
-            RunTestButton.IsEnabled = model.CanRead && !selfTest.IsRunning;
-            SubsystemPicker.IsEnabled = !selfTest.IsRunning;
+            // Capability first, then state (#304).
+            RunTestButton.IsEnabled = _canSelfTest && model.CanRead && !selfTest.IsRunning;
+            SubsystemPicker.IsEnabled = _canSelfTest && !selfTest.IsRunning;
             SelfTestSummary.Text = selfTest.Summary;
+
+            SelfTestUnsupportedText.Text = _canSelfTest
+                ? string.Empty
+                : Capability.NotOffered(_device?.Driver, "a self test");
+            SelfTestUnsupportedText.Visibility =
+                _canSelfTest ? Visibility.Collapsed : Visibility.Visible;
         }
         LogHeaderText.Text = model.LogHeaderText;
 
@@ -351,7 +404,13 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
         ApplyLoadingIndicator();
         RefreshButton.IsEnabled = model.CanRead;
         ReadErrorsButton.IsEnabled = model.CanRead;
-        ClearLogButton.IsEnabled = model.CanRead;
+        ClearLogButton.IsEnabled = _canClearLog && model.CanRead;
+
+        ClearLogUnsupportedText.Text = _canClearLog
+            ? string.Empty
+            : Capability.NotOffered(_device?.Driver, "clearing the diagnostic log");
+        ClearLogUnsupportedText.Visibility =
+            _canClearLog ? Visibility.Collapsed : Visibility.Visible;
 
         // Not model.CanRead: exporting what is already on screen does not need the receiver, and a
         // user whose link has just dropped is exactly the one who wants the log they were reading
