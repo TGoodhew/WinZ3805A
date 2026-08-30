@@ -201,11 +201,33 @@ function Remove-Framing {
         while ($start -lt $Raw.Length -and ($Raw[$start] -eq 0x0D -or $Raw[$start] -eq 0x0A)) { $start++ }
     }
 
-    # The prompt follows the final CRLF. Keeping that CRLF is what makes the file end the way
-    # the delivered fixture ends.
+    # The response ends at the FIRST prompt, because §7.2 says a transaction does: anything after
+    # one belongs to a different transaction and is not part of this screen.
+    #
+    # This cut at the LAST CRLF until #319, which is the same thing only while nothing else speaks.
+    # Something else did: captured/power-up-gps-acquisition.txt carries a stray
+    # "scpi > SYMMETRICOM,Z3805A,..." as its 28th line, a late *IDN? reply from the reconnect that
+    # ran during the power cycle, landing after the screen. Cutting at the last CRLF kept it, and
+    # the corpus's own contract - no framing, screen bytes only - was broken by the tool that
+    # exists to uphold it, silently, in the one capture nobody can retake on demand.
+    #
+    # Latin1 is one byte per character, so a character index is a byte index; the bytes themselves
+    # are never round-tripped through the string.
+    $tail = [System.Text.Encoding]::Latin1.GetString($Raw, $start, $Raw.Length - $start)
+    $atPrompt = [regex]::Match($tail, '(?m)^(?:scpi\s*>|E-\d+>)')
+
     $end = -1
-    for ($i = $Raw.Length - 2; $i -ge $start; $i--) {
-        if ($Raw[$i] -eq 0x0D -and $Raw[$i + 1] -eq 0x0A) { $end = $i + 2; break }
+    if ($atPrompt.Success) {
+        # The prompt starts a line, so the CRLF before it is the screen's last two bytes — which is
+        # what makes the file end the way the delivered fixture ends.
+        $end = $start + $atPrompt.Index
+    }
+    else {
+        # No prompt in the buffer at all. Fall back to the final CRLF, which is what a unit that
+        # has not printed its prompt yet leaves behind.
+        for ($i = $Raw.Length - 2; $i -ge $start; $i--) {
+            if ($Raw[$i] -eq 0x0D -and $Raw[$i + 1] -eq 0x0A) { $end = $i + 2; break }
+        }
     }
     if ($end -lt 0) { return , [byte[]]@() }
 
@@ -425,6 +447,23 @@ if ($SelfTest) {
     $stripped = Remove-Framing -Raw ($ascii.GetBytes('scpi > ')) -Command ':SYST:STAT?'
     Assert-True 'a prompt with no screen behind it yields nothing' ($stripped.Length -eq 0)
 
+    # #319. The defect this exists to prevent is in the corpus: captured/power-up-gps-acquisition.txt
+    # ends with a stray "scpi > SYMMETRICOM,..." line, a late *IDN? reply from the reconnect that
+    # ran during the power cycle. Cutting at the last CRLF kept everything before it, framing and
+    # all; cutting at the first prompt ends the response where §7.2 says a transaction ends.
+    $lateReply = Join-Bytes @() $screen ($ascii.GetBytes("scpi > SYMMETRICOM,Z3805A,3625A02931,1.01.03-A`r`nscpi > "))
+    $stripped = Remove-Framing -Raw $lateReply -Command ':SYST:STAT?'
+    Assert-True 'a late reply arriving after the screen is not captured as part of it' `
+        ([System.Linq.Enumerable]::SequenceEqual([byte[]]$stripped, [byte[]]$screen)) `
+        ("got {0} bytes, expected {1}" -f $stripped.Length, $screen.Length)
+
+    # An error prompt ends a transaction the same way (§7.2's second spelling).
+    $errorPrompt = Join-Bytes @() $screen ($ascii.GetBytes('E-113> '))
+    $stripped = Remove-Framing -Raw $errorPrompt -Command ':SYST:STAT?'
+    Assert-True 'an error prompt ends the screen as the plain one does' `
+        ([System.Linq.Enumerable]::SequenceEqual([byte[]]$stripped, [byte[]]$screen)) `
+        ("got {0} bytes, expected {1}" -f $stripped.Length, $screen.Length)
+
     # -----------------------------------------------------------------------
     # 2. The facts come off the real screen.
     # -----------------------------------------------------------------------
@@ -630,9 +669,14 @@ try {
                     (Get-Date -Format 'HH:mm:ss'), $facts.Mode, $facts.Tracking, `
                     (Split-Path -Leaf $path), $screen.Length) -ForegroundColor Yellow
 
-                $note = '{0}  {1}  mode="{2}" sync="{3}" acquisition="{4}" health="{5}" tracking={6}' -f `
+                # Every fact in the signature, and position is one of them since #242/#243. It was
+                # missing from this line until #319, so two captures that differ only by the survey
+                # state - which is exactly the pair #242 exists to tell apart - wrote log entries
+                # identical in every field, while the README claims this line is what tells you
+                # whether two similar-looking captures are actually different states.
+                $note = '{0}  {1}  mode="{2}" sync="{3}" acquisition="{4}" health="{5}" position="{6}" tracking={7}' -f `
                     (Get-Date -Format 'o'), (Split-Path -Leaf $path), $facts.Mode, $facts.Sync, `
-                    $facts.Acquisition, $facts.Health, $facts.Tracking
+                    $facts.Acquisition, $facts.Health, $facts.Position, $facts.Tracking
                 # .md, and neither .txt nor .log. The default output directory is the fixture
                 # corpus, and FixtureCorpusTests globs *.txt through every subdirectory - so a
                 # .txt log is collected as though it were a captured screen, and passes
