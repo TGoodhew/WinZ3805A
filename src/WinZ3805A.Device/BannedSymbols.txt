@@ -1,0 +1,30 @@
+; §12: nothing in this library reads the wall clock. Inject TimeProvider and call GetUtcNow().
+;
+; This is not a style rule. The GPS week-rollover logic (§7.4) compares device time to system
+; time, staleness and poll scheduling are clock-dependent, and the fixture tests pin the clock
+; with FakeTimeProvider so that a 2006 date correcting to 2026 is a deterministic assertion
+; rather than one that passes until the machine's date moves. One DateTime.UtcNow would make
+; those tests pass or fail according to when they ran, which is the shape of failure nobody
+; debugs quickly.
+;
+; §12 said this should be "enforced with a Roslyn analyzer rule or a code-review checklist item".
+; It was the checklist, which is to say it was memory. This file is the analyzer half (#320).
+;
+; Format is the documentation-comment ID: "P:" for a property, "M:" for a method, "T:" for a
+; type, then a semicolon and the message. Note P: and not M:get_ — the getter's metadata name
+; does not match, which is a mistake that produces a file full of rules enforcing nothing, and
+; did here until the analyzer was tested against a deliberate violation.
+;
+; RS0030 reports a use; TreatWarningsAsErrors makes it a build error.
+
+P:System.DateTime.Now; §12: read the clock through an injected TimeProvider (GetLocalNow), never the ambient one.
+P:System.DateTime.UtcNow; §12: read the clock through an injected TimeProvider (GetUtcNow), never the ambient one.
+P:System.DateTime.Today; §12: read the clock through an injected TimeProvider, never the ambient one.
+P:System.DateTimeOffset.Now; §12: read the clock through an injected TimeProvider (GetLocalNow), never the ambient one.
+P:System.DateTimeOffset.UtcNow; §12: read the clock through an injected TimeProvider (GetUtcNow), never the ambient one.
+
+; Stopwatch reads the same machine clock for elapsed time. TimeProvider.GetTimestamp and
+; GetElapsedTime are the injectable equivalents, and BroadcastListener's silence timeout already
+; uses them — a Stopwatch there would have made "the talker has stopped" untestable.
+M:System.Diagnostics.Stopwatch.StartNew; §12: use TimeProvider.GetTimestamp and GetElapsedTime so elapsed time can be pinned in tests.
+M:System.Diagnostics.Stopwatch.GetTimestamp; §12: use TimeProvider.GetTimestamp so elapsed time can be pinned in tests.

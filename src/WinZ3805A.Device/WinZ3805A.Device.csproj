@@ -25,4 +25,25 @@
     <PackageReference Include="System.IO.Ports" Version="10.0.11" />
   </ItemGroup>
 
+  <!--
+    §12's clock rule, enforced by the compiler rather than by memory (#320).
+
+    §12 asked for "a Roslyn analyzer rule or a code-review checklist item" and got the checklist,
+    which held only while reviewers remembered it. BannedSymbols.txt lists the ambient clock reads
+    and RS0030 reports any use; TreatWarningsAsErrors turns that into a build error.
+
+    CLAUDE.md's architecture boundary says this library references only System.Runtime,
+    System.IO.Ports and Logging.Abstractions, and says to keep it that way. That rule is about what
+    the library *ships*: this is an analyzer, PrivateAssets="all", so it produces no assembly, adds
+    nothing to the runtime dependency set, does not flow to anything referencing this project, and
+    needs no third-party notice. The boundary is intact; CLAUDE.md now says so explicitly.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="5.6.0">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <AdditionalFiles Include="BannedSymbols.txt" />
+  </ItemGroup>
+
 </Project>
