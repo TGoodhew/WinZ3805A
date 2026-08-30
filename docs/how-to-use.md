@@ -12,7 +12,7 @@ scaling, with a Z3805A connected, so the numbers are real ones.
 
 ## The main window
 
-![The main window: a large circular medallion with a green tick and a ring of small green marks, "Locked to GPS" beside it, then a satellites readout of 6, a 1 PPS TI readout of −6.5 ns, TFOM 3 and FFOM 0 pills, the receiver's time and date, and a footer with the port, Details, a pin and Disconnect](images/how-to-use/main-window.png)
+![The main window: a large circular medallion with a green tick and a ring of small green marks, "Locked to GPS" beside it, then a satellites readout of 6, a 1 PPS TI readout of 1.5 ns, TFOM 3 and FFOM 0 pills, the receiver's time and date, and a footer with the port, "updated 2 seconds ago", Details, a pin and Disconnect](images/how-to-use/main-window.png)
 
 The main window is meant to be left open — on a second monitor, in a corner, for weeks. Everything
 on it answers one of two questions: *what state is the receiver in*, and *how well is it doing*.
@@ -44,7 +44,7 @@ state; in the compact layout (below) the ring is uniform and the centre shows th
 
 ### The readouts
 
-![Two readouts side by side: "satellites 6" and "1 PPS TI −6.5 ns"](images/how-to-use/main-readouts.png)
+![Two readouts side by side: "satellites 6" and "1 PPS TI 1.3 ns"](images/how-to-use/main-readouts.png)
 
 - **satellites** — how many satellites the receiver is tracking right now. If the receiver is locked
   but tracking **none**, an amber **coasting** pill appears beside it: the receiver is coasting on a
@@ -68,15 +68,18 @@ caution, red hexagon for critical.
 
 ### The clock line
 
-![The receiver's time, "15:41:44 Pacific Daylight Time · 29 Aug 2026", followed by a small circled-i badge and a globe button](images/how-to-use/main-clock-line.png)
+![The receiver's time, "15:54:43 Pacific Daylight Time · 29 Aug 2026", followed by a small circled-i badge and a globe button](images/how-to-use/main-clock-line.png)
 
 The time and date the receiver is reporting, shown in the time zone you have chosen (see the globe
-button below). Two things sit after it:
+button below). Three things can sit after it:
 
 - **The ⓘ badge** appears when the receiver's own calendar has wrapped. GPS counts weeks in a
   field that rolls over about every 19.6 years, and a receiver of this age reports a date roughly
   two decades behind — 2007 for 2026. The application corrects the date and shows the corrected
   one; hover the badge to see the raw date the receiver actually reported.
+- **A caution badge** appears while the time is still the receiver's power-up default, not yet
+  corrected from GPS — it may be wrong by any amount until the first satellite is tracked. Hover
+  it to read exactly that.
 - **The globe button** opens the time-zone flyout:
 
   ![A flyout titled "Time zone" with a toggle "Use this computer's time zone" switched on, a time-zone picker, and the note that this changes what is displayed only](images/how-to-use/main-time-zone-flyout.png)
@@ -91,15 +94,15 @@ button below). Two things sit after it:
 
 - **The status text** names the port and serial settings in use and how long ago the last reading
   arrived. It is grey while readings are fresh, turns **amber after 15 seconds** without one and
-  **red after 60**, and always says the age in words — so a stale value is never mistaken for a
-  current one.
+  **red after 60** — with the caution triangle or the critical hexagon beside the text — and
+  always says the age in words, so a stale value is never mistaken for a current one.
 - **Details** opens the Receiver Details window (`Ctrl+D`).
 - **The pin** keeps this window above every other window. It stays pinned across restarts.
 - **Connect / Disconnect** opens the connection dialog, or drops the connection (`Ctrl+Shift+C`).
 
 ### Compact mode
 
-![A small window, 396 by 152 pixels: a 64 px circle with a uniform dotted green ring and a large green 7 in the centre, and "Locked to GPS" beside it](images/how-to-use/main-compact.png)
+![A small window, 396 by 152 pixels: a 64 px circle with a uniform dotted green ring and a large green 6 in the centre, and "Locked to GPS" beside it](images/how-to-use/main-compact.png)
 
 Compact mode is for a corner of the screen: the medallion shrinks, the satellite count moves into
 its centre, and everything else goes. **The window itself shrinks to its compact size when you
@@ -123,9 +126,11 @@ The first time the application runs it shows a **Connect your receiver** panel w
 
 - **Port** lists the serial ports Windows can see; **Refresh** re-scans after plugging an adapter
   in. If no ports appear at all on an ARM64 machine, the adapter's driver is the likely cause.
-- **Auto-detect settings** tries the likely baud rates and framings until the receiver answers an
-  identity query. Use it unless you know the settings. **Manual** exposes baud, data bits, parity
-  and stop bits — the Z3805A's factory setting is 9600-8-N-1; a Z3801A is commonly 19200-7-E-1.
+- **Auto-detect settings** tries the likely baud rates and framings — listening first for a
+  receiver that talks by itself, then asking for an identity — until one is recognised. Use it
+  unless you know the settings. **Manual** exposes baud, data bits, parity and stop bits — the
+  Z3805A's factory setting is 9600-8-N-1; a Z3801A leaves the factory at 19200-7-O-1, though
+  some units in the field are set to even parity.
 - **Reconnect automatically** keeps trying after the link drops — the adapter unplugged, the
   receiver power-cycled — with a growing pause between attempts.
 - **Connect to this device on launch** does what it says; with it on, the application connects
@@ -133,6 +138,17 @@ The first time the application runs it shows a **Connect your receiver** panel w
 
 Handshaking is always off. The application asserts DTR and RTS when it opens the port, which some
 adapters need.
+
+### Other receivers
+
+The application also connects to any GPS receiver that speaks **NMEA 0183** — a u-blox module, a
+marine receiver — through the same dialog: auto-detect hears it talking and chooses the NMEA driver
+by itself. Such a receiver has no disciplined oscillator, so the application shows only what NMEA
+carries: the mode (**Locked to GPS** with a fix, **Power-up** without one), the satellites being
+tracked and the sky plot, the position, and the time and date. The 1 PPS TI, TFOM and FFOM, the
+outputs, holdover, EFC, cable delay, status registers, self test, receiver log and error queue all
+show **—** or do nothing, and the Advanced Console offers reads only; nothing is ever sent to the
+receiver. The pages a talker cannot use are not yet hidden, so expect dashes rather than blanks.
 
 ---
 
@@ -143,7 +159,7 @@ existing one forward.
 
 ### The title bar
 
-![The Details title bar: a green "Connected" pill in the centre, and Refresh, Export and Settings icon buttons at the right](images/how-to-use/details-title-bar.png)
+![The Details title bar: a green "Connected · COM3" pill in the centre, and Refresh, Export, Settings and Help icon buttons at the right](images/how-to-use/details-title-bar.png)
 
 - **The status pill** says whether the receiver is connected and on which port. Clicking it opens
   the connection dialog.
@@ -189,7 +205,8 @@ Everything from the main window, with the words behind the numbers:
 - **The sky plot** is the sky as the antenna sees it, north up, the horizon at the rim and straight
   up at the centre. Each dot is a satellite at its position; its fill shows signal strength, and a
   dashed circle marks the **elevation mask** — satellites below it are not used. Arrow keys move
-  between satellites and `Enter` selects one, which highlights it in the table too. **List** swaps
+  between satellites, `Home` and `End` jump to the first and last, and `Enter` or `Space` selects
+  one, which highlights it in the table too. **List** swaps
   the plot for a plain table; **Save image** writes the plot to a file.
 
   ![The sky plot alone: a circle with a dashed inner ring for the elevation mask and green dots of varying darkness for the tracked satellites](images/how-to-use/satellites-sky-plot.png)
@@ -197,7 +214,7 @@ Everything from the main window, with the words behind the numbers:
 - **Tracked** and **Not tracked** tables list every satellite the receiver knows about with its PRN,
   elevation, azimuth and, for tracked ones, carrier-to-noise ratio — 35 and above is good.
 
-  ![The Tracked table: rows for PRN 3, 4, 6 and 9 with elevation, azimuth and a signal-strength bar](images/how-to-use/satellites-tracked-table.png)
+  ![The Tracked table: rows for PRN 3, 4 and 6 with elevation, azimuth and a signal-strength bar](images/how-to-use/satellites-tracked-table.png)
 
 ![The lower half of the Satellites page: the Not tracked table, an Elevation mask card with a New mask (degrees) box and Apply mask, and a Which satellites card with a Manage… button](images/how-to-use/page-satellites-2.png)
 
@@ -275,7 +292,8 @@ corrections it had learned, and its time error grows from there.
 ![The Time page: a Receiver clock card with the time, a Show times in picker, the time scale, the date reported by the receiver, the week rollover correction and the power-up time](images/how-to-use/page-time.png)
 
 - **Receiver clock** — the receiver's time in the zone you pick with **Show times in**, the **time
-  scale** it is keeping (GPS or UTC), the date it **reported** as against the corrected one, the
+  scale** it is keeping (UTC, GPS time, or local time derived from either), the date it
+  **reported** as against the corrected one, the
   **week rollover correction** the application is applying, and when the receiver was **powered
   up**.
 
@@ -300,10 +318,12 @@ changes**. This page is for finding out why a summary bit is set; most people ne
 
 #### Diagnostics — `Ctrl+8`
 
-![The Diagnostics page: a Self test card with a Subsystem picker and a Run button, and the start of the receiver's log with a Filter box and Export and Clear log buttons](images/how-to-use/page-diagnostics.png)
+![The Diagnostics page: a Refresh button at the top, then a Self test card with a Subsystem picker, a Run all tests button and one row per subsystem, and the start of the receiver's log with a Filter box and Export and Clear log buttons](images/how-to-use/page-diagnostics.png)
 
-- **Self test** — run the receiver's self-test on one **subsystem** or all of them, and see the
-  result.
+- **Self test** — pick one **subsystem** or all of them and press the button, which names what it
+  is about to do (**Run all tests**, or **Test** followed by the subsystem) because the receiver
+  drops what it is doing while it tests itself; the result appears in the row below. **Refresh**
+  at the top of the page re-reads the last self-test result and the receiver's log.
 - **The receiver's log** — the entries the receiver itself keeps, filterable, with **Export** to save
   what is shown (a filter applies to the file too) and **Clear log**, which removes the entries
   from the receiver after asking — export first if you want them. Timestamps are on the receiver's
@@ -412,9 +432,9 @@ has focus.
 | Details | `Ctrl+,` | Settings |
 | Anywhere | `F1` | Open this guide |
 | Anywhere | `Esc` | Cancel a dialog, close a flyout |
-| Anywhere | `Tab`, `Shift+Tab`, arrows | Move between controls; on the sky plot, arrows move between satellites and `Enter` selects |
+| Anywhere | `Tab`, `Shift+Tab`, arrows | Move between controls; on the sky plot, arrows move between satellites, `Home` and `End` jump to the ends, and `Enter` or `Space` selects |
 
-Every button's tooltip shows its shortcut where it has one. There is no `Ctrl+9`: Settings and the
+In the Details window, every title-bar button's tooltip shows its shortcut. There is no `Ctrl+9`: Settings and the
 Advanced Console live in the pane's footer and are reached with `Ctrl+,` and by clicking.
 
 ---
@@ -422,12 +442,18 @@ Advanced Console live in the pane's footer and are reached with `Ctrl+,` and by 
 ## Where things are kept
 
 The application stores everything under its own folder in your profile —
-`%LOCALAPPDATA%\Packages\WinZ3805A_1z32rh13vfry6\LocalCache\Local\WinZ3805A\` — which is what
-*Show log folder* on the Diagnostics page opens. In it: the application log (`logs\app.log`, with
-two older files kept), the recorded trend (`trend.db`), the remembered connection, and the window
-positions and settings. Uninstalling removes all of it; to keep the trend across a reinstall,
+`%LOCALAPPDATA%\Packages\<package family name>\LocalCache\Local\WinZ3805A\`, where the family
+name is `WinZ3805A_` followed by a hash of the publisher — which is what *Show log folder* on the
+Diagnostics page opens, so you never need to find it by hand. In it: the application log
+(`logs\app.log`, rolled at 1 MB with four older files kept), the recorded trend (`trend.db`), the
+remembered connection, and the window positions and settings. Uninstalling removes all of it; to
+keep the trend across a reinstall,
 uninstall from PowerShell with `Get-AppxPackage WinZ3805A | Remove-AppxPackage
 -PreserveApplicationData`.
 
 The application collects nothing and sends nothing anywhere. It has no network code at all;
 everything it knows, it learned from the serial port.
+
+**Further reading.** What each figure the receiver reports means is in the receiver's own user
+and programming guides; how the application reads them, field by field, is §11 of the
+specification in the repository.
