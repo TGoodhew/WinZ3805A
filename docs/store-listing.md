@@ -22,12 +22,19 @@ into `src/WinZ3805A/Package.appxmanifest` verbatim.
 | Partner Center field | Manifest location | In the repository now |
 |---|---|---|
 | Package/Identity/Name | `Identity/@Name` | `WinZ3805A` |
-| Package/Identity/Publisher | `Identity/@Publisher` | `CN=AppPublisher` (placeholder) |
+| Package/Identity/Publisher | `Identity/@Publisher` | `CN=The Schanzuer Group LLC` — the **sideload** identity, set for the first public release (30 Aug 2026) so the trust prompt names a real entity rather than "AppPublisher". Partner Center issues its own and it replaces this |
 | Package/Properties/PublisherDisplayName | `Properties/PublisherDisplayName` | `The Schanzuer Group LLC` — correct for the sideloaded build; Partner Center issues its own and it must match the account |
 
 Retyping the publisher distinguished name rather than copying it is the usual
 way a first submission fails: it must match the certificate the Store signs with
 exactly.
+
+> **A Store submission is not an upgrade for anyone who sideloaded.** `Name` and
+> `Publisher` together form the package family name, and Partner Center replaces
+> both — so the Store build installs *alongside* a sideloaded one rather than
+> over it. That is not a reason to delay submitting; it is a thing to say in the
+> listing and in the release notes when it happens, so people uninstall the
+> sideloaded copy rather than running two.
 
 `Identity/@Name` is effectively permanent — changing it later is a new app, a new
 listing, and no upgrade path for existing users. `Properties/DisplayName` is

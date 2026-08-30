@@ -26,14 +26,31 @@
     /DisplayName below is deliberately decoupled from it (§6.3) and can be
     changed at any time without consequence.
 
-    Until then these are placeholders. They are what a local build signs with,
-    and they are why the package installs for development but would be rejected
-    at submission.
+    Until then these are the SIDELOAD identity, not placeholders in the sense of
+    being arbitrary. Publisher was "CN=AppPublisher" until the first public
+    release (30 Aug 2026), and it had to stop being that before anyone installed:
+    the publisher string is what the trust prompt shows, and asking a person to
+    trust a certificate issued to "AppPublisher" is asking them to make a
+    security decision on no information. It now matches PublisherDisplayName
+    below, so the prompt names the entity the package already claims.
+
+    IT ALSO COULD NOT BE CHANGED LATER. Name and Publisher together form the
+    package family name; changing either means the next version installs
+    ALONGSIDE the old one rather than upgrading it. That is why this was settled
+    before the first release rather than after.
+
+    Version is the release version and must equal the tag that builds it -
+    .github/workflows/release.yml fails the release if they disagree, rather
+    than rewriting one to match the other, so this file stays the one place a
+    version is decided.
+
+    These still would be rejected at submission: Partner Center issues its own
+    Name and Publisher and they must match the account exactly.
   -->
   <Identity
     Name="WinZ3805A"
-    Publisher="CN=AppPublisher"
-    Version="1.0.0.3" />
+    Publisher="CN=The Schanzuer Group LLC"
+    Version="1.0.1.0" />
 
   <mp:PhoneIdentity PhoneProductId="DB5D1AF4-65FD-41CA-91F9-D83D5ACEB3B0" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
 
