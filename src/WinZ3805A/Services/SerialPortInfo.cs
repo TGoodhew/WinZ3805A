@@ -61,7 +61,10 @@ public sealed record SerialPortInfo
     /// <summary>
     /// The copy shown when Windows reports no serial ports at all (§9.11, §6.1).
     /// </summary>
-    /// <param name="architecture">The process architecture, which changes the likely cause.</param>
+    /// <param name="architecture">
+    /// The <b>machine's</b> architecture — <c>RuntimeInformation.OSArchitecture</c> — which changes
+    /// the likely cause. Not the process's: see the remarks.
+    /// </param>
     /// <remarks>
     /// <para>
     /// §6.1 singles ARM64 out for a reason: several common USB-serial chipsets ship no ARM64 driver,
@@ -70,13 +73,11 @@ public sealed record SerialPortInfo
     /// see instead of the driver they cannot.
     /// </para>
     /// <para>
-    /// <b>The only caller passes a value that can never select it</b> (#316 audit finding). §6.1's
-    /// x64-only package runs under emulation on ARM64, where
-    /// <c>RuntimeInformation.ProcessArchitecture</c> is always <c>X64</c>, so
-    /// <c>SerialPortEnumerator.EmptyMessage</c> never reaches the ARM64 branch (plain text, not a
-    /// cref: this file is linked into the test project without the enumerator);
-    /// <c>RuntimeInformation.OSArchitecture</c> is the reading that would. The tests call this
-    /// method with <c>Arm64</c> directly, which is why the branch stayed green.
+    /// <b>Callers must pass <c>OSArchitecture</c> (#319).</b> Both passed
+    /// <c>ProcessArchitecture</c> until then, and §6.1's x64-only package runs under emulation on
+    /// ARM64, where that is always <c>X64</c> — so the ARM64 branch could never be reached on an
+    /// ARM64 machine, the only kind that would ever see it. The branch stayed green throughout
+    /// because the tests call this method with <c>Arm64</c> directly, which no caller could.
     /// </para>
     /// </remarks>
     public static string NoPortsMessage(Architecture architecture) => architecture switch

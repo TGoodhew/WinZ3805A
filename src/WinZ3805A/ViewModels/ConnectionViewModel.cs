@@ -329,7 +329,9 @@ public sealed class ConnectionViewModel : INotifyPropertyChanged
                     port.PortName,
                     IsAutoDetect,
                     IsAutoDetect ? null : ManualSettings,
-                    RuntimeInformation.ProcessArchitecture);
+                    // The machine's architecture, not the emulated process's: the x64 package
+                    // reports X64 for its process on every ARM64 machine (#319).
+                    RuntimeInformation.OSArchitecture);
             }
 
             return connected;
@@ -402,7 +404,11 @@ public sealed class ConnectionViewModel : INotifyPropertyChanged
     /// <param name="portName">The port that was tried.</param>
     /// <param name="autoDetect">Whether the eight-combination walk was used.</param>
     /// <param name="settings">The settings tried, for the manual case.</param>
-    /// <param name="architecture">The process architecture, which changes what a missing port means.</param>
+    /// <param name="architecture">
+    /// The <b>machine's</b> architecture (<c>RuntimeInformation.OSArchitecture</c>), which changes
+    /// what a missing port means. The caller passed the process's until #319; under emulation that
+    /// is <c>X64</c> on an ARM64 machine, so the ARM64 copy could never be reached.
+    /// </param>
     /// <remarks>
     /// Static and fully parameterised so every row can be asserted without a serial port in the
     /// machine. The copy follows §9.11's rules literally: what happened, then what to do next, with
