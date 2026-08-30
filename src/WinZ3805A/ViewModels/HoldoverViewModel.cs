@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 
 using WinZ3805A.Controls;
 using WinZ3805A.Device.Models;
@@ -165,6 +165,83 @@ public sealed class HoldoverViewModel : INotifyPropertyChanged
         true => "Yes — the predicted uncertainty is past the threshold",
         false => "No",
         _ => ReadoutFormatter.NoValue,
+    };
+
+    /// <summary>
+    /// What "currently exceeded" means, in the user's terms (#345).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The row was legible and unexplained: two numbers and a Yes, with nothing saying what the
+    /// receiver is comparing or what follows from the answer. Tony asked for it in review, and it is
+    /// §9.11's voice rule — say what will happen, not what a field is called.
+    /// </para>
+    /// <para>
+    /// <b>Deliberately not a fault.</b> The comparison is a <i>prediction</i> about the oscillator,
+    /// which is why the pill beside it is caution and never critical: a receiver that has not been
+    /// locked long has not learned enough to promise better, and saying so is not the same as
+    /// reporting a failure.
+    /// </para>
+    /// </remarks>
+    public string ThresholdExplanation =>
+        "The receiver compares the predicted 24-hour holdover uncertainty above against this "
+        + "threshold. Exceeded means that if it lost GPS now and ran on its own oscillator for a "
+        + "day, the time error would be expected to pass the threshold. It is a prediction about "
+        + "the oscillator rather than a fault — a receiver that has not been locked for long has "
+        + "not learned enough to do better yet. This threshold is the receiver's own and cannot be "
+        + "changed: the command set has exactly one threshold command, and it sets the duration "
+        + "limit below.";
+
+    /// <summary>
+    /// What the holdover duration limit actually controls (#345).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Tony asked the question the card could not answer: the field was labelled and editable with
+    /// nothing saying what changing it does. The manual is exact — it "sets the duration (in
+    /// seconds) which represents a limit against which the elapsed time of holdover is compared. If
+    /// the elapsed time in holdover (and associated processes) exceeds the limit, <b>a flag is
+    /// set</b>", readable through <c>:SYNC:HOLD:DUR:THR:EXC?</c> and reported as bit 3 of
+    /// Questionable Status, "Exceeding User-Threshold".
+    /// </para>
+    /// <para>
+    /// <b>The important half is what it does not do.</b> It does not end holdover, recover the
+    /// receiver, or change any output — a user who sets it to an hour expecting the receiver to do
+    /// something at an hour would be wrong, and nothing on the card said otherwise.
+    /// </para>
+    /// <para>
+    /// Non-volatile, per the manual, so it outlives a power cycle and is worth saying: this is not a
+    /// setting that resets itself.
+    /// </para>
+    /// </remarks>
+    public string DurationLimitExplanation =>
+        "How long the receiver may stay in holdover before it raises a flag. Nothing else happens: "
+        + "it does not end holdover or change any output, it only starts reporting that holdover "
+        + "has run longer than you allowed — §10.10's Questionable Status carries the bit, and the "
+        + "state above reads it. The setting is stored in the receiver and survives a power cycle. "
+        + "The factory value is 86 400 seconds, one day.";
+
+    /// <summary>
+    /// The power-up verdict in one sentence, for the pill's tooltip (#345).
+    /// </summary>
+    /// <remarks>
+    /// <b>The "too soon" case has to say when it stops being too soon</b>, which was Tony's point:
+    /// a red pill that gives no horizon reads as a fault rather than as a wait. Its answer is the
+    /// same 24 hours §10.8's caution names, counted from power-up.
+    /// </remarks>
+    public string PowerUpTooltip => PowerUpSafety switch
+    {
+        Services.PowerUpSafety.Safe =>
+            "The receiver has been powered up for more than 24 hours, so the SmartClock oscillator "
+            + "learning period is over and forcing holdover will not corrupt it.",
+        Services.PowerUpSafety.TooSoon =>
+            "Inside the 24-hour SmartClock oscillator learning period. Forcing holdover now "
+            + "corrupts that learning, which then takes days to rebuild. This turns green once the "
+            + "receiver has been powered up for 24 hours.",
+        _ =>
+            "How long this receiver has been powered up could not be determined, so the 24-hour "
+            + "SmartClock learning period cannot be ruled out. It stays here until the receiver "
+            + "reports a power-up time this application has watched pass 24 hours.",
     };
 
     /// <summary>How bad that is.</summary>

@@ -541,8 +541,24 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
 
             if (outcome is { Succeeded: true })
             {
-                string? read = await model.ReadSelfTestResultAsync();
-                selfTest.Record(SelfTestResult.Parse(read));
+                if (selfTest.Selected.Keyword == SelfTestSubsystem.All.Keyword)
+                {
+                    // THE SWEEP'S OWN REPLY, not :DIAG:TEST:RES?. The manual gives the parameter as
+                    // "ALL returns test information for all of the tests" and the response as a
+                    // single value where zero is a pass — so this answer covers the whole set.
+                    // :DIAG:TEST:RES? would name only the last test the sweep finished with, which
+                    // is how this card used to run every test and then show twelve dashes.
+                    selfTest.RecordSweep(
+                        SelfTestResult.ParseRun(outcome.Lines.FirstOrDefault(), SelfTestSubsystem.All));
+                }
+                else
+                {
+                    // For one subsystem, :DIAG:TEST:RES? is worth the extra round trip: it echoes
+                    // the keyword, so the row is credited against what the receiver says it tested
+                    // rather than against what was asked for.
+                    string? read = await model.ReadSelfTestResultAsync();
+                    selfTest.Record(SelfTestResult.Parse(read));
+                }
             }
         }
         finally

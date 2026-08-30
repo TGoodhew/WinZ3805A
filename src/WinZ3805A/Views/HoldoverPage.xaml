@@ -152,6 +152,20 @@
                         <controls:SeverityPill x:Name="ThresholdPill" Grid.Row="1" Grid.Column="1" />
                     </Grid>
 
+                    <!--
+                        §9.11's voice rule applied to a row that was legible and unexplained (#345):
+                        two numbers and a Yes, with nothing saying what is being compared or what
+                        follows from the answer. Under the row rather than in the tooltip alone,
+                        because a tooltip is for the pointer and this is the sentence that makes the
+                        card readable at a glance.
+                    -->
+                    <TextBlock x:Name="ThresholdExplanationText"
+                               Style="{ThemeResource WzCaptionTextStyle}"
+                               Foreground="{ThemeResource WzTextSecondaryBrush}"
+                               MaxWidth="{ThemeResource WzProseMaxWidth}"
+                               HorizontalAlignment="Left"
+                               TextWrapping="Wrap" />
+
                     <!-- §9.7.4 puts Apply inline with the value it affects. -->
                     <Grid ColumnSpacing="{ThemeResource WzSpaceMd}" VerticalAlignment="Bottom">
                         <Grid.ColumnDefinitions>
@@ -169,8 +183,16 @@
                                 #320, so adjusting it and watching that reading never move was the
                                 obvious thing to do and told you nothing.
                             -->
+                            <!--
+                                MinHeight is stated because the box carries a tooltip (#345), which
+                                makes it a pointer target under A11Y-5 - and the gate requires the
+                                floor DECLARED rather than inherited, on the reasoning that a floor
+                                holding only while a stock style happens to supply it is a
+                                coincidence and not a floor.
+                            -->
                             <NumberBox x:Name="ThresholdBox"
                                        MinWidth="240"
+                                       MinHeight="32"
                                        Header="Holdover duration limit (seconds)"
                                        SmallChange="1"
                                        LargeChange="60"
@@ -178,16 +200,30 @@
                             <controls:FieldErrorText x:Name="ThresholdError" />
                         </StackPanel>
 
-                        <Button x:Name="ApplyThresholdButton"
+                        <!--
+                            "Apply duration limit" and not "Apply threshold" (#345). §9.11's voice
+                            rule is that a verb keeps its identity end to end, and this button sat
+                            beside the DURATION LIMIT while naming the THRESHOLD above it - two
+                            different receiver settings, only one of which can be set at all. Tony
+                            read the card and could not tell which one the button would send.
+                        -->
+                        <Button x:Name="ApplyDurationLimitButton"
                                 Grid.Column="1"
-                                Content="Apply threshold"
+                                Content="Apply duration limit"
                                 Style="{ThemeResource WzDestructiveButtonStyle}"
                                 VerticalAlignment="Center"
                                 Margin="0,24,0,0"
                                 IsEnabled="False"
-                                ToolTipService.ToolTip="Send this holdover threshold to the receiver"
+                                ToolTipService.ToolTip="Send this holdover duration limit to the receiver"
                                 Click="OnApplyThresholdClicked" />
                     </Grid>
+
+                    <TextBlock x:Name="DurationLimitExplanationText"
+                               Style="{ThemeResource WzCaptionTextStyle}"
+                               Foreground="{ThemeResource WzTextSecondaryBrush}"
+                               MaxWidth="{ThemeResource WzProseMaxWidth}"
+                               HorizontalAlignment="Left"
+                               TextWrapping="Wrap" />
 
                     <controls:CommandOutcomeBar x:Name="ThresholdOutcome" />
                 </StackPanel>

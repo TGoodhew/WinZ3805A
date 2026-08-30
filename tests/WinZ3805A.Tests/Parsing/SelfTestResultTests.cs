@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Time.Testing;
+﻿using Microsoft.Extensions.Time.Testing;
 
 using WinZ3805A.Controls;
 using WinZ3805A.Device.Models;
@@ -109,20 +109,78 @@ public class SelfTestResultTests
     }
 
     [Fact]
-    public void Running_ALL_credits_only_ALL()
+    public void A_sweep_credits_every_subsystem()
     {
-        // The heart of it. §10.9's wireframe shows eleven ticks and no query produces them: the
-        // receiver reports one result for the test that ran. Crediting the other ten from an ALL
-        // run would assert readings it never sent -- #245's defect, in a different field.
+        // The heart of it, and it was wrong until #345. The card ran every test and then showed
+        // twelve dashes, because it read :DIAG:TEST:RES? -- which names only the last test the
+        // sweep finished with. The 58503A manual gives :DIAGnostic:TEST?'s own response as a single
+        // value where "0 indicates test passed", and of the parameter says "ALL returns test
+        // information for all of the tests". So the sweep's reply IS a verdict over the set, and
+        // showing it against each row reports what the receiver said rather than inventing eleven
+        // readings.
         SelfTestViewModel card = Card();
 
-        card.Record(SelfTestResult.Parse("+0,ALL"));
+        card.RecordSweep(SelfTestResult.ParseRun("+0,+0,+0", SelfTestSubsystem.All));
+
+        Assert.Equal(SelfTestSubsystem.Known.Count, card.TestedCount);
+        Assert.All(card.Rows, r => Assert.Equal("Passed", r.StatusText));
+        Assert.All(card.Rows, r => Assert.Equal(Severity.Success, r.Severity));
+    }
+
+    [Fact]
+    public void A_sweep_stamps_every_row_with_one_time()
+    {
+        // One run, one timestamp. Twelve different times would say twelve tests happened.
+        SelfTestViewModel card = Card();
+
+        card.RecordSweep(SelfTestResult.ParseRun("+0,+0,+0", SelfTestSubsystem.All));
+
+        Assert.All(card.Rows, r => Assert.Equal(card.Rows[0].RanAtText, r.RanAtText));
+        Assert.NotEqual(string.Empty, card.Rows[0].RanAtText);
+    }
+
+    [Fact]
+    public void A_failing_sweep_says_it_cannot_attribute()
+    {
+        // What is still NOT claimed. A non-zero sweep says something in the set did not pass and
+        // does not say which; the rows carry the only figure the receiver gave, and the summary has
+        // to stop that being read as eleven separate findings.
+        SelfTestViewModel card = Card();
+
+        card.RecordSweep(SelfTestResult.ParseRun("+65536,+0,+0", SelfTestSubsystem.All));
+
+        Assert.All(card.Rows, r => Assert.Equal(Severity.Caution, r.Severity));
+        Assert.Contains("does not say which", card.Summary, StringComparison.Ordinal);
+        Assert.Contains("individually", card.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_single_subsystem_still_credits_only_itself()
+    {
+        // The sweep is the exception, not the rule: testing one subsystem must not colour the rest.
+        SelfTestViewModel card = Card();
+
+        card.Record(SelfTestResult.Parse("+0,GPS"));
 
         Assert.Equal(1, card.TestedCount);
-        Assert.Equal("Passed", card.Rows.Single(r => r.Subsystem.Keyword == "ALL").StatusText);
+        Assert.Equal("Passed", card.Rows.Single(r => r.Subsystem.Keyword == "GPS").StatusText);
         Assert.All(
-            card.Rows.Where(r => r.Subsystem.Keyword != "ALL"),
+            card.Rows.Where(r => r.Subsystem.Keyword != "GPS"),
             r => Assert.Equal(ReadoutFormatter.NoValue, r.StatusText));
+    }
+
+    [Fact]
+    public void A_later_individual_run_overwrites_what_the_sweep_said()
+    {
+        // How a user attributes a failing sweep: run the subsystems individually. That answer is
+        // about one subsystem and has to win over the set-wide one.
+        SelfTestViewModel card = Card();
+
+        card.RecordSweep(SelfTestResult.ParseRun("+65536,+0,+0", SelfTestSubsystem.All));
+        card.Record(SelfTestResult.Parse("+0,RAM"));
+
+        Assert.Equal("Passed", card.Rows.Single(r => r.Subsystem.Keyword == "RAM").StatusText);
+        Assert.Equal(Severity.Caution, card.Rows.Single(r => r.Subsystem.Keyword == "GPS").Severity);
     }
 
     [Fact]

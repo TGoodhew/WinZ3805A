@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Globalization;
 
@@ -68,11 +68,30 @@ public sealed record SelfTestRow(SelfTestSubsystem Subsystem, SelfTestResult? Re
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>Only what was measured.</b> §10.9's wireframe shows eleven ticks side by side, and no single
-/// query produces that — <c>:DIAG:TEST:RES?</c> reports one <c>&lt;code&gt;,&lt;subsystem&gt;</c>
-/// pair for whichever test ran last. So a subsystem that has not been tested in this session shows
-/// <c>—</c>, per §11.1, rather than a tick it never earned. Rendering eleven greens after one
-/// <c>ALL</c> run would assert ten results the receiver never sent, which is #245's defect exactly.
+/// <b>An <c>ALL</c> run credits every row, and that is the receiver's own statement rather than an
+/// inference.</b> This card used to leave the other rows at <c>—</c> after a sweep, on the reasoning
+/// that <c>:DIAG:TEST:RES?</c> names only the last test performed — true, but it was reading the
+/// wrong answer. The 58503A manual is explicit about <c>:DIAGnostic:TEST?</c>: the response is a
+/// single value where "0 indicates test passed", and of the parameter it says <b>"ALL returns test
+/// information for all of the tests"</b>. So the sweep's own reply is a verdict over the whole set,
+/// and showing it against each subsystem reports what the receiver said. Corrected 30 Aug 2026 after
+/// Tony found the old behaviour annoying in use — a card that runs every test and then shows twelve
+/// dashes is worse than useless, because it looks like the run failed.
+/// </para>
+/// <para>
+/// <b>What is still not claimed is attribution on a failure.</b> A non-zero sweep says something in
+/// the set did not pass; it does not say which, and <c>:DIAG:TEST:RES?</c> names the last test
+/// performed rather than the failing one. The rows carry the sweep's code because that is the only
+/// figure the receiver gave, and <see cref="Summary"/> says it came from the sweep so the number is
+/// never read as eleven separate findings. A user who needs attribution runs the subsystems
+/// individually, which the picker offers.
+/// </para>
+/// <para>
+/// <b>Individually is not the default, and the manual says why.</b> "Manual operation of internal
+/// self-test diagnostics will affect normal Receiver operation… When invoked manually, any of these
+/// diagnostics should be considered to be destructive tests." One sweep is one disruption and was
+/// measured at 12.4 s; eleven separate runs would be eleven disruptions of a disciplined oscillator
+/// for close to a minute of testing.
 /// </para>
 /// <para>
 /// Results are session-scoped and deliberately not persisted. A self-test is a statement about the
@@ -87,6 +106,9 @@ public sealed class SelfTestViewModel : INotifyPropertyChanged
 
     private SelfTestSubsystem _selected = SelfTestSubsystem.All;
     private bool _isRunning;
+
+    /// <summary>When the last <c>ALL</c> sweep ran, so the summary can say the rows came from one.</summary>
+    private DateTimeOffset? _sweptAt;
 
     /// <summary>Creates the view model.</summary>
     /// <param name="timeProvider">
@@ -160,18 +182,28 @@ public sealed class SelfTestViewModel : INotifyPropertyChanged
 
             int failed = _results.Values.Count(r => r.Result.Passed == false);
 
+            // The sweep is named, so its code is never read as eleven separate findings. On a
+            // failure the receiver says something in the set did not pass and not which one, and
+            // the sentence has to carry that or the rows overstate it.
+            if (_sweptAt is not null && _results.Count == SelfTestSubsystem.Known.Count)
+            {
+                return failed == 0
+                    ? $"All {SelfTestSubsystem.Known.Count} tested by one all-subsystems run, and it reported a pass."
+                    : $"All {SelfTestSubsystem.Known.Count} tested by one all-subsystems run, which did not report a pass. "
+                      + "It does not say which subsystem; test them individually to find out.";
+            }
+
             return failed == 0
                 ? $"{_results.Count} of {SelfTestSubsystem.Known.Count} tested, all reported a pass."
                 : $"{_results.Count} of {SelfTestSubsystem.Known.Count} tested, {failed} did not report a pass.";
         }
     }
 
-    /// <summary>Records a completed run.</summary>
-    /// <param name="result">What the receiver reported.</param>
+    /// <summary>Records one subsystem's run.</summary>
+    /// <param name="result">What the receiver reported, including which subsystem it names.</param>
     /// <remarks>
-    /// An <c>ALL</c> run records against <c>ALL</c> only. It genuinely is one test with one answer:
-    /// the receiver does not break it down, and crediting eleven rows from it would be inventing
-    /// ten readings.
+    /// For a single-subsystem test. A sweep goes through <see cref="RecordSweep"/> instead, because
+    /// <c>:DIAG:TEST:RES?</c> would name only the last test the sweep happened to finish with.
     /// </remarks>
     public void Record(SelfTestResult result)
     {
@@ -181,6 +213,32 @@ public sealed class SelfTestViewModel : INotifyPropertyChanged
         }
 
         _results[subsystem.Keyword] = (result, _time.GetUtcNow());
+        RefreshRows();
+    }
+
+    /// <summary>
+    /// Records an <c>ALL</c> sweep against every subsystem.
+    /// </summary>
+    /// <param name="result">
+    /// The reply to <c>:DIAG:TEST? ALL</c> itself — <b>not</b> to <c>:DIAG:TEST:RES?</c>, which
+    /// names only the last test the sweep finished with.
+    /// </param>
+    /// <remarks>
+    /// The manual's own words for the parameter are "ALL returns test information for all of the
+    /// tests", and its response is a single value where zero is a pass. One answer, covering the
+    /// set — so every row carries it, stamped with one timestamp because there was one run.
+    /// </remarks>
+    public void RecordSweep(SelfTestResult result)
+    {
+        DateTimeOffset at = _time.GetUtcNow();
+
+        foreach (SelfTestSubsystem subsystem in SelfTestSubsystem.Known)
+        {
+            _results[subsystem.Keyword] =
+                (new SelfTestResult(subsystem, result.Code, subsystem.Keyword), at);
+        }
+
+        _sweptAt = at;
         RefreshRows();
     }
 
