@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 <Page
     x:Class="WinZ3805A.Views.MainPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -271,29 +271,28 @@
                         Spacing="{StaticResource WzSpaceXxs}"
                         VerticalAlignment="Center">
                 <!--
-                    A11Y-12's second channel for §10.3's staleness (#32).
+                    A11Y-12's second channel for §10.3's staleness (#32), now through the one
+                    renderer §9.13 item 10 allows (#320).
 
-                    The states below used to change nothing but FooterText.Foreground, so how old a
+                    The states below once changed nothing but FooterText.Foreground, so how old a
                     reading is was carried by hue and nothing else. §9.4.3 says exactly why that
                     fails: caution and critical converge under protanopia and deuteranopia. Under
                     high contrast it is not a convergence but an identity - WzCautionBrush and
-                    WzCriticalBrush are both SystemColorWindowTextColor, so the two states render
+                    WzCriticalBrush are both SystemColorWindowTextColor, so the two states rendered
                     the same pixels.
 
-                    The age in words is in FooterText either way. What was missing is the judgement
-                    the colour was making about it, and this carries that: §9.4.3's triangle for
-                    caution and hexagon for critical, the same geometry SeverityPill uses, collapsed
-                    when the reading is fresh because a fresh reading has nothing to say.
+                    #32 fixed that with a bare Path carrying §9.4.3's triangle and hexagon, which
+                    was the right SHAPE reached the wrong way: §9.13 item 10 says every severity
+                    render goes through SeverityPill, and a hand-drawn Path beside a hand-set
+                    Foreground is a second renderer that has to be kept in step with the first by
+                    hand. It is a pill now, so the colour, the shape and the word all arrive
+                    together and none of them can drift.
+
+                    Collapsed when the reading is fresh, because a fresh reading has nothing to say.
                 -->
-                <Path x:Name="FooterStalenessShape"
-                      Width="10"
-                      Height="10"
-                      Stretch="Uniform"
-                      VerticalAlignment="Center"
-                      Visibility="Collapsed"
-                      AutomationProperties.AccessibilityView="Raw"
-                      Data="{ThemeResource WzShapeTriangle}"
-                      Fill="{ThemeResource WzCautionBrush}" />
+                <controls:SeverityPill x:Name="FooterStalenessPill"
+                                       VerticalAlignment="Center"
+                                       Visibility="Collapsed" />
 
                 <TextBlock x:Name="FooterText"
                            Style="{StaticResource WzCaptionTextStyle}"
@@ -388,20 +387,41 @@
             -->
             <VisualStateGroup x:Name="StalenessStates">
                 <VisualState x:Name="AgeFresh" />
+                <!--
+                    §9.11's Stale row: the pill carries the severity, and the values "remain
+                    visible, dimmed to WzTextSecondaryBrush". Both halves are here (#320) - the
+                    dimming had never been built, so a reading a minute old was drawn in exactly
+                    the ink of one that arrived this second, and only the footer sentence said
+                    otherwise.
+
+                    Dimmed and never blanked: an old reading with an honest timestamp beats an
+                    empty field, which cannot tell a user whether the value or the link is the
+                    problem.
+
+                    The merit pills are deliberately NOT dimmed. They are severity renders, and
+                    repainting one in a text brush would destroy the §9.4.3 colour it exists to
+                    carry - the age is the footer pill's business, not theirs.
+
+                    FooterText keeps its tertiary brush. Colouring the sentence as well would put a
+                    second severity renderer back beside the first, which is what this change
+                    removed.
+                -->
                 <VisualState x:Name="AgeCaution">
                     <VisualState.Setters>
-                        <Setter Target="FooterText.Foreground" Value="{ThemeResource WzCautionBrush}" />
-                        <Setter Target="FooterStalenessShape.Visibility" Value="Visible" />
-                        <Setter Target="FooterStalenessShape.Data" Value="{ThemeResource WzShapeTriangle}" />
-                        <Setter Target="FooterStalenessShape.Fill" Value="{ThemeResource WzCautionBrush}" />
+                        <Setter Target="FooterStalenessPill.Visibility" Value="Visible" />
+                        <Setter Target="FooterStalenessPill.Severity" Value="Caution" />
+                        <Setter Target="Satellites.Foreground" Value="{ThemeResource WzTextSecondaryBrush}" />
+                        <Setter Target="TimeInterval.Foreground" Value="{ThemeResource WzTextSecondaryBrush}" />
+                        <Setter Target="ClockText.Foreground" Value="{ThemeResource WzTextSecondaryBrush}" />
                     </VisualState.Setters>
                 </VisualState>
                 <VisualState x:Name="AgeCritical">
                     <VisualState.Setters>
-                        <Setter Target="FooterText.Foreground" Value="{ThemeResource WzCriticalBrush}" />
-                        <Setter Target="FooterStalenessShape.Visibility" Value="Visible" />
-                        <Setter Target="FooterStalenessShape.Data" Value="{ThemeResource WzShapeHexagon}" />
-                        <Setter Target="FooterStalenessShape.Fill" Value="{ThemeResource WzCriticalBrush}" />
+                        <Setter Target="FooterStalenessPill.Visibility" Value="Visible" />
+                        <Setter Target="FooterStalenessPill.Severity" Value="Critical" />
+                        <Setter Target="Satellites.Foreground" Value="{ThemeResource WzTextSecondaryBrush}" />
+                        <Setter Target="TimeInterval.Foreground" Value="{ThemeResource WzTextSecondaryBrush}" />
+                        <Setter Target="ClockText.Foreground" Value="{ThemeResource WzTextSecondaryBrush}" />
                     </VisualState.Setters>
                 </VisualState>
             </VisualStateGroup>

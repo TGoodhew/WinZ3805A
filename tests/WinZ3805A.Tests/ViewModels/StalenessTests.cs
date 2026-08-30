@@ -1,4 +1,4 @@
-using WinZ3805A.Controls;
+﻿using WinZ3805A.Controls;
 using WinZ3805A.ViewModels;
 
 namespace WinZ3805A.Tests.ViewModels;
@@ -75,4 +75,43 @@ public class StalenessTests
     [InlineData(90, Severity.Critical)]
     public void SeverityFollowsTheSection103Thresholds(int seconds, Severity expected) =>
         Assert.Equal(expected, Staleness.SeverityOf(TimeSpan.FromSeconds(seconds)));
+
+    /// <summary>
+    /// §9.4.3's third channel for the footer pill (#320): the two judgements the colour was making.
+    /// </summary>
+    /// <remarks>
+    /// Not the age — that is in the sentence beside the pill already, and a pill repeating it would
+    /// add a renderer without adding a channel. Fresh and never-updated say nothing at all, because
+    /// §9.11's rule is that a fresh reading has nothing to report and a window meant to sit still
+    /// for weeks must not carry a badge that never goes out.
+    /// </remarks>
+    [Theory]
+    [InlineData(Severity.Neutral, null)]
+    [InlineData(Severity.Success, null)]
+    [InlineData(Severity.Info, null)]
+    [InlineData(Severity.Caution, "overdue")]
+    [InlineData(Severity.Critical, "stale")]
+    public void TheFooterPillSaysWhichJudgementTheColourIsMaking(Severity severity, string? expected) =>
+        Assert.Equal(expected, Staleness.LabelOf(severity));
+
+    /// <summary>
+    /// The pill's three channels come from one age, so they cannot disagree.
+    /// </summary>
+    /// <remarks>
+    /// This is the property the #320 change bought. The old footer set a <c>Foreground</c> in one
+    /// place and a <c>Path</c>'s <c>Data</c> and <c>Fill</c> in three more, all by hand, and
+    /// keeping four setters in step across two visual states is exactly the kind of thing that
+    /// stays right until someone adds a fifth.
+    /// </remarks>
+    [Theory]
+    [InlineData(5, false)]
+    [InlineData(14, false)]
+    [InlineData(15, true)]
+    [InlineData(59, true)]
+    [InlineData(60, true)]
+    public void APillIsShownExactlyWhenThereIsAJudgementToShow(int seconds, bool expected)
+    {
+        Severity severity = Staleness.SeverityOf(TimeSpan.FromSeconds(seconds));
+        Assert.Equal(expected, Staleness.LabelOf(severity) is not null);
+    }
 }

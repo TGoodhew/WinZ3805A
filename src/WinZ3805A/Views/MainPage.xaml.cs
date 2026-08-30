@@ -403,6 +403,11 @@ public sealed partial class MainPage : Page
             ? _model.AgeDescription
             : $"{_model.PortDescription} · {_model.AgeDescription}";
 
+        // The word is set here rather than in the visual state, because a Setter can only assign a
+        // literal and this one comes from the same place the severity does — one switch in
+        // Staleness, so the pill's three channels cannot get out of step with each other.
+        FooterStalenessPill.Text = Staleness.LabelOf(_model.AgeSeverity) ?? string.Empty;
+
         VisualStateManager.GoToState(this, _model.AgeSeverity switch
         {
             Severity.Critical => "AgeCritical",

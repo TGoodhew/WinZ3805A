@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 
 <!--
     Default templates for the controls in Controls/. WinUI resolves DefaultStyleKey against
@@ -267,6 +267,14 @@
     <Style TargetType="controls:ReadoutTile">
         <Setter Property="IsTabStop" Value="False" />
         <Setter Property="HorizontalAlignment" Value="Left" />
+        <!--
+            The value's brush is a template binding rather than a literal in the template, so that
+            §9.11's Stale state can dim a reading to WzTextSecondaryBrush without reaching inside
+            the control (#320). The default here is what the three value runs used to hard-code.
+            The label and the unit keep their own brushes: they are not the reading, and dimming a
+            caption that was already secondary would say nothing.
+        -->
+        <Setter Property="Foreground" Value="{ThemeResource WzTextPrimaryBrush}" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="controls:ReadoutTile">
@@ -341,7 +349,7 @@
                             <TextBlock x:Name="PART_ValueText"
                                        Grid.Column="0"
                                        Style="{ThemeResource WzReadoutMediumTextStyle}"
-                                       Foreground="{ThemeResource WzTextPrimaryBrush}"
+                                       Foreground="{TemplateBinding Foreground}"
                                        HorizontalAlignment="Right"
                                        AutomationProperties.AccessibilityView="Raw">
                                 <Run x:Name="PART_ValueRun" />
@@ -357,7 +365,7 @@
                             <TextBlock x:Name="PART_PointText"
                                        Grid.Column="1"
                                        Style="{ThemeResource WzReadoutMediumTextStyle}"
-                                       Foreground="{ThemeResource WzTextPrimaryBrush}"
+                                       Foreground="{TemplateBinding Foreground}"
                                        AutomationProperties.AccessibilityView="Raw">
                                 <Run x:Name="PART_PointRun" />
                             </TextBlock>
@@ -367,7 +375,7 @@
                                         HorizontalAlignment="Left">
                                 <TextBlock x:Name="PART_FractionText"
                                            Style="{ThemeResource WzReadoutMediumTextStyle}"
-                                           Foreground="{ThemeResource WzTextPrimaryBrush}"
+                                           Foreground="{TemplateBinding Foreground}"
                                            AutomationProperties.AccessibilityView="Raw">
                                     <Run x:Name="PART_FractionRun" />
                                 </TextBlock>
