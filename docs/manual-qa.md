@@ -1,13 +1,14 @@
 # Manual QA checklist
 
-The checks that need a person, a receiver, or a machine setting — everything the eleven CI gates and
-1700-odd unit tests cannot reach.
+The checks that need a person, a receiver, or a machine setting — everything the CI gates and the
+unit tests cannot reach.
 
 Two places in `requirements.md` name this document and, until 28 Aug 2026, it did not exist:
 
 - **§6.4 item 4** — *"Add an integration test to the manual QA checklist: unplug the adapter
   mid-transaction and confirm the app reports Disconnected without crashing."*
-- **§9.12** — *"A11Y-3 and A11Y-4 run in CI. The rest are a release checklist item."*
+- **§9.12** — which, as it then read, said *"A11Y-3 and A11Y-4 run in CI. The rest are a release
+  checklist item."*
 
 So the work had been done and recorded in issue comments, which is not something anybody can run
 before a release. This is that list.
@@ -56,7 +57,8 @@ application twice on 28 Aug: reconnected, then never polled again.
 timeouts accumulate, so the session never enters `Reconnecting` and the failing path is never
 entered. A cycle that produces no `Reconnecting` line has proved nothing.
 
-Log location: `%LOCALAPPDATA%\Packages\WinZ3805A_1z32rh13vfry6\LocalCache\Local\WinZ3805A\logs\app.log`
+Log location: *Show log folder* on the Diagnostics page opens it; the path is in
+[how-to-use.md](how-to-use.md#where-things-are-kept).
 
 ---
 
@@ -87,23 +89,46 @@ Restore the original scaling afterwards and **read it back to confirm**.
 
 ---
 
-## 4. Accessibility, the eleven not in CI (§9.12, P0-16)
+## 4. Accessibility, what CI cannot reach (§9.12, P0-16)
 
-A11Y-3 (icon-only controls) and A11Y-4 (contrast floors) gate CI. The rest are here. See #16 for the
-full text of each; this is the operator's summary.
+Six of the thirteen criteria have a CI gate for the part of them a script can judge — A11Y-2
+(`Test-FocusVisualCoverage.ps1`), A11Y-3 (`Test-IconOnlyButtons.ps1`), A11Y-4
+(`Test-ContrastFloor.ps1`, Light and Dark only), A11Y-5 (`Test-PointerTargets.ps1`, declared floors
+only), A11Y-8 (`Test-ThemeDictionaryParity.ps1`, `Test-HighContrastLegibility.ps1`) and A11Y-12
+(`Test-NoColourOnlyStates.ps1`, `Test-SeriesSeparation.ps1`). The full text of every criterion and
+its verification method is §9.12; this is the operator's list, one item per criterion, so a run can
+record a result against each number.
 
-- **Keyboard only.** Unplug the mouse. Reach every command, every page, and every dialog. Tab order
-  follows reading order; focus is always visible.
-- **Screen reader.** With Narrator running, confirm the medallion announces its state, that a tier C
-  outcome is spoken, and that a lost connection is announced assertively rather than politely.
-- **High contrast.** Switch the desktop into a contrast theme. Every reading stays legible; no
-  foreground is painted in the surface behind it.
+- **A11Y-1 Keyboard only.** Unplug the mouse. Reach every command, every page, and every dialog. Tab
+  order follows reading order.
+- **A11Y-2 Focus visual.** At each focus stop, in all three themes, the ring is visible against both
+  adjacent surfaces, accent-filled buttons included. The gate proves the two strokes cover the
+  luminance range; a person confirms a ring is actually drawn at every stop.
+- **A11Y-4 Contrast, where the gate cannot read.** Accessibility Insights colour-contrast pass under
+  a contrast theme (its colours are the user's own `SystemColor*`), and over Mica, where the backdrop
+  is a live blur of the wallpaper.
+- **A11Y-5 Target size.** Accessibility Insights target-size check. The sky-plot markers will flag;
+  §9.10.2 is the answer to that flag.
+- **A11Y-6 Text scaling.** Settings → Accessibility → Text size at 100, 150 and 200 %, at each of
+  §9.6.1's breakpoints — Minimal (below 640), Compact (640–1023) and Medium (1024 and up). Nothing
+  clips; dialogs scroll rather than truncate.
+- **A11Y-7 Display scaling** is section 3.
+- **A11Y-8 High contrast.** Switch the desktop into each of the four contrast themes. Every reading
+  stays legible; no foreground is painted in the surface behind it; the medallion and the severity
+  shapes are distinguishable.
   > Windows 11 renamed these. "High Contrast White" is **Desert**. `.theme` files silently no-op —
   > use the Settings UI. See #218 for what this found the first time it was actually done.
-- **Text scaling.** Settings → Accessibility → Text size to 200 %. Nothing clips; dialogs scroll
-  rather than truncate.
-- **Colour.** Confirm no state is carried by hue alone — severity is colour **and** shape **and**
-  text everywhere it appears.
+- **A11Y-9 Announcements.** With Narrator running, force a mode change, a connection change and a
+  tier C outcome. Each is spoken; a lost connection assertively rather than politely.
+- **A11Y-10 Automation peers.** Accessibility Insights tree: the medallion exposes its state as a
+  sentence, and the sky plot exposes every marker.
+- **A11Y-11 List alternate.** On the Satellites page, **List** shows the same satellites with the
+  same data as the plot.
+- **A11Y-12 Colour.** A greyscale screenshot of every page and state (P0-19): no state is carried by
+  hue alone — severity is colour **and** shape **and** text everywhere it appears. The chart-series
+  gate covers the eight series and nothing else.
+- **A11Y-13 Animations off.** Settings → Accessibility → Visual effects → Animation effects off.
+  Nothing animates, and no layout differs from the animated path.
 
 ---
 
@@ -112,12 +137,15 @@ full text of each; this is the operator's summary.
 Only run when the receiver is being moved anyway. The capture harness collects these unattended:
 
 ```
-winapp run src\WinZ3805A\bin\x64\Debug\net10.0-windows10.0.26100.0\win-x64 --detach   # stop this first
-pwsh build\Capture-Fixtures.ps1
+pwsh build\Capture-Fixtures.ps1 -SelfTest     # the half that needs no port; run it first
+pwsh build\Capture-Fixtures.ps1 [-Port COM3]  # then leave it running; Ctrl+C when the receiver has settled
 ```
 
-It needs COM3 to itself, so **stop the application first**. It writes only states it has not seen,
-seeding what it already has from disk, so leaving it running across a whole session is safe.
+It needs the port to itself, so **exit the application first** — closing its window only hides it
+and keeps the port open; exit from Settings → Advanced → Exit or the notification-area icon. The
+harness writes only states it has not seen, seeding what it already has from disk, so leaving it
+running across a whole session is safe, and it appends a provenance line to `capture-log.md` for
+every file it writes — commit the two together.
 
 | State | How to reach it |
 |---|---|
@@ -131,12 +159,20 @@ seeding what it already has from disk, so leaving it running across a whole sess
 
 ## 6. Survey operations (P0-12)
 
-Each needs a survey actually running, which needs a power cycle.
+Each needs a survey actually running, which needs a power cycle with survey-on-power-up enabled.
+
+| | |
+|---|---|
+| **Do** | With a survey running, press **Cancel survey** and confirm. |
+| **Pass** | The dialog reports success after about ten seconds; the Position page shows the previously held position, not the partial estimate; the survey card says no survey is running. |
+
+| | |
+|---|---|
+| **Do** | Power-cycle again, let the survey run a few minutes, press **Adopt computed position** and confirm. |
+| **Pass** | Success after about ten seconds; the position shown is the estimate as it stood; no survey is running. Adopting early leaves a poor position, and the manual entry form is the way back. |
 
 - **Cancel** sends `:GPS:POSition LAST` and restores the previously held position — so it costs
   minutes rather than the two hours a full survey takes, and leaves the receiver where it started.
-- **Adopt** ends the survey and takes the estimate *as it stands*. Adopting early leaves a poor
-  position; the manual entry form is the way back if you do.
 - Both take **about ten seconds** to answer. That is normal — the receiver tears down the
   accumulation before replying — and is why they have their own 30 s timeout class (#256).
 
@@ -197,8 +233,56 @@ source that a script could check.
 
 ---
 
+## 8. The shipped binary carries no excluded command (P0-7, §8.4)
+
+**Why.** P0-7's acceptance is a manual audit of the built binary, the only P0 whose stated method
+is manual. `Test-NoBlockedCommands.ps1` proves the *source* holds §8.4's tokens in one file; only a
+search of the *output* proves nothing else — a resource, a generated string, a dependency — carries
+them. This checklist cannot spell the tokens (the gate exempts only the specification), so take
+them from §8.4.
+
+| | |
+|---|---|
+| **Do** | Build Release. Search every `.dll` in the package output for each §8.4 token, as text, case-insensitively. |
+| **Pass** | The only matches are the regular-expression patterns compiled from `BlockedCommands.cs` in `WinZ3805A.Device.dll`. The application assembly contains none. |
+
+## 9. Every status-screen field reaches the Details window (P0-5)
+
+**Why.** P0-5's acceptance — *every field in the source status screen is represented somewhere in
+the details UI* — has no test, because a test cannot know what "represented" means.
+
+| | |
+|---|---|
+| **Do** | Take a captured screen from `tests/WinZ3805A.Tests/Fixtures/` and walk it line by line against the Details pages with the receiver in a comparable state. |
+| **Pass** | Every field has a home — a readout, a table cell, a card — or a recorded reason for not having one. |
+
+## 10. Lock notifications (P1-9, #288)
+
+**Why.** The notification path was rebuilt on 29 Aug 2026 after `AppNotificationManager` turned out
+never to have registered on any machine, and nobody noticed for a fortnight because nothing tests
+it. It rides on section 5's antenna pull.
+
+| | |
+|---|---|
+| **Do** | With *Tell me when the receiver loses GPS lock* on, pull the antenna and wait. Plug it back in. Then turn the switch off and repeat. |
+| **Pass** | A Windows notification about a minute after the pull, not before; another when lock returns; none at all with the switch off. |
+
+## 11. Help in the installed package (#312)
+
+**Why.** The guide and its images are linked `Content` items copied into the package; whether the
+*installed* application carries `Help\how-to-use.md` and its images is checkable only there.
+
+| | |
+|---|---|
+| **Do** | In the sideloaded install, press `F1` from the main window and from Details. |
+| **Pass** | The guide opens in its own window with every screenshot rendered, not the fallback text. |
+
+---
+
 ## Before a release
 
-Sections 1–4 in full. Section 5 only if the hardware is being moved, and section 7 alongside it
-since it needs the same sky; section 6 if survey behaviour has been touched. Record the result on the relevant issue, and if something fails, file it rather
-than fixing it silently — the log of what was checked is worth as much as the checking.
+Sections 1–4, 8, 9 and 11 in full. Section 5 only if the hardware is being moved, with sections 7
+and 10 alongside it since they need the same antenna; section 6 if survey behaviour has been touched.
+Open a QA-run issue for the release and record each section's result there — every issue this
+checklist cites is closed, so there is no standing place otherwise — and if something fails, file it
+rather than fixing it silently: the log of what was checked is worth as much as the checking.
