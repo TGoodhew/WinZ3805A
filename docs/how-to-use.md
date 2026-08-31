@@ -221,12 +221,12 @@ Everything from the main window, with the words behind the numbers:
   one, which highlights it in the table too. **List** swaps
   the plot for a plain table; **Save image** writes the plot to a file.
 
-  ![The sky plot alone: a circle with a dashed inner ring for the elevation mask and green dots of varying darkness for the tracked satellites](images/how-to-use/satellites-sky-plot.png)
+  ![The sky plot alone: a circle with north at the top, a dashed ring marking the elevation mask, teal dots of varying darkness for the satellites being tracked and hollow rings for those that are not, and a legend reading tracked, predicted, acquiring, below mask, ignored, elevation mask](images/how-to-use/satellites-sky-plot.png)
 
 - **Tracked** and **Not tracked** tables list every satellite the receiver knows about with its PRN,
   elevation, azimuth and, for tracked ones, carrier-to-noise ratio — 35 and above is good.
 
-  ![The Tracked table: rows for PRN 3, 4 and 6 with elevation, azimuth and a signal-strength bar](images/how-to-use/satellites-tracked-table.png)
+  ![The Tracked table: one row per satellite with its PRN, elevation, azimuth and a bar showing carrier-to-noise ratio](images/how-to-use/satellites-tracked-table.png)
 
 ![The lower half of the Satellites page: the Not tracked table, an Elevation mask card with a New mask (degrees) box, a slider across the 0-90 range beneath it and Apply mask, and a Which satellites card with a Manage… button](images/how-to-use/page-satellites-2.png)
 
@@ -377,12 +377,19 @@ changes**. This page is for finding out why a summary bit is set; most people ne
   everything below it. Timestamps are on the receiver's own time scale and are subject to the week
   rollover.
 
-![The lower half of the Diagnostics page: an Application log card with Show log folder, an Error queue card with Read errors, and an Undocumented queries card listing six queries each with a Run button](images/how-to-use/page-diagnostics-2.png)
+![The lower half of the Diagnostics page: the end of the Lifetime card, an Error queue card with Read errors, and an Undocumented queries card listing six queries each with a Run button](images/how-to-use/page-diagnostics-2.png)
 
 - **Application log** — what the application saw: the port opening, the settings auto-detect settled
   on, every connection change, and the receiver's mode and satellite count whenever they move.
   **Show log folder** opens it in Explorer. This is the place to look for a fault that comes and
   goes while nobody is watching the window.
+- **Status screen parsing** — whether the last full status screen was understood completely. A
+  field the application could not read becomes an em dash rather than a guess, and this card is
+  where it says so, naming the line it could not parse. It is the first place to look if a reading
+  is dashed when it should not be — usually a firmware revision printing something slightly
+  different.
+- **Lifetime** — **power-on hours**, how long the receiver has run in total. An oven-controlled
+  oscillator ages with running time, so this is the figure behind the drift the Timing page reports.
 - **Error queue** — **Read errors** reads the receiver's error queue. Reading it empties it: each
   read removes the entry it returns, so what is shown is what was read.
 - **Undocumented queries** — present only when *Undocumented read-only queries* is on in Settings.
