@@ -89,6 +89,22 @@ the second is the API surface it compiles against.
 > 1809 as the floor is a compatibility statement, not a recommendation — anyone
 > choosing a machine for this application should be on Windows 11.
 
+### Linux and macOS
+
+Not this application, and it cannot be — WinUI 3 is Windows-only by definition,
+which is why cross-platform support is a non-goal in §3 rather than a backlog
+item. A separate project,
+**[smartclock-monitor](https://github.com/TGoodhew/smartclock-monitor)**,
+reimplements the same thing in Python and Qt for the same receivers. It shares no
+code with this one, because none of it can be shared; what it does share is the
+specification, the captured parser fixtures and the colour derivation, all
+carried across verbatim.
+
+It is early — at the time of writing it is scaffolding, not an application. What
+it is building from is [docs/porting-to-python-qt.md](docs/porting-to-python-qt.md),
+which is also the honest account of what such a port costs and what it cannot
+carry across.
+
 **A caveat specific to Windows App SDK 2.x.** From 2.0 the minimum is no longer
 one number for the whole SDK; it varies by component. The refactored
 `Microsoft.Windows.AI.MachineLearning` package supports Windows 10 v1903 and
@@ -358,6 +374,10 @@ The rest of `docs/`, and the other documents worth knowing about:
   which exists to give the Store listing a privacy-policy URL and is not enabled
   until submission needs it; it publishes the policy and the user's guide, and
   nothing else.
+- [docs/porting-to-python-qt.md](docs/porting-to-python-qt.md) — a work plan for
+  porting this application to Python and Qt, so it runs on Linux. Written to be
+  handed to someone who has not seen this repository; it is being followed in
+  [smartclock-monitor](https://github.com/TGoodhew/smartclock-monitor).
 - [tests/WinZ3805A.Tests/Fixtures/README.md](tests/WinZ3805A.Tests/Fixtures/README.md)
   — provenance of the captured status screens the parser is tested against.
 - [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) — the third-party components
