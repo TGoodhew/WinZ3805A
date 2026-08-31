@@ -315,9 +315,37 @@ non-developer can act on. This is expected to fail; the check is that it fails *
 
 ---
 
+## 13. The guide's screenshots still show the application
+
+**Why.** `docs\how-to-use.md` is also the F1 help, and its 17 page screenshots are the part of it
+nothing can check. **A wrong screenshot is worse than a missing one**: drifted prose reads as prose,
+but a picture is read as evidence, and a reader who sees a control in the guide that is not in the
+application concludes they have the wrong version.
+
+`Test-GuideCoverage.ps1` makes it impossible to ship an option nobody wrote about. It cannot look at
+a picture.
+
+| | |
+|---|---|
+| **Do** | Open each page the guide illustrates beside the guide, at the width the images were taken at, and compare. |
+| **Pass** | Every control visible in the image is on the page, with the same label; nothing on the page that the surrounding text names is missing from the image. |
+
+> **Known stale as of 30 Aug 2026, and a whole-set job rather than a per-page one.** The audit that
+> added this section found `page-holdover.png` showing a *Threshold* card with *Enter holdover
+> above* and an *Apply threshold* button — none of which exist any more — and `page-satellites-2.png`
+> with no elevation-mask slider. Both are fixed in the *text*; the pictures are not.
+>
+> They cannot be re-taken one at a time. #351 made the cards flow into as many columns as the width
+> allows, so at the width the existing set was captured every page now lays out in **two** columns
+> where the images show one. Re-photographing one page produces a set that disagrees with itself
+> about how the application looks, which is worse than a set that is uniformly a little old. When
+> these are redone, redo all of them in one sitting and look at every one.
+
+---
+
 ## Before a release
 
-Sections 1–4, 8, 9 and 11 in full, then **12 on the published artifact** — which means the release
+Sections 1–4, 8, 9, 11 and 13 in full, then **12 on the published artifact** — which means the release
 exists before the last check passes. That is the right way round: a release nobody can install is
 worth catching after it is published rather than not at all, and the fix is another tag. Section 5
 only if the hardware is being moved, with sections 7 and 10 alongside it since they need the same

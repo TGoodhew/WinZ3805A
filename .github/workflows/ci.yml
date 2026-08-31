@@ -177,6 +177,15 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: ./build/Test-DocumentReferences.ps1
 
+      # #358. docs/how-to-use.md is both the repository's guide and the F1 help -
+      # one file, linked into the package as Help\how-to-use.md - so a control
+      # missing from it is undocumented in both places at once. Added after an
+      # audit found a week's worth of new options undocumented and a Holdover
+      # section describing a setting that cannot be set.
+      - name: Every option in the interface is named in the guide
+        shell: pwsh
+        run: ./build/Test-GuideCoverage.ps1
+
   # ---------------------------------------------------------------------------
   tooling:
     name: Tooling self-tests

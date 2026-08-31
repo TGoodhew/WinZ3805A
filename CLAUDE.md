@@ -207,7 +207,30 @@ pwsh build/Test-NoColourOnlyStates.ps1   # A11Y-12 / §9.4.3
 pwsh build/Test-FocusVisualCoverage.ps1  # A11Y-2 / §9.12
 pwsh build/Test-PointerTargets.ps1       # A11Y-5 / §9.6.3
 pwsh build/Test-DocumentReferences.ps1   # #321 — the documents, not the source
+pwsh build/Test-GuideCoverage.ps1        # #358 — the guide, which is also the F1 help
 ```
+
+The guide-coverage gate was added 30 Aug 2026 for #358, and it is the second that checks a
+document. `docs/how-to-use.md` is **both** the repository's guide and the application's F1 help — one
+file, linked into the package as `Help\how-to-use.md` — so a control missing from it is undocumented
+in both places at once. It requires every interactive control in `Views/*.xaml` carrying a **literal**
+label to have that label somewhere in the guide.
+
+**Labels, never `x:Name`.** A name-based check produces noise (`ApplyDurationLimitButton` against
+"Apply duration limit") and a gate that cries wolf is one people learn to scroll past — the same
+reasoning the #321 issue rule was tuned by. A user looks a control up by what it says on it.
+
+**Its allowlist is a redirection, not an exemption.** A guide should read as prose, so it says "the
+cable length in metres" where the control's header reads `Cable length (metres)`. Such a control gets
+a row giving the guide's own phrasing, **and that phrasing is itself required to be in the guide** —
+so a row cannot decay into a hole: delete the sentence it points at and the gate fails on the row
+rather than passing on the silence. Both halves were tested against deliberate violations.
+
+**What it cannot check is that the guide is right.** The audit that prompted it found a Holdover
+section describing *one* editable threshold where the page has two settings, of which the one
+described **cannot be set at all** — and every word of that would have passed this gate. It makes
+shipping an undocumented option impossible; it cannot make writing something wrong impossible. That
+is what `docs/manual-qa.md` and a reader are for.
 
 The document-references gate was added 30 Aug 2026 for #321, and it is the only one that checks
 the **documents** rather than the source. The #316 audit read sixteen of them by hand and found some 360
@@ -245,7 +268,7 @@ than a rule:
 pwsh build/Capture-Fixtures.ps1 -SelfTest # #4 / #185 — the harness, not the app
 ```
 
-`.github/workflows/ci.yml` runs all thirteen in their own dependency-free jobs, alongside the
+`.github/workflows/ci.yml` runs all fourteen in their own dependency-free jobs, alongside the
 build rather than ahead of it — they need no restore, so a token, accessibility, or safety
 regression fails in seconds rather than after a full build. A separate matrix job builds both
 Configuration × Platform combinations — Debug and Release against x64, the only platform
