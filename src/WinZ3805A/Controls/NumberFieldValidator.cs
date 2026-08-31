@@ -143,6 +143,19 @@ public sealed class NumberFieldValidator
     public void Rebind(ParameterSpec? parameter)
     {
         ApplyBounds(parameter?.Minimum, parameter?.Maximum, parameter?.Unit);
+
+        // An EMPTY field is not judged, and the difference is the whole of §9.11's rule about when
+        // to tell someone off. A value already on screen and now out of range is exactly what the
+        // user needs told about, so that is revalidated. A field nobody has typed in yet is not
+        // wrong - it is untouched - and the first version of this called Revalidate unconditionally,
+        // which put "Enter a value of at least 0 s." and a red border on the §10.8 duration limit of
+        // a page the user had just navigated to. Found by photographing the page for the guide.
+        if (Value is null)
+        {
+            Reset();
+            return;
+        }
+
         Revalidate();
     }
 
