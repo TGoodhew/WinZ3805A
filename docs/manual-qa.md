@@ -330,16 +330,15 @@ a picture.
 | **Do** | Open each page the guide illustrates beside the guide, at the width the images were taken at, and compare. |
 | **Pass** | Every control visible in the image is on the page, with the same label; nothing on the page that the surrounding text names is missing from the image. |
 
-> **Known stale as of 30 Aug 2026, and a whole-set job rather than a per-page one.** The audit that
-> added this section found `page-holdover.png` showing a *Threshold* card with *Enter holdover
-> above* and an *Apply threshold* button — none of which exist any more — and `page-satellites-2.png`
-> with no elevation-mask slider. Both are fixed in the *text*; the pictures are not.
+> **Re-taken 30 Aug 2026, and there is a script for it now.** `build\Capture-GuideImages.ps1`
+> drives a running, connected application and photographs each page's content pane as an *element*,
+> so no cropping arithmetic can be wrong about where the page is. Run it, then **look at every
+> image**: it will photograph a page that failed to load just as willingly as one that worked, and
+> two of the first run's images were of a page still reading from the receiver.
 >
-> They cannot be re-taken one at a time. #351 made the cards flow into as many columns as the width
-> allows, so at the width the existing set was captured every page now lays out in **two** columns
-> where the images show one. Re-photographing one page produces a set that disagrees with itself
-> about how the application looks, which is worse than a set that is uniformly a little old. When
-> these are redone, redo all of them in one sitting and look at every one.
+> **Its `-ContentWidth` is load-bearing.** #351 flows the cards into as many columns as fit, and the
+> threshold is 864 px. The guide's prose and its "upper half" / "lower half" pairs are written
+> around a single column, so the default of 860 is what keeps the pictures matching the words.
 
 ---
 
