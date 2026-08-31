@@ -11,22 +11,44 @@ guessed at.
 
 ---
 
-## 0. Status: this is a plan, not a decision
+## 0. Status, and who this is for
 
-**The specification currently forbids this port.** §3 lists cross-platform support as a
-non-goal, and three of the six goals in §2 name Windows explicitly — a WinUI 3 surface,
-Microsoft Store distribution, and an application that is "native to Windows". §6.1 fixes
-the stack at WinUI 3 on .NET 10.
+**Cross-platform support is a non-goal of *this project*, not a prohibition on porting.**
+§3 records the non-goal and three of the six goals in §2 name Windows explicitly — a WinUI 3
+surface, Microsoft Store distribution, and an application that is "native to Windows"; §6.1
+fixes the stack at WinUI 3 on .NET 10. That is a statement of what the maintainers of this
+repository have taken on. It says nothing about what anyone else may build.
 
-That is not a technical obstacle, it is an ownership one. `CLAUDE.md` requires that a
-conflict with `requirements.md` be surfaced rather than resolved quietly, so it is surfaced
-here: **starting this port means amending §2, §3 and §6.1 first.** Part 12 below lists what else
-follows from that amendment. Nothing in this document assumes the amendment has happened.
+The code is MIT-licensed. **A port is welcome, and needs no permission.** What the non-goal
+does mean is that a port has to be clear about which of two things it is, because the
+engineering is identical and the ownership is not:
 
-Read [`requirements.md`](requirements.md) before writing any code. It remains the authority
-on receiver behaviour, on the safety model, and on the design system, and almost all of it
-is platform-neutral in substance even where it is Windows-specific in wording. The port
-changes the rendering technology; it does not get to change what the application means.
+- **An independent port** — a fork, or a new repository that borrows this one's work. It
+  needs no amendment to anything here, because it is not bound by this project's goals. The
+  decisions collected in part 12 become the porter's own, and this document's job is to make
+  sure none of them gets made by accident.
+- **A port this project adopts** — the Python application shipped as a sibling of the
+  Windows one, maintained here. Then §2, §3 and §6.1 do need amending first, since that is
+  where the goals and the stack are written down, and `CLAUDE.md` requires a conflict with
+  `requirements.md` to be raised rather than resolved quietly.
+
+Everything else in this document applies unchanged either way. Only who signs off on part 12
+differs.
+
+Read [`requirements.md`](requirements.md) before writing any code, on either route. It is
+the best description that exists of the receiver's behaviour, the safety model and the
+design intent, and almost all of it is platform-neutral in substance even where it is
+Windows-specific in wording. **An independent port should carry it across and annotate where
+it diverges** rather than starting from a blank document — the parts that are wrong for
+Linux are named in part 7, and the rest is hard-won and still true. The port changes the
+rendering technology; it does not get to change what the application means.
+
+Two things a fork inherits whatever route it takes. §8's safety model is not a stylistic
+preference — the exclusions in §8.4 exist because the commands behind them can brick a
+receiver, and the allowlist architecture in §8.1 is what makes them unreachable rather than
+merely discouraged. And the ten captured status screens are irreplaceable hardware output.
+Both are discussed below; neither is negotiable in a port that expects to be used on real
+equipment.
 
 ---
 
@@ -165,9 +187,14 @@ Each phase states what "done" means. Do not start a phase before its predecessor
 done-condition holds — §15 makes the same point about the original build, and for the same
 reason.
 
-### Phase 0 — Decide, and set up
+### Phase 0 — Settle the route, and set up
 
-Amend §2, §3 and §6.1, or stop. Then: `pyproject.toml`, `mypy --strict`, `ruff`, `pytest`,
+Decide which of part 0's two routes this is, and if it is the second, amend §2, §3 and §6.1
+before anything else. If it is the first, note in the new repository's README that it is an
+independent port and which commit of this one it was taken from — a fork that cannot say
+what it diverged from cannot pick up a later parser fix.
+
+Then: `pyproject.toml`, `mypy --strict`, `ruff`, `pytest`,
 CI running all three on every push. Copy `build/palette/` across unchanged and confirm
 `validate.py` still passes — it checks the colour maths against published figures and is
 the one piece of this repository that needs no porting at all.
@@ -395,7 +422,9 @@ them was someone trying to use the app.
 ## 7. What does not cross the platform boundary
 
 These are the parts where the answer is not "port it" but "decide what to do instead". Each
-needs a specification amendment, not an implementation choice.
+changes what the application promises a user, so each belongs in whatever document the port
+treats as its specification — an amendment to §2, §3 and §6.1 on the adopted route, or the
+fork's own equivalent. None of them should be settled by whoever reaches the file first.
 
 | Windows feature | Where it is used | Linux situation |
 |---|---|---|
@@ -426,8 +455,9 @@ not a per-token API and it is not universal. So the port faces a genuine choice:
   as such.
 - **(b) Ship Light and Dark only**, and amend §9.2 and §9.4.1 to say so.
 
-**(a) is the better answer for this audience**, but it is the specification owner's call.
-Do not let it be settled by whoever writes the theme file first.
+**(a) is the better answer for this audience**, but it is a promise about accessibility
+rather than a detail of theming, so make it deliberately — see part 12. Do not let it be
+settled by whoever writes the theme file first.
 
 ---
 
@@ -524,18 +554,29 @@ one only if Python itself is a goal.
 
 ---
 
-## 12. Decisions reserved for the specification owner
+## 12. Decisions that must not be made by accident
 
-Do not settle these while implementing. Each one changes what the application promises.
+Each of these changes what the application promises a user, and each has a default that
+looks harmless from inside a single pull request. **On an independent port they are the
+porter's own calls — this list is not a request for permission, it is a list of the things
+worth deciding on purpose and writing down.** On the adopted route they belong to whoever
+owns `requirements.md`.
 
-1. **Amend §2, §3 and §6.1**, or do not start. Cross-platform is currently a stated
-   non-goal and WinUI 3 is a stated requirement.
-2. **G5 (Microsoft Store).** Retained as Windows-only, or dropped?
-3. **High contrast** — option (a) or (b) in part 7. This is an accessibility promise, and
-   weakening it should be deliberate and written down.
+1. **Which route this is**, per part 0 — an independent port, or one this project adopts and
+   amends §2, §3 and §6.1 for. Decide it once, at the start; it determines who owns the rest
+   of this list and whether a fix flows back.
+2. **G5 (Microsoft Store).** Retained as a Windows-only goal, or dropped? An independent
+   Linux-first port will almost certainly drop it, which is fine, but it should be stated
+   rather than left to lapse.
+3. **High contrast** — option (a) or (b) in part 7. This is the one to be most careful
+   about. It is an accessibility promise, the current one is stronger than a hand-authored
+   theme can be, and the difference is invisible to anyone not relying on it.
 4. **The type face**, per part 7, and the contrast re-derivation that follows from it.
+   Changing the face without re-running the contrast figures silently invalidates §9.4.5.
 5. **Tray and notification behaviour** on desktops that have neither. §10.3.1's
-   close-to-tray design assumes a tray exists.
-6. **Whether the Windows app continues to be maintained** alongside the Python one. Two
-   implementations of §8's safety model is two places for it to go wrong; §8.1's allowlist
-   architecture is the thing that must not diverge.
+   close-to-tray design assumes a tray exists, and on GNOME it does not without an extension.
+6. **What the relationship between the two implementations is.** If both exist, §8's safety
+   model exists twice and can diverge; §8.1's allowlist architecture is the part that must
+   not. A fork that intends to track this repository should say so and keep the exclusion
+   list synchronised; one that intends to diverge should say that too, so nobody assumes a
+   fix here reaches users there.
