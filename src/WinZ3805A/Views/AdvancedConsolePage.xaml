@@ -78,6 +78,7 @@
                 <TextBlock x:Name="DescriptionText"
                            Style="{ThemeResource WzBodyTextStyle}"
                            Foreground="{ThemeResource WzTextSecondaryBrush}"
+                           HorizontalAlignment="Left"
                            MaxWidth="{ThemeResource WzProseMaxWidth}"
                            TextWrapping="Wrap" />
 
@@ -103,6 +104,7 @@
                     <TextBlock x:Name="ParameterError"
                                Style="{ThemeResource WzCaptionTextStyle}"
                                Foreground="{ThemeResource WzCriticalBrush}"
+                               HorizontalAlignment="Left"
                                MaxWidth="{ThemeResource WzProseMaxWidth}"
                                TextWrapping="Wrap"
                                Visibility="Collapsed" />

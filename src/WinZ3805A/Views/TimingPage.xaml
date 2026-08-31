@@ -351,6 +351,7 @@
                             <TextBlock x:Name="DriftAdvisoryText"
                                        Style="{ThemeResource WzBodyTextStyle}"
                                        TextWrapping="Wrap"
+                                       HorizontalAlignment="Left"
                                        MaxWidth="{ThemeResource WzProseMaxWidth}" />
 
                             <TextBlock x:Name="DriftNumbersText"
@@ -363,12 +364,14 @@
                                        Style="{ThemeResource WzCaptionTextStyle}"
                                        Foreground="{ThemeResource WzTextTertiaryBrush}"
                                        TextWrapping="Wrap"
+                                       HorizontalAlignment="Left"
                                        MaxWidth="{ThemeResource WzProseMaxWidth}" />
 
                             <TextBlock x:Name="DriftHardwareText"
                                        Style="{ThemeResource WzCaptionTextStyle}"
                                        Foreground="{ThemeResource WzTextTertiaryBrush}"
                                        TextWrapping="Wrap"
+                                       HorizontalAlignment="Left"
                                        MaxWidth="{ThemeResource WzProseMaxWidth}" />
                         </StackPanel>
 
@@ -376,12 +379,14 @@
                                    Style="{ThemeResource WzCaptionTextStyle}"
                                    Foreground="{ThemeResource WzTextTertiaryBrush}"
                                    TextWrapping="Wrap"
+                                   HorizontalAlignment="Left"
                                    MaxWidth="{ThemeResource WzProseMaxWidth}" />
 
                         <TextBlock x:Name="DeviationWindowText"
                                    Style="{ThemeResource WzCaptionTextStyle}"
                                    Foreground="{ThemeResource WzTextTertiaryBrush}"
                                    TextWrapping="Wrap"
+                                   HorizontalAlignment="Left"
                                    MaxWidth="{ThemeResource WzProseMaxWidth}" />
                     </StackPanel>
                 </Border>
@@ -407,6 +412,7 @@
                                    Style="{ThemeResource WzBodyTextStyle}"
                                    Foreground="{ThemeResource WzTextSecondaryBrush}"
                                    TextWrapping="Wrap"
+                                   HorizontalAlignment="Left"
                                    MaxWidth="{ThemeResource WzProseMaxWidth}" />
 
                         <Grid x:Name="StabilityHeader" ColumnSpacing="{ThemeResource WzSpaceMd}">

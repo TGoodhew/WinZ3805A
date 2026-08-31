@@ -153,6 +153,7 @@
                                    Style="{ThemeResource WzBodyTextStyle}"
                                    Foreground="{ThemeResource WzTextSecondaryBrush}"
                                    TextWrapping="Wrap"
+                                   HorizontalAlignment="Left"
                                    MaxWidth="{ThemeResource WzProseMaxWidth}" />
 
                         <!-- §10.6's button row, in its order. All three are §8.3 tier C. -->
@@ -298,6 +299,7 @@
                                        VerticalAlignment="Bottom"
                                        Margin="0,0,0,4"
                                        TextWrapping="Wrap"
+                                       HorizontalAlignment="Left"
                                        MaxWidth="360" />
                         </StackPanel>
 

@@ -292,6 +292,7 @@
                     <Border Style="{ThemeResource WzCardStyle}">
                         <TextBlock Style="{ThemeResource WzBodyTextStyle}"
                                    Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   HorizontalAlignment="Left"
                                    MaxWidth="{ThemeResource WzProseMaxWidth}"
                                    TextWrapping="Wrap"
                                    Text="Poll cadences, the display time zone and units are not on this page yet. The time zone is chosen from the main window's clock; the poll cadences are fixed at the intervals the specification sets." />

@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 <ContentDialog
     x:Class="WinZ3805A.Views.CommandConfirmationDialog"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -51,6 +51,7 @@
             <TextBlock x:Name="MessageText"
                        Style="{ThemeResource WzBodyTextStyle}"
                        TextWrapping="Wrap"
+                       HorizontalAlignment="Left"
                        MaxWidth="{ThemeResource WzProseMaxWidth}" />
 
             <!--
@@ -62,6 +63,7 @@
                        Style="{ThemeResource WzBodyTextStyle}"
                        Foreground="{ThemeResource WzTextSecondaryBrush}"
                        TextWrapping="Wrap"
+                       HorizontalAlignment="Left"
                        MaxWidth="{ThemeResource WzProseMaxWidth}"
                        Visibility="Collapsed" />
 

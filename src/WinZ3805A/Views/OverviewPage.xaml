@@ -345,6 +345,7 @@
                                    Style="{ThemeResource WzCaptionTextStyle}"
                                    Foreground="{ThemeResource WzTextTertiaryBrush}"
                                    TextWrapping="Wrap"
+                                   HorizontalAlignment="Left"
                                    MaxWidth="{ThemeResource WzProseMaxWidth}" />
                     </StackPanel>
                 </Border>
