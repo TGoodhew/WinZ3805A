@@ -157,6 +157,7 @@
                                    Style="{ThemeResource WzBodyTextStyle}"
                                    Foreground="{ThemeResource WzTextSecondaryBrush}"
                                    TextWrapping="Wrap"
+                                   HorizontalAlignment="Left"
                                    MaxWidth="{ThemeResource WzProseMaxWidth}" />
 
                         <ItemsControl x:Name="SelfTestRows">
@@ -198,6 +199,7 @@
                                    Style="{ThemeResource WzCaptionTextStyle}"
                                    Foreground="{ThemeResource WzTextSecondaryBrush}"
                                    TextWrapping="Wrap"
+                                   HorizontalAlignment="Left"
                                    MaxWidth="{ThemeResource WzProseMaxWidth}" />
                     </StackPanel>
                 </Border>
@@ -331,12 +333,14 @@
                                    Style="{ThemeResource WzBodyTextStyle}"
                                    Foreground="{ThemeResource WzTextSecondaryBrush}"
                                    TextWrapping="Wrap"
+                                   HorizontalAlignment="Left"
                                    MaxWidth="{ThemeResource WzProseMaxWidth}"
                                    Visibility="Collapsed" />
 
                         <TextBlock Style="{ThemeResource WzCaptionTextStyle}"
                                    Foreground="{ThemeResource WzTextTertiaryBrush}"
                                    TextWrapping="Wrap"
+                                   HorizontalAlignment="Left"
                                    MaxWidth="{ThemeResource WzProseMaxWidth}"
                                    Text="Timestamps are on the receiver's own time scale and are subject to the §7.4 week rollover. Export writes the entries shown, so a filter applies to the file too." />
                     </StackPanel>
@@ -371,6 +375,7 @@
                         -->
                         <TextBlock Style="{ThemeResource WzBodyTextStyle}"
                                    TextWrapping="Wrap"
+                                   HorizontalAlignment="Left"
                                    MaxWidth="{ThemeResource WzProseMaxWidth}"
                                    Text="What this application saw: the port opening, the settings auto-detect settled on, every connection change, and the receiver's mode and satellite count whenever they move. Useful for a fault that comes and goes while nobody is watching the window." />
 
@@ -403,6 +408,7 @@
                                    Style="{ThemeResource WzBodyTextStyle}"
                                    Foreground="{ThemeResource WzTextSecondaryBrush}"
                                    TextWrapping="Wrap"
+                                   HorizontalAlignment="Left"
                                    MaxWidth="{ThemeResource WzProseMaxWidth}" />
 
                         <!--
@@ -454,6 +460,7 @@
                         <TextBlock Style="{ThemeResource WzCaptionTextStyle}"
                                    Foreground="{ThemeResource WzTextTertiaryBrush}"
                                    TextWrapping="Wrap"
+                                   HorizontalAlignment="Left"
                                    MaxWidth="{ThemeResource WzProseMaxWidth}"
                                    Text="How long the receiver has run in total. An oven-controlled oscillator ages with running time, so this is the figure behind the drift the Overview page's EFC trend shows." />
                     </StackPanel>
@@ -496,6 +503,7 @@
                         <TextBlock Style="{ThemeResource WzCaptionTextStyle}"
                                    Foreground="{ThemeResource WzTextTertiaryBrush}"
                                    TextWrapping="Wrap"
+                                   HorizontalAlignment="Left"
                                    MaxWidth="{ThemeResource WzProseMaxWidth}"
                                    Text="Reading the queue empties it: each read removes the entry it returns. What is shown here is what was read, and it is not re-read on its own." />
                     </StackPanel>
@@ -519,6 +527,7 @@
                         <TextBlock Style="{ThemeResource WzBodyTextStyle}"
                                    Foreground="{ThemeResource WzTextSecondaryBrush}"
                                    TextWrapping="Wrap"
+                                   HorizontalAlignment="Left"
                                    MaxWidth="{ThemeResource WzProseMaxWidth}"
                                    Text="Present in the receiver's command parser but absent from the published manual. They may return errors or nonsense. No setting is changed." />
 
@@ -544,6 +553,7 @@
                                             <TextBlock Style="{ThemeResource WzCaptionTextStyle}"
                                                        Foreground="{ThemeResource WzTextTertiaryBrush}"
                                                        TextWrapping="Wrap"
+                                                       HorizontalAlignment="Left"
                                                        MaxWidth="{ThemeResource WzProseMaxWidth}"
                                                        Text="{x:Bind Description}" />
                                         </StackPanel>
@@ -569,6 +579,7 @@
                         <TextBlock Style="{ThemeResource WzCaptionTextStyle}"
                                    Foreground="{ThemeResource WzTextTertiaryBrush}"
                                    TextWrapping="Wrap"
+                                   HorizontalAlignment="Left"
                                    MaxWidth="{ThemeResource WzProseMaxWidth}"
                                    Text="This list is fixed. Nothing can be typed into it, and the set forms of these nodes are excluded from this application permanently." />
                     </StackPanel>

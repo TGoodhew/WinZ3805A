@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 <Page
     x:Class="WinZ3805A.Views.DetailsPlaceholderPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -29,12 +29,14 @@
             <TextBlock x:Name="PageSummary"
                        Style="{ThemeResource WzBodyTextStyle}"
                        Foreground="{ThemeResource WzTextSecondaryBrush}"
+                       HorizontalAlignment="Left"
                        MaxWidth="{ThemeResource WzProseMaxWidth}"
                        TextWrapping="Wrap"
                        Text="" />
 
             <TextBlock Style="{ThemeResource WzCaptionTextStyle}"
                        Foreground="{ThemeResource WzTextTertiaryBrush}"
+                       HorizontalAlignment="Left"
                        MaxWidth="{ThemeResource WzProseMaxWidth}"
                        TextWrapping="Wrap"
                        Text="This page is not built yet. The shell, its navigation and its title bar are; the content arrives with the page's own step in the implementation sequence." />
