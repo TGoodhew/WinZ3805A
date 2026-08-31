@@ -29,7 +29,10 @@ not paying one — so the thumbprint below is what you check it against.
 
 ### Requirements
 
-- Windows 11 24H2 or later, **x64**
+- **Windows 10 version 1809 (build 17763) or later, x64.** That is the floor the package
+  declares and will install against. Windows 11 is the sensible choice — mainstream servicing
+  for 1809 has ended, and only the LTSC Extended channel is still serviced — but the
+  application does not require it.
 - A serial port, or a USB-to-serial adapter, wired to the receiver
   (9600-8-N-1 for a Z3805A)
 
