@@ -147,9 +147,15 @@ marine receiver — through the same dialog: auto-detect hears it talking and ch
 by itself. Such a receiver has no disciplined oscillator, so the application shows only what NMEA
 carries: the mode (**Locked to GPS** with a fix, **Power-up** without one), the satellites being
 tracked and the sky plot, the position, and the time and date. The 1 PPS TI, TFOM and FFOM, the
-outputs, holdover, EFC, cable delay, status registers, self test, receiver log and error queue all
-show **—** or do nothing, and the Advanced Console offers reads only; nothing is ever sent to the
-receiver. The pages a talker cannot use are not yet hidden, so expect dashes rather than blanks.
+outputs, holdover, EFC, cable delay, status registers, self test, receiver log and error queue have
+nothing behind them and show **—**, and the Advanced Console offers reads only; nothing is ever
+sent to the receiver.
+
+**Anything the receiver cannot do is greyed out with a line saying why** — *"This receiver does not
+support an elevation mask. The NMEA 0183 driver has no command for it."* The controls are not
+hidden: a page that quietly lost half of itself would look either broken or, worse, complete, and a
+button that is visible and silently does nothing is the one thing that must not happen. So the
+pages stay as they are, with dashes where a reading would be and a reason where a command would be.
 
 ---
 
@@ -179,6 +185,10 @@ The eight pages in the main list are reachable with `Ctrl+1` to `Ctrl+8` in the 
 Settings and the Advanced Console sit in the footer and have no number. In a narrower window the
 pane collapses to a rail of icons, and the button at its top opens it.
 
+Every page's cards **flow into as many columns as the width allows** — one in a narrow window, two
+or three when you widen it, each card going to whichever column is currently shortest. Widening the
+window is therefore worth doing on the busier pages; nothing is hidden at any width.
+
 #### Overview — `Ctrl+1`
 
 ![The Overview page: a Synchronization card with a 96 px medallion, Outputs valid, TFOM and FFOM pills with their meanings, and 1 PPS TI; a Holdover uncertainty card; a Health monitor card with six green pills and a Run test button; and an Oscillator control (EFC) card with the current value and a trend](images/how-to-use/page-overview.png)
@@ -188,8 +198,9 @@ Everything from the main window, with the words behind the numbers:
 - **Synchronization** — the medallion and mode, whether the receiver's **outputs are valid**, TFOM
   and FFOM each with what the value means, and the 1 PPS TI relative to GPS.
 - **Holdover uncertainty** — the receiver's own prediction of how far its time would drift in 24
-  hours of holdover, the threshold it will enter holdover at, and how long it has been in holdover
-  if it is.
+  hours of holdover, the threshold that prediction is compared against, and how long it has been in
+  holdover if it is. The threshold is **not** the point at which the receiver enters holdover;
+  the Holdover page explains what it is and what the separate, settable duration limit does.
 - **Health monitor** — one pill per subsystem the receiver checks (self test, internal power,
   oven power, the oscillator, its control voltage, the GPS receiver), and **Run test** to run the
   receiver's self-test now — it asks first, because the receiver stops doing other things while it
@@ -217,11 +228,14 @@ Everything from the main window, with the words behind the numbers:
 
   ![The Tracked table: rows for PRN 3, 4 and 6 with elevation, azimuth and a signal-strength bar](images/how-to-use/satellites-tracked-table.png)
 
-![The lower half of the Satellites page: the Not tracked table, an Elevation mask card with a New mask (degrees) box and Apply mask, and a Which satellites card with a Manage… button](images/how-to-use/page-satellites-2.png)
+![The lower half of the Satellites page: the Not tracked table, an Elevation mask card with a New mask (degrees) box, a slider across the 0-90 range beneath it and Apply mask, and a Which satellites card with a Manage… button](images/how-to-use/page-satellites-2.png)
 
-- **Elevation mask** — satellites below this elevation are ignored. Enter a new angle and **Apply
-  mask**; it asks for confirmation first, because a mask that is too high can leave the receiver
-  with too few satellites.
+- **Elevation mask** — satellites below this elevation are ignored. The box **opens on the mask the
+  receiver is using**, not on a default, so you can see what it is set to before changing it. Type a
+  new angle or drag the **slider** beneath — they are two ways to move one value, not two values —
+  and press **Apply mask**. It asks for confirmation first, because a mask that is too high can
+  leave the receiver with too few satellites. Once you have typed, the number is yours: the
+  once-a-second sweep will not overwrite it mid-edit.
 - **Which satellites** — **Manage…** opens a dialog that reads the receiver's inclusion and
   exclusion lists and offers the commands that change them: track only the selected satellites,
   track all, clear exclusions, track none, exclude all. Each is confirmed before it is sent and
@@ -270,15 +284,32 @@ Everything from the main window, with the words behind the numbers:
 
 #### Holdover — `Ctrl+5`
 
-![The Holdover page: Predicted 24 h uncertainty, Present time error, Duration and Waiting reason readouts, and a Threshold card with the current threshold and whether it is currently exceeded](images/how-to-use/page-holdover.png)
+![The Holdover page: Predicted 24 h uncertainty, Present time error, Duration and Waiting reason readouts, and a Thresholds card with a read-only Uncertainty threshold, whether it is currently exceeded, and an editable Holdover duration limit in seconds with an Apply duration limit button](images/how-to-use/page-holdover.png)
 
 Holdover is what the receiver does when it loses GPS: it keeps its oscillator running on the
 corrections it had learned, and its time error grows from there.
 
 - **Predicted 24 h uncertainty**, **present time error**, **duration** and — while it is *waiting to
   recover* — the **waiting reason** the receiver gives.
-- **Threshold** — the receiver enters holdover when its predicted uncertainty exceeds this. Enter a
-  new value in seconds and **Apply threshold**, after confirmation.
+- **Thresholds** — there are two here, they measure different things, and **only the second can be
+  changed**. The page says so beside each; this is the short version.
+
+  - **Uncertainty threshold** is what the *predicted 24 h uncertainty* above is compared against.
+    *Currently exceeded* means that if the receiver lost GPS now and ran on its own oscillator for a
+    day, its time error would be expected to pass this figure. It is a **prediction about the
+    oscillator, not a fault** — a receiver that has not been locked for long has not yet learned
+    enough to promise better — and it is **read only**: the receiver's command set has exactly one
+    settable threshold and this is not it.
+  - **Holdover duration limit** is that one. It is how long the receiver may stay in holdover before
+    it *raises a flag* — and nothing else: it does not end holdover, and it changes no output. The
+    receiver simply starts reporting that holdover has run longer than you allowed, in the
+    Questionable status register, which is what the state above reads. Enter a new value in seconds
+    and **Apply duration limit**, after confirmation. The factory value is 86 400 seconds, one day;
+    the setting is stored in the receiver and survives a power cycle.
+
+  The two are easy to confuse, and the confusion has a symptom worth naming: change the duration
+  limit and the uncertainty reading above it will never move, because they are not the same
+  quantity.
 
 ![The lower half of the Holdover page: a Manual control card with a Before forcing holdover note, the time since power-up, and Force holdover, Recover now and Ignore recovery limit buttons](images/how-to-use/page-holdover-2.png)
 
@@ -287,6 +318,14 @@ corrections it had learned, and its time error grows from there.
   overrides the check that keeps it waiting. Each is confirmed, and the *Before forcing holdover*
   note is worth reading once: a receiver that has not been powered up for long has not finished
   learning its oscillator, and forcing holdover then proves little.
+
+  The **time since power-up** beside it carries a verdict, and one of its values needs explaining
+  because it is the one you will usually see. **Unverified** does not mean anything is wrong: the
+  application can only bound the power-up time *from below*, because it knows when **it** started
+  watching and not when the **receiver** was switched on — which is why the figure reads *at least*.
+  A receiver that has been running for a week looks exactly like one switched on a minute ago. It
+  becomes a definite answer once the application has watched 24 hours pass, or you can confirm the
+  uptime yourself and disregard it.
 
 #### Time — `Ctrl+6`
 
@@ -323,12 +362,20 @@ changes**. This page is for finding out why a summary bit is set; most people ne
 
 - **Self test** — pick one **subsystem** or all of them and press the button, which names what it
   is about to do (**Run all tests**, or **Test** followed by the subsystem) because the receiver
-  drops what it is doing while it tests itself; the result appears in the row below. **Refresh**
-  at the top of the page re-reads the last self-test result and the receiver's log.
+  drops what it is doing while it tests itself. Testing one subsystem fills in that subsystem's row;
+  **Run all tests** returns a result for every subsystem and fills in all of them from the one
+  sweep, against a shared timestamp. **Refresh** at the top of the page re-reads the last self-test
+  result and the receiver's log.
+
+  An `ALL` sweep is not free: on a Z3805A it takes about eleven seconds, and the receiver leaves
+  GPS lock while it runs — expect a couple of minutes back to lock and a few more before the time
+  figure of merit recovers. The confirmation says so before it runs.
 - **The receiver's log** — the entries the receiver itself keeps, filterable, with **Export** to save
   what is shown (a filter applies to the file too) and **Clear log**, which removes the entries
-  from the receiver after asking — export first if you want them. Timestamps are on the receiver's
-  own time scale and are subject to the week rollover.
+  from the receiver after asking — export first if you want them. The list **scrolls inside its own
+  card** rather than stretching the page, so a receiver with hundreds of entries does not bury
+  everything below it. Timestamps are on the receiver's own time scale and are subject to the week
+  rollover.
 
 ![The lower half of the Diagnostics page: an Application log card with Show log folder, an Error queue card with Read errors, and an Undocumented queries card listing six queries each with a Run button](images/how-to-use/page-diagnostics-2.png)
 
