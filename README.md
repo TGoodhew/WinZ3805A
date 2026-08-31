@@ -250,11 +250,13 @@ the release checklist.
 ### The CI gates
 
 Eleven acceptance criteria — design-system, accessibility and safety — are
-enforced by script rather than by review. All are dependency-free and answer in
-seconds, which makes them the fastest local check available;
+enforced by script rather than by review, and two further gates check the
+**documents**: that every link and section reference resolves, and that every
+option in the interface is named in the user's guide. All are dependency-free and
+answer in seconds, which makes them the fastest local check available;
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs every one in its own
 dependency-free job alongside the build, so a regression fails in seconds instead of
-after a full build (a twelfth script there checks the fixture-capture harness rather
+after a full build (a fourteenth script there checks the fixture-capture harness rather
 than the source). The list, with what each guards and why it exists, is in
 [CLAUDE.md](CLAUDE.md); the two below are the ones to know first:
 
