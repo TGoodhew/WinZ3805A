@@ -156,12 +156,19 @@
                 Diverging: 1 PPS time interval. The neutral midpoint maps to exactly 0 ns,
                 never to the data midpoint — a colour break that drifts with the data is
                 actively misleading on a timing instrument.
+
+                Derived for THIS surface (#371), like the sequential ramp above and for the
+                same reason. Every one of the five is a 1 px whisker carrying a reading, so
+                all five clear §9.4.5's 3:1 here — the pale near-white neutral this ramp used
+                to have measured 1.24:1 on this card, which is not a line anyone can follow.
+                Prominence rises with distance from zero, 1.5× per step, so a large excursion
+                draws a bolder mark than a small one. build/palette/diverging.py derives it.
             -->
-            <SolidColorBrush x:Key="WzDivergingNegativeStrongBrush" Color="#08474D" />
-            <SolidColorBrush x:Key="WzDivergingNegativeBrush" Color="#3FB8C4" />
-            <SolidColorBrush x:Key="WzDivergingZeroBrush" Color="#DDE4E5" />
-            <SolidColorBrush x:Key="WzDivergingPositiveBrush" Color="#F0A882" />
-            <SolidColorBrush x:Key="WzDivergingPositiveStrongBrush" Color="#B23A00" />
+            <SolidColorBrush x:Key="WzDivergingNegativeStrongBrush" Color="#1D5D64" />
+            <SolidColorBrush x:Key="WzDivergingNegativeBrush" Color="#2A7D85" />
+            <SolidColorBrush x:Key="WzDivergingZeroBrush" Color="#8B9293" />
+            <SolidColorBrush x:Key="WzDivergingPositiveBrush" Color="#C24D19" />
+            <SolidColorBrush x:Key="WzDivergingPositiveStrongBrush" Color="#93370F" />
 
             <!--
                 §9.10.2's high-contrast rule, expressed as a token so the medallion never has to ask
@@ -263,11 +270,20 @@
             <SolidColorBrush x:Key="WzSequential6Brush" Color="#9BD3D9" />
             <SolidColorBrush x:Key="WzSequential7Brush" Color="#C5E6E9" />
 
-            <SolidColorBrush x:Key="WzDivergingNegativeStrongBrush" Color="#08474D" />
-            <SolidColorBrush x:Key="WzDivergingNegativeBrush" Color="#3FB8C4" />
-            <SolidColorBrush x:Key="WzDivergingZeroBrush" Color="#DDE4E5" />
-            <SolidColorBrush x:Key="WzDivergingPositiveBrush" Color="#F0A882" />
-            <SolidColorBrush x:Key="WzDivergingPositiveStrongBrush" Color="#B23A00" />
+            <!--
+                Diverging, derived for the Dark card (#371). The one row this ramp used to be
+                was drawn for a light surface, so here it ran backwards: the pale neutral was
+                the boldest mark on the chart at 10.99:1 while a large excursion faded into
+                the card at 1.36:1. The arms are lighter than the neutral on this surface for
+                the same reason they are darker on Light — away from the card is away from
+                zero. WzDivergingNegativeBrush was also *exactly* WzInfoBrush here, 0.0 ΔE₀₀;
+                it now clears the nearest §9.4.3 colour by 5.6.
+            -->
+            <SolidColorBrush x:Key="WzDivergingNegativeStrongBrush" Color="#90DEE7" />
+            <SolidColorBrush x:Key="WzDivergingNegativeBrush" Color="#75B6BD" />
+            <SolidColorBrush x:Key="WzDivergingZeroBrush" Color="#818788" />
+            <SolidColorBrush x:Key="WzDivergingPositiveBrush" Color="#EB976A" />
+            <SolidColorBrush x:Key="WzDivergingPositiveStrongBrush" Color="#F3C9B4" />
 
             <!--
                 §9.10.2's high-contrast rule, expressed as a token so the medallion never has to ask
