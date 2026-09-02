@@ -139,7 +139,11 @@
             <SolidColorBrush x:Key="WzSeries7Brush" Color="#085AA6" />
             <SolidColorBrush x:Key="WzSeries8Brush" Color="#4A4A4A" />
 
-            <!-- Sequential: signal strength. Read by lightness, so the ramp is monotonic. -->
+            <!--
+                Sequential: signal strength. Read by lightness, so the ramp is monotonic —
+                and monotonic against the card it is drawn on, which is why Dark carries its
+                own seven values rather than these (#367).
+            -->
             <SolidColorBrush x:Key="WzSequential1Brush" Color="#DFF1F3" />
             <SolidColorBrush x:Key="WzSequential2Brush" Color="#A8DDE3" />
             <SolidColorBrush x:Key="WzSequential3Brush" Color="#6FC5CE" />
@@ -239,13 +243,25 @@
             <SolidColorBrush x:Key="WzSeries7Brush" Color="#719BEA" />
             <SolidColorBrush x:Key="WzSeries8Brush" Color="#C4C4C4" />
 
-            <SolidColorBrush x:Key="WzSequential1Brush" Color="#DFF1F3" />
-            <SolidColorBrush x:Key="WzSequential2Brush" Color="#A8DDE3" />
-            <SolidColorBrush x:Key="WzSequential3Brush" Color="#6FC5CE" />
-            <SolidColorBrush x:Key="WzSequential4Brush" Color="#3FB8C4" />
-            <SolidColorBrush x:Key="WzSequential5Brush" Color="#189AA6" />
-            <SolidColorBrush x:Key="WzSequential6Brush" Color="#0B6C74" />
-            <SolidColorBrush x:Key="WzSequential7Brush" Color="#08474D" />
+            <!--
+                Sequential: signal strength. Derived for THIS surface (#367), not the Light
+                ramp repeated — a sequential ramp is read by lightness, so the pale-to-dark
+                walk that recedes correctly on a near-white card is exactly inverted here:
+                the strongest satellite drew #08474D at 1.36:1 on this card and the weakest
+                drew the brightest mark on the plot. Reversing the same seven values cures
+                the inversion and nothing else; their adjacent steps span 5.1 to 17.1 ΔE₀₀,
+                a 3.33× spread that reversal cannot change, and it lands the coarsest steps
+                at the strong end where telling 45 dB-Hz from 50 is the job. Hue and the
+                specification's own chroma curve are held, L* is evenly spaced, and step 4
+                no longer *is* WzInfoBrush. build/palette/sequential.py is the derivation.
+            -->
+            <SolidColorBrush x:Key="WzSequential1Brush" Color="#216D74" />
+            <SolidColorBrush x:Key="WzSequential2Brush" Color="#2A828A" />
+            <SolidColorBrush x:Key="WzSequential3Brush" Color="#3398A1" />
+            <SolidColorBrush x:Key="WzSequential4Brush" Color="#48ADB7" />
+            <SolidColorBrush x:Key="WzSequential5Brush" Color="#70C1C9" />
+            <SolidColorBrush x:Key="WzSequential6Brush" Color="#9BD3D9" />
+            <SolidColorBrush x:Key="WzSequential7Brush" Color="#C5E6E9" />
 
             <SolidColorBrush x:Key="WzDivergingNegativeStrongBrush" Color="#08474D" />
             <SolidColorBrush x:Key="WzDivergingNegativeBrush" Color="#3FB8C4" />
