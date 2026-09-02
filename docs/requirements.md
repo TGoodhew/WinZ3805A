@@ -1052,14 +1052,33 @@ Its adjacent steps measure low under simulation (4.4 ΔE₀₀ protanopia) and t
 >
 > **The Light column is unchanged, including its 1.13:1 weakest step on the Light card.** Receding *is* the encoding at the low end — a ramp whose weakest step met §9.4.5's 3:1 floor would not be a sequential ramp — and the sky-plot marker's 1 px stroke, not its fill, is what keeps a weak satellite findable. `Test-ContrastFloor.ps1` applies the 3:1 floor to the **strongest** step for that reason, and checks the rise itself in both themes.
 
-**Diverging** — 1 PPS time interval, zero-anchored (negative / zero / positive):
-`#08474D` ← `#3FB8C4` ← `#DDE4E5` → `#F0A882` → `#B23A00`
+**Diverging** — 1 PPS time interval, zero-anchored (negative / zero / positive), **and a ramp per theme**:
+
+| Step | Light | Dark |
+|---|---|---|
+| Negative, strong | `#1D5D64` | `#90DEE7` |
+| Negative | `#2A7D85` | `#75B6BD` |
+| Zero | `#8B9293` | `#818788` |
+| Positive | `#C24D19` | `#EB976A` |
+| Positive, strong | `#93370F` | `#F3C9B4` |
 
 The neutral midpoint must map to exactly 0 ns, not to the data midpoint. A TI chart whose colour break drifts with the data is misleading.
 
+> **⚠ Both columns were derived 2 Sep 2026, closing #371.** This section gave the ramp as **one** row of five, as it had given the sequential ramp one column, and `Themes/Colors.xaml` repeated those five in Light and in Dark. It is the same defect as #367's and it was found by asking, immediately after that fix, whether any other ramp was one row for two surfaces. It was, and it was **also below the floor on the theme it was drawn for**.
+>
+> **`TrendChart` draws the 1 PPS chart's per-column min/max whisker with three of these five**, and a 1 px line is exactly the case §9.4.5's 3:1 exists for. In **Light** they measured `WzDivergingNegativeBrush` **2.29:1**, `WzDivergingZeroBrush` **1.24:1** and `WzDivergingPositiveBrush` **1.91:1** — the near-zero whisker, which is most of a healthy chart, was very nearly invisible. This is #177's defect in the one ramp `Test-ContrastFloor.ps1` was still not looking at.
+>
+> On **Dark** the ordering was inverted as well: the pale neutral was the boldest mark on the chart at 10.99:1 while a large excursion faded into the card at 1.36:1. **A diverging ramp puts its neutral near the surface and its extremes away from it**, so magnitude reads as prominence — and "away from the surface" means darker on Light and lighter on Dark.
+>
+> **`WzDivergingNegativeBrush` was also `WzInfoBrush` exactly in Dark, 0.0 ΔE₀₀** — the same collision the sequential ramp had at its step 4, in the same theme. Both derived columns now clear the nearest §9.4.3 colour by **5.3** (Light) and **5.6** (Dark).
+>
+> `build/palette/diverging.py` is the derivation and states what it solves for. Two things there are worth knowing before changing a value. Its objective is **"change as little as possible"** — the nearest legal ramp to the five values this section already had, rather than an optimisation of some property — because those five are a design somebody chose and what was wrong with them was the surface, not the taste. And each step out from zero is at least **1.5× the contrast** of the one before it, so "further from zero" is a step a reader can see rather than infer; that ladder binds in both themes, which is to say it is the design rather than a formality.
+>
+> **What the Light ramp loses is forced.** Its neutral was `#DDE4E5`, a near-white, and no near-white clears 3:1 on a near-white card, so the Light column is darker throughout and its neutral now reads as a grey line rather than as an absence. It is not an absence: it means the receiver was on both sides of zero within that bucket. §9.4.4's categorical palette made the same trade in #87 and said so.
+
 **The diverging ramp therefore applies only to an axis that contains zero**, which in practice means the 1 PPS chart alone. §10.7.1's oscillator-control chart is framed on its own data and does not reach zero, so there is nothing for the neutral midpoint to map to; anchoring it on the window mean instead would make the same colour break mean *"the receiver is on time"* on one chart and *"near where the oscillator has lately been"* on the other. That series takes a single stroke from the categorical palette above and carries **no colour-borne value at all** — its diagnostic content is entirely in the shape of the trace, which satisfies A11Y-12 by having nothing to encode.
 
-**Verification.** `build/Test-SeriesSeparation.ps1` gates CI on the categorical palette: all 28 pairs, both themes, three vision models, plus the hue-gap and semantic-clearance rules above. `build/Test-ContrastFloor.ps1` gates the sequential ramp, which until #367 no gate looked at: prominence must rise with the value on each theme's own card, and the strongest step must clear §9.4.5's 3:1. `build/palette/` holds both derivations — `derive.py` for the categorical ramp, `sequential.py` for the Dark sequential column — and `build/palette/validate.py` checks the colour maths against the figures published on #87 and the ones in this section before anything trusts it.
+**Verification.** `build/Test-SeriesSeparation.ps1` gates CI on the categorical palette: all 28 pairs, both themes, three vision models, plus the hue-gap and semantic-clearance rules above. `build/Test-ContrastFloor.ps1` gates **both** other ramps, which until #367 and #371 no gate looked at: each must rise in prominence as it is read outward on its own theme's card — the sequential ramp from weakest to strongest, the diverging ramp from zero along both arms — and every step of the diverging ramp, the neutral included, takes §9.4.5's plain 3:1, while the sequential ramp takes it at its strongest step alone. `build/palette/` holds all three derivations — `derive.py` for the categorical ramp, `sequential.py` for the Dark sequential column, `diverging.py` for both diverging columns — and `build/palette/validate.py` checks the colour maths against the figures published on #87 and the ones in this section before anything trusts it.
 
 **HighContrast is not checked and cannot be.** Its series alternate between `SystemColorWindowTextColor` and `SystemColorHighlightColor` — the user's own two colours — so **eight traces cannot be separated by colour there at all.** A pass from the gate is not a statement that the chart is accessible. A second channel (dash pattern plus direct labelling) is required for HighContrast regardless of what this ramp contains — **stated as a rule in the categorical palette above** rather than tracked as an open issue, because it binds the next multi-series chart and nothing draws one today (#87 closed 29 Aug 2026).
 
