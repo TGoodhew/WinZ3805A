@@ -38,6 +38,74 @@ public sealed class AntennaCableTests
     }
 
     /// <summary>
+    /// LMR-240's figure agrees with itself: the datasheet's velocity factor and its ns/ft both
+    /// give the ns/m in the table (#368).
+    /// </summary>
+    /// <remarks>
+    /// The Times Microwave datasheet gives velocity of propagation 84% and time delay 1.21 ns/ft
+    /// (3.97 ns/m). Two independent routes to the same number is the check worth having on a
+    /// figure typed in from a PDF, and it is the check the RG-213 row above already gets.
+    /// </remarks>
+    [Fact]
+    public void TheLmr240FigureAgreesWithItsDatasheet()
+    {
+        Assert.Equal(3.97, AntennaCable.Lmr240.DelayNanosecondsPerMetre, 3);
+
+        // 1.21 ns/ft, converted.
+        Assert.Equal(1.21, AntennaCable.Lmr240.DelayNanosecondsPerMetre * 0.3048, 2);
+
+        // And from the velocity factor, the way a Custom cable is computed.
+        Assert.Equal(
+            AntennaCable.VacuumDelayNanosecondsPerMetre / 0.84,
+            AntennaCable.Lmr240.DelayNanosecondsPerMetre,
+            1);
+    }
+
+    /// <summary>
+    /// Picking LMR-240 rather than the LMR-400 a user might otherwise settle for is worth well
+    /// under a nanosecond over a normal run — which is the point of the row, not an argument
+    /// against it (#368).
+    /// </summary>
+    /// <remarks>
+    /// The preset exists so that a user picks the name on the jacket instead of judging which
+    /// offered cable theirs is nearest to. Pinning the difference keeps that honest: if a future
+    /// change makes these two diverge by more than a nanosecond over 20 m, one of the figures has
+    /// been mistyped rather than improved.
+    /// </remarks>
+    [Fact]
+    public void TheTwoLmrPresetsBarelyDifferOverANormalRun()
+    {
+        double lmr240 = AntennaCable.Lmr240.DelayFor(20)!.Value;
+        double lmr400 = AntennaCable.Lmr400.DelayFor(20)!.Value;
+
+        Assert.InRange(lmr240 - lmr400, 0.5, 1.0);
+    }
+
+    /// <summary>Every preset is offered, distinct, and carries its provenance (#368).</summary>
+    /// <remarks>
+    /// <c>Source</c> is shown beside the choice, so an empty one is a claim with nothing behind
+    /// it. Two presets sharing a name would be a picker a user cannot use.
+    /// </remarks>
+    [Fact]
+    public void ThePresetsAreDistinctAndSourced()
+    {
+        Assert.Equal(
+            [AntennaCable.Rg213, AntennaCable.Lmr400, AntennaCable.Lmr240, AntennaCable.Belden9913],
+            AntennaCable.Presets);
+
+        Assert.Equal(
+            AntennaCable.Presets.Count,
+            AntennaCable.Presets.Select(cable => cable.Name).Distinct().Count());
+
+        Assert.All(AntennaCable.Presets, cable =>
+        {
+            Assert.False(string.IsNullOrWhiteSpace(cable.Name));
+            Assert.False(string.IsNullOrWhiteSpace(cable.Source));
+            Assert.InRange(cable.DelayNanosecondsPerMetre, AntennaCable.VacuumDelayNanosecondsPerMetre, 10);
+        });
+    }
+
+    /// <summary>
     /// The guide's own cable assemblies carry a labelled nominal delay, and the table reproduces it.
     /// </summary>
     /// <remarks>
