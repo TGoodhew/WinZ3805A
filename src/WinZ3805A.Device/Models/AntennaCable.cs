@@ -15,7 +15,8 @@ namespace WinZ3805A.Device.Models;
 /// (3.94 ns/meter)." Those are the two cables HP recommends for this antenna system. LMR-400 is not
 /// in that manual — §10.7 substitutes it, reasonably, since it is what a modern installation is
 /// likely to use and Belden 9913 is long out of production — so both are offered here rather than
-/// one replacing the other.
+/// one replacing the other. LMR-240 joined them for #368, on the same reasoning and from its own
+/// datasheet: a preset earns its place by being the name printed on somebody's jacket.
 /// </para>
 /// </remarks>
 public sealed record AntennaCable
@@ -61,13 +62,48 @@ public sealed record AntennaCable
         Source = "§10.7, velocity factor 0.85",
     };
 
+    /// <summary>LMR-240, which is what a run goes in when LMR-400 will not fit (#368).</summary>
+    /// <remarks>
+    /// <para>
+    /// The Times Microwave datasheet gives velocity of propagation 84% and time delay
+    /// 1.21 ns/ft (3.97 ns/m), and those agree: 3.3356 / 0.84 = 3.971. The jacket is 6.10 mm
+    /// against LMR-400's 10.3, with a 19 mm installation bend radius, which is the whole reason
+    /// it is here — it goes through a window frame or a conduit where the 400 has to be routed
+    /// around, and the extra loss at L1 does not trouble a receiver that only needs the
+    /// satellites decodable.
+    /// </para>
+    /// <para>
+    /// <b>This row is a label, not an accuracy fix</b>, and it should not be "improved" into one.
+    /// LMR-240 and LMR-400 differ by 0.04 ns/m — 0.8 ns over a 20 m run, which is nothing beside
+    /// the 78 ns this calculator exists to stop people guessing at. What it buys is that a user
+    /// picks the name printed on the jacket instead of judging which of three cables theirs is
+    /// nearest to. §10.7 already reasons that way: it offers LMR-400 in Belden 9913's place
+    /// because nobody's cable says 9913 on it.
+    /// </para>
+    /// <para>
+    /// <b>KMR-240 is in the name because the figure is the same one.</b> It, CNT-240, RFC-240 and
+    /// LLC240 are sold as LMR-240 equivalents to the same 84% velocity factor rather than as
+    /// different cables. That equivalence is the vendors' claim and is not measured here — but a
+    /// clone whose velocity factor differed enough to matter would be out by well under a
+    /// nanosecond over any run this calculator is used for, and the Custom option takes a
+    /// velocity factor for anyone who knows theirs.
+    /// </para>
+    /// </remarks>
+    public static AntennaCable Lmr240 { get; } = new()
+    {
+        Name = "LMR-240 / KMR-240",
+        DelayNanosecondsPerMetre = 3.97,
+        Source = "Times Microwave datasheet, 1.21 ns/ft",
+    };
+
     /// <summary>The presets.</summary>
     /// <remarks>
-    /// §10.7 lists RG-213, LMR-400 and Custom, in that order, and the first two lead here. Belden
-    /// 9913 is offered as well, from the guide's own second recommendation (see the remarks above);
-    /// §10.7 does not yet list it.
+    /// §10.7 lists RG-213, LMR-400 and Custom, in that order, and the first two lead here. The
+    /// other two are additions: Belden 9913 from the guide's own second recommendation (see the
+    /// remarks above), and LMR-240 for the thin runs (#368). The LMR sizes sit together, largest
+    /// first, so the list reads as thickest to thinnest rather than as an accident of history.
     /// </remarks>
-    public static IReadOnlyList<AntennaCable> Presets { get; } = [Rg213, Lmr400, Belden9913];
+    public static IReadOnlyList<AntennaCable> Presets { get; } = [Rg213, Lmr400, Lmr240, Belden9913];
 
     /// <summary>
     /// A cable described by its velocity factor rather than by name.

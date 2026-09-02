@@ -2296,14 +2296,17 @@ Validation before send: lat degrees 0–90, lon degrees 0–180, minutes 0–59,
 > beside the span because a deviation over 3,000 readings and one over 12 are not the same figure.
 > It falls back to the 60-sample ring where no trend store exists.
 
-Cable presets, delay per metre. The 58503A/B guide's cable table (p. 2-12) gives two cables, RG-213 and Belden 9913; LMR-400 is this section's substitution for a modern installation, at velocity factor 0.85, and the code offers all three plus Custom (`Models/AntennaCable.cs`; the Belden 9913 row was missing here and LMR-400 was attributed to the manual — corrected 29 Aug 2026, #316):
+Cable presets, delay per metre. The 58503A/B guide's cable table (p. 2-12) gives two cables, RG-213 and Belden 9913; LMR-400 is this section's substitution for a modern installation, at velocity factor 0.85, and the code offers all four plus Custom (`Models/AntennaCable.cs`; the Belden 9913 row was missing here and LMR-400 was attributed to the manual — corrected 29 Aug 2026, #316):
 
 | Cable | ns/m | Source |
 |---|---|---|
 | RG-213 / Belden 8267 | 5.05 | 58503A guide, 1.54 ns/ft |
 | Belden 9913 | 3.94 | 58503A guide, 1.2 ns/ft |
 | LMR-400 | 3.93 | §10.7, velocity factor 0.85 |
+| LMR-240 / KMR-240 | 3.97 | Times Microwave datasheet, 1.21 ns/ft |
 | Custom (enter velocity factor) | `3.3356 / VF` ns/m | — |
+
+> **⚠ LMR-240 added 2 Sep 2026 (#368), and it is a label rather than an accuracy fix.** It differs from LMR-400 by 0.04 ns/m — 0.8 ns over a 20 m run, nothing beside the 78 ns this calculator exists to stop people guessing at. What it buys is that a user with the thin cable picks **the name printed on the jacket** instead of judging which offered cable theirs is nearest to, which is the same reasoning that put LMR-400 here in Belden 9913's place. LMR-240 is what a run goes in when LMR-400 will not: 6.10 mm against 10.3, a 19 mm installation bend radius, so it turns through a window frame or a conduit. Its datasheet's two figures agree — 84% velocity of propagation gives 3.971 ns/m, and 1.21 ns/ft gives 3.970 — and the tests assert both routes. **KMR-240 shares the row rather than taking one**: it, CNT-240, RFC-240 and LLC240 are sold as equivalents to the same velocity factor, and that is the vendors' claim rather than something measured here — anyone who knows their own cable's factor has the Custom option.
 
 **The CSV export is not a button on the card.** It is the Details title bar's *Export* (`Ctrl+E`, §9.7.4), which asks the current page for its rows through `ICsvExportSource`; `TimingPage` implements it for the trend series. The wireframe's `[ Export CSV… ]` is kept as the intent and the title-bar command is how it is met — amended 29 Aug 2026 (#316); **kept — confirmed by Tony 30 Aug 2026 (#320)**.
 
