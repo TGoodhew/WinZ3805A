@@ -1028,10 +1028,29 @@ Assign by index in a stable order (PRN ascending), never by hash — a satellite
 3. **A minimum hue gap.** Maximising the smallest colour difference, on its own, produces a ramp with two browns and two purples separated by lightness. That satisfies the arithmetic and fails a person asked which trace is which; categorical colours have to be *nameable*.
 4. **Clear of §9.4.3 by ≥10 ΔE₀₀** — the opening sentence of this section is a perceptual claim, not only a naming one, so it is measured. **The neutral series is exempt**: series 8 is grey and `WzNeutralBrush` is grey, and both mean *nothing is being asserted*.
 
-**Sequential** — signal strength (C/N or SS). Single-hue teal ramp anchored on the brand:
-`#DFF1F3` → `#A8DDE3` → `#6FC5CE` → `#3FB8C4` → `#189AA6` → `#0B6C74` → `#08474D`
+**Sequential** — signal strength (C/N or SS). Single-hue teal ramp anchored on the brand, **and a ramp per theme**:
+
+| Step | Light | Dark |
+|---|---|---|
+| 1 — weakest | `#DFF1F3` | `#216D74` |
+| 2 | `#A8DDE3` | `#2A828A` |
+| 3 | `#6FC5CE` | `#3398A1` |
+| 4 | `#3FB8C4` | `#48ADB7` |
+| 5 | `#189AA6` | `#70C1C9` |
+| 6 | `#0B6C74` | `#9BD3D9` |
+| 7 — strongest | `#08474D` | `#C5E6E9` |
 
 Its adjacent steps measure low under simulation (4.4 ΔE₀₀ protanopia) and that is correct rather than a defect: a sequential ramp is read by lightness, and the simulated ramp stays monotonic. Neighbouring steps of a ramp are meant to be similar.
+
+> **⚠ The Dark column was derived 2 Sep 2026, closing #367.** This section gave the ramp as **one** column, unlike the categorical ramp above, and `Themes/Colors.xaml` faithfully defined the same seven values in Light and in Dark. **A sequential ramp is read by lightness, so which end recedes depends on the surface it is drawn on**, and one column cannot be right for two surfaces: used verbatim on the Dark card the encoding is exactly *inverted*. The strongest satellite drew `#08474D` at **1.36:1** and the weakest drew the brightest mark on the sky plot, on the theme that ships by default. Found while porting this section to the Python sibling, where the same values produced the same defect.
+>
+> **Reversing the seven values is not the fix**, though it cures the inversion. The specification ramp is not perceptually uniform — its six adjacent steps measure 10.7, 8.6, 5.1, 9.1, 17.1, 12.2 ΔE₀₀, a **3.33× spread** — and reversal cannot change that ratio, because max/min does not care about order. What it changes is *where the coarse steps land*: at the strong-signal end on Light, and at the weak end once reversed onto Dark, so the ramp would spend its resolution where the data matters least. Telling 45 dB-Hz from 50 is the job the ramp exists for.
+>
+> The Dark column is therefore derived rather than rearranged: hue held inside this ramp's own band — the Light column measures 208.0–209.2°, and the derivation lands on 208.0° — chroma following **the specification's own (L\*, C) curve** — which peaks mid-ramp and desaturates toward white, and is what makes the two columns read as one family — and L\* evenly spaced. It measures 1.20× for step evenness against the Light column's 3.33×, rises from 2.36:1 to 10.70:1 on the Dark card, and stays monotonic under simulated deuteranopia and protanopia.
+>
+> **It also separates the ramp from §9.4.3.** Step 4 of the Light column *is* `WzInfoBrush` in Dark — 0.0 ΔE₀₀ — so a mid-strength satellite drew exactly the info indicator. The derived column clears the nearest semantic colour by 3.2 ΔE₀₀, asserted in the derivation because 1–2 ΔE₀₀ is around the just-noticeable difference and "not mistakable" has to mean more than "not identical".
+>
+> **The Light column is unchanged, including its 1.13:1 weakest step on the Light card.** Receding *is* the encoding at the low end — a ramp whose weakest step met §9.4.5's 3:1 floor would not be a sequential ramp — and the sky-plot marker's 1 px stroke, not its fill, is what keeps a weak satellite findable. `Test-ContrastFloor.ps1` applies the 3:1 floor to the **strongest** step for that reason, and checks the rise itself in both themes.
 
 **Diverging** — 1 PPS time interval, zero-anchored (negative / zero / positive):
 `#08474D` ← `#3FB8C4` ← `#DDE4E5` → `#F0A882` → `#B23A00`
@@ -1040,7 +1059,7 @@ The neutral midpoint must map to exactly 0 ns, not to the data midpoint. A TI ch
 
 **The diverging ramp therefore applies only to an axis that contains zero**, which in practice means the 1 PPS chart alone. §10.7.1's oscillator-control chart is framed on its own data and does not reach zero, so there is nothing for the neutral midpoint to map to; anchoring it on the window mean instead would make the same colour break mean *"the receiver is on time"* on one chart and *"near where the oscillator has lately been"* on the other. That series takes a single stroke from the categorical palette above and carries **no colour-borne value at all** — its diagnostic content is entirely in the shape of the trace, which satisfies A11Y-12 by having nothing to encode.
 
-**Verification.** `build/Test-SeriesSeparation.ps1` gates CI on the categorical palette: all 28 pairs, both themes, three vision models, plus the hue-gap and semantic-clearance rules above. `build/palette/` holds the derivation, and `build/palette/validate.py` checks the colour maths against the figures published on #87 before anything trusts it.
+**Verification.** `build/Test-SeriesSeparation.ps1` gates CI on the categorical palette: all 28 pairs, both themes, three vision models, plus the hue-gap and semantic-clearance rules above. `build/Test-ContrastFloor.ps1` gates the sequential ramp, which until #367 no gate looked at: prominence must rise with the value on each theme's own card, and the strongest step must clear §9.4.5's 3:1. `build/palette/` holds both derivations — `derive.py` for the categorical ramp, `sequential.py` for the Dark sequential column — and `build/palette/validate.py` checks the colour maths against the figures published on #87 and the ones in this section before anything trusts it.
 
 **HighContrast is not checked and cannot be.** Its series alternate between `SystemColorWindowTextColor` and `SystemColorHighlightColor` — the user's own two colours — so **eight traces cannot be separated by colour there at all.** A pass from the gate is not a statement that the chart is accessible. A second channel (dash pattern plus direct labelling) is required for HighContrast regardless of what this ramp contains — **stated as a rule in the categorical palette above** rather than tracked as an open issue, because it binds the next multi-series chart and nothing draws one today (#87 closed 29 Aug 2026).
 
