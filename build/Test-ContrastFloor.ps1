@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     CI gate for A11Y-4 / §9.4.5: every token pair meets its contrast floor in Light and Dark.
 
@@ -18,19 +18,28 @@
        fluent-stock-colours.txt stop describing what ships. That is worth failing on by
        itself, before any ratio is computed.
 
-    3. SEQUENTIAL PROMINENCE (#367). §9.4.4's signal-strength ramp is read by lightness, so
-       which end recedes depends on the surface it is drawn on. Prominence must therefore
-       RISE with the value on each theme's own card. The defect this exists to catch is the
-       one #367 found: the same seven values defined in Light and in Dark, which cannot be
-       monotone in both - it shipped inverted on the default theme, drawing the strongest
-       satellite at 1.36:1 and the weakest as the brightest mark on the plot, and it passed
-       every gate here because no gate looked at the ramp at all.
+    3. RAMP SHAPE (#367, #371). §9.4.4's ramps are read by lightness, so which end recedes
+       depends on the surface they are drawn on. Prominence must therefore RISE as each ramp
+       is read outward on each theme's own card - the sequential ramp from weakest signal to
+       strongest, the diverging ramp from zero outward along both arms. The defect this
+       exists to catch was found twice in the same week and is one defect: a ramp defined
+       with the SAME VALUES in Light and Dark, which cannot hold its shape in both. The
+       sequential ramp shipped inverted on the default theme, drawing the strongest satellite
+       at 1.36:1 and the weakest as the brightest mark on the plot; the diverging ramp
+       shipped inverted the same way, with the pale neutral the boldest thing on the 1 PPS
+       chart at 10.99:1 and a large excursion fading into the card. Both passed every check
+       here, because no check looked at a ramp at all.
 
-       THE WEAK END IS DELIBERATELY EXEMPT FROM THE 3:1 FLOOR and the strong end is not. A
-       sequential ramp whose low steps met the floor for meaningful non-text would not be a
-       sequential ramp; receding IS the encoding, the marker's 1 px stroke is what keeps a
-       weak satellite findable, and §9.4.4 says as much. The step that carries the reading
-       people act on is the strong one, so that is where the floor is applied.
+       A RATIO MEASURED IN ISOLATION CANNOT CATCH THIS. Every individual step was a legal
+       colour; what was wrong was the order they appeared in on one theme.
+
+       THE TWO RAMPS TAKE THE FLOOR DIFFERENTLY, and that asymmetry is the design rather than
+       an oversight. Every step of the diverging ramp is measured at 3:1 in $graphics above,
+       the neutral included: a column that straddles zero is a reading about a bucket, not an
+       absence. The sequential ramp's weak end is exempt and only its strongest step is
+       checked here, because receding IS its encoding - a ramp whose low steps met the floor
+       for meaningful non-text would not be a sequential ramp, and the sky-plot marker's 1 px
+       stroke is what keeps a weak satellite findable. §9.4.4 says as much.
 
     ALPHA IS THE TRAP. Almost every stock token is semi-transparent: TextFillColorPrimary is
     89% black, LayerFillColorDefault is 50% white, CardStrokeColorDefault is 6% black. Reading
@@ -200,7 +209,30 @@ $surfaces = @('WzLayerFillBrush', 'WzCardFillBrush', 'WzCardFillSecondaryBrush',
 $bodyText = @('WzTextPrimaryBrush', 'WzTextSecondaryBrush', 'WzTextTertiaryBrush')
 $graphics = @('WzSuccessBrush', 'WzCautionBrush', 'WzCriticalBrush', 'WzInfoBrush', 'WzNeutralBrush',
               'WzSeries1Brush', 'WzSeries2Brush', 'WzSeries3Brush', 'WzSeries4Brush',
-              'WzSeries5Brush', 'WzSeries6Brush', 'WzSeries7Brush', 'WzSeries8Brush')
+              'WzSeries5Brush', 'WzSeries6Brush', 'WzSeries7Brush', 'WzSeries8Brush',
+              # The diverging ramp, added for #371. Every one of these is a 1 px whisker on the
+              # 1 PPS chart carrying a reading about a bucket, so all five take the plain 3:1 -
+              # including the neutral, which is "the receiver was on both sides of zero here"
+              # rather than an absence. It measured 1.24:1 in Light before this list included it.
+              'WzDivergingNegativeStrongBrush', 'WzDivergingNegativeBrush', 'WzDivergingZeroBrush',
+              'WzDivergingPositiveBrush', 'WzDivergingPositiveStrongBrush')
+
+# §9.4.4's two ramps, and the shape each has to hold on the card it is drawn on. Order matters:
+# these are read outward, and the check is that prominence rises along the sequence.
+$ramps = @(
+    @{ Name = 'WzSequential1..7Brush'
+       Arms = @(, @('WzSequential1Brush', 'WzSequential2Brush', 'WzSequential3Brush', 'WzSequential4Brush',
+                    'WzSequential5Brush', 'WzSequential6Brush', 'WzSequential7Brush'))
+       Floor = 3.0
+       FloorOn = 'last'
+       Why = 'signal strength rises with the value' }
+    @{ Name = 'WzDiverging*Brush'
+       Arms = @(@('WzDivergingZeroBrush', 'WzDivergingNegativeBrush', 'WzDivergingNegativeStrongBrush'),
+                @('WzDivergingZeroBrush', 'WzDivergingPositiveBrush', 'WzDivergingPositiveStrongBrush'))
+       Floor = 3.0
+       FloorOn = 'all'
+       Why = 'distance from zero rises with the magnitude, on both arms' }
+)
 
 
 # Tokens this project has deliberately taken off stock Fluent, each with the issue that decided
@@ -292,44 +324,60 @@ foreach ($theme in @('Light', 'Dark')) {
         }
     }
 
-    # ---- check 3: §9.4.4's sequential ramp rises in prominence on this theme's own card ----
-    $ramp = @()
-    foreach ($step in 1..7) {
-        $raw = Resolve-Token $theme "WzSequential${step}Brush"
-        if (-not $raw) { break }
-        $ramp += Get-ContrastRatio (Merge-Colour $raw $card) $card
-    }
-
-    if ($ramp.Count -eq 7) {
-        $checked++
-        $rising = $true
-        for ($i = 1; $i -lt 7; $i++) { if ($ramp[$i] -le $ramp[$i - 1]) { $rising = $false } }
-
-        if (-not $rising) {
-            $failures += [pscustomobject]@{
-                Theme = $theme; What = 'WzSequential1..7Brush'; Against = '(sequential ramp)'
-                Ratio = 0.0; Floor = 0.0
-                Why = ("does not rise in prominence with the value on this theme's card: " +
-                       (($ramp | ForEach-Object { '{0:N2}' -f $_ }) -join '  ') +
-                       '. A sequential ramp is read by lightness, so it has to be derived for the ' +
-                       'surface it is drawn on - see §9.4.4 and build/palette/sequential.py.')
+    # ---- check 3: §9.4.4's ramps hold their shape on this theme's own card ----
+    #
+    # A ramp is read outward from one end, and which end recedes depends on the surface. The
+    # sequential ramp runs weakest to strongest; the diverging ramp runs zero outward along two
+    # arms. Both must gain prominence as they go, and a ramp defined identically in Light and
+    # Dark cannot do that in both - which is the defect this catches, twice over (#367, #371).
+    foreach ($ramp in $ramps) {
+        foreach ($arm in $ramp.Arms) {
+            $ratios = @()
+            foreach ($key in $arm) {
+                $raw = Resolve-Token $theme $key
+                if (-not $raw) { break }
+                $ratios += Get-ContrastRatio (Merge-Colour $raw $card) $card
             }
-        }
 
-        $checked++
-        if ($ramp[6] -lt 3.0) {
-            $failures += [pscustomobject]@{
-                Theme = $theme; What = 'WzSequential7Brush'; Against = 'WzCardFillBrush'
-                Ratio = $ramp[6]; Floor = 3.0
-                Why = 'the strongest step of the §9.4.4 ramp is below §9.4.5''s 3:1 floor for meaningful non-text'
+            if ($ratios.Count -ne $arm.Count) {
+                $failures += [pscustomobject]@{
+                    Theme = $theme; What = $ramp.Name; Against = '(ramp)'
+                    Ratio = 0.0; Floor = 0.0
+                    Why = "resolves only $($ratios.Count) of its $($arm.Count) steps here. Fix the tokens rather than the gate."
+                }
+                continue
             }
-        }
-    }
-    elseif ($ramp.Count -gt 0) {
-        $failures += [pscustomobject]@{
-            Theme = $theme; What = 'WzSequential1..7Brush'; Against = '(sequential ramp)'
-            Ratio = 0.0; Floor = 0.0
-            Why = "resolves only $($ramp.Count) of its 7 steps here. Fix the tokens rather than the gate."
+
+            $checked++
+            $rising = $true
+            for ($i = 1; $i -lt $ratios.Count; $i++) { if ($ratios[$i] -le $ratios[$i - 1]) { $rising = $false } }
+
+            if (-not $rising) {
+                $failures += [pscustomobject]@{
+                    Theme = $theme; What = $ramp.Name; Against = '(ramp)'
+                    Ratio = 0.0; Floor = 0.0
+                    Why = ("does not hold its shape on this theme's card - " + $ramp.Why + ' - reading ' +
+                           (($ratios | ForEach-Object { '{0:N2}' -f $_ }) -join '  ') +
+                           ' along ' + ($arm -join ' -> ') +
+                           '. A ramp is read by lightness, so it has to be derived for the surface it is ' +
+                           'drawn on - see §9.4.4, build/palette/sequential.py and build/palette/diverging.py.')
+                }
+            }
+
+            # The floor: every step of the diverging ramp carries a reading, so all of it is
+            # measured above in $graphics. The sequential ramp's weak end is exempt by design -
+            # receding IS its encoding - so only its strongest step is checked here.
+            if ($ramp.FloorOn -eq 'last') {
+                $checked++
+                $last = $ratios[$ratios.Count - 1]
+                if ($last -lt $ramp.Floor) {
+                    $failures += [pscustomobject]@{
+                        Theme = $theme; What = $arm[$arm.Count - 1]; Against = 'WzCardFillBrush'
+                        Ratio = $last; Floor = $ramp.Floor
+                        Why = 'the strongest step of the §9.4.4 ramp is below §9.4.5''s 3:1 floor for meaningful non-text'
+                    }
+                }
+            }
         }
     }
 }

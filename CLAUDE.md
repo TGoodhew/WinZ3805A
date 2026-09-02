@@ -360,15 +360,29 @@ then fixed — #176 in PR #180, #177 with #87 in PR #181 — and the gate's base
 empty since, which is the point: **a baseline row is a debt with a number on it, not an
 exemption**.
 
-It gained a third check on 2 Sep 2026 (#367): §9.4.4's sequential ramp must **rise in prominence
-with the value on each theme's own card**, and its strongest step must clear 3:1. A ratio measured
-in isolation cannot catch what that does — every step of the old ramp was a legal colour, and the
-defect was the *order* they appeared in on one theme. Two things worth not rediscovering: the ramp
-was defined with **the same seven values in Light and Dark**, which cannot be monotone in both, so
-per-theme values are the fix rather than a preference; and **the weak end is deliberately exempt
-from the 3:1 floor** — receding is the encoding, and a ramp whose low steps met the floor for
-meaningful non-text would not be a sequential ramp. `build/palette/sequential.py` is the
-derivation, shared byte-for-byte with the Python port where the defect was found.
+It gained a third check on 2 Sep 2026 (#367, widened the same day by #371): §9.4.4's ramps must
+**rise in prominence as they are read outward on each theme's own card** — the sequential ramp from
+weakest signal to strongest, the diverging ramp from zero along both arms. A ratio measured in
+isolation cannot catch what that does: every step of both old ramps was a legal colour, and the
+defect was the *order* they appeared in on one theme. **Both ramps were defined with the same
+values in Light and Dark**, which cannot hold in both, so per-theme values are the fix rather than
+a preference — and finding the second took one question asked immediately after the first was
+fixed. `build/palette/sequential.py` and `diverging.py` are the derivations, shared byte-for-byte
+with the Python port where the sequential defect was found.
+
+**The two ramps take the 3:1 floor differently, and the asymmetry is the design.** Every step of
+the diverging ramp is measured, the neutral included, because each is a 1 px whisker carrying a
+reading — the Light neutral shipped at 1.24:1, which is #177's defect in the last ramp no gate was
+watching. The sequential ramp's weak end is exempt and only its strongest step is checked, because
+receding *is* its encoding and the sky-plot marker's stroke keeps a weak satellite findable. Do not
+"tidy" that into one rule.
+
+One trap in the shared derivations: `vec.lab2rgb` **clips**, so its returned bytes are always
+inside 0–255 and a gamut test that reads them answers yes for every colour in the plane. Use the
+`inside` flag it returns alongside. The first version of `sequential.py` had the clipped-bytes
+form, which cost nothing there (its chroma curve never asks for an impossible colour, and the ramp
+re-derives byte for byte either way) and produced instant nonsense in `diverging.py`, which does
+ask.
 
 The spacing gate was added 15 Aug 2026, after the §15 step 11 anti-pattern audit found
 **nine** off-scale values that had each passed review — `Padding="0,3"`,
