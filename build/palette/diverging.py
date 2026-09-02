@@ -77,6 +77,15 @@ CARD = {'Light': np.array([251.0, 251.0, 251.0]), 'Dark': np.array([43.0, 43.0, 
 SPEC = ['#08474D', '#3FB8C4', '#DDE4E5', '#F0A882', '#B23A00']
 
 # Section 9.4.3's semantic colours, per theme, which a magnitude step must not be mistaken for.
+#
+# THESE ARE WinZ3805A's, AND THE TWO REPOSITORIES DO NOT AGREE HERE. The Qt port's accent and
+# info are blue - #0F6CBD in Light and #4CC2FF in Dark - where this table's info is the brand
+# teal. So this is the one constant in a shared file that is NOT shared, and a run of this file
+# in the port measures the clearance against the wrong palette while looking entirely correct.
+# It happens to be safe: the ramps below clear the PORT's own colours by 11.2 dE00 in Light and
+# 7.5 in Dark, and the Dark sequential ramp clears them by 14.9, all well past the 5.0 asserted
+# here. Measured, not assumed - and the point of writing it down is that the next person to
+# change a value in either repository has to measure it again rather than inherit the luck.
 SEMANTIC = {
     'Light': {'success': '#0F7B3C', 'caution': '#8A5300', 'critical': '#B22B2B',
               'info': '#0B6C74', 'neutral': '#616161'},
