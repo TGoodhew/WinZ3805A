@@ -360,6 +360,16 @@ then fixed — #176 in PR #180, #177 with #87 in PR #181 — and the gate's base
 empty since, which is the point: **a baseline row is a debt with a number on it, not an
 exemption**.
 
+It gained a third check on 2 Sep 2026 (#367): §9.4.4's sequential ramp must **rise in prominence
+with the value on each theme's own card**, and its strongest step must clear 3:1. A ratio measured
+in isolation cannot catch what that does — every step of the old ramp was a legal colour, and the
+defect was the *order* they appeared in on one theme. Two things worth not rediscovering: the ramp
+was defined with **the same seven values in Light and Dark**, which cannot be monotone in both, so
+per-theme values are the fix rather than a preference; and **the weak end is deliberately exempt
+from the 3:1 floor** — receding is the encoding, and a ramp whose low steps met the floor for
+meaningful non-text would not be a sequential ramp. `build/palette/sequential.py` is the
+derivation, shared byte-for-byte with the Python port where the defect was found.
+
 The spacing gate was added 15 Aug 2026, after the §15 step 11 anti-pattern audit found
 **nine** off-scale values that had each passed review — `Padding="0,3"`,
 `Margin="0,0,0,6"`, `Margin="28,0,0,0"`. None of them is visible one at a time, which

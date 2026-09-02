@@ -6,7 +6,7 @@
     §9.12 and P0-16 both say A11Y-4 gates CI. Until now nothing computed a contrast ratio
     anywhere in the repository, so the claim was not true. This is that computation.
 
-    TWO CHECKS, and the second is the one that keeps the first honest.
+    THREE CHECKS, and the second is the one that keeps the first honest.
 
     1. CONTRAST. Every pair below is measured against its §9.4.5 floor, in Light and in Dark.
 
@@ -17,6 +17,20 @@
        a contrast relationship it did not previously own - and the numbers in
        fluent-stock-colours.txt stop describing what ships. That is worth failing on by
        itself, before any ratio is computed.
+
+    3. SEQUENTIAL PROMINENCE (#367). §9.4.4's signal-strength ramp is read by lightness, so
+       which end recedes depends on the surface it is drawn on. Prominence must therefore
+       RISE with the value on each theme's own card. The defect this exists to catch is the
+       one #367 found: the same seven values defined in Light and in Dark, which cannot be
+       monotone in both - it shipped inverted on the default theme, drawing the strongest
+       satellite at 1.36:1 and the weakest as the brightest mark on the plot, and it passed
+       every gate here because no gate looked at the ramp at all.
+
+       THE WEAK END IS DELIBERATELY EXEMPT FROM THE 3:1 FLOOR and the strong end is not. A
+       sequential ramp whose low steps met the floor for meaningful non-text would not be a
+       sequential ramp; receding IS the encoding, the marker's 1 px stroke is what keeps a
+       weak satellite findable, and §9.4.4 says as much. The step that carries the reading
+       people act on is the strong one, so that is where the floor is applied.
 
     ALPHA IS THE TRAP. Almost every stock token is semi-transparent: TextFillColorPrimary is
     89% black, LayerFillColorDefault is 50% white, CardStrokeColorDefault is 6% black. Reading
@@ -277,6 +291,47 @@ foreach ($theme in @('Light', 'Dark')) {
             else { $failures += $row }
         }
     }
+
+    # ---- check 3: §9.4.4's sequential ramp rises in prominence on this theme's own card ----
+    $ramp = @()
+    foreach ($step in 1..7) {
+        $raw = Resolve-Token $theme "WzSequential${step}Brush"
+        if (-not $raw) { break }
+        $ramp += Get-ContrastRatio (Merge-Colour $raw $card) $card
+    }
+
+    if ($ramp.Count -eq 7) {
+        $checked++
+        $rising = $true
+        for ($i = 1; $i -lt 7; $i++) { if ($ramp[$i] -le $ramp[$i - 1]) { $rising = $false } }
+
+        if (-not $rising) {
+            $failures += [pscustomobject]@{
+                Theme = $theme; What = 'WzSequential1..7Brush'; Against = '(sequential ramp)'
+                Ratio = 0.0; Floor = 0.0
+                Why = ("does not rise in prominence with the value on this theme's card: " +
+                       (($ramp | ForEach-Object { '{0:N2}' -f $_ }) -join '  ') +
+                       '. A sequential ramp is read by lightness, so it has to be derived for the ' +
+                       'surface it is drawn on - see §9.4.4 and build/palette/sequential.py.')
+            }
+        }
+
+        $checked++
+        if ($ramp[6] -lt 3.0) {
+            $failures += [pscustomobject]@{
+                Theme = $theme; What = 'WzSequential7Brush'; Against = 'WzCardFillBrush'
+                Ratio = $ramp[6]; Floor = 3.0
+                Why = 'the strongest step of the §9.4.4 ramp is below §9.4.5''s 3:1 floor for meaningful non-text'
+            }
+        }
+    }
+    elseif ($ramp.Count -gt 0) {
+        $failures += [pscustomobject]@{
+            Theme = $theme; What = 'WzSequential1..7Brush'; Against = '(sequential ramp)'
+            Ratio = 0.0; Floor = 0.0
+            Why = "resolves only $($ramp.Count) of its 7 steps here. Fix the tokens rather than the gate."
+        }
+    }
 }
 
 Write-Host "Checked $checked pair(s) across Light and Dark, composited over the §9.4.1 opaque page background."
@@ -304,7 +359,7 @@ if ($failures.Count -gt 0) {
     Write-Host ''
     Write-Host "FAIL: $($failures.Count) pair(s) below the §9.4.5 floor with no issue owning them." -ForegroundColor Red
     foreach ($f in $failures) {
-        if ($f.Against -eq '(inheritance)') {
+        if ($f.Against -like '(*)') {
             Write-Host ("  {0,-5} {1} {2}" -f $f.Theme, $f.What, $f.Why) -ForegroundColor Red
         }
         else {
