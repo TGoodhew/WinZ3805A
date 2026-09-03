@@ -62,6 +62,13 @@ jobs:
     name: Build, sign and publish
     runs-on: windows-latest
 
+    # A ceiling, because there was none and #381 found out what that means: a
+    # dry run stalled inside dotnet test and, left alone, would have held a
+    # runner until GitHub's six-hour default. This job takes about three and a
+    # half minutes. Thirty is room for a slow runner and a long timestamp round
+    # trip; it is not room for a hang.
+    timeout-minutes: 30
+
     steps:
       - uses: actions/checkout@v7
 
@@ -125,8 +132,24 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
+      # --blame-hang and a results directory, for the reason ci.yml's Test step
+      # records at greater length (#381): this is the step that stalled, and a
+      # release blocked by a silent test host is the worst place to have no
+      # evidence. A hang now ends the run in five minutes with a dump naming the
+      # test, and the dump is uploaded below even though nothing else about a
+      # failed release is.
       - name: Test
-        run: dotnet test tests/WinZ3805A.Tests/WinZ3805A.Tests.csproj -c Release
+        run: dotnet test tests/WinZ3805A.Tests/WinZ3805A.Tests.csproj -c Release --blame-hang --blame-hang-timeout 5m --results-directory ${{ runner.temp }}/testresults
+
+      # Only when something went wrong. A green release has nothing to say here,
+      # and the zip is the artifact that matters.
+      - name: Upload the test results
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-${{ github.run_id }}
+          path: ${{ runner.temp }}/testresults
+          if-no-files-found: ignore
 
       # ---------------------------------------------------------------------
       # Sign and package.
