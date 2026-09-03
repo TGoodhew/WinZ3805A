@@ -1,4 +1,5 @@
-using System.IO.Pipelines;
+﻿using System.IO.Pipelines;
+using System.Text;
 
 using WinZ3805A.Device.Transport;
 
@@ -69,5 +70,44 @@ public sealed class FakeTransportTests
 
             await writing.WaitAsync(Patience);
         }
+    }
+
+    /// <summary>
+    /// Disposing does not wait forever for a pump that is paused with nobody left to drain it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>#381.</b> <see cref="FakeTransport.WaitForReaderToConsume"/> builds the pipe with a
+    /// one-byte <c>pauseWriterThreshold</c>, so a response being pumped stops after its first chunk
+    /// and waits to be read. <c>DisposeAsync</c> then awaited that pump <i>before</i> completing the
+    /// pipe — with no cancellation and no timeout — so a transport disposed while the thing reading
+    /// it had already stopped never came back. Not a failure: a hang, inside <c>await using</c>,
+    /// which is why the test that hit it produced no output at all.
+    /// </para>
+    /// <para>
+    /// The order in a test is what decides it. Sessions and listeners are usually declared after
+    /// the transport and so dispose first, which is exactly the state this reproduces: the reader
+    /// is gone, one chunk sits unread, and the writer is paused behind it.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task DisposingDoesNotWaitForeverForAPumpNobodyIsDraining()
+    {
+        FakeTransport transport = new(_ => "an answer long enough to need a second chunk\r\n")
+        {
+            WaitForReaderToConsume = true,
+            ChunkSize = 4,
+        };
+
+        await transport.OpenAsync();
+
+        // The pipe exists and has a reader — and then nothing ever reads from it, which is what a
+        // disposed session leaves behind.
+        _ = transport.Input;
+
+        // A command starts the response pump, which pauses at the one-byte threshold.
+        await transport.WriteAsync(Encoding.Latin1.GetBytes("SYST:ERR?\r\n"));
+
+        await transport.DisposeAsync().AsTask().WaitAsync(Patience);
     }
 }
