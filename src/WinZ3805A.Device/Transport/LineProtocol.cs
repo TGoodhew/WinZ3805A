@@ -79,6 +79,31 @@ public sealed class LineProtocol
     /// aligned (#209). See <see cref="ResynchroniseAsync"/>.
     /// </summary>
     private TimeSpan? _resynchroniseWithin;
+
+    /// <summary>
+    /// Whether the driver buffer might hold bytes this link did not ask for (#395).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>True until a transaction has ended cleanly on a prompt.</b> That is the state in which
+    /// purging the driver buffer is worth what it costs: a receiver that finished its answer has
+    /// nothing more to send, so there is nothing to purge, while one that timed out or faulted may
+    /// still be talking.
+    /// </para>
+    /// <para>
+    /// <b>What it costs.</b> <c>DiscardInBuffer</c> aborts the read the pump has in flight, and
+    /// <see cref="SerialTransport"/>'s pump catches the resulting
+    /// <see cref="OperationCanceledException"/> and carries on — by design, and documented there.
+    /// Doing it before every command made that one exception per command: measured at <b>eight a
+    /// second</b> on an idle connected receiver, all of them unlogged, which read as a runaway
+    /// retry loop to anyone looking at counters and shaped a whole afternoon of #385's diagnosis.
+    /// </para>
+    /// <para>
+    /// It starts true because the first command on a link follows whatever the receiver said when
+    /// DTR was asserted, which is exactly the case the purge was written for.
+    /// </para>
+    /// </remarks>
+    private bool _mayHaveStaleInput = true;
     private readonly ILogger _logger;
 
     public LineProtocol(ITransport transport, TimeProvider timeProvider, ILogger<LineProtocol>? logger = null)
@@ -137,6 +162,10 @@ public sealed class LineProtocol
             TimeSpan elapsed = _timeProvider.GetElapsedTime(startedAt);
             TransportLog.TransactionCompleted(_logger, lines.Count, elapsed.TotalMilliseconds, echoDiscarded);
 
+            // Ended on the prompt, so the receiver has finished and the driver buffer holds nothing
+            // this link did not ask for. The next command can skip the purge (#395).
+            _mayHaveStaleInput = false;
+
             return new Transaction
             {
                 Command = sent,
@@ -155,6 +184,7 @@ public sealed class LineProtocol
             TransportLog.TransactionTimedOut(_logger, sent, timeout.TotalMilliseconds, lines.Count);
 
             NeedsResynchronising(lines.Count, timeout);
+            _mayHaveStaleInput = true;
 
             return new Transaction
             {
@@ -171,6 +201,7 @@ public sealed class LineProtocol
             // command at a time and finishes what it started — so the rest of this reply is still
             // coming, and would be read as the next command's answer (#209).
             NeedsResynchronising(lines.Count, timeout);
+            _mayHaveStaleInput = true;
             throw;
         }
         catch (Exception ex) when (TransportFaults.IsTransportFault(ex))
@@ -180,6 +211,7 @@ public sealed class LineProtocol
             // and P0-14 requires the app to report Disconnected rather than fall over.
             TransportFault fault = TransportFaults.Classify(ex);
             TransportLog.TransactionFaulted(_logger, sent, fault, ex);
+            _mayHaveStaleInput = true;
 
             return new Transaction
             {
@@ -406,7 +438,13 @@ public sealed class LineProtocol
     /// </remarks>
     private void DiscardStaleInput()
     {
-        _transport.DiscardInput();
+        // The PURGE is conditional (#395); the pipe drain below is not. Draining costs nothing and
+        // catches anything the pump has already collected. Purging costs an aborted read, and is
+        // only worth it when the receiver may still be mid-sentence - see _mayHaveStaleInput.
+        if (_mayHaveStaleInput)
+        {
+            _transport.DiscardInput();
+        }
 
         PipeReader reader = _transport.Input;
         long discarded = 0;
