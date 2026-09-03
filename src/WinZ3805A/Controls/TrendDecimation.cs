@@ -103,7 +103,7 @@ public static class TrendDecimation
             counts[key] = counts.TryGetValue(key, out int seen) ? seen + 1 : 1;
         }
 
-        List<(int Column, int State)> columns = [];
+        List<(int Column, int State)> columns = new(width);
         for (int c = 0; c < width; c++)
         {
             if (tally[c] is not Dictionary<int, int> counts || counts.Count == 0)
@@ -203,7 +203,7 @@ public static class TrendDecimation
             count[column]++;
         }
 
-        List<TrendColumn> columns = [];
+        List<TrendColumn> columns = new(width);
         for (int c = 0; c < width; c++)
         {
             if (count[c] > 0)
