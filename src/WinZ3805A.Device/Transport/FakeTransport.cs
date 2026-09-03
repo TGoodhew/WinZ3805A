@@ -1,4 +1,4 @@
-using System.IO.Pipelines;
+﻿using System.IO.Pipelines;
 using System.Text;
 using System.Threading.Channels;
 
@@ -33,6 +33,12 @@ public sealed class FakeTransport : ITransport
 
     /// <summary>Guards the lazy construction of <see cref="Pipe"/>, which two threads race for (#324).</summary>
     private readonly Lock _pipeGate = new();
+
+    /// <summary>
+    /// Cancels a response pump that is paused at the write threshold when the transport is disposed
+    /// (#381). Without it, disposal waits for a drain that is never coming.
+    /// </summary>
+    private readonly CancellationTokenSource _disposing = new();
 
     private Pipe? _pipe;
     private Task _pump = Task.CompletedTask;
@@ -194,9 +200,27 @@ public sealed class FakeTransport : ITransport
         _open = false;
         _commands.Writer.TryComplete();
 
+        // ------------------------------------------------------------------------------------
+        // CANCEL THE PUMP BEFORE WAITING FOR IT (#381). With WaitForReaderToConsume the pipe has a
+        // one-byte pauseWriterThreshold, so a response stops after its first chunk and waits to be
+        // drained. Nothing drains it once the session or listener under test has been disposed -
+        // and in a test that is the NORMAL order, since those are declared after the transport and
+        // so dispose first. Awaiting the pump then never returned: not a failed test, a hung one,
+        // inside `await using`, which is why the run it stalled produced no output at all.
+        //
+        // Cancelling the writer's token rather than completing the reader, deliberately: the
+        // protocol may still have a read in flight on the other end, and completing a reader from
+        // underneath it trades this hang for an exception somewhere less obvious.
+        // ------------------------------------------------------------------------------------
+        await _disposing.CancelAsync().ConfigureAwait(false);
+
         try
         {
             await _pump.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // A response was still being pumped, and is now abandoned. That is what disposal means.
         }
         catch (InvalidOperationException)
         {
@@ -208,6 +232,8 @@ public sealed class FakeTransport : ITransport
             await _pipe.Writer.CompleteAsync().ConfigureAwait(false);
             await _pipe.Reader.CompleteAsync().ConfigureAwait(false);
         }
+
+        _disposing.Dispose();
     }
 
     /// <summary>
@@ -312,7 +338,11 @@ public sealed class FakeTransport : ITransport
         for (int offset = 0; offset < payload.Length; offset += chunk)
         {
             int length = Math.Min(chunk, payload.Length - offset);
-            await Pipe.Writer.WriteAsync(payload.AsMemory(offset, length)).ConfigureAwait(false);
+            // The token is what makes disposal terminate rather than wait (#381): with
+            // WaitForReaderToConsume this write pauses until the reader drains it, and after
+            // disposal there is no reader left to.
+            await Pipe.Writer.WriteAsync(payload.AsMemory(offset, length), _disposing.Token)
+                .ConfigureAwait(false);
 
             // Yield between writes so the reader observes separate reads rather than one coalesced
             // buffer. Without this the fragmentation the chunk size asks for never actually happens.
