@@ -221,7 +221,7 @@ Everything from the main window, with the words behind the numbers:
   one, which highlights it in the table too. **List** swaps
   the plot for a plain table; **Save image** writes the plot to a file.
 
-  ![The sky plot alone: a circle with north at the top, a dashed ring marking the elevation mask, teal dots of varying darkness for the satellites being tracked and hollow rings for those that are not, and a legend reading tracked, predicted, acquiring, below mask, ignored, elevation mask](images/how-to-use/satellites-sky-plot.png)
+  ![The sky plot alone: a circle with north at the top, a dashed ring marking the elevation mask, teal dots for the satellites being tracked, stronger signals drawn as larger and bolder dots, hollow rings for those not being tracked, and a legend reading tracked, predicted, acquiring, below mask, ignored, elevation mask](images/how-to-use/satellites-sky-plot.png)
 
 - **Tracked** and **Not tracked** tables list every satellite the receiver knows about with its PRN,
   elevation, azimuth and, for tracked ones, carrier-to-noise ratio — 35 and above is good.
@@ -276,6 +276,13 @@ Everything from the main window, with the words behind the numbers:
 
 - **1 PPS time interval** and **Oscillator control (EFC)** — the same two quantities the main
   window and the Overview show, as trends over the range you choose.
+
+  ![The 1 PPS time interval trend: a mark for each slice of the window, on an axis running from +50 ns at the top through 0 ns in the middle to −50 ns at the bottom, drawn in orange above the zero line and teal below it](images/how-to-use/timing-ti-trend.png)
+
+  Each mark spans everything the receiver reported in that slice of time, so a tall one is a
+  moment that moved. **Orange is above the zero line and teal below it**, and the further from
+  zero, the bolder the mark; a mark that crosses zero is grey, because within that slice the
+  interval was on both sides of it.
 - **Oscillator drift** — how the EFC is trending, which is the oscillator's ageing rate.
 - **Stability (Allan deviation)** — the standard measure of an oscillator's short-term stability,
   computed from the recorded 1 PPS readings for a range of averaging times τ. The **differences
