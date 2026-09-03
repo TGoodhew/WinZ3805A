@@ -50,6 +50,7 @@ jobs:
   # ---------------------------------------------------------------------------
   design-system-gates:
     name: Design system gates
+    timeout-minutes: 10
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
@@ -166,6 +167,7 @@ jobs:
   # ---------------------------------------------------------------------------
   safety-gates:
     name: Safety gates
+    timeout-minutes: 10
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
@@ -193,6 +195,7 @@ jobs:
   # ---------------------------------------------------------------------------
   documents:
     name: Document references
+    timeout-minutes: 10
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
@@ -215,6 +218,7 @@ jobs:
   # ---------------------------------------------------------------------------
   tooling:
     name: Tooling self-tests
+    timeout-minutes: 10
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
@@ -230,6 +234,7 @@ jobs:
   # ---------------------------------------------------------------------------
   build:
     name: Build ${{ matrix.configuration }} | ${{ matrix.platform }}
+    timeout-minutes: 30
     runs-on: windows-latest
     strategy:
       fail-fast: false
@@ -267,6 +272,7 @@ jobs:
   # ---------------------------------------------------------------------------
   test:
     name: Test
+    timeout-minutes: 20
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
@@ -279,8 +285,19 @@ jobs:
       - name: Restore
         run: dotnet restore tests/WinZ3805A.Tests/WinZ3805A.Tests.csproj
 
+      # --blame-hang, because of what #381 looked like without it: a release run
+      # printed the test host's banner and then nothing for nine minutes, and the
+      # only thing anybody could say afterwards was that it had stopped. A job's
+      # log cannot be read while it runs and cancelling adds nothing, so a hang
+      # here used to leave no evidence at all. With this, a test that goes quiet
+      # for five minutes ends the run and leaves a dump NAMING IT, collected by
+      # the upload below.
+      #
+      # Five minutes is chosen against what this suite actually does: 2 177 tests
+      # in about 50 seconds on a runner, and the timeout is per test rather than
+      # for the run. Anything approaching it is already wrong.
       - name: Test
-        run: dotnet test tests/WinZ3805A.Tests/WinZ3805A.Tests.csproj --no-restore --logger "trx;LogFileName=test-results.trx" --results-directory ${{ runner.temp }}/testresults
+        run: dotnet test tests/WinZ3805A.Tests/WinZ3805A.Tests.csproj --no-restore --blame-hang --blame-hang-timeout 5m --logger "trx;LogFileName=test-results.trx" --results-directory ${{ runner.temp }}/testresults
 
       - name: Upload test results
         if: ${{ !cancelled() }}
