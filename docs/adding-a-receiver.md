@@ -451,7 +451,43 @@ Covered in [the safety model](#the-safety-model--obligations-that-bind-your-driv
 above; implement them exactly that way, and run
 `pwsh build/Test-NoBlockedCommands.ps1` before you push anything.
 
-### Step 6 — timeouts and cadence
+### Step 6 — timeouts, cadence, and what the transport does between commands
+
+**Before the numbers, one behaviour of the shared transport that a driver
+author will otherwise meet as a surprise.** `LineProtocol` realigns the stream
+between transactions, and since #395 it does so in two distinct ways:
+
+| | when | cost |
+|---|---|---|
+| **Drain the pipe** | before every command | nothing — it reads what the pump has already collected |
+| **Purge the driver buffer** (`DiscardInBuffer`) | only when the previous transaction did **not** end on a prompt, and on the first command of a link | aborts the read the pump has in flight |
+
+**Why the purge is conditional.** Purging aborts the in-flight read, which
+raises an `OperationCanceledException` that `SerialTransport`'s pump catches and
+carries on from. Doing it before every command made that **one exception per
+command — eight a second** on an idle connected receiver, none of them logged.
+That is not a fault, but it is invisible cost, and it read as a runaway retry
+loop to everyone who met it in #385's counters.
+
+**What this means for your driver.** The transport assumes a receiver that
+answers when asked and is silent otherwise: after a transaction that ended on a
+prompt, nothing more is expected, so nothing is purged.
+
+- **A command-response receiver needs nothing from you here.** This is the
+  SmartClock family's shape and the assumption holds.
+- **A receiver that emits unsolicited output between commands** — a status line
+  on an alarm, a keep-alive, anything the application did not ask for — will
+  have that output *drained into the next transaction's read* rather than
+  purged. `LineProtocol` discards what it drains, so the practical effect is
+  that unsolicited bytes are dropped rather than misread; but if your receiver
+  says something between commands that **matters**, a driver that expects the
+  transport to catch it will not see it. Say so in your driver's remarks, and
+  raise it (Step 11) rather than working around it.
+- **A talker that streams continuously does not use this path at all.** NMEA
+  and its family read through `BroadcastListener`, which never sends a command
+  and never purges anything.
+
+#### The numbers
 
 **These are measurements, not conventions.** Copying another receiver's figures
 gives numbers that are either wastefully long or short enough to fail healthy

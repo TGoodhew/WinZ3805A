@@ -337,6 +337,91 @@ public class LineProtocolTests
         await pending.WaitAsync(s_testTimeout);
     }
 
+    /// <summary>
+    /// A clean transaction leaves nothing to purge, so the next command does not purge (#395).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The purge is <c>SerialPort.DiscardInBuffer</c>, and it aborts the read the pump has in
+    /// flight — <see cref="SerialTransport"/> catches the resulting cancellation and carries on, by
+    /// design. Before every command, that was one exception per command: <b>eight a second</b> on
+    /// an idle connected receiver, unlogged, and it read as a runaway retry loop in #385's counters.
+    /// </para>
+    /// <para>
+    /// The first command still purges, which is why this counts from one rather than zero: it
+    /// follows whatever the receiver said when DTR was asserted.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ACleanTransactionMeansTheNextCommandDoesNotPurgeTheBuffer()
+    {
+        await using FakeTransport transport = new(_ => IdentityResponse);
+        LineProtocol protocol = await ConnectAsync(transport);
+
+        Transaction first = await protocol.ExecuteAsync("*IDN?").WaitAsync(s_testTimeout);
+        Assert.Equal(TransactionOutcome.Completed, first.Outcome);
+        Assert.Equal(1, transport.DiscardCount);
+
+        for (int i = 0; i < 5; i++)
+        {
+            Transaction next = await protocol.ExecuteAsync("*IDN?").WaitAsync(s_testTimeout);
+            Assert.Equal(TransactionOutcome.Completed, next.Outcome);
+        }
+
+        Assert.Equal(1, transport.DiscardCount);
+    }
+
+    /// <summary>
+    /// A transaction that did not end on a prompt does, because the receiver may still be talking.
+    /// </summary>
+    /// <remarks>
+    /// This is the case the purge exists for and the reason it is conditional rather than removed:
+    /// a receiver that timed out mid-answer has a tail coming, and a tail read as the next
+    /// command's answer misaligns the session indefinitely (#209).
+    /// </remarks>
+    [Fact]
+    public async Task ATimedOutTransactionMeansTheNextCommandDoesPurge()
+    {
+        FakeTimeProvider clock = new();
+        await using FakeTransport transport = new() { Silent = true };
+        LineProtocol protocol = await ConnectAsync(transport, clock);
+
+        Task<Transaction> pending = protocol.ExecuteAsync("*IDN?", TimeSpan.FromSeconds(3));
+        clock.Advance(TimeSpan.FromSeconds(4));
+
+        Transaction timedOut = await pending.WaitAsync(s_testTimeout);
+        Assert.Equal(TransactionOutcome.TimedOut, timedOut.Outcome);
+
+        int afterFirst = transport.DiscardCount;
+
+        // The next command purges because the last one did not finish. Nothing answers here either,
+        // so the count is what is asserted rather than the outcome.
+        Task<Transaction> second = protocol.ExecuteAsync("*IDN?", TimeSpan.FromSeconds(3));
+        clock.Advance(TimeSpan.FromSeconds(4));
+        _ = await second.WaitAsync(s_testTimeout);
+
+        Assert.True(
+            transport.DiscardCount > afterFirst,
+            $"a command after a timed-out one must purge the driver buffer; count stayed at {afterFirst} (#395)");
+    }
+
+    /// <summary>
+    /// And once it is talking cleanly again, it stops purging (#395).
+    /// </summary>
+    [Fact]
+    public async Task PurgingStopsAgainOnceTheLinkIsHealthy()
+    {
+        FakeTimeProvider clock = new();
+        await using FakeTransport transport = new(_ => IdentityResponse);
+        LineProtocol protocol = await ConnectAsync(transport, clock);
+
+        // Healthy, healthy: one purge for the first command and none after.
+        _ = await protocol.ExecuteAsync("*IDN?").WaitAsync(s_testTimeout);
+        _ = await protocol.ExecuteAsync("*IDN?").WaitAsync(s_testTimeout);
+
+        Assert.Equal(1, transport.DiscardCount);
+    }
+
     private static async Task<LineProtocol> ConnectAsync(FakeTransport transport, TimeProvider? timeProvider = null)
     {
         await transport.OpenAsync();
