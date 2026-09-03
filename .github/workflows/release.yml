@@ -30,6 +30,11 @@
 #
 # Regenerate both with build\New-SigningSecrets.ps1, which prints the exact
 # gh commands.
+#
+# THE ACTION PINS ARE EXPLAINED IN ci.yml, above its jobs (#377). They have to
+# move together with that file's, and the one to know about is upload-artifact,
+# whose v5 still declares node20. Bump them here only behind the dry run below:
+# this workflow signs, and a tag is the worst place to find that out.
 # ---------------------------------------------------------------------------
 name: Release
 
@@ -58,10 +63,10 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
 
@@ -168,7 +173,7 @@ jobs:
           Write-Host "timestamped $($signature.TimeStamperCertificate.Subject)"
 
       - name: Upload the zip as an artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: WinZ3805A-${{ steps.version.outputs.manifest }}-x64
           path: dist/*.zip
