@@ -15,6 +15,32 @@ env:
   DOTNET_CLI_TELEMETRY_OPTOUT: 1
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
 
+# ---------------------------------------------------------------------------
+# THE ACTION PINS, AND WHY THEY ARE THESE NUMBERS (#377).
+#
+# Both workflows pin major tags, and every one of them must declare `node24` in
+# its own action.yml. The v4 line declared node20, which the runner had already
+# begun forcing onto node24 - so every job carried a deprecation annotation on a
+# green run. Seven of them. A warning nobody can clear is one people learn to
+# scroll past, and the day one of these actions genuinely breaks the message
+# will look exactly like the noise before it.
+#
+# THE TRAP IS upload-artifact: its v5 STILL DECLARES node20, so bumping the
+# three together to v5 leaves the warning standing and looks like the fix did
+# not work. node24 arrives there at v6. checkout and setup-dotnet reach it at
+# v5. All three are pinned above that, at the current majors, because nothing in
+# this repository watches for these - there is no dependabot configuration - and
+# a bump that has to be repeated in a month is the same chore twice.
+#
+# What the majors changed, checked rather than assumed: checkout v5 raises the
+# minimum runner to 2.327.1 (hosted windows-latest is far past it), v6 moves
+# credential persistence to a separate file, v7 blocks checking out a fork's PR
+# under pull_request_target and workflow_run - neither of which is a trigger
+# here. setup-dotnet v6 and upload-artifact v7 are ESM rewrites with the same
+# inputs; upload-artifact v7 adds an opt-in `archive: false` for single files,
+# which neither call site uses.
+# ---------------------------------------------------------------------------
+
 jobs:
   # ---------------------------------------------------------------------------
   # The §9.12 and §9.13 criteria that gate the build rather than a review — ten of them.
@@ -26,7 +52,7 @@ jobs:
     name: Design system gates
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # P0-17 / §9.13 item 2
       - name: No hex colour literals outside Themes/Colors.xaml
@@ -142,7 +168,7 @@ jobs:
     name: Safety gates
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: No excluded command is named outside the exclusion patterns
         shell: pwsh
@@ -169,7 +195,7 @@ jobs:
     name: Document references
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Links, section references, cited issues and the notices table
         shell: pwsh
@@ -191,7 +217,7 @@ jobs:
     name: Tooling self-tests
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: The fixture capture harness still parses a status screen
         shell: pwsh
@@ -211,10 +237,10 @@ jobs:
         configuration: [Debug, Release]
         platform: [x64]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
 
@@ -243,10 +269,10 @@ jobs:
     name: Test
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
 
@@ -258,7 +284,7 @@ jobs:
 
       - name: Upload test results
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-results
           path: ${{ runner.temp }}/testresults
