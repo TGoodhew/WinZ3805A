@@ -1,7 +1,7 @@
-﻿using System.Globalization;
+﻿using System.ComponentModel;
+using System.Globalization;
 
 using Microsoft.Extensions.DependencyInjection;
-using System.ComponentModel;
 
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -46,6 +46,62 @@ public sealed partial class TimingPage : Page, ICsvExportSource
     private readonly NumberFieldValidator _length;
     private readonly NumberFieldValidator _velocityFactor;
     private bool _busy;
+    /// <summary>UTC ticks of the last trend redraw, or 0 for never (#389).</summary>
+    private long _trendRenderedTicks;
+
+    /// <summary>
+    /// The fit window, kept between redraws and extended rather than read again (#389).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The store is append-only</b>, which is what makes this sound: rows arrive with increasing
+    /// ticks and nothing rewrites history, so a redraw needs the records since the last one plus
+    /// whatever has aged out of the front - never the whole window again.
+    /// </para>
+    /// <para>
+    /// <b>Why it is worth caching rather than re-reading.</b> A 1 h window is about 3,600 records,
+    /// which is 200 KB - over the 85 KB large-object threshold, so every re-read put another large
+    /// object on a heap that is not compacted, thirteen times a minute at the throttled rate. The
+    /// increment between two redraws is five seconds of data: under 300 bytes, and nowhere near the
+    /// LOH. Measured before this: 2.67 MB/min of working set with the throttle already in.
+    /// </para>
+    /// </remarks>
+    private readonly List<TrendRecord> _window = [];
+
+    /// <summary>The newest tick in <see cref="_window"/>, or 0 when it is empty (#389).</summary>
+    /// <remarks>
+    /// The newest RECORD's tick rather than the time of the last read. A record can be appended
+    /// with a tick a little behind the moment the read happened, and starting the next read from
+    /// "now" would step over it - a dropped sample that would never come back, because the next
+    /// read starts later still.
+    /// </remarks>
+    private long _windowToTicks;
+
+    /// <summary>Which range <see cref="_window"/> was built for, so a change to it re-reads (#389).</summary>
+    private int _windowRangeHours;
+
+    /// <summary>
+    /// The lists a redraw fills, kept and refilled rather than rebuilt (#389).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>Clear()</c> keeps a list's capacity, so after the first redraw at a given range these
+    /// allocate nothing at all. Rebuilt each time, they were four large objects per redraw - the
+    /// drawn window at about 200 KB on the 1 h range and three projections at 58 KB each - every
+    /// one of them over the 85 KB large-object threshold, thirteen times a minute.
+    /// </para>
+    /// <para>
+    /// <b>Handing the chart a list this page goes on to refill is safe because both happen on the
+    /// UI thread</b>, and a redraw clears and refills within one synchronous block: there is no
+    /// moment at which a layout pass can observe a half-filled list.
+    /// </para>
+    /// </remarks>
+    private readonly List<TrendRecord> _drawn = [];
+    private readonly List<TrendSample> _series = [];
+    private readonly List<TrendSample> _efc = [];
+    private readonly List<TrendSample> _states = [];
+    private readonly List<EfcSample> _drift = [];
+
     private readonly DispatcherTimer _stalenessTicker = new() { Interval = TimeSpan.FromSeconds(1) };
 
     /// <summary>
@@ -102,10 +158,17 @@ public sealed partial class TimingPage : Page, ICsvExportSource
         // The trend redraws on the staleness tick rather than on every fast poll. One second of
         // new data cannot move a plot whose narrowest range is an hour, and redrawing a thousand
         // strokes at 1 Hz to show it would be work nobody can see.
+        //
+        // THAT REASONING WAS RIGHT AND THE TICK WAS STILL TOO OFTEN (#389). A second of new data
+        // cannot move an hour-wide plot, and neither can four: the chart decimates to one column
+        // per pixel, so nothing changes until a whole column of time has passed - 4.6 s on the 1 h
+        // range, two minutes on 7 d. Measured with the ticker unthrottled and this page on screen,
+        // the working set still climbed 7.5 MB a minute after #387 and #388 had fixed everything
+        // else (#385).
         _stalenessTicker.Tick += (_, _) =>
         {
             _model?.RaiseAll();
-            RenderTrend();
+            RenderTrendIfItWouldShowAnything();
         };
         Unloaded += (_, _) => Detach();
     }
@@ -119,6 +182,24 @@ public sealed partial class TimingPage : Page, ICsvExportSource
     private void Detach()
     {
         _stalenessTicker.Stop();
+
+        // The cached window goes with it (#389). A page that has been away would otherwise hold a
+        // 7 d window - megabytes - for as long as it is not being looked at, which is the thing
+        // #388 was about; and its next redraw would extend a window with a hole in the middle.
+        _window.Clear();
+        _window.TrimExcess();
+        _drawn.Clear();
+        _drawn.TrimExcess();
+        _series.Clear();
+        _series.TrimExcess();
+        _efc.Clear();
+        _efc.TrimExcess();
+        _states.Clear();
+        _states.TrimExcess();
+        _drift.Clear();
+        _drift.TrimExcess();
+        _windowToTicks = 0;
+        _windowRangeHours = 0;
 
         if (_device is DeviceContext device)
         {
@@ -585,7 +666,10 @@ public sealed partial class TimingPage : Page, ICsvExportSource
     /// </remarks>
     private void RenderDrift(IReadOnlyList<TrendRecord> window)
     {
-        List<EfcSample> samples = [];
+        // Refilled rather than rebuilt, like the three projections above (#389): this walks the FIT
+        // window, which is the widest of the lot.
+        _drift.Clear();
+        List<EfcSample> samples = _drift;
         foreach (TrendRecord record in window)
         {
             if (record.Efc is not double percent)
@@ -697,21 +781,89 @@ public sealed partial class TimingPage : Page, ICsvExportSource
         }
     }
 
-    /// <summary>Pulls one field out of a window, dropping the samples that have none.</summary>
+    /// <summary>
+    /// Brings <see cref="_window"/> up to date, reading only what is new (#389).
+    /// </summary>
+    /// <param name="trends">The store.</param>
+    /// <param name="fitFrom">The oldest tick the window should hold.</param>
+    /// <param name="now">The newest.</param>
+    /// <remarks>
+    /// <para>
+    /// Falls back to reading the whole window in the two cases where an increment would be wrong:
+    /// the range changed, so the window is a different window; or the cache is empty or stale
+    /// enough that its newest record is older than the new front, which is the shape of a page that
+    /// has been away — there would be a hole in the middle otherwise, and a hole in a trend is
+    /// indistinguishable from a receiver that stopped answering.
+    /// </para>
+    /// <para>
+    /// <b>What this does not handle, deliberately.</b> Compaction thins rows older than 24 h, and a
+    /// cached window keeps the detail it read before that happened; it draws more than the store
+    /// still holds, which is harmless. And an <c>Append</c> that updates a tick already cached is
+    /// not seen — the store upserts, but the poll loop writes each instant once, so that is a
+    /// theoretical case rather than one to complicate this for.
+    /// </para>
+    /// </remarks>
+    private IReadOnlyList<TrendRecord> ExtendWindow(TrendStore trends, long fitFrom, long now)
+    {
+        bool sameRange = _windowRangeHours == _rangeHours;
+        bool contiguous = _window.Count > 0 && _windowToTicks >= fitFrom;
+
+        if (!sameRange || !contiguous)
+        {
+            _window.Clear();
+            _window.AddRange(trends.Read(fitFrom, now));
+            _windowRangeHours = _rangeHours;
+        }
+        else
+        {
+            // Strictly after the newest record we hold: the store's key is the tick, so a record
+            // at that tick is already here and one after it is not.
+            foreach (TrendRecord record in trends.Read(_windowToTicks + 1, now))
+            {
+                _window.Add(record);
+            }
+
+            // And drop what has fallen off the back. RemoveRange shifts what remains rather than
+            // allocating, which is the point — this list is the thing being kept.
+            int aged = 0;
+            while (aged < _window.Count && _window[aged].Ticks < fitFrom)
+            {
+                aged++;
+            }
+
+            if (aged > 0)
+            {
+                _window.RemoveRange(0, aged);
+            }
+        }
+
+        _windowToTicks = _window.Count > 0 ? _window[^1].Ticks : 0;
+        return _window;
+    }
+
+    /// <summary>
+    /// Pulls one field out of a window into a buffer the caller keeps, dropping the samples that
+    /// have none (#389).
+    /// </summary>
+    /// <remarks>
+    /// Fills rather than returns: a fresh list here was a large object three times per redraw. The
+    /// buffer's capacity survives <c>Clear()</c>, so this settles at one allocation per range.
+    /// </remarks>
     private static IReadOnlyList<TrendSample> Project(
+        List<TrendSample> buffer,
         IReadOnlyList<TrendRecord> window,
         Func<TrendRecord, double?> selector)
     {
-        List<TrendSample> samples = [];
+        buffer.Clear();
         foreach (TrendRecord record in window)
         {
             if (selector(record) is double value)
             {
-                samples.Add(new TrendSample(record.Ticks, value));
+                buffer.Add(new TrendSample(record.Ticks, value));
             }
         }
 
-        return samples;
+        return buffer;
     }
 
     private void OnRangeChanged(object sender, RoutedEventArgs e)
@@ -737,6 +889,34 @@ public sealed partial class TimingPage : Page, ICsvExportSource
     /// and a disconnected stretch are the same picture, and only the count tells them apart.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Renders the trend only if a whole pixel column of new data has arrived since the last one
+    /// (#389).
+    /// </summary>
+    /// <remarks>
+    /// Everything that wants the trend brought up to date on a schedule comes through here. The two
+    /// callers that must draw regardless - the first render, and a range change, which moves the
+    /// window rather than extending it - call <see cref="RenderTrend"/> directly.
+    /// </remarks>
+    private void RenderTrendIfItWouldShowAnything()
+    {
+        if (_device is not DeviceContext device)
+        {
+            return;
+        }
+
+        if (!TrendRefreshPolicy.ShouldRedraw(
+                _trendRenderedTicks,
+                device.TimeProvider.GetUtcNow().UtcTicks,
+                TimeSpan.FromHours(_rangeHours),
+                TimeIntervalTrend.ActualWidth))
+        {
+            return;
+        }
+
+        RenderTrend();
+    }
+
     private void RenderTrend()
     {
         if (_trends is not TrendStore trends || _device is not DeviceContext device)
@@ -745,37 +925,38 @@ public sealed partial class TimingPage : Page, ICsvExportSource
         }
 
         long now = device.TimeProvider.GetUtcNow().UtcTicks;
+        _trendRenderedTicks = now;
         long from = now - TimeSpan.FromHours(_rangeHours).Ticks;
 
-        // One read, reaching EfcDrift.FitMargin further back than the charts draw, and filtered for
-        // them (#184). The fit needs a span of a full day before it can separate a diurnal term,
-        // and a window of exactly 24 hours holds slightly under 24 hours of span - so the range
-        // named for a day could never reach the analysis the card is built around.
+        // One window, reaching EfcDrift.FitMargin further back than the charts draw, and filtered
+        // for them (#184). The fit needs a span of a full day before it can separate a diurnal
+        // term, and a window of exactly 24 hours holds slightly under 24 hours of span - so the
+        // range named for a day could never reach the analysis the card is built around.
         //
-        // Read once and narrowed rather than read twice: the 7 d range is 200 000-odd rows and the
-        // second query would be almost all of the first.
-        IReadOnlyList<TrendRecord> fitWindow = trends.Read(from - EfcDrift.FitMargin.Ticks, now);
+        // Extended rather than re-read (#389). See _window.
+        IReadOnlyList<TrendRecord> fitWindow = ExtendWindow(trends, from - EfcDrift.FitMargin.Ticks, now);
 
-        List<TrendRecord> drawn = new(fitWindow.Count);
+        _drawn.Clear();
         foreach (TrendRecord record in fitWindow)
         {
             if (record.Ticks >= from)
             {
-                drawn.Add(record);
+                _drawn.Add(record);
             }
         }
 
-        IReadOnlyList<TrendRecord> window = drawn;
+        IReadOnlyList<TrendRecord> window = _drawn;
 
         // The export is what the user is looking at, not what the fit reached into.
         _exportable = window;
 
-        IReadOnlyList<TrendSample> series = Project(window, record => record.TimeIntervalNanoseconds);
-        IReadOnlyList<TrendSample> efc = Project(window, record => record.Efc);
+        IReadOnlyList<TrendSample> series = Project(_series, window, record => record.TimeIntervalNanoseconds);
+        IReadOnlyList<TrendSample> efc = Project(_efc, window, record => record.Efc);
 
         // The mode as a number, for the background shading. Read once and shared by both charts,
         // so the two cannot disagree about when the receiver was locked.
         IReadOnlyList<TrendSample> states = Project(
+            _states,
             window,
             record => (double)InterpretSyncState(record.SyncState));
 
