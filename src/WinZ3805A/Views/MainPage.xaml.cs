@@ -8,6 +8,8 @@ using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Windows.ApplicationModel;
+
 using WinZ3805A.Controls;
 using WinZ3805A.Services;
 using WinZ3805A.ViewModels;
@@ -391,6 +393,30 @@ public sealed partial class MainPage : Page
     private void OnModelChanged(object? sender, PropertyChangedEventArgs e) =>
         DispatcherQueue.TryEnqueue(Render);
 
+    /// <summary>
+    /// The installed version, for the §10.3 footer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Read once, not per render.</b> This footer is rewritten on every notification - at least
+    /// once a second - and <c>Package.Current</c> is a COM call. The version cannot change while
+    /// the process runs, so it is resolved when the class is first touched and reused.
+    /// </para>
+    /// <para>
+    /// From <c>Package.Current.Id.Version</c>, which is the manifest's own number and therefore the
+    /// one the release tag had to match (§6.3). An assembly version would be a second number that
+    /// could drift from it. The F1 help footer shows the same value the same way; this is the copy
+    /// somebody can read without opening anything.
+    /// </para>
+    /// </remarks>
+    private static readonly string PackageVersionText = FormatPackageVersion();
+
+    private static string FormatPackageVersion()
+    {
+        PackageVersion version = Package.Current.Id.Version;
+        return $"{version.Major}.{version.Minor}.{version.Build}.{version.Revision}";
+    }
+
     private void Render()
     {
         RenderFirstRun();
@@ -421,8 +447,8 @@ public sealed partial class MainPage : Page
         RenderClock();
 
         FooterText.Text = string.IsNullOrEmpty(_model.PortDescription)
-            ? _model.AgeDescription
-            : $"{_model.PortDescription} · {_model.AgeDescription}";
+            ? $"{PackageVersionText} · {_model.AgeDescription}"
+            : $"{PackageVersionText} · {_model.PortDescription} · {_model.AgeDescription}";
 
         // The word is set here rather than in the visual state, because a Setter can only assign a
         // literal and this one comes from the same place the severity does — one switch in
