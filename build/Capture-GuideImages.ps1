@@ -43,6 +43,22 @@
     two-column layout the text beside it does not describe.
 
 .NOTES
+    IT NEEDS THE NAVIGATION PANE EXPANDED, and expands it if it is not (#374).
+    That is not a preference about how the window looks: DetailsWindow enforces a
+    minimum content width of 1024 effective pixels and MoveWindow is clamped to it
+    without saying so, so whether an 860 px page area is reachable AT ALL depends
+    on how much of that 1024 the navigation pane is using. Expanded (260 px) it is;
+    collapsed to a rail (48 px) the narrowest page area is about 975 - past #351's
+    864 px threshold, where the cards flow into two columns.
+
+    THE FAILURE THAT CAUSED THIS WAS SILENT, which is why the page area is now
+    measured after the resize rather than assumed. With the pane collapsed, no
+    content pane matches the requested width, the Nav-crop fallback below takes the
+    left 860 px of a two-column layout, and the per-image size assertion passes -
+    because that fallback crops to exactly the size being asserted. What came out
+    was a plausible picture of a page the guide does not describe, with the right
+    column sliced down its middle. Only looking at it caught that.
+
     IT PHOTOGRAPHS THE CONTENT PANE AS AN ELEMENT, NOT THE WINDOW WITH A CROP.
     Two earlier attempts cropped a window capture and both were wrong - once by
     150 px - because the capture includes the drop shadow and by how much is not
@@ -148,6 +164,25 @@ $rect = New-Object Win+RECT
 $pane = Get-Bounds (Get-Tree $hwnd 8) 'PaneRoot'
 if (-not $pane) { throw 'Could not measure the navigation pane.' }
 
+# THE NAVIGATION PANE HAS TO BE EXPANDED, and it is persisted state rather than a
+# default, so it is whatever the last person left it as (#343's "persist the pane
+# state the user chose"). Collapsed to a rail it is about 48 px, and the page area
+# at the window's own minimum is then far too wide for the guide - see #374 and the
+# assertion after the resize. Expanded it is around 260, which is what makes an
+# 860 px page reachable at all.
+if ($pane.Width -lt 120) {
+    Write-Host "Navigation pane is a $($pane.Width) px rail; expanding it."
+    winapp ui invoke TogglePaneButton -w $hwnd | Out-Null
+    Start-Sleep -Milliseconds 900
+
+    $pane = Get-Bounds (Get-Tree $hwnd 8) 'PaneRoot'
+    if (-not $pane -or $pane.Width -lt 120) {
+        throw ('The navigation pane is still a rail after invoking TogglePaneButton, so the page ' +
+               'area cannot be narrowed to the width the guide is written around. Expand it by ' +
+               'hand and run this again - see #374.')
+    }
+}
+
 $inset = $pane.Left - $rect.Left
 $currentWidth = ($rect.Right - $inset) - ($pane.Left + $pane.Width)
 $currentHeight = ($rect.Bottom - $inset) - $pane.Top
@@ -167,6 +202,42 @@ Start-Sleep -Milliseconds 900
 [void][Win]::GetWindowRect([IntPtr]$hwnd, [ref]$rect)
 $pane = Get-Bounds (Get-Tree $hwnd 8) 'PaneRoot'
 $contentLeft = $pane.Left + $pane.Width
+
+# ---------------------------------------------------------------------------
+# THE WINDOW IS NOT ALWAYS THE SIZE IT WAS ASKED FOR, so the page area is measured
+# rather than assumed (#374). DetailsWindow enforces a minimum content width of
+# 1024 effective pixels, and MoveWindow is clamped to it silently: asked for 924,
+# measured 1040. Whether an 860 px page area is reachable at that minimum depends
+# entirely on how wide the navigation pane is, which is why it is expanded above.
+#
+# WHAT GOES WRONG WITHOUT THIS CHECK is not a failure, which is the point. The page
+# area comes out at 975, past #351's 864 px threshold, so the cards flow into TWO
+# COLUMNS; no content pane then matches $ContentWidth, the Nav-crop fallback below
+# takes the left 860 px of that two-column layout, and the per-image size assertion
+# at the end of the loop PASSES - because the fallback crops to exactly the size
+# being asserted. The result is a plausible picture of a page the guide does not
+# describe, with the right-hand column sliced down its middle. It was caught by
+# looking, which is what the closing message asks for; a gate is better.
+# ---------------------------------------------------------------------------
+$achievedWidth = ($rect.Right - $inset) - $contentLeft
+$achievedHeight = ($rect.Bottom - $inset) - $pane.Top
+
+if ([Math]::Abs($achievedWidth - $ContentWidth) -gt 2) {
+    throw ("The page area came out ${achievedWidth} px wide, not $ContentWidth. The window was " +
+           "asked for ${targetWidth} px and is $($rect.Right - $rect.Left); DetailsWindow clamps " +
+           'it at 1024 effective pixels of content. Every image from this run would be a crop of a ' +
+           'layout the guide does not describe, and above 863 px that layout is two columns with ' +
+           'its right one sliced down the middle. See #374, and widen the navigation pane or lower ' +
+           'the display scaling rather than relaxing this check.')
+}
+
+if ([Math]::Abs($achievedHeight - $ContentHeight) -gt 2) {
+    Write-Warning ("The page area is ${achievedHeight} px tall, not $ContentHeight. The images will " +
+                   'be trimmed to height, so this is survivable - but the "upper half" and "lower ' +
+                   'half" pairs will not divide the page where the guide says they do.')
+}
+
+Write-Host "Page area measured at ${achievedWidth}x${achievedHeight}."
 
 New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
 $fileNames = @{ statusregisters = 'status-registers'; advancedconsole = 'advanced-console' }
