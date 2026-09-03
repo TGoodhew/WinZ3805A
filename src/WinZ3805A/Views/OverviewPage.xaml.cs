@@ -49,6 +49,9 @@ public sealed partial class OverviewPage : Page
     /// <summary>True while the self-test is running, so a second click cannot queue a second one.</summary>
     private bool _testRunning;
 
+    /// <summary>UTC ticks of the last trend redraw, or 0 for never (#387).</summary>
+    private long _trendRenderedTicks;
+
     /// <summary>Creates the page.</summary>
     public OverviewPage()
     {
@@ -87,10 +90,18 @@ public sealed partial class OverviewPage : Page
             Identity = device.Session.ParsedIdentity,
             RawIdentity = device.Session.Identity,
         };
+        // Render on every notification; the TREND only when a redraw could show something (#387).
+        //
+        // Both used to run here, and the trend is the expensive one by a wide margin: it reads the
+        // whole selected window out of SQLite and decimates it, where Render() rewrites a few
+        // readouts. Notifications arrive at least once a second - the ticker below raises them so
+        // the staleness footer counts up - and each one was a full 6 h read. Measured consequence
+        // in #385: 36 MB/s allocated, 1.1 GB of large object heap, a working set climbing 8.9 MB a
+        // minute for ten hours with no ceiling.
         _model.PropertyChanged += (_, _) => DispatcherQueue.TryEnqueue(() =>
         {
             Render();
-            RenderTrend();
+            RenderTrendIfItWouldShowAnything();
         });
         device.Session.StatusChanged += OnStatusChanged;
 
@@ -298,6 +309,34 @@ public sealed partial class OverviewPage : Page
     /// back than the chart draws, and one series rather than two.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Renders the trend only if a whole pixel column of new data has arrived since the last one
+    /// (#387).
+    /// </summary>
+    /// <remarks>
+    /// The chart decimates to one column per pixel (§9.10.2), so on this page's default 6 h range
+    /// over a 700 px chart nothing on it can change more than once every 31 seconds. Everything that
+    /// wants the trend brought up to date goes through here; the two callers that must draw
+    /// regardless — the first render and a range change — call <see cref="RenderTrend"/> directly.
+    /// </remarks>
+    private void RenderTrendIfItWouldShowAnything()
+    {
+        if (_device is not DeviceContext device)
+        {
+            return;
+        }
+
+        long now = device.TimeProvider.GetUtcNow().UtcTicks;
+
+        if (!TrendRefreshPolicy.ShouldRedraw(
+                _trendRenderedTicks, now, TimeSpan.FromHours(_rangeHours), EfcTrend.ActualWidth))
+        {
+            return;
+        }
+
+        RenderTrend();
+    }
+
     private void RenderTrend()
     {
         if (_trends is not TrendStore trends || _device is not DeviceContext device)
@@ -306,6 +345,7 @@ public sealed partial class OverviewPage : Page
         }
 
         long now = device.TimeProvider.GetUtcNow().UtcTicks;
+        _trendRenderedTicks = now;
         long from = now - TimeSpan.FromHours(_rangeHours).Ticks;
 
         IReadOnlyList<TrendRecord> window = trends.Read(from, now);

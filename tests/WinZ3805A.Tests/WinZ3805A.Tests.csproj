@@ -131,6 +131,13 @@
              Link="Controls\SurveyRefusalAdvice.cs" />
     <Compile Include="..\..\src\WinZ3805A\Controls\TrendDecimation.cs"
              Link="Controls\TrendDecimation.cs" />
+    <!-- #387's redraw throttle. Linked for the same reason as the rest: it is arithmetic over a
+         TimeSpan and a width, with no WinUI in it, and the rule it encodes - a redraw shows nothing
+         until a whole pixel column of new data exists - is exactly the kind of claim that should be
+         asserted rather than believed. The page that consumes it cannot be tested headlessly; this
+         is the part of it that can. -->
+    <Compile Include="..\..\src\WinZ3805A\Controls\TrendRefreshPolicy.cs"
+             Link="Controls\TrendRefreshPolicy.cs" />
     <Compile Include="..\..\src\WinZ3805A\Controls\AllanDeviation.cs"
              Link="Controls\AllanDeviation.cs" />
     <Compile Include="..\..\src\WinZ3805A\Controls\SkyPlotExport.cs"
