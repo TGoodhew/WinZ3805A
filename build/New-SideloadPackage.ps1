@@ -152,18 +152,62 @@ if (-not $SkipBuild) {
     & $msbuild @leadingArgs $project "-t:$($targets.Fetch)" -p:Configuration=Release -p:Platform=x64 -v:q -nologo
     if ($LASTEXITCODE -ne 0) { throw 'Package restore failed.' }
 
-    & $msbuild @leadingArgs $project "-t:$($targets.Rebuild)" `
-        -p:Configuration=Release -p:Platform=x64 `
-        -p:GenerateAppxPackageOnBuild=true `
-        -p:UapAppxPackageBuildMode=SideloadOnly `
-        -p:AppxPackageSigningEnabled=true `
-        -p:PackageCertificateKeyFile="$CertificatePath" `
-        -p:PackageCertificatePassword="$CertificatePassword" `
-        -p:AppxPackageSigningTimestampServerUrl="$TimestampUrl" `
-        -p:AppxPackageSigningTimestampDigestAlgorithm=SHA256 `
-        -p:AppxPackageTestDir="$appPackages\" `
-        -v:m -nologo
-    if ($LASTEXITCODE -ne 0) { throw 'Build failed.' }
+    # -----------------------------------------------------------------------
+    # SIGNED FROM THE STORE, NOT FROM THE FILE (#380).
+    #
+    # Handing the packaging targets a password-protected PFX signs correctly and
+    # warns twice while doing it: the validation step at
+    # Microsoft.Windows.SDK.BuildTools.MSIX.Packaging.targets opens
+    # PackageCertificateKeyFile WITHOUT the password, cannot read it (APPX0105),
+    # and then reports that the certificate is not valid for signing (APPX0107).
+    # The signing task itself does get the password and signs anyway, so both
+    # warnings are false - and they are false in the one workflow where a real
+    # signing failure matters most. Two warnings saying signing failed, on a run
+    # that signed, are two warnings people learn to scroll past.
+    #
+    # The message says the remedy: put the certificate where something without a
+    # password can read it. Imported here for the length of the build and REMOVED
+    # AFTERWARDS, because this script is run on real machines as well as on
+    # ephemeral runners and a signing key left in a personal store is a footprint
+    # nobody asked for. The key file is cleared explicitly - the targets prefer it
+    # over the thumbprint when both are set, so leaving it would change nothing.
+    # -----------------------------------------------------------------------
+    $signing = if ($CertificatePassword) {
+        Import-PfxCertificate -FilePath $CertificatePath -CertStoreLocation Cert:\CurrentUser\My `
+            -Password (ConvertTo-SecureString $CertificatePassword -AsPlainText -Force)
+    }
+    else {
+        Import-PfxCertificate -FilePath $CertificatePath -CertStoreLocation Cert:\CurrentUser\My
+    }
+
+    # The public half, exported from the certificate that is about to sign rather
+    # than hoped for in the build output. What ends up in the zip is what the
+    # person installing has to trust, so it should come from the same place the
+    # signature does - and a -SkipBuild run over an older output has nowhere else
+    # to get it.
+    $cerBesidePfx = [IO.Path]::ChangeExtension($CertificatePath, '.cer')
+    if (-not (Test-Path $cerBesidePfx)) {
+        Export-Certificate -Cert $signing -FilePath $cerBesidePfx | Out-Null
+    }
+
+    try {
+        & $msbuild @leadingArgs $project "-t:$($targets.Rebuild)" `
+            -p:Configuration=Release -p:Platform=x64 `
+            -p:GenerateAppxPackageOnBuild=true `
+            -p:UapAppxPackageBuildMode=SideloadOnly `
+            -p:AppxPackageSigningEnabled=true `
+            -p:PackageCertificateKeyFile= `
+            -p:PackageCertificateThumbprint="$($signing.Thumbprint)" `
+            -p:AppxPackageSigningTimestampServerUrl="$TimestampUrl" `
+            -p:AppxPackageSigningTimestampDigestAlgorithm=SHA256 `
+            -p:AppxPackageTestDir="$appPackages\" `
+            -p:AppxSymbolPackageEnabled=false `
+            -v:m -nologo
+        if ($LASTEXITCODE -ne 0) { throw 'Build failed.' }
+    }
+    finally {
+        Remove-Item (Join-Path 'Cert:\CurrentUser\My' $signing.Thumbprint) -Force -ErrorAction SilentlyContinue
+    }
 }
 
 # ---------------------------------------------------------------------------
