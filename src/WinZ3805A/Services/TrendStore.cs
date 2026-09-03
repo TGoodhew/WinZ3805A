@@ -164,7 +164,21 @@ public sealed class TrendStore : IDisposable
                 command.Parameters.AddWithValue("$from", fromTicks);
                 command.Parameters.AddWithValue("$to", toTicks);
 
-                List<TrendRecord> records = [];
+                // Sized before it is filled (#390). A List that grows from empty doubles as it
+                // goes, and every doubling past a few thousand records allocates an array over
+                // 85 KB - which lands on the large object heap, and the LOH is not compacted. A
+                // 24 h window is about 86,000 records: seventeen reallocations, roughly twice the
+                // final size allocated in total, and sixteen dead arrays left fragmenting the heap
+                // for each read. At the rate this was being called, that was 1.1 GB of LOH and
+                // 36 MB/s of allocation on an idle instrument (#385).
+                //
+                // Counted rather than estimated from the range, because the store's cadence is NOT
+                // uniform: it follows the poll schedule and drops to a coarse tier past 24 h, so
+                // arithmetic over the window would be wrong exactly when it mattered - after a
+                // reconnect, or across the tier boundary. The count is a B-tree range walk on the
+                // primary key, inside the lock this method already holds, so no writer can move it
+                // between the two queries.
+                List<TrendRecord> records = new(CountBetween(fromTicks, toTicks));
                 using SqliteDataReader reader = command.ExecuteReader();
                 while (reader.Read())
                 {
@@ -185,6 +199,34 @@ public sealed class TrendStore : IDisposable
         }
     }
 
+    /// <summary>
+    /// How many samples lie in a window. Assumes <see cref="_gate"/> is already held (#390).
+    /// </summary>
+    /// <remarks>
+    /// Private and lock-free by contract rather than by locking again: the public
+    /// <see cref="Count"/> takes the gate and counts the whole table, and calling it from inside
+    /// <see cref="Read"/> would both re-enter and answer a different question. A failure here
+    /// returns zero, which costs a capacity hint and nothing else - the read that follows still
+    /// works, it just grows the way it used to.
+    /// </remarks>
+    private int CountBetween(long fromTicks, long toTicks)
+    {
+        try
+        {
+            using SqliteCommand command = _connection.CreateCommand();
+            command.CommandText = "SELECT COUNT(*) FROM sample WHERE ticks >= $from AND ticks <= $to;";
+            command.Parameters.AddWithValue("$from", fromTicks);
+            command.Parameters.AddWithValue("$to", toTicks);
+
+            long count = (long)(command.ExecuteScalar() ?? 0L);
+            return count is > 0 and <= int.MaxValue ? (int)count : 0;
+        }
+        catch (SqliteException)
+        {
+            return 0;
+        }
+    }
+
     /// <summary>The samples in a window as the chart wants them, already reduced to one field.</summary>
     /// <param name="fromTicks">The left edge of the window, in UTC ticks.</param>
     /// <param name="toTicks">The right edge.</param>
@@ -198,8 +240,13 @@ public sealed class TrendStore : IDisposable
     {
         ArgumentNullException.ThrowIfNull(selector);
 
-        List<TrendSample> samples = [];
-        foreach (TrendRecord record in Read(fromTicks, toTicks))
+        IReadOnlyList<TrendRecord> window = Read(fromTicks, toTicks);
+
+        // Sized from the window rather than grown from empty (#390). The count is an upper bound
+        // rather than the answer - rows whose chosen field is null are dropped below - so this
+        // trades a little slack for none of the doubling series.
+        List<TrendSample> samples = new(window.Count);
+        foreach (TrendRecord record in window)
         {
             if (selector(record) is double value)
             {
