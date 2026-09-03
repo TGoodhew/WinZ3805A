@@ -180,6 +180,16 @@ if (-not $SkipBuild) {
         Import-PfxCertificate -FilePath $CertificatePath -CertStoreLocation Cert:\CurrentUser\My
     }
 
+    # ONE WARNING IS LEFT IN THIS BUILD AND IT STAYS: the packaging targets look
+    # for mspdbcmf.exe, which ships with the MSVC toolset, and say "a symbols
+    # package will not be generated" when it is absent - true, and wanted, since
+    # the sideload zip carries no symbols. It has no warning code, so -nowarn
+    # cannot name it, and AppxSymbolPackageEnabled=false does not silence it
+    # either: that was tried here on 3 Sep 2026 and the message came back
+    # unchanged. It is also the one warning GitHub does not annotate, so it costs
+    # nothing on a run. Left alone deliberately rather than papered over with a
+    # property that does not do what it looks like it does.
+    #
     # The public half, exported from the certificate that is about to sign rather
     # than hoped for in the build output. What ends up in the zip is what the
     # person installing has to trust, so it should come from the same place the
@@ -201,7 +211,6 @@ if (-not $SkipBuild) {
             -p:AppxPackageSigningTimestampServerUrl="$TimestampUrl" `
             -p:AppxPackageSigningTimestampDigestAlgorithm=SHA256 `
             -p:AppxPackageTestDir="$appPackages\" `
-            -p:AppxSymbolPackageEnabled=false `
             -v:m -nologo
         if ($LASTEXITCODE -ne 0) { throw 'Build failed.' }
     }
