@@ -1,5 +1,7 @@
 ﻿using System.Globalization;
 using Microsoft.Extensions.DependencyInjection;
+using System.ComponentModel;
+
 using Microsoft.UI.Xaml;
 using Microsoft.UI;
 using Microsoft.UI.Xaml.Media;
@@ -69,7 +71,7 @@ public sealed partial class MainPage : Page
         _model = new MainViewModel(
             _device.Store, services.GetRequiredService<TimeProvider>(), _device.Driver);
 
-        _model.PropertyChanged += (_, _) => DispatcherQueue.TryEnqueue(Render);
+        _model.PropertyChanged += OnModelChanged;
         _device.Session.StatusChanged += (_, e) => DispatcherQueue.TryEnqueue(() =>
         {
             _model.Connection = e.Status;
@@ -377,6 +379,18 @@ public sealed partial class MainPage : Page
     private ConnectionViewModel NewConnectionViewModel() => new(_device.Session, _ports, _preferences);
 
     /// <summary>Pushes the view model onto the surface.</summary>
+    /// <summary>
+    /// Renders on a model notification (#388).
+    /// </summary>
+    /// <remarks>
+    /// Named rather than a lambda even though this page is never navigated away from - it is the
+    /// main window's content for the window's whole life. An unremovable subscription is a defect
+    /// waiting for the day that stops being true, and the rule is cheaper to keep than to argue
+    /// about per page.
+    /// </remarks>
+    private void OnModelChanged(object? sender, PropertyChangedEventArgs e) =>
+        DispatcherQueue.TryEnqueue(Render);
+
     private void Render()
     {
         RenderFirstRun();

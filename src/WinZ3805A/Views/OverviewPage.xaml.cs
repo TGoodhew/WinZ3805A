@@ -1,4 +1,5 @@
-﻿using System.Globalization;
+﻿using System.ComponentModel;
+using System.Globalization;
 
 using Microsoft.Extensions.DependencyInjection;
 
@@ -59,14 +60,64 @@ public sealed partial class OverviewPage : Page
 
         // The footer counts up while nothing arrives, which is exactly when its number matters.
         _stalenessTicker.Tick += (_, _) => _model?.RaiseAll();
-        Unloaded += (_, _) =>
+        Unloaded += (_, _) => Detach();
+    }
+
+    /// <summary>
+    /// Undoes everything <see cref="OnNavigatedTo"/> subscribed to (#388).
+    /// </summary>
+    /// <remarks>
+    /// Idempotent, because both <c>Unloaded</c> and <c>OnNavigatedFrom</c> call it and neither is a
+    /// reliable single point on its own: <c>Unloaded</c> was what this page had, and it did not stop
+    /// the page working after navigation because the model — not the ticker — was what kept it
+    /// running. Disposing the model is the half that matters: it is what lets go of the store.
+    /// </remarks>
+    private void Detach()
+    {
+        _stalenessTicker.Stop();
+
+        if (_device is DeviceContext device)
         {
-            _stalenessTicker.Stop();
-            if (_device is DeviceContext device)
-            {
-                device.Session.StatusChanged -= OnStatusChanged;
-            }
-        };
+            device.Session.StatusChanged -= OnStatusChanged;
+        }
+
+        if (_model is OverviewViewModel model)
+        {
+            model.PropertyChanged -= OnModelChanged;
+            model.Dispose();
+            _model = null;
+        }
+    }
+
+    /// <summary>
+    /// Renders on every notification; the TREND only when a redraw could show something (#387).
+    /// </summary>
+    /// <remarks>
+    /// A named method rather than a lambda so that <see cref="Detach"/> can remove it (#388). The
+    /// trend is the expensive one by a wide margin — it reads the whole selected window out of
+    /// SQLite and decimates it, where <see cref="Render"/> rewrites a few readouts. Notifications
+    /// arrive at least once a second, and each one used to be a full 6 h read: 36 MB/s allocated,
+    /// 1.1 GB of large object heap, a working set climbing 8.9 MB a minute for ten hours (#385).
+    /// </remarks>
+    private void OnModelChanged(object? sender, PropertyChangedEventArgs e) =>
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            Render();
+            RenderTrendIfItWouldShowAnything();
+        });
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <b>The Frame's hook, not Unloaded (#388).</b> Everything this page subscribed to in
+    /// <see cref="OnNavigatedTo"/> is undone here, and the model is disposed so it lets go of the
+    /// store. Unloaded was doing half the job and could not do the other half: the store outlives
+    /// every page, so store -> model -> page kept the page alive and rendering on every reading
+    /// after it left the screen, once per visit. Four visits to Overview left four of them.
+    /// </remarks>
+    protected override void OnNavigatedFrom(NavigationEventArgs e)
+    {
+        base.OnNavigatedFrom(e);
+        Detach();
     }
 
     /// <inheritdoc />
@@ -90,19 +141,7 @@ public sealed partial class OverviewPage : Page
             Identity = device.Session.ParsedIdentity,
             RawIdentity = device.Session.Identity,
         };
-        // Render on every notification; the TREND only when a redraw could show something (#387).
-        //
-        // Both used to run here, and the trend is the expensive one by a wide margin: it reads the
-        // whole selected window out of SQLite and decimates it, where Render() rewrites a few
-        // readouts. Notifications arrive at least once a second - the ticker below raises them so
-        // the staleness footer counts up - and each one was a full 6 h read. Measured consequence
-        // in #385: 36 MB/s allocated, 1.1 GB of large object heap, a working set climbing 8.9 MB a
-        // minute for ten hours with no ceiling.
-        _model.PropertyChanged += (_, _) => DispatcherQueue.TryEnqueue(() =>
-        {
-            Render();
-            RenderTrendIfItWouldShowAnything();
-        });
+        _model.PropertyChanged += OnModelChanged;
         device.Session.StatusChanged += OnStatusChanged;
 
         _trends = App.Services?.GetService<TrendStore>();

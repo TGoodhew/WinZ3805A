@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Globalization;
 
 using WinZ3805A.Controls;
@@ -30,7 +30,7 @@ namespace WinZ3805A.ViewModels;
 /// answers to all four queries are recorded in §10.14.
 /// </para>
 /// </remarks>
-public sealed class TimeViewModel : INotifyPropertyChanged
+public sealed class TimeViewModel : INotifyPropertyChanged, IDisposable
 {
     private readonly ReceiverStateStore _store;
 
@@ -43,8 +43,19 @@ public sealed class TimeViewModel : INotifyPropertyChanged
         ArgumentNullException.ThrowIfNull(store);
 
         _store = store;
-        _store.PropertyChanged += (_, _) => RaiseAll();
+        _store.PropertyChanged += OnStoreChanged;
     }
+
+    /// <summary>Lets go of the store, which outlives every page (#388).</summary>
+    /// <remarks>
+    /// The store is registered for the application's lifetime, so a model that subscribes to it and
+    /// never unsubscribes is rooted for that lifetime - and so is the page holding the model. A
+    /// lambda cannot be unsubscribed, which is why this handler has a name. See
+    /// <see cref="OverviewViewModel.Dispose"/> for the measurement that found it.
+    /// </remarks>
+    public void Dispose() => _store.PropertyChanged -= OnStoreChanged;
+
+    private void OnStoreChanged(object? sender, PropertyChangedEventArgs e) => RaiseAll();
 
     /// <inheritdoc />
     public event PropertyChangedEventHandler? PropertyChanged;

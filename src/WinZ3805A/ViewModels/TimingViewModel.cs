@@ -15,7 +15,7 @@ namespace WinZ3805A.ViewModels;
 /// the number is still the useful half — it is the part a user cannot do in their head, and P0-11
 /// is about the arithmetic.
 /// </remarks>
-public sealed class TimingViewModel : INotifyPropertyChanged
+public sealed class TimingViewModel : INotifyPropertyChanged, IDisposable
 {
     private readonly ReceiverStateStore _store;
 
@@ -33,8 +33,19 @@ public sealed class TimingViewModel : INotifyPropertyChanged
         ArgumentNullException.ThrowIfNull(store);
 
         _store = store;
-        _store.PropertyChanged += (_, _) => RaiseAll();
+        _store.PropertyChanged += OnStoreChanged;
     }
+
+    /// <summary>Lets go of the store, which outlives every page (#388).</summary>
+    /// <remarks>
+    /// The store is registered for the application's lifetime, so a model that subscribes to it and
+    /// never unsubscribes is rooted for that lifetime - and so is the page holding the model. A
+    /// lambda cannot be unsubscribed, which is why this handler has a name. See
+    /// <see cref="OverviewViewModel.Dispose"/> for the measurement that found it.
+    /// </remarks>
+    public void Dispose() => _store.PropertyChanged -= OnStoreChanged;
+
+    private void OnStoreChanged(object? sender, PropertyChangedEventArgs e) => RaiseAll();
 
     /// <inheritdoc />
     public event PropertyChangedEventHandler? PropertyChanged;

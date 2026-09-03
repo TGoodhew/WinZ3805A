@@ -65,21 +65,7 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
 
         _loadingTimer.Tick += (_, _) => ApplyLoadingIndicator();
 
-        Unloaded += (_, _) =>
-        {
-            _loadingTimer.Stop();
-            _reading?.Cancel();
-            _reading?.Dispose();
-            _reading = null;
-
-            SettingsPage.AdvancedChanged -= OnAdvancedChanged;
-
-            if (_device is DeviceContext device)
-            {
-                device.Session.StatusChanged -= OnStatusChanged;
-                device.Store.PropertyChanged -= OnStoreChanged;
-            }
-        };
+        Unloaded += (_, _) => Detach();
     }
 
     /// <summary>Keeps the parse-warnings card following the sweeps while the page is open.</summary>
@@ -117,6 +103,47 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
         });
 
     /// <inheritdoc />
+    /// <summary>Undoes everything <see cref="OnNavigatedTo"/> subscribed to (#388).</summary>
+    /// <remarks>
+    /// Idempotent: both <c>Unloaded</c> and <see cref="OnNavigatedFrom"/> call it, and neither is
+    /// reliable alone. Disposing the model is the half that matters - it is what lets go of the
+    /// store, which outlives every page and was keeping this one alive after it left the screen.
+    /// </remarks>
+    private void Detach()
+    {
+        if (_device is DeviceContext device)
+        {
+            device.Session.StatusChanged -= OnStatusChanged;
+            device.Store.PropertyChanged -= OnStoreChanged;
+        }
+
+        // No Dispose here, unlike the other pages: DiagnosticsViewModel does not subscribe to the
+        // store itself. This page does, directly, and that subscription is removed above.
+        if (_model is DiagnosticsViewModel model)
+        {
+            model.PropertyChanged -= OnModelChanged;
+            _model = null;
+        }
+    }
+
+    /// <summary>Renders on a model notification. Named so <see cref="Detach"/> can remove it (#388).</summary>
+    private void OnModelChanged(object? sender, PropertyChangedEventArgs e) =>
+        DispatcherQueue.TryEnqueue(Render);
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <b>The Frame's hook, not Unloaded (#388).</b> Everything this page subscribed to in
+    /// <see cref="OnNavigatedTo"/> is undone here, and the model is disposed so it lets go of the
+    /// store. Unloaded was doing half the job and could not do the other half: the store outlives
+    /// every page, so store -> model -> page kept the page alive and rendering on every reading
+    /// after it left the screen, once per visit.
+    /// </remarks>
+    protected override void OnNavigatedFrom(NavigationEventArgs e)
+    {
+        base.OnNavigatedFrom(e);
+        Detach();
+    }
+
     protected override async void OnNavigatedTo(NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
@@ -140,7 +167,7 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
         _logProvider = App.Services?.GetService<FileLoggerProvider>();
         _logFolder = ResolveLogFolder(_logProvider);
         _model = new DiagnosticsViewModel(device.Session) { ParseWarnings = device.Store.Status?.ParseWarnings ?? [] };
-        _model.PropertyChanged += (_, _) => DispatcherQueue.TryEnqueue(Render);
+        _model.PropertyChanged += OnModelChanged;
         device.Session.StatusChanged += OnStatusChanged;
 
         // Parse warnings belong to a status screen, so they arrive with each full sweep rather than

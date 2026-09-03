@@ -1,4 +1,6 @@
-﻿using Microsoft.UI.Xaml;
+﻿using System.ComponentModel;
+
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
 using WinZ3805A.Device.Commands;
@@ -103,7 +105,7 @@ public sealed partial class SatelliteManagementDialog : ContentDialog
         foreach (int prn in SatelliteTrackingState.AllPrns)
         {
             SatelliteChoice choice = new(prn, included.Contains(prn), excluded.Contains(prn));
-            choice.PropertyChanged += (_, _) => RenderSelection();
+            choice.PropertyChanged += OnChoiceChanged;
             _choices.Add(choice);
         }
 
@@ -116,6 +118,14 @@ public sealed partial class SatelliteManagementDialog : ContentDialog
 
         RenderSelection();
     }
+
+    /// <summary>Re-renders the selection when a satellite's choice changes (#388).</summary>
+    /// <remarks>
+    /// One named handler for all thirty-two choices rather than a lambda each: the choices live in
+    /// <c>_choices</c> for the dialog's life, so nothing leaks either way, but a subscription that
+    /// cannot be removed is a defect the moment somebody rebuilds the list.
+    /// </remarks>
+    private void OnChoiceChanged(object? sender, PropertyChangedEventArgs e) => RenderSelection();
 
     private void RenderSelection()
     {
