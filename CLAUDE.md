@@ -208,6 +208,7 @@ pwsh build/Test-FocusVisualCoverage.ps1  # A11Y-2 / §9.12
 pwsh build/Test-PointerTargets.ps1       # A11Y-5 / §9.6.3
 pwsh build/Test-DocumentReferences.ps1   # #321 — the documents, not the source
 pwsh build/Test-GuideCoverage.ps1        # #358 — the guide, which is also the F1 help
+pwsh build/Test-PageTeardown.ps1         # #388 — page lifetimes, not tokens
 ```
 
 The guide-coverage gate was added 30 Aug 2026 for #358, and it is the second that checks a
@@ -231,6 +232,23 @@ section describing *one* editable threshold where the page has two settings, of 
 described **cannot be set at all** — and every word of that would have passed this gate. It makes
 shipping an undocumented option impossible; it cannot make writing something wrong impossible. That
 is what `docs/manual-qa.md` and a reader are for.
+
+The page-teardown gate was added 3 Sep 2026 for #388, and it is the only one about **object
+lifetime** rather than about tokens, text or commands. Every page in the Details window built a view
+model in `OnNavigatedTo` and subscribed to it; every view model subscribed to `ReceiverStateStore`,
+which is registered for the application's lifetime. Store → model → page is a chain anchored at
+something that never dies, so **a page went on rendering on every reading after the user navigated
+away from it, and a second visit left a second one** — measured at 216 ms of a 15-second sample after
+one visit to Overview and 585 ms after four, with the window showing a different page entirely. That
+is most of #385, which took ten hours and 4.9 GB to find.
+
+Two rules, and the second is the one that would have prevented it: a page that subscribes in
+`OnNavigatedTo` must override `OnNavigatedFrom` and actually undo something there, and **no view may
+subscribe to `PropertyChanged` with a lambda**, because a lambda cannot be passed to `-=` — the
+teardown is impossible to write however carefully you try. `Unloaded` is not accepted as the hook: it
+is what the pages already had, and it stopped the staleness ticker, which was never what kept them
+alive. **The gate found four more instances the moment it first ran**, one of them in the very change
+that introduced it.
 
 The document-references gate was added 30 Aug 2026 for #321, and it is the only one that checks
 the **documents** rather than the source. The #316 audit read sixteen of them by hand and found some 360
@@ -268,7 +286,7 @@ than a rule:
 pwsh build/Capture-Fixtures.ps1 -SelfTest # #4 / #185 — the harness, not the app
 ```
 
-`.github/workflows/ci.yml` runs all fourteen in their own dependency-free jobs, alongside the
+`.github/workflows/ci.yml` runs all fifteen in their own dependency-free jobs, alongside the
 build rather than ahead of it — they need no restore, so a token, accessibility, or safety
 regression fails in seconds rather than after a full build. A separate matrix job builds both
 Configuration × Platform combinations — Debug and Release against x64, the only platform

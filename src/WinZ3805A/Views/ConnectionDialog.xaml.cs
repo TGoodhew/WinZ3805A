@@ -1,4 +1,6 @@
 using System.IO.Ports;
+using System.ComponentModel;
+
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
@@ -39,7 +41,7 @@ public sealed partial class ConnectionDialog : ContentDialog
         InitializeComponent();
 
         _model = model;
-        _model.PropertyChanged += (_, _) => DispatcherQueue.TryEnqueue(Render);
+        _model.PropertyChanged += OnModelChanged;
 
         BaudPicker.ItemsSource = _model.BaudRateOptions;
         DataBitsPicker.ItemsSource = _model.DataBitOptions;
@@ -159,6 +161,15 @@ public sealed partial class ConnectionDialog : ContentDialog
     }
 
     /// <summary>Pushes the view model onto the surface.</summary>
+    /// <summary>Renders on a model notification (#388).</summary>
+    /// <remarks>
+    /// Named rather than a lambda although nothing leaks here: MainPage builds a fresh
+    /// <c>ConnectionViewModel</c> for each dialog, so the two die together. The rule is universal
+    /// because the exemption is a claim about a caller that a future caller can quietly break.
+    /// </remarks>
+    private void OnModelChanged(object? sender, PropertyChangedEventArgs e) =>
+        DispatcherQueue.TryEnqueue(Render);
+
     private void Render()
     {
         _updating = true;

@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 
 using WinZ3805A.Controls;
 using WinZ3805A.Device.Models;
@@ -15,7 +15,7 @@ namespace WinZ3805A.ViewModels;
 /// confirmation dialog, and that infrastructure is §15 step 10. What is here is the half that
 /// answers "where does the receiver think it is", which is what a user opens the page for.
 /// </remarks>
-public sealed class PositionViewModel : INotifyPropertyChanged
+public sealed class PositionViewModel : INotifyPropertyChanged, IDisposable
 {
     private readonly ReceiverStateStore _store;
 
@@ -28,8 +28,19 @@ public sealed class PositionViewModel : INotifyPropertyChanged
         ArgumentNullException.ThrowIfNull(store);
 
         _store = store;
-        _store.PropertyChanged += (_, _) => RaiseAll();
+        _store.PropertyChanged += OnStoreChanged;
     }
+
+    /// <summary>Lets go of the store, which outlives every page (#388).</summary>
+    /// <remarks>
+    /// The store is registered for the application's lifetime, so a model that subscribes to it and
+    /// never unsubscribes is rooted for that lifetime - and so is the page holding the model. A
+    /// lambda cannot be unsubscribed, which is why this handler has a name. See
+    /// <see cref="OverviewViewModel.Dispose"/> for the measurement that found it.
+    /// </remarks>
+    public void Dispose() => _store.PropertyChanged -= OnStoreChanged;
+
+    private void OnStoreChanged(object? sender, PropertyChangedEventArgs e) => RaiseAll();
 
     /// <inheritdoc />
     public event PropertyChangedEventHandler? PropertyChanged;

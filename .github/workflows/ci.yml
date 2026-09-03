@@ -159,6 +159,15 @@ jobs:
         shell: pwsh
         run: ./build/Test-SeriesSeparation.ps1
 
+      # #388. Not a design-system rule, but it belongs with the gates that need no restore, and it
+      # guards the defect that cost the most to find: every page subscribed to a view model that
+      # subscribed to the application-lifetime store, with lambdas that cannot be unsubscribed - so
+      # a page went on rendering on every reading after the user navigated away, once per visit.
+      # Ten hours and 4.9 GB (#385). The gate found four more instances the moment it first ran.
+      - name: Pages let go of what they subscribed to when navigated away from
+        shell: pwsh
+        run: ./build/Test-PageTeardown.ps1
+
   # ---------------------------------------------------------------------------
   # P0-7 / §8.4. Separate from the design-system gates because it guards a
   # different thing: that no excluded command is named anywhere but the single

@@ -60,18 +60,36 @@ public sealed partial class AdvancedConsolePage : Page, ICsvExportSource
         // §9.7.4's right-click layer, on the transcript this page exports.
         CopyMenu.AttachCsv(TranscriptCard, this);
 
-        Unloaded += (_, _) =>
-        {
-            if (_transcript is CommandTranscript transcript)
-            {
-                transcript.Changed -= OnTranscriptChanged;
-            }
+        Unloaded += (_, _) => Detach();
+    }
 
-            if (_device is DeviceContext device)
-            {
-                device.Session.StatusChanged -= OnStatusChanged;
-            }
-        };
+    /// <summary>Undoes everything <see cref="OnNavigatedTo"/> subscribed to (#388).</summary>
+    /// <remarks>
+    /// Idempotent: both <c>Unloaded</c> and <see cref="OnNavigatedFrom"/> call it, and neither is
+    /// reliable alone. Disposing the model is the half that matters - it is what lets go of the
+    /// store, which outlives every page and was keeping this one alive after it left the screen.
+    /// </remarks>
+    private void Detach()
+    {
+        if (_device is DeviceContext device)
+        {
+            device.Session.StatusChanged -= OnStatusChanged;
+        }
+
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <b>The Frame's hook, not Unloaded (#388).</b> Everything this page subscribed to in
+    /// <see cref="OnNavigatedTo"/> is undone here, and the model is disposed so it lets go of the
+    /// store. Unloaded was doing half the job and could not do the other half: the store outlives
+    /// every page, so store -> model -> page kept the page alive and rendering on every reading
+    /// after it left the screen, once per visit. Four visits to Overview left four of them.
+    /// </remarks>
+    protected override void OnNavigatedFrom(NavigationEventArgs e)
+    {
+        base.OnNavigatedFrom(e);
+        Detach();
     }
 
     /// <inheritdoc />

@@ -1,6 +1,8 @@
 ﻿using System.Globalization;
 
 using Microsoft.Extensions.DependencyInjection;
+using System.ComponentModel;
+
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
@@ -105,14 +107,48 @@ public sealed partial class TimingPage : Page, ICsvExportSource
             _model?.RaiseAll();
             RenderTrend();
         };
-        Unloaded += (_, _) =>
+        Unloaded += (_, _) => Detach();
+    }
+
+    /// <summary>Undoes everything <see cref="OnNavigatedTo"/> subscribed to (#388).</summary>
+    /// <remarks>
+    /// Idempotent: both <c>Unloaded</c> and <see cref="OnNavigatedFrom"/> call it, and neither is
+    /// reliable alone. Disposing the model is the half that matters - it is what lets go of the
+    /// store, which outlives every page and was keeping this one alive after it left the screen.
+    /// </remarks>
+    private void Detach()
+    {
+        _stalenessTicker.Stop();
+
+        if (_device is DeviceContext device)
         {
-            _stalenessTicker.Stop();
-            if (_device is DeviceContext device)
-            {
-                device.Session.StatusChanged -= OnStatusChanged;
-            }
-        };
+            device.Session.StatusChanged -= OnStatusChanged;
+        }
+
+        if (_model is TimingViewModel model)
+        {
+            model.PropertyChanged -= OnModelChanged;
+            model.Dispose();
+            _model = null;
+        }
+    }
+
+    /// <summary>Renders on a model notification. Named so <see cref="Detach"/> can remove it (#388).</summary>
+    private void OnModelChanged(object? sender, PropertyChangedEventArgs e) =>
+        DispatcherQueue.TryEnqueue(Render);
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <b>The Frame's hook, not Unloaded (#388).</b> Everything this page subscribed to in
+    /// <see cref="OnNavigatedTo"/> is undone here, and the model is disposed so it lets go of the
+    /// store. Unloaded was doing half the job and could not do the other half: the store outlives
+    /// every page, so store -> model -> page kept the page alive and rendering on every reading
+    /// after it left the screen, once per visit. Four visits to Overview left four of them.
+    /// </remarks>
+    protected override void OnNavigatedFrom(NavigationEventArgs e)
+    {
+        base.OnNavigatedFrom(e);
+        Detach();
     }
 
     /// <inheritdoc />
@@ -150,7 +186,7 @@ public sealed partial class TimingPage : Page, ICsvExportSource
         _ = ReadEfcHardwareBitsAsync();
         _invoker = new CommandInvoker(device.Session);
         _model = new TimingViewModel(device.Store) { Connection = device.Session.Status };
-        _model.PropertyChanged += (_, _) => DispatcherQueue.TryEnqueue(Render);
+        _model.PropertyChanged += OnModelChanged;
         device.Session.StatusChanged += OnStatusChanged;
 
         _ready = true;
