@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     CI gate for A11Y-5: a pointer target that is not a button is still 32 px.
 
@@ -258,6 +258,81 @@ if ($checked -eq 0) {
     Write-Host 'No non-button pointer targets found - check the detection rather than trusting this.' -ForegroundColor Yellow
     exit 1
 }
+
+
+# ===============================================================================================
+# #405: text that swallows the click meant for the row underneath it.
+#
+# A TextBlock with IsTextSelectionEnabled captures pointer input so it can drag out a selection.
+# Inside a SELECTABLE items control that is fatal: the press never reaches the item. The Advanced
+# Console's picker had exactly this - clicking the ":SYST:COMM" of a command did nothing, the
+# dropdown did not even close, while clicking the description beside it worked. Half a row that
+# responds is worse than none, because the user concludes the control is broken at random.
+#
+# TWO RULES, and the second is the one that would have caught it.
+#
+# 1. No selection-enabled text inside the item template of a container whose items are selectable
+#    or clickable - ComboBox, ListView, GridView, ListBox. ItemsControl and ItemsRepeater are
+#    deliberately NOT in that list: their items are not clickable, so selectable text inside them
+#    is a feature, and the diagnostics cards use it to let a warning be copied.
+#
+# 2. No style may turn selection on. The defect was not written at a call site at all - it came
+#    from WzMonoTextStyle setting IsTextSelectionEnabled="True", so every mono TextBlock in the
+#    application got it silently, including one inside a ComboBox item template. Selection has to
+#    be asked for where it is wanted, in the markup, where a reviewer can see it.
+#
+# PARSED AS XML, NOT GREPPED. The first draft walked the lines keeping a stack of open tags and
+# reported six false positives, because a self-closing <ComboBox ... /> never popped it and every
+# opt-in later in the file looked nested. Ancestry is a tree question.
+# ===============================================================================================
+
+$selectableContainers = 'ComboBox', 'ListView', 'GridView', 'ListBox'
+$selectionFailures = @()
+$optIns = 0
+
+foreach ($file in Get-ChildItem (Join-Path $Root 'src\WinZ3805A') -Recurse -Filter '*.xaml' |
+    Where-Object { $_.FullName -notmatch '\\(obj|bin)\\' }) {
+
+    $xml = New-Object System.Xml.XmlDocument
+    try { $xml.Load($file.FullName) } catch { continue }
+
+    foreach ($node in $xml.SelectNodes('//*')) {
+        $on = $false
+        foreach ($attribute in $node.Attributes) {
+            if ($attribute.LocalName -eq 'IsTextSelectionEnabled' -and $attribute.Value -eq 'True') { $on = $true }
+        }
+        if (-not $on) { continue }
+
+        $optIns++
+
+        # Walk up: is this inside the item template of a container whose rows are clickable?
+        $container = $null
+        for ($ancestor = $node.ParentNode; $null -ne $ancestor; $ancestor = $ancestor.ParentNode) {
+            if ($selectableContainers -contains $ancestor.LocalName) { $container = $ancestor.LocalName; break }
+        }
+
+        if ($null -ne $container) {
+            $selectionFailures += ("{0}: <{1}> with IsTextSelectionEnabled inside a <{2}> - it swallows the click that should select the row (#405)." -f $file.Name, $node.LocalName, $container)
+        }
+    }
+}
+
+# Rule 2: a style may not turn it on for everything.
+foreach ($file in Get-ChildItem (Join-Path $Root 'src\WinZ3805A\Themes') -Filter '*.xaml') {
+    $text = Get-Content -LiteralPath $file.FullName -Raw
+    if ($text -match '<Setter\s+Property\s*=\s*"IsTextSelectionEnabled"\s+Value\s*=\s*"True"') {
+        $selectionFailures += ("{0} turns IsTextSelectionEnabled on in a Style - selection must be asked for at the call site, or text silently eats clicks wherever the style is used (#405)." -f $file.Name)
+    }
+}
+
+if ($selectionFailures.Count -gt 0) {
+    Write-Host ''
+    Write-Host 'Text selection swallows pointer input meant for the control underneath (#405).' -ForegroundColor Red
+    foreach ($f in $selectionFailures) { Write-Host "  $f" -ForegroundColor Red }
+    exit 1
+}
+
+Write-Host "Checked $optIns deliberate text-selection opt-in(s); none sits inside a selectable item template."
 
 Write-Host 'PASS - every non-button pointer target declares A11Y-5 floor.' -ForegroundColor Green
 exit 0
