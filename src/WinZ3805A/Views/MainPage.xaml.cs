@@ -2,6 +2,7 @@
 using System.Globalization;
 using Microsoft.Extensions.DependencyInjection;
 
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI;
 using Microsoft.UI.Xaml.Media;
@@ -56,6 +57,21 @@ public sealed partial class MainPage : Page
     /// </remarks>
     private readonly bool _ready;
 
+    /// <summary>
+    /// The one handler this page hands the dispatcher, reused for every notification (#399).
+    /// </summary>
+    /// <remarks>
+    /// <c>TryEnqueue</c> takes a WinRT delegate, so the callback has to be given a COM callable
+    /// wrapper to cross into native code, and CsWinRT caches that wrapper by <i>managed object
+    /// identity</i>. A lambda or a method-group conversion allocates a fresh delegate on every
+    /// call, so every notification used to mint a wrapper under a new identity — and the runtime's
+    /// wrapper table is sized by how many have ever existed, never reusing a freed slot and never
+    /// shrinking. One night of polling reached 8.4 million slots and 69.5 MB of large object heap,
+    /// climbing 19 MB an hour (#399). One delegate held here is one wrapper for the life of the
+    /// page.
+    /// </remarks>
+    private readonly DispatcherQueueHandler _render;
+
     /// <summary>Creates the page over the application's services.</summary>
     /// <param name="services">The §12 composition root, which owns the receiver.</param>
     public MainPage(IServiceProvider services)
@@ -63,6 +79,8 @@ public sealed partial class MainPage : Page
         ArgumentNullException.ThrowIfNull(services);
 
         InitializeComponent();
+
+        _render = Render;
 
         // §12: resolved by device key, never constructed here. The Details window binds to the
         // same context, and a page that built its own session would give it a second port.
@@ -391,7 +409,7 @@ public sealed partial class MainPage : Page
     /// about per page.
     /// </remarks>
     private void OnModelChanged(object? sender, PropertyChangedEventArgs e) =>
-        DispatcherQueue.TryEnqueue(Render);
+        DispatcherQueue.TryEnqueue(_render);
 
     /// <summary>
     /// The installed version, for the §10.3 footer.

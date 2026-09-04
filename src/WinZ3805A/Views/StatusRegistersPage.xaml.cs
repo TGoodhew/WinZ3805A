@@ -1,5 +1,6 @@
 ﻿using System.ComponentModel;
 
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
@@ -30,10 +31,22 @@ public sealed partial class StatusRegistersPage : Page
     private bool _ready;
     private bool _busy;
 
+    /// <summary>
+    /// The one handler this page hands the dispatcher, reused for every notification (#399).
+    /// </summary>
+    /// <remarks>
+    /// A field rather than a lambda or a method group because each of those allocates a fresh
+    /// delegate, and a fresh delegate is a fresh COM wrapper the runtime can never reuse. See
+    /// <see cref="MainPage"/> for the measurement.
+    /// </remarks>
+    private readonly DispatcherQueueHandler _render;
+
     /// <summary>Creates the page.</summary>
     public StatusRegistersPage()
     {
         InitializeComponent();
+
+        _render = Render;
 
         RegisterPicker.ItemsSource = StatusRegistersViewModel.Registers;
         RegisterPicker.SelectedItem = StatusRegisterMaps.Operation;
@@ -61,7 +74,7 @@ public sealed partial class StatusRegistersPage : Page
 
     /// <summary>Renders on a model notification. Named so <see cref="Detach"/> can remove it (#388).</summary>
     private void OnModelChanged(object? sender, PropertyChangedEventArgs e) =>
-        DispatcherQueue.TryEnqueue(Render);
+        DispatcherQueue.TryEnqueue(_render);
 
     /// <inheritdoc />
     /// <remarks>

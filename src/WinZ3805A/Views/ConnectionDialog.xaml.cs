@@ -1,6 +1,7 @@
 using System.IO.Ports;
 using System.ComponentModel;
 
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
@@ -33,12 +34,24 @@ public sealed partial class ConnectionDialog : ContentDialog
     /// <summary>True while the code is writing the controls, so its own writes do not echo back.</summary>
     private bool _updating;
 
+    /// <summary>
+    /// The one handler this page hands the dispatcher, reused for every notification (#399).
+    /// </summary>
+    /// <remarks>
+    /// A field rather than a lambda or a method group because each of those allocates a fresh
+    /// delegate, and a fresh delegate is a fresh COM wrapper the runtime can never reuse. See
+    /// <see cref="MainPage"/> for the measurement.
+    /// </remarks>
+    private readonly DispatcherQueueHandler _render;
+
     /// <summary>Creates the dialog over a view model.</summary>
     public ConnectionDialog(ConnectionViewModel model)
     {
         ArgumentNullException.ThrowIfNull(model);
 
         InitializeComponent();
+
+        _render = Render;
 
         _model = model;
         _model.PropertyChanged += OnModelChanged;
@@ -168,7 +181,7 @@ public sealed partial class ConnectionDialog : ContentDialog
     /// because the exemption is a claim about a caller that a future caller can quietly break.
     /// </remarks>
     private void OnModelChanged(object? sender, PropertyChangedEventArgs e) =>
-        DispatcherQueue.TryEnqueue(Render);
+        DispatcherQueue.TryEnqueue(_render);
 
     private void Render()
     {

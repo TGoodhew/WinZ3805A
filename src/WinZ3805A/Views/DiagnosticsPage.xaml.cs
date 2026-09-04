@@ -56,12 +56,24 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
 
     private readonly DispatcherTimer _loadingTimer = new() { Interval = TimeSpan.FromMilliseconds(100) };
 
+    /// <summary>
+    /// The one handler this page hands the dispatcher, reused for every notification (#399).
+    /// </summary>
+    /// <remarks>
+    /// A field rather than a lambda or a method group because each of those allocates a fresh
+    /// delegate, and a fresh delegate is a fresh COM wrapper the runtime can never reuse. See
+    /// <see cref="MainPage"/> for the measurement.
+    /// </remarks>
+    private readonly Microsoft.UI.Dispatching.DispatcherQueueHandler _render;
+
     /// <summary>When the read in flight started, for the ladder above.</summary>
     private DateTimeOffset? _readingSince;
 
     public DiagnosticsPage()
     {
         InitializeComponent();
+
+        _render = Render;
 
         _loadingTimer.Tick += (_, _) => ApplyLoadingIndicator();
 
@@ -128,7 +140,7 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
 
     /// <summary>Renders on a model notification. Named so <see cref="Detach"/> can remove it (#388).</summary>
     private void OnModelChanged(object? sender, PropertyChangedEventArgs e) =>
-        DispatcherQueue.TryEnqueue(Render);
+        DispatcherQueue.TryEnqueue(_render);
 
     /// <inheritdoc />
     /// <remarks>

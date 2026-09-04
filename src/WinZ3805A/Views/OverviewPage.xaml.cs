@@ -3,6 +3,7 @@ using System.Globalization;
 
 using Microsoft.Extensions.DependencyInjection;
 
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -53,10 +54,26 @@ public sealed partial class OverviewPage : Page
     /// <summary>UTC ticks of the last trend redraw, or 0 for never (#387).</summary>
     private long _trendRenderedTicks;
 
+    /// <summary>
+    /// The one handler this page hands the dispatcher, reused for every notification (#399).
+    /// </summary>
+    /// <remarks>
+    /// A field rather than a lambda or a method group because each of those allocates a fresh
+    /// delegate, and a fresh delegate is a fresh COM wrapper the runtime can never reuse. See
+    /// <see cref="MainPage"/> for the measurement.
+    /// </remarks>
+    private readonly DispatcherQueueHandler _render;
+
     /// <summary>Creates the page.</summary>
     public OverviewPage()
     {
         InitializeComponent();
+
+        _render = () =>
+        {
+            Render();
+            RenderTrendIfItWouldShowAnything();
+        };
 
         // The footer counts up while nothing arrives, which is exactly when its number matters.
         _stalenessTicker.Tick += (_, _) => _model?.RaiseAll();
@@ -100,11 +117,7 @@ public sealed partial class OverviewPage : Page
     /// 1.1 GB of large object heap, a working set climbing 8.9 MB a minute for ten hours (#385).
     /// </remarks>
     private void OnModelChanged(object? sender, PropertyChangedEventArgs e) =>
-        DispatcherQueue.TryEnqueue(() =>
-        {
-            Render();
-            RenderTrendIfItWouldShowAnything();
-        });
+        DispatcherQueue.TryEnqueue(_render);
 
     /// <inheritdoc />
     /// <remarks>
