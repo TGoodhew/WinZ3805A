@@ -112,6 +112,9 @@ public sealed class TrendChart : Control
 
     private Canvas? _surface;
 
+    /// <summary>Tokens resolved during the current draw, and no longer (#399).</summary>
+    private readonly Dictionary<string, object?> _tokens = new(StringComparer.Ordinal);
+
     /// <summary>Creates the control.</summary>
     public TrendChart()
     {
@@ -222,6 +225,9 @@ public sealed class TrendChart : Control
         }
 
         surface.Children.Clear();
+
+        // Held for this draw only. See Resource for why it may not outlive one.
+        _tokens.Clear();
 
         double width = surface.ActualWidth;
         double height = surface.ActualHeight;
@@ -452,10 +458,31 @@ public sealed class TrendChart : Control
     /// The fallback is deliberately visible rather than pretty. A grey line that looks wrong is a
     /// bug someone fixes; a silently skipped stroke is a chart that quietly draws nothing.
     /// </para>
+    /// <para>
+    /// <b>Resolved once per draw, not once per use (#399).</b> A lookup hands its key across to
+    /// WinRT as an <c>IInspectable</c>, so it boxes the string and mints a COM callable wrapper —
+    /// and the runtime appends every wrapper to a diagnostics list that never shrinks.
+    /// <see cref="BrushFor"/> is called once per column and a column is one decimated sample, so a
+    /// second's redraw asked for the same four keys some hundreds of times.
+    /// </para>
+    /// <para>
+    /// The cache is cleared at the top of every <see cref="Draw"/> and never lives longer than one.
+    /// That is deliberate: these are <c>{ThemeResource}</c> values, and a cache that outlived a
+    /// draw would have to be invalidated on both a theme change and a high-contrast change — two
+    /// events, one of which this control does not listen for. A draw cannot span either.
+    /// </para>
     /// </remarks>
-    private static T? Resource<T>(string key)
-        where T : class =>
-        Application.Current.Resources.TryGetValue(key, out object? value) ? value as T : null;
+    private T? Resource<T>(string key)
+        where T : class
+    {
+        if (!_tokens.TryGetValue(key, out object? cached))
+        {
+            cached = Application.Current.Resources.TryGetValue(key, out object? value) ? value : null;
+            _tokens[key] = cached;
+        }
+
+        return cached as T;
+    }
 
     /// <summary>One axis figure: U+2212 for a negative, never a hyphen, at this chart's precision.</summary>
     /// <remarks>§9.5.3 and P0-20. The decimal count is fixed per chart and never varies with the range.</remarks>

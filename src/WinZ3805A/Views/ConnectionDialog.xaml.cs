@@ -38,11 +38,14 @@ public sealed partial class ConnectionDialog : ContentDialog
     /// The one handler this page hands the dispatcher, reused for every notification (#399).
     /// </summary>
     /// <remarks>
-    /// A field rather than a lambda or a method group because each of those allocates a fresh
-    /// delegate, and a fresh delegate is a fresh COM wrapper the runtime can never reuse. See
-    /// <see cref="MainPage"/> for the measurement.
+    /// A field rather than a lambda or a method group so the hop allocates nothing. See
+    /// <see cref="MainPage"/> for why that is hygiene and not the fix, and for what the leak
+    /// in #399 actually turned out to be.
     /// </remarks>
     private readonly DispatcherQueueHandler _render;
+
+    /// <summary>1 while a render is already queued, so a burst costs one (#399).</summary>
+    private int _renderQueued;
 
     /// <summary>Creates the dialog over a view model.</summary>
     public ConnectionDialog(ConnectionViewModel model)
@@ -51,7 +54,11 @@ public sealed partial class ConnectionDialog : ContentDialog
 
         InitializeComponent();
 
-        _render = Render;
+        _render = () =>
+        {
+            Interlocked.Exchange(ref _renderQueued, 0);
+            Render();
+        };
 
         _model = model;
         _model.PropertyChanged += OnModelChanged;
@@ -180,8 +187,22 @@ public sealed partial class ConnectionDialog : ContentDialog
     /// <c>ConnectionViewModel</c> for each dialog, so the two die together. The rule is universal
     /// because the exemption is a claim about a caller that a future caller can quietly break.
     /// </remarks>
-    private void OnModelChanged(object? sender, PropertyChangedEventArgs e) =>
-        DispatcherQueue.TryEnqueue(_render);
+    private void OnModelChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        // One hop and one render per burst (#399). The store raises about seven notifications per
+        // sweep and Render rewrites everything, so six of them repaint what the seventh is about
+        // to - and each repaint marshals boxed values into WinRT, minting a COM wrapper the
+        // runtime appends to a list that never shrinks.
+        if (Interlocked.Exchange(ref _renderQueued, 1) == 1)
+        {
+            return;
+        }
+
+        if (!DispatcherQueue.TryEnqueue(_render))
+        {
+            Interlocked.Exchange(ref _renderQueued, 0);
+        }
+    }
 
     private void Render()
     {

@@ -58,11 +58,20 @@ public sealed partial class OverviewPage : Page
     /// The one handler this page hands the dispatcher, reused for every notification (#399).
     /// </summary>
     /// <remarks>
-    /// A field rather than a lambda or a method group because each of those allocates a fresh
-    /// delegate, and a fresh delegate is a fresh COM wrapper the runtime can never reuse. See
-    /// <see cref="MainPage"/> for the measurement.
+    /// A field rather than a lambda or a method group so the hop allocates nothing. See
+    /// <see cref="MainPage"/> for why that is hygiene and not the fix, and for what the leak
+    /// in #399 actually turned out to be.
     /// </remarks>
     private readonly DispatcherQueueHandler _render;
+
+    /// <summary>1 while a render is already queued, so a burst costs one (#399).</summary>
+    private int _renderQueued;
+
+    /// <summary>The items the health pills were built from, so an unchanged card is left alone (#399).</summary>
+    private HealthItem[] _healthShown = [];
+
+    /// <summary>The tooltip last set on the FFOM pill, so an unchanged one is not re-set (#399).</summary>
+    private string? _ffomTooltipShown;
 
     /// <summary>Creates the page.</summary>
     public OverviewPage()
@@ -71,6 +80,7 @@ public sealed partial class OverviewPage : Page
 
         _render = () =>
         {
+            Interlocked.Exchange(ref _renderQueued, 0);
             Render();
             RenderTrendIfItWouldShowAnything();
         };
@@ -116,8 +126,22 @@ public sealed partial class OverviewPage : Page
     /// arrive at least once a second, and each one used to be a full 6 h read: 36 MB/s allocated,
     /// 1.1 GB of large object heap, a working set climbing 8.9 MB a minute for ten hours (#385).
     /// </remarks>
-    private void OnModelChanged(object? sender, PropertyChangedEventArgs e) =>
-        DispatcherQueue.TryEnqueue(_render);
+    private void OnModelChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        // One hop and one render per burst (#399). The store raises about seven notifications per
+        // sweep and Render rewrites everything, so six of them repaint what the seventh is about
+        // to - and each repaint marshals boxed values into WinRT, minting a COM wrapper the
+        // runtime appends to a list that never shrinks.
+        if (Interlocked.Exchange(ref _renderQueued, 1) == 1)
+        {
+            return;
+        }
+
+        if (!DispatcherQueue.TryEnqueue(_render))
+        {
+            Interlocked.Exchange(ref _renderQueued, 0);
+        }
+    }
 
     /// <inheritdoc />
     /// <remarks>
@@ -220,7 +244,15 @@ public sealed partial class OverviewPage : Page
 
         RenderMerit(TfomPill, TfomDetailText, "TFOM", model.Tfom, model.TfomDetail);
         RenderMerit(FfomPill, FfomDetailText, "FFOM", model.Ffom, model.FfomDetail);
-        ToolTipService.SetToolTip(FfomPill, model.FfomTooltip);
+
+        // Attached properties take their value as object, so the string is boxed into an
+        // IInspectable and every set mints a COM wrapper (#399). The tooltip changes when the
+        // figure of merit does, which is rarely; the comparison is free by comparison.
+        if (_ffomTooltipShown != model.FfomTooltip)
+        {
+            _ffomTooltipShown = model.FfomTooltip;
+            ToolTipService.SetToolTip(FfomPill, model.FfomTooltip);
+        }
 
         TimeInterval.Value = model.TimeIntervalNanoseconds;
 
@@ -229,7 +261,17 @@ public sealed partial class OverviewPage : Page
         HoldoverDurationText.Text = model.HoldoverDuration;
 
         HealthSummaryText.Text = model.HealthSummary;
-        HealthItems.ItemsSource = model.Health.Select(BuildHealthPill).ToList();
+
+        // THE EXPENSIVE LINE ON THIS PAGE (#399). Rebuilding the card meant a new SeverityPill per
+        // item, an AutomationProperties.SetName on each, and a fresh ItemsSource that made the
+        // ItemsControl regenerate every container - all of it several times a second, for a card
+        // that changes when the receiver's health does. HealthItem is a record struct, so asking
+        // whether anything changed costs a field comparison per item.
+        if (!model.Health.SequenceEqual(_healthShown))
+        {
+            _healthShown = [.. model.Health];
+            HealthItems.ItemsSource = model.Health.Select(BuildHealthPill).ToList();
+        }
 
         OscillatorControl.Value = model.OscillatorControl;
 
