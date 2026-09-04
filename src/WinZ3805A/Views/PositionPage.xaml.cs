@@ -45,17 +45,19 @@ public sealed partial class PositionPage : Page
     /// </remarks>
     private readonly DispatcherQueueHandler _render;
 
-    /// <summary>1 while a render is already queued, so a burst costs one (#399).</summary>
-    private int _renderQueued;
+    /// <summary>Collapses a burst of notifications into one render (#399).</summary>
+    private readonly RenderCoalescer _renders;
 
     /// <summary>Creates the page.</summary>
     public PositionPage()
     {
         InitializeComponent();
 
+        _renders = new RenderCoalescer(EnqueueRender);
+
         _render = () =>
         {
-            Interlocked.Exchange(ref _renderQueued, 0);
+            _renders.Begin();
             Render();
         };
 
@@ -117,22 +119,10 @@ public sealed partial class PositionPage : Page
     }
 
     /// <summary>Renders on a model notification. Named so <see cref="Detach"/> can remove it (#388).</summary>
-    private void OnModelChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        // One hop and one render per burst (#399). The store raises about seven notifications per
-        // sweep and Render rewrites everything, so six of them repaint what the seventh is about
-        // to - and each repaint marshals boxed values into WinRT, minting a COM wrapper the
-        // runtime appends to a list that never shrinks.
-        if (Interlocked.Exchange(ref _renderQueued, 1) == 1)
-        {
-            return;
-        }
+    private void OnModelChanged(object? sender, PropertyChangedEventArgs e) => _renders.Request();
 
-        if (!DispatcherQueue.TryEnqueue(_render))
-        {
-            Interlocked.Exchange(ref _renderQueued, 0);
-        }
-    }
+    /// <summary>Hands the cached handler to the dispatcher. A method, so the one delegate is reused.</summary>
+    private bool EnqueueRender() => DispatcherQueue.TryEnqueue(_render);
 
     /// <inheritdoc />
     /// <remarks>

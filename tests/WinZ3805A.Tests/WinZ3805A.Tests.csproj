@@ -73,6 +73,12 @@
          judge it. A default is the one value nobody re-reads. -->
     <Compile Include="..\..\src\WinZ3805A\ViewModels\ParameterDefaults.cs"
              Link="ViewModels\ParameterDefaults.cs" />
+    <!-- #399's render coalescing. The dispatcher arrives as a Func<bool>, so the race the
+         views depend on - a notification arriving mid-render must not be swallowed - is
+         assertable here without WinUI. It was the last part of that fix that was only
+         reasoned about, and reasoning is what got #399 wrong the first time. -->
+    <Compile Include="..\..\src\WinZ3805A\ViewModels\RenderCoalescer.cs"
+             Link="ViewModels\RenderCoalescer.cs" />
     <Compile Include="..\..\src\WinZ3805A\Services\HelpDocument.cs"
              Link="Services\HelpDocument.cs" />
     <Compile Include="..\..\src\WinZ3805A\Services\HighContrast.cs"

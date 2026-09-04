@@ -466,10 +466,16 @@ public sealed class TrendChart : Control
     /// second's redraw asked for the same four keys some hundreds of times.
     /// </para>
     /// <para>
-    /// The cache is cleared at the top of every <see cref="Draw"/> and never lives longer than one.
-    /// That is deliberate: these are <c>{ThemeResource}</c> values, and a cache that outlived a
-    /// draw would have to be invalidated on both a theme change and a high-contrast change — two
-    /// events, one of which this control does not listen for. A draw cannot span either.
+    /// The cache is cleared at the top of every <see cref="Draw"/> and never lives longer than one,
+    /// and the reason is stronger than "invalidating it would be awkward" (audited under #399).
+    /// <b>Nothing in this application observes a high-contrast change at all</b> — <c>HighContrast</c>
+    /// only reads the setting through <c>SystemParametersInfo</c> — so there is no event a
+    /// longer-lived cache could be invalidated on, and it could hold stale brushes indefinitely
+    /// rather than until the next theme change. This control is the one that would suffer, because
+    /// it resolves its brushes in code and paints shapes imperatively, where the rest of the
+    /// application uses <c>{ThemeResource}</c> and is re-resolved by the framework; this one
+    /// recovers only when it next draws. A draw cannot span a theme change, so a cache scoped to
+    /// one cannot go stale.
     /// </para>
     /// </remarks>
     private T? Resource<T>(string key)

@@ -74,14 +74,14 @@ public sealed partial class MainPage : Page
     /// never shrinks: <c>ComWrappers.RegisterManagedObjectWrapperForDiagnostics</c>, whose
     /// <c>List</c> doubling is the staircase in the working set. Nine hours reached 8.4 million
     /// slots and 69.5 MB of large object heap at 19 MB an hour. The remedy is to render less and
-    /// set less: <see cref="_renderQueued"/> collapses a burst into one render, and the fields
+    /// set less: <see cref="_renders"/> collapses a burst into one render, and the fields
     /// under it skip a value that has not changed.
     /// </para>
     /// </remarks>
     private readonly DispatcherQueueHandler _render;
 
-    /// <summary>1 while a render is already queued, so a burst costs one (#399).</summary>
-    private int _renderQueued;
+    /// <summary>Collapses a burst of notifications into one render (#399).</summary>
+    private readonly RenderCoalescer _renders;
 
     /// <summary>
     /// What was last handed to each attached property, so an unchanged value is not set again.
@@ -109,9 +109,11 @@ public sealed partial class MainPage : Page
 
         InitializeComponent();
 
+        _renders = new RenderCoalescer(EnqueueRender);
+
         _render = () =>
         {
-            Interlocked.Exchange(ref _renderQueued, 0);
+            _renders.Begin();
             Render();
         };
 
@@ -441,22 +443,10 @@ public sealed partial class MainPage : Page
     /// waiting for the day that stops being true, and the rule is cheaper to keep than to argue
     /// about per page.
     /// </remarks>
-    private void OnModelChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        // One hop and one render per burst (#399). The store raises about seven notifications per
-        // sweep and Render rewrites everything, so six of them repaint what the seventh is about
-        // to - and each repaint marshals boxed values into WinRT, minting a COM wrapper the
-        // runtime appends to a list that never shrinks.
-        if (Interlocked.Exchange(ref _renderQueued, 1) == 1)
-        {
-            return;
-        }
+    private void OnModelChanged(object? sender, PropertyChangedEventArgs e) => _renders.Request();
 
-        if (!DispatcherQueue.TryEnqueue(_render))
-        {
-            Interlocked.Exchange(ref _renderQueued, 0);
-        }
-    }
+    /// <summary>Hands the cached handler to the dispatcher. A method, so the one delegate is reused.</summary>
+    private bool EnqueueRender() => DispatcherQueue.TryEnqueue(_render);
 
     /// <summary>
     /// The installed version, for the §10.3 footer.
