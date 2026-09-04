@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     CI gate for #388: a page that subscribes to something must let go of it when it is navigated
     away from.
@@ -55,6 +55,33 @@ $notFrameHosted = @{
     'MainPage.xaml.cs' = 'The main window''s own content, set as Window.Content and never navigated.'
 }
 
+<#
+.SYNOPSIS
+    The text of every place a view undoes what it set up.
+.DESCRIPTION
+    Detach and OnNavigatedFrom for a page, and the Unloaded and Closed handlers for a view whose
+    lifecycle is not the Frame's - MainPage is the window's content and stops its ticker in
+    Unloaded, DetailsWindow does its own teardown in Closed. A Stop() or a -= anywhere else in the
+    file is not teardown, however tidy it looks: it runs when the page felt like it, not when the
+    page went away.
+#>
+function TeardownRegions {
+    param([Parameter(Mandatory)] [AllowEmptyString()] [string] $Text)
+
+    $body = '\{(?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*\}'
+    $regions = @()
+
+    foreach ($pattern in @(
+            "private void Detach\([^)]*\)\s*$body",
+            "protected override void OnNavigatedFrom\([^)]*\)\s*$body",
+            "(?:Unloaded|Closed)\s*\+=[^;{]*$body",
+            "(?:Unloaded|Closed)\s*\+=[^;{]*;")) {
+        foreach ($match in [regex]::Matches($Text, $pattern)) { $regions += $match.Value }
+    }
+
+    return ($regions -join "`n")
+}
+
 $failures = @()
 $checked = 0
 
@@ -81,19 +108,28 @@ foreach ($file in Get-ChildItem $viewsPath -Filter '*.xaml.cs' | Sort-Object Nam
     # Rule 3 (#400). A started DispatcherTimer is rooted by the dispatcher and its Tick handler
     # captures the view, so a timer that is started and never stopped keeps the view alive on its
     # own. This is what left one TimePage per visit while CPU stayed perfectly flat.
+    # THE STOP HAS TO BE IN THE TEARDOWN, not merely somewhere in the file. The first version of
+    # this rule asked only that a Stop() existed, and that is not the same claim: DiagnosticsPage
+    # stopped _loadingTimer at the end of its loading path and left it running on navigation, so a
+    # gate looking anywhere would have passed the very page it was written for. Verified by
+    # deleting only the teardown Stop and watching the loose form pass (#400).
+    $teardown = TeardownRegions $text
+
     foreach ($declaration in [regex]::Matches(
             $text, '(?:private|protected|internal)\s+(?:readonly\s+)?DispatcherTimer\s+(?<name>_\w+)')) {
         $timer = $declaration.Groups['name'].Value
         if ($text -notmatch [regex]::Escape("$timer.Start()")) { continue }
 
         $checked++
-        if ($text -notmatch [regex]::Escape("$timer.Stop()")) {
+        if ($teardown -notmatch [regex]::Escape("$timer.Stop()")) {
             $failures += [pscustomobject]@{
                 File = $file.Name
-                Rule = 'timer never stopped'
-                Why  = ("starts $timer and never stops it. A running DispatcherTimer is rooted by " +
-                        'the dispatcher and its Tick captures this view, so the view cannot be ' +
-                        'collected - one instance per visit, with no rendering to give it away (#400).')
+                Rule = 'timer not stopped on teardown'
+                Why  = ("starts $timer and does not stop it in Detach, OnNavigatedFrom, Unloaded " +
+                        'or Closed. A Stop() elsewhere in the file does not count: a running ' +
+                        'DispatcherTimer is rooted by the dispatcher and its Tick captures this ' +
+                        'view, so whatever else the timer does, the view cannot be collected while ' +
+                        'it runs - one instance per visit, with no rendering to give it away (#400).')
             }
         }
     }
@@ -104,13 +140,14 @@ foreach ($file in Get-ChildItem $viewsPath -Filter '*.xaml.cs' | Sort-Object Nam
         if ($text -notmatch [regex]::Escape($subscribe)) { continue }
 
         $checked++
-        if ($text -notmatch [regex]::Escape("$($declared.Type).$($declared.Event) -=")) {
+        if ($teardown -notmatch [regex]::Escape("$($declared.Type).$($declared.Event) -=")) {
             $failures += [pscustomobject]@{
                 File = $file.Name
-                Rule = 'static event never left'
-                Why  = ("subscribes to the static $($declared.Type).$($declared.Event) and never " +
-                        'unsubscribes. A static event outlives every view, so this pins one ' +
-                        'instance per subscription for the life of the process (#400).')
+                Rule = 'static event not left on teardown'
+                Why  = ("subscribes to the static $($declared.Type).$($declared.Event) and does " +
+                        'not unsubscribe in Detach, OnNavigatedFrom, Unloaded or Closed. A static ' +
+                        'event outlives every view, so this pins one instance per subscription for ' +
+                        'the life of the process (#400).')
             }
         }
     }

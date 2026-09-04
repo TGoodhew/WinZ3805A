@@ -97,9 +97,15 @@ button below). Three things can sit after it:
   what is running; the number in the picture above is whichever version that screenshot was
   taken from, and yours will differ.
 - **The status text** then names the port and serial settings in use and how long ago the last
-  reading arrived. It is grey while readings are fresh, turns **amber after 15 seconds** without
-  one and **red after 60** — with the caution triangle or the critical hexagon beside the text —
-  and always says the age in words, so a stale value is never mistaken for a current one.
+  reading arrived — *updated just now*, *updated 47 seconds ago* — so an old value is never
+  mistaken for a current one.
+- **A pill appears beside it when a reading is late**, and it says which of the two it is:
+  **overdue** after 15 seconds without one, **stale** after 60. Overdue means the receiver has not
+  answered when it should have, which happens briefly and often comes back on its own; stale means
+  the reading is old enough that you should not act on it. The pill carries an amber caution
+  triangle or a red critical hexagon as well as the word, so it reads the same if the colours do
+  not. **There is no pill while readings are fresh** — a window meant to sit on a second monitor
+  for weeks should not carry a badge that never goes out, so silence here is the good state.
 - **Details** opens the Receiver Details window (`Ctrl+D`).
 - **The pin** keeps this window above every other window. It stays pinned across restarts.
 - **Connect / Disconnect** opens the connection dialog, or drops the connection (`Ctrl+Shift+C`).
