@@ -157,7 +157,23 @@
         <Setter Property="FontSize" Value="13" />
         <Setter Property="LineHeight" Value="18" />
         <Setter Property="FontWeight" Value="Normal" />
-        <Setter Property="IsTextSelectionEnabled" Value="True" />
+        <!--
+            SELECTION IS OPT-IN, AND THIS DEFAULT USED TO BE True (#405).
+
+            A TextBlock with text selection enabled captures pointer input so it can drag out a
+            selection, so it SWALLOWS a click meant for whatever is underneath. In the Advanced
+            Console's command picker that made the mnemonic column dead: clicking the ":SYST:COMM"
+            of a command did nothing at all - the press never reached the ComboBoxItem and the
+            dropdown did not even close - while clicking the description beside it selected
+            normally. A user cannot be expected to learn which half of a row is clickable.
+
+            Every place that genuinely wants selection already asks for it in the markup - the
+            console transcript and its command preview, the diagnostics cards, the readouts a user
+            copies figures out of. There were sixteen such explicit opt-ins and they are unaffected;
+            what this removes is selection nobody asked for, on text sitting inside something
+            clickable.
+        -->
+        <Setter Property="IsTextSelectionEnabled" Value="False" />
     </Style>
 
 </ResourceDictionary>
