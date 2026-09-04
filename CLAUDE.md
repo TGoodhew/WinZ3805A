@@ -279,11 +279,12 @@ verbatim — so the description of the rule tripped the rule. Both are now descr
 It is a small thing and it is the whole argument for the gate: these are exactly the references nobody
 re-reads.
 
-One more script runs in CI and is **not** a gate on the source — it checks a tool rather
-than a rule:
+Two more scripts run in CI and are **not** gates on the source — they check tools rather
+than rules, and share one job:
 
 ```powershell
 pwsh build/Capture-Fixtures.ps1 -SelfTest # #4 / #185 — the harness, not the app
+pwsh build/Watch-Soak.ps1 -SelfTest       # #385 / #399 — the soak's arithmetic, not the memory
 ```
 
 `.github/workflows/ci.yml` runs all fifteen in their own dependency-free jobs, alongside the
@@ -299,6 +300,18 @@ happen only while the receiver is being moved. It is used perhaps once a season,
 a parsing bug found afterwards cannot be retried without moving the hardware again. So the
 half that needs no serial port is checked on every push rather than on the day. The serial
 half still cannot be, and the self-test says so when it passes.
+
+`Watch-Soak.ps1` is the same bargain for memory, added 4 Sep 2026 after #399. **Two leaks have
+shipped and neither was visible in an afternoon** — #385 at 2.2 GB in two hours, #399 at 19 MB an
+hour with CPU flat, nothing logged and the window still responsive. A soak needs a receiver and
+hours, so section 14 of `docs/manual-qa.md` owns the procedure; what CI can check is the arithmetic, and
+that is not a formality. The measurement has three ways to lie and the self-test pins all of them:
+growth measured from the first sample reads launch as trend, the value in a `dotnet-counters` CSV
+is the **last** column and not the fourth (the fourth is the counter's type, so reading it yields
+the word `Metric` for everything), and a type's bytes in a gcdump report are the **sum** of its
+size buckets rather than the largest. Two things the script cannot tell you and the document must:
+**attaching perturbs** — one gcdump mid-soak moved the working set 8 MB — and a soak is read
+against another soak, never a threshold.
 
 The hex gate implements the broader §9.13 wording rather than P0-17's minimum: it
 scans every `*.xaml` under `src/` except `Themes/Colors.xaml`, plus `*.cs` under

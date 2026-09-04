@@ -342,14 +342,78 @@ a picture.
 
 ---
 
+## 14. Memory over hours (#385, #399, G1)
+
+**Why.** Two leaks have shipped, and neither was visible in an afternoon. #385 held 2.2 GB and
+pegged a core inside two hours — the kind anybody notices, eventually, after ten hours and 4.9 GB of
+diagnosis. #399 was the other kind: **19 MB an hour with CPU perfectly flat, nothing in the log, the
+window still responsive**, and 3.2 GB across the week G1 expects the app to survive on a second
+monitor. Nothing in CI can see either. A soak needs a receiver, hours, and somebody to read it.
+
+Run it when anything on the polling, rendering or shell-badge path has changed, and before a release
+that touches any of them.
+
+```
+pwsh build\Watch-Soak.ps1 -SelfTest                       # the arithmetic; needs no receiver
+pwsh build\Watch-Soak.ps1 -Label before -DurationMinutes 60
+```
+
+**A soak is read against another soak, never against a threshold.** Working set depends on the
+window layout, the page on screen and how long the receiver has been locked, so a number on its own
+means nothing. Hold these equal between the two runs, or the comparison is worthless:
+
+| Hold equal | Why |
+|---|---|
+| The resting page | Overview reads the trend store; Status Registers does not. |
+| Which windows are open | The Details window is a second render path on every reading. |
+| Any navigation done first | Visiting pages allocates legitimately. Do the same visits, then let it settle. |
+| Receiver state | A locked receiver and one in holdover poll differently. |
+| Duration | Growth is a rate, and a rate needs the same denominator. |
+
+**Read it in this order**, because each instrument answers what the one before it cannot:
+
+1. **Working set** — is anything growing at all. This is also the only instrument that sees a GDI,
+   handle or native leak, none of which appear on a managed heap.
+2. **The heap sizes from `dotnet-counters`** — *which* heap. #399 was 147.6 MB of large object heap
+   against 4.4 MB of gen2, and that one line would have aimed the whole investigation a day earlier.
+3. **The gcdump totals and type lines** — *which type*. #399's finding was 69.5 MB of
+   `ManagedObjectWrapperHolder[]` against **101,861 live objects in the entire heap**. A table sized
+   for eight million under a heap of a hundred thousand is not a retention bug but a *rate* bug —
+   something minting wrappers, not something holding them — and no working-set curve says that.
+
+**What to do when it grows.** Get the allocating callstack rather than reasoning about it:
+
+```
+dotnet-trace collect -p <pid> --providers Microsoft-DotNETCore-SampleProfiler --duration 00:00:02:00
+```
+
+#399's mechanism was *inferred* from reading twelve call sites, and shipped with that inference
+stated as unproven. A trace would have named the caller in five minutes.
+
+> **Attaching changes the reading.** A diagnostic session allocates its buffers inside the process
+> being measured: one gcdump taken mid-soak on 4 Sep 2026 moved the working set 8 MB in the very
+> next sample. That is why the script dumps at the two ends and not throughout, and why
+> `-SkipDumps` exists for when another measurement is already in flight. If you attach anything by
+> hand during a run, the run is contaminated — start the window again.
+
+> **`dotnet-counters ps` does not list a packaged app**, and its silence is not evidence that the
+> diagnostics IPC is unreachable. The first #399 session concluded exactly that and spent the night
+> on working set alone. Check for `\\.\pipe\dotnet-diagnostic-<pid>` and attach with `-p <pid>`.
+> `dotnet-gcdump` is not installed by default: `dotnet tool install -g dotnet-gcdump`.
+
+---
+
 ## Before a release
 
 Sections 1–4, 8, 9, 11 and 13 in full, then **12 on the published artifact** — which means the release
 exists before the last check passes. That is the right way round: a release nobody can install is
 worth catching after it is published rather than not at all, and the fix is another tag. Section 5
 only if the hardware is being moved, with sections 7 and 10 alongside it since they need the same
-antenna; section 6 if survey behaviour has been touched.
+antenna; section 6 if survey behaviour has been touched; **section 14 if anything on the polling,
+rendering or shell-badge path has changed** — it costs an hour of waiting and perhaps five minutes of
+attention, and both leaks that have shipped would have been caught by it.
 
-Open a QA-run issue for the release and record each section's result there — every issue this
-checklist cites is closed, so there is no standing place otherwise — and if something fails, file it
+Open a QA-run issue for the release and record each section's result there — the issues this
+checklist cites track defects rather than runs, so there is no standing place otherwise — and if
+something fails, file it
 rather than fixing it silently: the log of what was checked is worth as much as the checking.
