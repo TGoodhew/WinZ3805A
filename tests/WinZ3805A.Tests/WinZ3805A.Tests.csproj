@@ -67,6 +67,12 @@
          report whatever the test machine happens to be set to. -->
     <!-- #312's guide parser. Markdig in, a block model out, no WinUI anywhere in it - which is
          what lets the real document be parsed here and checked against the package layout. -->
+    <!-- #404's console argument rules and the defaults their editors open on. Both speak only
+         WinZ3805A.Device.Commands - no WinUI at all - which is what lets the real command catalog
+         be walked here and every editor's opening value checked against the validator that will
+         judge it. A default is the one value nobody re-reads. -->
+    <Compile Include="..\..\src\WinZ3805A\ViewModels\ParameterDefaults.cs"
+             Link="ViewModels\ParameterDefaults.cs" />
     <Compile Include="..\..\src\WinZ3805A\Services\HelpDocument.cs"
              Link="Services\HelpDocument.cs" />
     <Compile Include="..\..\src\WinZ3805A\Services\HighContrast.cs"

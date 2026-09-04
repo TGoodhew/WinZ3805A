@@ -246,26 +246,46 @@ public sealed partial class AdvancedConsolePage : Page, ICsvExportSource
     /// the trip.
     /// </para>
     /// </remarks>
+    /// <summary>A picker over the parameter's own list of legal values (#404).</summary>
+    /// <remarks>
+    /// Opens on the first choice rather than on nothing, so the command is valid the moment it is
+    /// selected. A picker cannot be given an illegal value, which is the whole reason a constrained
+    /// parameter gets one whatever its declared kind.
+    /// </remarks>
+    private Func<string?> AddChoiceEditor(ParameterSpec parameter, string label)
+    {
+        ComboBox choice = new()
+        {
+            Header = label,
+            Width = FieldWidth,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            ItemsSource = parameter.Choices,
+            SelectedItem = ParameterDefaults.For(parameter),
+        };
+
+        choice.SelectionChanged += (_, _) => Revalidate();
+        ParameterFields.Children.Add(choice);
+
+        return () => choice.SelectedItem as string;
+    }
+
     private Func<string?> AddEditor(ParameterSpec parameter)
     {
         string label = parameter.Unit is null ? parameter.Name : $"{parameter.Name} ({parameter.Unit})";
 
+        // A CONSTRAINED SET IS A PICKER, whatever the kind says (#404). The catalog declares baud
+        // as an Integer that carries Choices, and the validator enforces Choices for every kind -
+        // so switching on the kind alone put a NumberBox in front of a value that had to be one of
+        // four, opened it on 0, and disabled Send before the user had touched anything.
+        if (parameter.Choices is { Count: > 0 })
+        {
+            return AddChoiceEditor(parameter, label);
+        }
+
         switch (parameter.Kind)
         {
             case ParameterKind.Keyword:
-                ComboBox keyword = new()
-                {
-                    Header = label,
-                    Width = FieldWidth,
-                    HorizontalAlignment = HorizontalAlignment.Left,
-                    ItemsSource = parameter.Choices,
-                    SelectedIndex = parameter.Choices is { Count: > 0 } ? 0 : -1,
-                };
-
-                keyword.SelectionChanged += (_, _) => Revalidate();
-                ParameterFields.Children.Add(keyword);
-
-                return () => keyword.SelectedItem as string;
+                return AddChoiceEditor(parameter, label);
 
             case ParameterKind.PrnList:
                 TextBox prn = new()
@@ -293,7 +313,7 @@ public sealed partial class AdvancedConsolePage : Page, ICsvExportSource
                     // the control. §9.11 wants an out-of-range entry explained, not silently
                     // replaced - and the XAML parser widens a literal bound anyway, which is how a
                     // maximum of 0.99 once became 0.9900000095 on the Timing page.
-                    Value = parameter.Minimum ?? 0,
+                    Value = ParameterDefaults.NumberFor(parameter),
                 };
 
                 number.ValueChanged += (_, _) => Revalidate();

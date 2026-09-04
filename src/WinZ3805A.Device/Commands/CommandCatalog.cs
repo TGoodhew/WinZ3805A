@@ -424,7 +424,24 @@ public static class CommandCatalog
                 "Run the {0} diagnostic? The receiver will drop out of lock and re-acquire, so the "
                 + "1 PPS output is degraded for several minutes. The test itself takes up to 30 seconds.",
                 "Ran the {0} diagnostic.",
-                parameters: [new ParameterSpec("Subsystem", ParameterKind.Keyword)],
+                // THE SUBSYSTEMS THE MANUAL DOCUMENTS (#404). Without them this command could not
+                // be sent at all: a keyword parameter with no choices is refused by the validator
+                // with "Subsystem has no documented values", whatever the user picked.
+                //
+                // 58503A manual, Command Quick Reference p4-9. THE SAME MANUAL DISAGREES WITH
+                // ITSELF: its Expanded Syntax entry for this command omits IREFerence and spells
+                // EEPROM as "EEPRom". The fuller list is taken here so a documented test is not
+                // silently unavailable - if a receiver refuses one of them, that is the manual
+                // contradicting itself rather than this catalog being wrong. SCPI is
+                // case-insensitive, so the mixed case is the manual's own long form, not a literal.
+                parameters:
+                [
+                    new ParameterSpec("Subsystem", ParameterKind.Keyword, Choices:
+                    [
+                        "ALL", "DISPlay", "PROCessor", "RAM", "EEPROM", "UART",
+                        "QSPI", "FPGA", "INTerpolator", "IREFerence", "GPS", "POWer",
+                    ]),
+                ],
                 isQuery: true, format: ResponseFormat.ValueList),
         ];
 
