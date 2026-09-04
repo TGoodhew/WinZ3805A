@@ -236,6 +236,10 @@ jobs:
         shell: pwsh
         run: ./build/Capture-Fixtures.ps1 -SelfTest
 
+      - name: The soak harness still does its arithmetic
+        shell: pwsh
+        run: ./build/Watch-Soak.ps1 -SelfTest
+
   # ---------------------------------------------------------------------------
   # §6.1 requires x64 only and forbids AnyCPU, x86 and ARM64. The matrix keeps its
   # shape for the two configurations, not for a second architecture: ARM64 is not a
