@@ -1,4 +1,4 @@
-using Windows.Foundation;
+﻿using Windows.Foundation;
 using System.Globalization;
 
 using Microsoft.UI.Xaml;
@@ -120,8 +120,30 @@ public sealed class ReadoutTile : Control
     public double? Value
     {
         get => (double?)GetValue(ValueProperty);
-        set => SetValue(ValueProperty, value);
+        set
+        {
+            // Assigned only when it differs (#403): SetValue takes an IInspectable, so every
+            // assignment boxes and mints a COM wrapper the runtime never lets go of. See
+            // _valueShown for why the shadow is kept by the callback and not here.
+            if (Nullable.Equals(_valueShown, value))
+            {
+                return;
+            }
+
+            SetValue(ValueProperty, value);
+        }
     }
+
+    /// <summary>
+    /// What <see cref="Value"/> currently holds, so an unchanged assignment is skipped.
+    /// </summary>
+    /// <remarks>
+    /// Maintained in the change callback rather than the setter, so a binding or a Style Setter -
+    /// neither of which goes through the CLR property - cannot leave it stale and cause a real
+    /// change to be skipped. Compared against rather than GetValue, because a read crosses the
+    /// same boundary a write does.
+    /// </remarks>
+    private double? _valueShown;
 
     /// <summary>The unit, typeset separately — "ns", "dB", "°".</summary>
     public string Unit
@@ -166,8 +188,17 @@ public sealed class ReadoutTile : Control
         Refresh();
     }
 
-    private static void OnAnyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e) =>
-        ((ReadoutTile)d).Refresh();
+    private static void OnAnyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        var tile = (ReadoutTile)d;
+
+        if (e.Property == ValueProperty)
+        {
+            tile._valueShown = (double?)e.NewValue;
+        }
+
+        tile.Refresh();
+    }
 
     private static void OnSizeChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
