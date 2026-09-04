@@ -1,4 +1,4 @@
-using System.IO.Ports;
+﻿using System.IO.Ports;
 using System.ComponentModel;
 
 using Microsoft.UI.Dispatching;
@@ -44,8 +44,8 @@ public sealed partial class ConnectionDialog : ContentDialog
     /// </remarks>
     private readonly DispatcherQueueHandler _render;
 
-    /// <summary>1 while a render is already queued, so a burst costs one (#399).</summary>
-    private int _renderQueued;
+    /// <summary>Collapses a burst of notifications into one render (#399).</summary>
+    private readonly RenderCoalescer _renders;
 
     /// <summary>Creates the dialog over a view model.</summary>
     public ConnectionDialog(ConnectionViewModel model)
@@ -54,9 +54,11 @@ public sealed partial class ConnectionDialog : ContentDialog
 
         InitializeComponent();
 
+        _renders = new RenderCoalescer(EnqueueRender);
+
         _render = () =>
         {
-            Interlocked.Exchange(ref _renderQueued, 0);
+            _renders.Begin();
             Render();
         };
 
@@ -187,22 +189,10 @@ public sealed partial class ConnectionDialog : ContentDialog
     /// <c>ConnectionViewModel</c> for each dialog, so the two die together. The rule is universal
     /// because the exemption is a claim about a caller that a future caller can quietly break.
     /// </remarks>
-    private void OnModelChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        // One hop and one render per burst (#399). The store raises about seven notifications per
-        // sweep and Render rewrites everything, so six of them repaint what the seventh is about
-        // to - and each repaint marshals boxed values into WinRT, minting a COM wrapper the
-        // runtime appends to a list that never shrinks.
-        if (Interlocked.Exchange(ref _renderQueued, 1) == 1)
-        {
-            return;
-        }
+    private void OnModelChanged(object? sender, PropertyChangedEventArgs e) => _renders.Request();
 
-        if (!DispatcherQueue.TryEnqueue(_render))
-        {
-            Interlocked.Exchange(ref _renderQueued, 0);
-        }
-    }
+    /// <summary>Hands the cached handler to the dispatcher. A method, so the one delegate is reused.</summary>
+    private bool EnqueueRender() => DispatcherQueue.TryEnqueue(_render);
 
     private void Render()
     {
