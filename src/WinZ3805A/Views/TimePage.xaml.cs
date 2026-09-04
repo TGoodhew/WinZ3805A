@@ -72,6 +72,12 @@ public sealed partial class TimePage : Page
     /// </remarks>
     private void Detach()
     {
+        // A STARTED DispatcherTimer IS ROOTED BY THE DISPATCHER (#400), and this one's Tick is a
+        // lambda that captures the page. Leaving it running kept an instance alive per visit -
+        // four visits, four pages - without the page rendering or costing any CPU, which is why
+        // #388's fix did not reach it and nine hours of flat CPU hid it completely.
+        _ticker.Stop();
+
         if (_device is DeviceContext device)
         {
             device.Session.StatusChanged -= OnStatusChanged;
