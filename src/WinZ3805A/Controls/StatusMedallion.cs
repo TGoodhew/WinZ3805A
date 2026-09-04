@@ -122,14 +122,30 @@ public sealed class StatusMedallion : Control
     public ReceiverMode Mode
     {
         get => (ReceiverMode)GetValue(ModeProperty);
-        set => SetValue(ModeProperty, value);
+        set
+        {
+            if (_modeShown == value)
+            {
+                return;
+            }
+
+            SetValue(ModeProperty, value);
+        }
     }
 
     /// <summary>The time-interval window, oldest first, with nulls for polls that did not land.</summary>
     public IReadOnlyList<double?>? Samples
     {
         get => (IReadOnlyList<double?>?)GetValue(SamplesProperty);
-        set => SetValue(SamplesProperty, value);
+        set
+        {
+            if (ReferenceEquals(_samplesShown, value))
+            {
+                return;
+            }
+
+            SetValue(SamplesProperty, value);
+        }
     }
 
     /// <summary>Which of the three §9.10.2 diameters to draw.</summary>
@@ -143,7 +159,15 @@ public sealed class StatusMedallion : Control
     public int? SatelliteCount
     {
         get => (int?)GetValue(SatelliteCountProperty);
-        set => SetValue(SatelliteCountProperty, value);
+        set
+        {
+            if (_satelliteCountShown == value)
+            {
+                return;
+            }
+
+            SetValue(SatelliteCountProperty, value);
+        }
     }
 
     /// <summary>
@@ -167,14 +191,30 @@ public sealed class StatusMedallion : Control
     public double? TimeIntervalNanoseconds
     {
         get => (double?)GetValue(TimeIntervalNanosecondsProperty);
-        set => SetValue(TimeIntervalNanosecondsProperty, value);
+        set
+        {
+            if (Nullable.Equals(_timeIntervalShown, value))
+            {
+                return;
+            }
+
+            SetValue(TimeIntervalNanosecondsProperty, value);
+        }
     }
 
     /// <summary>The qualifier after the mode, such as "stabilising frequency".</summary>
     public string? ModeDetail
     {
         get => (string?)GetValue(ModeDetailProperty);
-        set => SetValue(ModeDetailProperty, value);
+        set
+        {
+            if (string.Equals(_modeDetailShown, value, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            SetValue(ModeDetailProperty, value);
+        }
     }
 
     /// <summary>
@@ -208,9 +248,72 @@ public sealed class StatusMedallion : Control
         UpdateAnnouncement();
     }
 
+
+    /// <summary>
+    /// What the assigned properties currently hold, so an unchanged assignment is skipped (#403).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>SetValue</c> takes an <c>IInspectable</c>, so every assignment boxes its value and mints
+    /// a COM callable wrapper the runtime records in storage it never shrinks. This medallion is
+    /// rewritten several times a second by two pages, for a mode that changes a few times a day.
+    /// </para>
+    /// <para>
+    /// <b>Kept by the change callbacks, not by the setters</b>, because this control's own style
+    /// sets <c>PlainRingThickness</c> through a <c>Setter</c> and a binding never touches the CLR
+    /// property. A shadow written only in the setter would go stale for any such writer, and the
+    /// next matching assignment would be skipped - a wrong reading that no test would catch.
+    /// </para>
+    /// <para>
+    /// <see cref="Samples"/> compares by reference on purpose: the view model hands over a fresh
+    /// list only when the window has moved on, and comparing several hundred nullable doubles on
+    /// every render would cost more than the assignment it saves.
+    /// </para>
+    /// </remarks>
+    private ReceiverMode _modeShown = ReceiverMode.Disconnected;
+
+    /// <inheritdoc cref="_modeShown" />
+    private IReadOnlyList<double?>? _samplesShown;
+
+    /// <inheritdoc cref="_modeShown" />
+    private int? _satelliteCountShown;
+
+    /// <inheritdoc cref="_modeShown" />
+    private double? _timeIntervalShown;
+
+    /// <inheritdoc cref="_modeShown" />
+    private string? _modeDetailShown;
+
+    /// <summary>Records what a dependency property now holds, for the shadow comparisons.</summary>
+    /// <remarks>Called from every change callback, which is where all writers converge.</remarks>
+    private void RecordShown(DependencyPropertyChangedEventArgs e)
+    {
+        if (e.Property == ModeProperty)
+        {
+            _modeShown = (ReceiverMode)e.NewValue;
+        }
+        else if (e.Property == SamplesProperty)
+        {
+            _samplesShown = (IReadOnlyList<double?>?)e.NewValue;
+        }
+        else if (e.Property == SatelliteCountProperty)
+        {
+            _satelliteCountShown = (int?)e.NewValue;
+        }
+        else if (e.Property == TimeIntervalNanosecondsProperty)
+        {
+            _timeIntervalShown = (double?)e.NewValue;
+        }
+        else if (e.Property == ModeDetailProperty)
+        {
+            _modeDetailShown = (string?)e.NewValue;
+        }
+    }
+
     private static void OnModeChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         var medallion = (StatusMedallion)d;
+        medallion.RecordShown(e);
         medallion.UpdateVisualState();
         medallion.UpdateAnnouncement();
     }
@@ -218,6 +321,7 @@ public sealed class StatusMedallion : Control
     private static void OnVisualChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         var medallion = (StatusMedallion)d;
+        medallion.RecordShown(e);
         medallion.Redraw();
         medallion.UpdateAnnouncement();
     }
@@ -225,6 +329,7 @@ public sealed class StatusMedallion : Control
     private static void OnSizeChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         var medallion = (StatusMedallion)d;
+        medallion.RecordShown(e);
         medallion.ApplySize();
         medallion.Redraw();
     }
@@ -232,6 +337,7 @@ public sealed class StatusMedallion : Control
     private static void OnAnnouncementChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         StatusMedallion medallion = (StatusMedallion)d;
+        medallion.RecordShown(e);
         medallion.UpdateAnnouncement();
 
         // SatelliteCount is drawn as well as announced now (#279), and it shares this callback with
@@ -240,8 +346,12 @@ public sealed class StatusMedallion : Control
         medallion.UpdateCentre();
     }
 
-    private static void OnCentreChanged(DependencyObject d, DependencyPropertyChangedEventArgs e) =>
-        ((StatusMedallion)d).UpdateCentre();
+    private static void OnCentreChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        var medallion = (StatusMedallion)d;
+        medallion.RecordShown(e);
+        medallion.UpdateCentre();
+    }
 
     private void ApplySize()
     {

@@ -49,10 +49,21 @@ public sealed class SeverityPill : Control
     }
 
     /// <summary>How bad it is. Drives the colour, the shape, and nothing else about the control.</summary>
+    /// <remarks>
+    /// Assigned only when it differs (#403). See <see cref="_severityShown"/>.
+    /// </remarks>
     public Severity Severity
     {
         get => (Severity)GetValue(SeverityProperty);
-        set => SetValue(SeverityProperty, value);
+        set
+        {
+            if (_severityShown == value)
+            {
+                return;
+            }
+
+            SetValue(SeverityProperty, value);
+        }
     }
 
     /// <summary>
@@ -65,8 +76,44 @@ public sealed class SeverityPill : Control
     public string Text
     {
         get => (string)GetValue(TextProperty);
-        set => SetValue(TextProperty, value);
+        set
+        {
+            if (string.Equals(_textShown, value, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            SetValue(TextProperty, value);
+        }
     }
+
+    /// <summary>
+    /// What the properties above currently hold, so an assignment that changes nothing is skipped.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>SetValue</c> takes its value as an <c>IInspectable</c>, so every assignment boxes and
+    /// mints a COM callable wrapper — and the runtime appends every wrapper to storage it never
+    /// shrinks (#399, #403). A pill on a page that redraws several times a second carries a
+    /// severity that changes a few times a day.
+    /// </para>
+    /// <para>
+    /// <b>Kept by the change callbacks, not by the setters.</b> That is the whole point: this
+    /// control's own default template contains a <c>SeverityPill</c> whose severity is a
+    /// <c>{TemplateBinding}</c>, and a binding writes through the property system without ever
+    /// touching the CLR setter. A shadow maintained in the setter would go stale for exactly that
+    /// pill, and the next assignment matching the stale value would be skipped — a wrong colour
+    /// that no test would catch. Updated where every writer converges instead.
+    /// </para>
+    /// <para>
+    /// The comparison is against this rather than against <c>GetValue</c> because a read crosses
+    /// the same boundary a write does, and would cost what it saves.
+    /// </para>
+    /// </remarks>
+    private Severity _severityShown = Severity.Neutral;
+
+    /// <inheritdoc cref="_severityShown" />
+    private string _textShown = string.Empty;
 
     /// <inheritdoc />
     protected override void OnApplyTemplate()
@@ -76,11 +123,22 @@ public sealed class SeverityPill : Control
         UpdateAutomationName();
     }
 
-    private static void OnSeverityChanged(DependencyObject d, DependencyPropertyChangedEventArgs e) =>
-        ((SeverityPill)d).UpdateVisualState(useTransitions: false);
+    private static void OnSeverityChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        var pill = (SeverityPill)d;
 
-    private static void OnTextChanged(DependencyObject d, DependencyPropertyChangedEventArgs e) =>
-        ((SeverityPill)d).UpdateAutomationName();
+        // Here rather than in the setter, so a {TemplateBinding} or a Style Setter cannot leave it
+        // stale. See _severityShown.
+        pill._severityShown = (Severity)e.NewValue;
+        pill.UpdateVisualState(useTransitions: false);
+    }
+
+    private static void OnTextChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        var pill = (SeverityPill)d;
+        pill._textShown = (string?)e.NewValue ?? string.Empty;
+        pill.UpdateAutomationName();
+    }
 
     /// <remarks>
     /// <c>useTransitions: false</c> always. §9.8.2 gives severity state changes
