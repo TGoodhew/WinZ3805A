@@ -39,18 +39,25 @@ public sealed partial class PositionPage : Page
     /// The one handler this page hands the dispatcher, reused for every notification (#399).
     /// </summary>
     /// <remarks>
-    /// A field rather than a lambda or a method group because each of those allocates a fresh
-    /// delegate, and a fresh delegate is a fresh COM wrapper the runtime can never reuse. See
-    /// <see cref="MainPage"/> for the measurement.
+    /// A field rather than a lambda or a method group so the hop allocates nothing. See
+    /// <see cref="MainPage"/> for why that is hygiene and not the fix, and for what the leak
+    /// in #399 actually turned out to be.
     /// </remarks>
     private readonly DispatcherQueueHandler _render;
+
+    /// <summary>1 while a render is already queued, so a burst costs one (#399).</summary>
+    private int _renderQueued;
 
     /// <summary>Creates the page.</summary>
     public PositionPage()
     {
         InitializeComponent();
 
-        _render = Render;
+        _render = () =>
+        {
+            Interlocked.Exchange(ref _renderQueued, 0);
+            Render();
+        };
 
         LatitudeSign.ItemsSource = new[] { "N", "S" };
         LongitudeSign.ItemsSource = new[] { "E", "W" };
@@ -110,8 +117,22 @@ public sealed partial class PositionPage : Page
     }
 
     /// <summary>Renders on a model notification. Named so <see cref="Detach"/> can remove it (#388).</summary>
-    private void OnModelChanged(object? sender, PropertyChangedEventArgs e) =>
-        DispatcherQueue.TryEnqueue(_render);
+    private void OnModelChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        // One hop and one render per burst (#399). The store raises about seven notifications per
+        // sweep and Render rewrites everything, so six of them repaint what the seventh is about
+        // to - and each repaint marshals boxed values into WinRT, minting a COM wrapper the
+        // runtime appends to a list that never shrinks.
+        if (Interlocked.Exchange(ref _renderQueued, 1) == 1)
+        {
+            return;
+        }
+
+        if (!DispatcherQueue.TryEnqueue(_render))
+        {
+            Interlocked.Exchange(ref _renderQueued, 0);
+        }
+    }
 
     /// <inheritdoc />
     /// <remarks>

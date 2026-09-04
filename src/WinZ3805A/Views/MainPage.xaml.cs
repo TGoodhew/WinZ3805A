@@ -61,16 +61,45 @@ public sealed partial class MainPage : Page
     /// The one handler this page hands the dispatcher, reused for every notification (#399).
     /// </summary>
     /// <remarks>
-    /// <c>TryEnqueue</c> takes a WinRT delegate, so the callback has to be given a COM callable
-    /// wrapper to cross into native code, and CsWinRT caches that wrapper by <i>managed object
-    /// identity</i>. A lambda or a method-group conversion allocates a fresh delegate on every
-    /// call, so every notification used to mint a wrapper under a new identity — and the runtime's
-    /// wrapper table is sized by how many have ever existed, never reusing a freed slot and never
-    /// shrinking. One night of polling reached 8.4 million slots and 69.5 MB of large object heap,
-    /// climbing 19 MB an hour (#399). One delegate held here is one wrapper for the life of the
-    /// page.
+    /// <para>
+    /// One delegate rather than a fresh lambda or method-group conversion per notification, so the
+    /// hop allocates nothing. <b>This is hygiene, not the fix for #399</b> — it was tried as the fix
+    /// first, on the guess that <c>TryEnqueue</c>'s wrapper was cached by delegate identity, and a
+    /// soak showed the leak entirely unchanged. What the trace then showed is below.
+    /// </para>
+    /// <para>
+    /// The leak is the <i>rate of rendering</i>. Every value crossing into WinRT as an
+    /// <c>IInspectable</c> — an attached property, a boxed value on a dependency property — mints a
+    /// COM callable wrapper, and the runtime appends every one of them to a diagnostics list that
+    /// never shrinks: <c>ComWrappers.RegisterManagedObjectWrapperForDiagnostics</c>, whose
+    /// <c>List</c> doubling is the staircase in the working set. Nine hours reached 8.4 million
+    /// slots and 69.5 MB of large object heap at 19 MB an hour. The remedy is to render less and
+    /// set less: <see cref="_renderQueued"/> collapses a burst into one render, and the fields
+    /// under it skip a value that has not changed.
+    /// </para>
     /// </remarks>
     private readonly DispatcherQueueHandler _render;
+
+    /// <summary>1 while a render is already queued, so a burst costs one (#399).</summary>
+    private int _renderQueued;
+
+    /// <summary>
+    /// What was last handed to each attached property, so an unchanged value is not set again.
+    /// </summary>
+    /// <remarks>
+    /// An attached property's value crosses to WinRT as an <c>IInspectable</c>, so setting one
+    /// boxes the string and mints a COM callable wrapper — and the runtime appends every wrapper
+    /// to a diagnostics list it never shrinks (#399). None of these values changes more than a
+    /// handful of times in a session; all of them were being set several times a second.
+    /// </remarks>
+    private string? _coastingTooltipShown;
+    private bool? _connectTooltipShown;
+    private string? _rolloverNameShown;
+    private bool _provisionalNameSet;
+
+    /// <summary>What each merit pill was last given, so an unchanged one is left alone (#399).</summary>
+    private (string Text, Severity Severity)? _tfomShown;
+    private (string Text, Severity Severity)? _ffomShown;
 
     /// <summary>Creates the page over the application's services.</summary>
     /// <param name="services">The §12 composition root, which owns the receiver.</param>
@@ -80,7 +109,11 @@ public sealed partial class MainPage : Page
 
         InitializeComponent();
 
-        _render = Render;
+        _render = () =>
+        {
+            Interlocked.Exchange(ref _renderQueued, 0);
+            Render();
+        };
 
         // §12: resolved by device key, never constructed here. The Details window binds to the
         // same context, and a page that built its own session would give it a second port.
@@ -408,8 +441,22 @@ public sealed partial class MainPage : Page
     /// waiting for the day that stops being true, and the rule is cheaper to keep than to argue
     /// about per page.
     /// </remarks>
-    private void OnModelChanged(object? sender, PropertyChangedEventArgs e) =>
-        DispatcherQueue.TryEnqueue(_render);
+    private void OnModelChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        // One hop and one render per burst (#399). The store raises about seven notifications per
+        // sweep and Render rewrites everything, so six of them repaint what the seventh is about
+        // to - and each repaint marshals boxed values into WinRT, minting a COM wrapper the
+        // runtime appends to a list that never shrinks.
+        if (Interlocked.Exchange(ref _renderQueued, 1) == 1)
+        {
+            return;
+        }
+
+        if (!DispatcherQueue.TryEnqueue(_render))
+        {
+            Interlocked.Exchange(ref _renderQueued, 0);
+        }
+    }
 
     /// <summary>
     /// The installed version, for the §10.3 footer.
@@ -453,14 +500,22 @@ public sealed partial class MainPage : Page
 
         // §10.3: the coasting pill is the single most useful diagnostic the application surfaces.
         CoastingPill.Visibility = _model.IsCoasting ? Visibility.Visible : Visibility.Collapsed;
-        ToolTipService.SetToolTip(CoastingPill, _model.CoastingTooltip);
+
+        // An attached property takes its value as object, so the string is boxed into an
+        // IInspectable and every set mints a COM wrapper the runtime never lets go of (#399).
+        // This window renders for the life of the process, so it is the worst place to pay it.
+        if (_coastingTooltipShown != _model.CoastingTooltip)
+        {
+            _coastingTooltipShown = _model.CoastingTooltip;
+            ToolTipService.SetToolTip(CoastingPill, _model.CoastingTooltip);
+        }
 
         Satellites.Value = _model.SatelliteCount;
 
         TimeInterval.Value = _model.TimeIntervalNanoseconds;
 
-        RenderMerit(TfomPill, "TFOM", _model.Tfom);
-        RenderMerit(FfomPill, "FFOM", _model.Ffom);
+        RenderMerit(TfomPill, "TFOM", _model.Tfom, ref _tfomShown);
+        RenderMerit(FfomPill, "FFOM", _model.Ffom, ref _ffomShown);
 
         RenderClock();
 
@@ -485,11 +540,16 @@ public sealed partial class MainPage : Page
         // footer in compact mode), so nothing would otherwise tell a user the shortcut exists —
         // the Details button beside it has said so all along, and this one said nothing (#319).
         ConnectButton.Content = _model.CanConnect ? "Connect" : "Disconnect";
-        ToolTipService.SetToolTip(
-            ConnectButton,
-            _model.CanConnect
-                ? "Connect to a receiver (Ctrl+Shift+C)"
-                : "Disconnect from the receiver (Ctrl+Shift+C)");
+        // Two possible strings, so it changes only when the button's sense does (#399).
+        if (_connectTooltipShown != _model.CanConnect)
+        {
+            _connectTooltipShown = _model.CanConnect;
+            ToolTipService.SetToolTip(
+                ConnectButton,
+                _model.CanConnect
+                    ? "Connect to a receiver (Ctrl+Shift+C)"
+                    : "Disconnect from the receiver (Ctrl+Shift+C)");
+        }
 
         // A11Y-9. Last, so that the announcement is never made about a surface that has not been
         // written yet: a reader that follows it straight to the medallion must find the state it
@@ -506,16 +566,35 @@ public sealed partial class MainPage : Page
     /// Lower is better for both figures of merit, and §9.4.3 forbids conveying that by colour alone
     /// — so each renders through a pill, which carries a shape and the number in text as well.
     /// </remarks>
-    private static void RenderMerit(SeverityPill pill, string label, int? value)
+    /// <remarks>
+    /// <para>
+    /// Assigns only what changed (#399). A dependency property takes its value as an
+    /// <c>IInspectable</c>, so setting one boxes the value and mints a COM callable wrapper whether
+    /// or not the value differs — and a figure of merit changes far more slowly than this is
+    /// called. The comparison is against what was last written rather than against the property
+    /// read back, because a read crosses the same boundary the write does.
+    /// </para>
+    /// </remarks>
+    private static void RenderMerit(
+        SeverityPill pill, string label, int? value, ref (string Text, Severity Severity)? shown)
     {
-        pill.Text = value is int merit ? $"{label} {merit}" : $"{label} —";
-        pill.Severity = value switch
+        string text = value is int merit ? $"{label} {merit}" : $"{label} —";
+        Severity severity = value switch
         {
             null => Severity.Neutral,
             <= 3 => Severity.Success,
             <= 6 => Severity.Caution,
             _ => Severity.Critical,
         };
+
+        if (shown is { } was && was.Text == text && was.Severity == severity)
+        {
+            return;
+        }
+
+        shown = (text, severity);
+        pill.Text = text;
+        pill.Severity = severity;
     }
 
     /// <summary>
@@ -579,7 +658,15 @@ public sealed partial class MainPage : Page
         // The same sentence to the tooltip and to the automation name, because §9.9 wants an
         // icon-only control to have both and a screen-reader user has no other route to it.
         RolloverTip.Content = _model.RolloverExplanation ?? string.Empty;
-        AutomationProperties.SetName(RolloverBadge, _model.RolloverExplanation ?? string.Empty);
+
+        // Guarded for #399, not for speed: SetName boxes its string, and a rollover explanation
+        // changes at most once in a session.
+        string rollover = _model.RolloverExplanation ?? string.Empty;
+        if (_rolloverNameShown != rollover)
+        {
+            _rolloverNameShown = rollover;
+            AutomationProperties.SetName(RolloverBadge, rollover);
+        }
 
         // #245. The receiver's own marker for "this is the power-up default, not yet corrected from
         // GPS". It belongs on the primary window rather than only in Details, because §10.3's whole
@@ -591,6 +678,11 @@ public sealed partial class MainPage : Page
 
         ProvisionalBadge.Visibility = _model.IsTimeProvisional ? Visibility.Visible : Visibility.Collapsed;
         ProvisionalTip.Content = provisional;
-        AutomationProperties.SetName(ProvisionalBadge, provisional);
+        // A constant, so it is set once rather than several times a second (#399).
+        if (!_provisionalNameSet)
+        {
+            _provisionalNameSet = true;
+            AutomationProperties.SetName(ProvisionalBadge, provisional);
+        }
     }
 }
