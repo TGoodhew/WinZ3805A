@@ -31,7 +31,20 @@ public sealed class TrayIconService : IDisposable
     private readonly DispatcherQueue _dispatcher;
     private readonly TrayIcon _icon;
 
+    /// <summary>
+    /// The one handler this service hands the dispatcher, reused for every notification (#399).
+    /// </summary>
+    /// <remarks>
+    /// A fresh lambda per hop is a fresh COM callable wrapper the runtime's table can never reuse.
+    /// See <see cref="WinZ3805A.Views.MainPage"/> for the measurement.
+    /// </remarks>
+    private readonly DispatcherQueueHandler _push;
+
     private ConnectionStatus _connection = ConnectionStatus.Disconnected;
+
+    /// <summary>The mode last handed to the UI thread, or null before the first (#399).</summary>
+    private ReceiverMode? _pushed;
+
     private bool _disposed;
 
     /// <summary>Creates the service and shows the icon.</summary>
@@ -58,6 +71,7 @@ public sealed class TrayIconService : IDisposable
         _session = session;
         _dispatcher = dispatcher;
         _icon = new TrayIcon(displayName, logger);
+        _push = Push;
 
         _store.PropertyChanged += OnStoreChanged;
         _session.StatusChanged += OnSessionChanged;
@@ -102,9 +116,18 @@ public sealed class TrayIconService : IDisposable
     /// Pushes the current mode to the icon, on the UI thread.
     /// </summary>
     /// <remarks>
-    /// Called on every property change, which is many times a second while polling. The icon itself
-    /// discards an unchanged mode, so this is a dispatcher hop and a comparison rather than a
-    /// redraw — cheap enough not to need its own throttle, and one fewer piece of state to be wrong.
+    /// <para>
+    /// Called on every property change, which is many times a second while polling — and the mode
+    /// changes perhaps a handful of times a day. So the unchanged mode is discarded <i>here</i>,
+    /// before the hop, and not on the far side of it (#399). The icon still makes the same check
+    /// itself, which is what keeps this one a hint rather than the authority: a queued handler that
+    /// never ran cannot leave the icon showing something stale.
+    /// </para>
+    /// <para>
+    /// The handler is a field for the same issue: a fresh lambda per hop is a fresh COM wrapper.
+    /// It reads the mode again rather than closing over this one, because by the time the UI thread
+    /// runs it a newer reading may have arrived, and the newest is the one worth drawing.
+    /// </para>
     /// </remarks>
     private void Refresh()
     {
@@ -117,17 +140,27 @@ public sealed class TrayIconService : IDisposable
 
         if (_dispatcher.HasThreadAccess)
         {
+            _pushed = mode;
             _icon.Update(mode);
             return;
         }
 
-        _dispatcher.TryEnqueue(() =>
+        if (mode == _pushed)
         {
-            if (!_disposed)
-            {
-                _icon.Update(mode);
-            }
-        });
+            return;
+        }
+
+        _pushed = mode;
+        _dispatcher.TryEnqueue(_push);
+    }
+
+    /// <summary>Shows whatever the mode is now, on the UI thread.</summary>
+    private void Push()
+    {
+        if (!_disposed)
+        {
+            _icon.Update(Mode);
+        }
     }
 
     /// <inheritdoc />

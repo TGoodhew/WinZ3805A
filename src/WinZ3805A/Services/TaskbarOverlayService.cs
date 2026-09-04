@@ -31,7 +31,20 @@ public sealed class TaskbarOverlayService : IDisposable
     private readonly DispatcherQueue _dispatcher;
     private readonly TaskbarOverlay _overlay;
 
+    /// <summary>
+    /// The one handler this service hands the dispatcher, reused for every notification (#399).
+    /// </summary>
+    /// <remarks>
+    /// A fresh lambda per hop is a fresh COM callable wrapper the runtime's table can never reuse.
+    /// See <see cref="WinZ3805A.Views.MainPage"/> for the measurement.
+    /// </remarks>
+    private readonly DispatcherQueueHandler _push;
+
     private ConnectionStatus _connection = ConnectionStatus.Disconnected;
+
+    /// <summary>The mode last handed to the UI thread, or null before the first (#399).</summary>
+    private ReceiverMode? _pushed;
+
     private bool _disposed;
 
     /// <summary>Creates the service and applies the current state.</summary>
@@ -55,6 +68,7 @@ public sealed class TaskbarOverlayService : IDisposable
         _session = session;
         _dispatcher = dispatcher;
         _overlay = new TaskbarOverlay(window, logger);
+        _push = Push;
 
         _store.PropertyChanged += OnStoreChanged;
         _session.StatusChanged += OnSessionChanged;
@@ -74,9 +88,17 @@ public sealed class TaskbarOverlayService : IDisposable
     /// Pushes the current mode to the badge, on the UI thread.
     /// </summary>
     /// <remarks>
-    /// Called many times a second while polling. <see cref="TaskbarOverlay.Update"/> discards an
-    /// unchanged mode, so this is a dispatcher hop and a comparison rather than a rasterise — cheap
-    /// enough not to need a throttle of its own, and one fewer piece of state to be wrong.
+    /// <para>
+    /// Called many times a second while polling, for a mode that changes perhaps a handful of times
+    /// a day. <see cref="TaskbarOverlay.Update"/> still discards an unchanged mode, but that check
+    /// used to sit on the far side of the hop, so a rasterise was avoided and a dispatcher hop was
+    /// not — and each hop minted a COM wrapper the runtime could never reuse (#399). The comparison
+    /// happens here now; the overlay's own remains the authority.
+    /// </para>
+    /// <para>
+    /// The handler is a field for the same issue, and reads the mode again rather than closing over
+    /// this one: by the time the UI thread runs it a newer reading may have arrived.
+    /// </para>
     /// </remarks>
     private void Refresh()
     {
@@ -89,17 +111,27 @@ public sealed class TaskbarOverlayService : IDisposable
 
         if (_dispatcher.HasThreadAccess)
         {
+            _pushed = mode;
             _overlay.Update(mode);
             return;
         }
 
-        _dispatcher.TryEnqueue(() =>
+        if (mode == _pushed)
         {
-            if (!_disposed)
-            {
-                _overlay.Update(mode);
-            }
-        });
+            return;
+        }
+
+        _pushed = mode;
+        _dispatcher.TryEnqueue(_push);
+    }
+
+    /// <summary>Shows whatever the mode is now, on the UI thread.</summary>
+    private void Push()
+    {
+        if (!_disposed)
+        {
+            _overlay.Update(ShellMode.For(_session.Driver, _store, _connection));
+        }
     }
 
     /// <inheritdoc />
