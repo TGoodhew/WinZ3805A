@@ -130,6 +130,14 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
     /// </remarks>
     private void Detach()
     {
+        // A STATIC EVENT HOLDS ITS SUBSCRIBERS FOR THE LIFE OF THE PROCESS (#400). This page joined
+        // SettingsPage.AdvancedChanged with an instance handler and never left, so one page per
+        // visit was pinned by the event itself - no rendering, no CPU, invisible to #388's fix.
+        SettingsPage.AdvancedChanged -= OnAdvancedChanged;
+
+        // Rooted by the dispatcher while it runs, and its Tick captures this page.
+        _loadingTimer.Stop();
+
         if (_device is DeviceContext device)
         {
             device.Session.StatusChanged -= OnStatusChanged;

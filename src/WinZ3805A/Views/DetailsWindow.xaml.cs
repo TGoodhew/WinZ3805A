@@ -160,6 +160,12 @@ public sealed partial class DetailsWindow : Window
         Closed += (_, _) =>
         {
             _bannerCountdown.Stop();
+
+            // Static, so it would hold this window for the life of the process (#400). Harmless
+            // while the window is opened once and never closed, which is exactly the condition
+            // that makes it worth fixing before that stops being true.
+            SettingsPage.AdvancedChanged -= OnAdvancedChanged;
+
             _device.Session.StatusChanged -= OnSessionStatusChanged;
             _saveAfterIdle.Stop();
             SavePlacement();
