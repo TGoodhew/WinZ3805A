@@ -66,6 +66,9 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
     /// </remarks>
     private readonly Microsoft.UI.Dispatching.DispatcherQueueHandler _render;
 
+    /// <summary>The self-test button's label as last written, so an unchanged one is skipped (#403).</summary>
+    private string? _runLabelShown;
+
     /// <summary>Collapses a burst of notifications into one render (#399).</summary>
     private readonly RenderCoalescer _renders;
 
@@ -419,13 +422,23 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
         LastReadText.Text = $"The receiver reports its last stored result as {model.SelfTestResultText}.";
 
         ParseWarningSummaryText.Text = model.ParseWarningSummary;
-        ParseWarningItems.ItemsSource = model.ParseWarnings;
+        if (!ReferenceEquals(ParseWarningItems.ItemsSource, model.ParseWarnings))
+        {
+            ParseWarningItems.ItemsSource = model.ParseWarnings;
+        }
 
         PowerOnHoursText.Text = model.PowerOnHoursText;
 
         if (_selfTest is SelfTestViewModel selfTest)
         {
-            RunTestButton.Content = selfTest.RunLabel;
+            // Content is object-typed, so an unchanged label still boxes and mints a COM wrapper
+            // (#403). Compared against what was last written rather than read back, because a read
+            // crosses the same boundary a write does.
+            if (!string.Equals(_runLabelShown, selfTest.RunLabel, StringComparison.Ordinal))
+            {
+                _runLabelShown = selfTest.RunLabel;
+                RunTestButton.Content = selfTest.RunLabel;
+            }
             // Capability first, then state (#304).
             RunTestButton.IsEnabled = _canSelfTest && model.CanRead && !selfTest.IsRunning;
             SubsystemPicker.IsEnabled = _canSelfTest && !selfTest.IsRunning;
@@ -439,7 +452,12 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
         }
         LogHeaderText.Text = model.LogHeaderText;
 
-        LogRows.ItemsSource = model.Filtered;
+        // Only when the rows have actually changed, as SatellitesPage and StatusRegistersPage
+        // already do: reassigning ItemsSource boxes the list and rebuilds every container (#403).
+        if (!ReferenceEquals(LogRows.ItemsSource, model.Filtered))
+        {
+            LogRows.ItemsSource = model.Filtered;
+        }
         LogEmptyText.Text = model.LogEmptyText;
         LogEmptyText.Visibility = model.Filtered.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
 

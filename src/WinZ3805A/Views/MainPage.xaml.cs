@@ -529,11 +529,14 @@ public sealed partial class MainPage : Page
         // registered on the window's content root rather than on this button (§9.6.2 collapses the
         // footer in compact mode), so nothing would otherwise tell a user the shortcut exists —
         // the Details button beside it has said so all along, and this one said nothing (#319).
-        ConnectButton.Content = _model.CanConnect ? "Connect" : "Disconnect";
-        // Two possible strings, so it changes only when the button's sense does (#399).
+        // Two possible strings, so both change only when the button's sense does (#399, #403).
+        // Content is object-typed, so assigning it boxes the string and mints a COM wrapper exactly
+        // as the tooltip does - it sat outside this guard until the #403 soak found it still doing
+        // so several times a second.
         if (_connectTooltipShown != _model.CanConnect)
         {
             _connectTooltipShown = _model.CanConnect;
+            ConnectButton.Content = _model.CanConnect ? "Connect" : "Disconnect";
             ToolTipService.SetToolTip(
                 ConnectButton,
                 _model.CanConnect
@@ -647,14 +650,15 @@ public sealed partial class MainPage : Page
         RolloverBadge.Visibility = _model.IsDateCorrected ? Visibility.Visible : Visibility.Collapsed;
         // The same sentence to the tooltip and to the automation name, because §9.9 wants an
         // icon-only control to have both and a screen-reader user has no other route to it.
-        RolloverTip.Content = _model.RolloverExplanation ?? string.Empty;
-
-        // Guarded for #399, not for speed: SetName boxes its string, and a rollover explanation
+        // Guarded for #399, not for speed: both a ToolTip's Content and SetName take their value
+        // as object, so each boxes the string and mints a COM wrapper. The tooltip was outside this
+        // guard and the name inside it, which meant half the saving (#403). A rollover explanation
         // changes at most once in a session.
         string rollover = _model.RolloverExplanation ?? string.Empty;
         if (_rolloverNameShown != rollover)
         {
             _rolloverNameShown = rollover;
+            RolloverTip.Content = rollover;
             AutomationProperties.SetName(RolloverBadge, rollover);
         }
 
@@ -667,11 +671,13 @@ public sealed partial class MainPage : Page
             + "any amount until the first satellite is tracked.";
 
         ProvisionalBadge.Visibility = _model.IsTimeProvisional ? Visibility.Visible : Visibility.Collapsed;
-        ProvisionalTip.Content = provisional;
-        // A constant, so it is set once rather than several times a second (#399).
+        // A constant, so both are set once rather than several times a second (#399, #403). The
+        // tooltip was outside this guard, which is a boxed assignment per render for a string that
+        // never changes at all.
         if (!_provisionalNameSet)
         {
             _provisionalNameSet = true;
+            ProvisionalTip.Content = provisional;
             AutomationProperties.SetName(ProvisionalBadge, provisional);
         }
     }
