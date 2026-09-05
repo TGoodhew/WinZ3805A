@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Measures a long soak of the running application: whether memory grows, and if it does, on which
     heap and in which type.
@@ -27,7 +27,16 @@
        hundred thousand objects is not a retention bug, it is a rate bug, and no amount of
        working-set sampling gets you there.
 
-    FIVE TRAPS, ALL OF THEM MET IN ANGER.
+    SIX TRAPS, ALL OF THEM MET IN ANGER.
+
+    - THE VERDICT IS PRIVATE BYTES, NOT WORKING SET, AND THIS ONE COST A THREE-HOUR RUN. Working
+      set is what the operating system currently keeps resident, so ANYTHING can move it without
+      the application allocating or freeing a byte. On 4 Sep 2026 one run saw it fall 38 MB in a
+      single sample when another session started bench work on the same machine, and rise 120 MB
+      when a dump faulted every page back in - private bytes moved by less than one MB through
+      both. Read as working set that run said -16.35 MB/hour; read as private bytes it said -0.07.
+      Minimising the window does the same thing, which is why the procedure says not to.
+      This script now leads with private and warns when the two disagree.
 
     - ATTACHING COSTS THE TARGET MEMORY. A diagnostic session allocates its buffers inside the
       process being measured - dotnet-counters says so itself, about --maxTimeSeries - and one
@@ -153,6 +162,7 @@ function Measure-SoakSeries {
             GdiDelta            = 0
             FirstWorkingSetMB   = 0.0
             LastWorkingSetMB    = 0.0
+            Perturbed           = $false
         }
     }
 
@@ -184,6 +194,13 @@ function Measure-SoakSeries {
         GdiDelta            = ($last.GdiObjects - $first.GdiObjects)
         FirstWorkingSetMB   = $first.WorkingSetMB
         LastWorkingSetMB    = $last.WorkingSetMB
+
+        # True when the two series tell different stories, which means the difference was not made
+        # by this application. Five MB/hour is well above the couple of MB the two normally drift
+        # apart by and well below the tens of MB a trim or a dump moves.
+        Perturbed           = ([math]::Abs(
+            (& $perHour $first.WorkingSetMB $last.WorkingSetMB) -
+            (& $perHour $first.PrivateMB $last.PrivateMB)) -gt 5)
     }
 }
 
@@ -335,6 +352,46 @@ if ($SelfTest) {
     Assert-Equal 112123723 $totals.Bytes 'heap bytes'
     Assert-Equal 101861 $totals.Objects 'heap objects'
 
+    # The trap that cost a run: working set moves, private does not, and only one of them is about
+    # this application. The verdict must follow private and the disagreement must be announced.
+    $trimmed = @()
+    foreach ($m in 0..65) {
+        # Private is flat throughout. Working set is trimmed 40 MB at the half-way mark.
+        $ws = if ($m -lt 33) { 300.0 } else { 260.0 }
+        $trimmed += [pscustomobject]@{
+            UptimeMinutes = [double] $m
+            WorkingSetMB  = $ws
+            PrivateMB     = 200.0
+            Handles       = 1500
+            GdiObjects    = 81
+            CpuSeconds    = 10.0 * $m
+        }
+    }
+
+    $t = Measure-SoakSeries -Samples $trimmed -SettleMinutes 5
+    Assert-Equal 0.0 $t.PrivateMbPerHour 'a trimmed working set does not move the private verdict'
+    Assert-Equal $true $t.Perturbed 'the two series disagreeing is reported as perturbation'
+    if ($t.WorkingSetMbPerHour -ge 0) {
+        $script:failures.Add('the synthetic trim should have driven the working-set figure negative')
+    }
+
+    # And a genuine leak, where both rise together, must NOT be flagged as perturbation.
+    $leaking = @()
+    foreach ($m in 0..65) {
+        $leaking += [pscustomobject]@{
+            UptimeMinutes = [double] $m
+            WorkingSetMB  = 300.0 + (0.2 * $m)
+            PrivateMB     = 200.0 + (0.2 * $m)
+            Handles       = 1500
+            GdiObjects    = 81
+            CpuSeconds    = 10.0 * $m
+        }
+    }
+
+    $g = Measure-SoakSeries -Samples $leaking -SettleMinutes 5
+    Assert-Equal 12.0 $g.PrivateMbPerHour 'a real leak shows in private bytes'
+    Assert-Equal $false $g.Perturbed 'both series rising together is a leak, not perturbation'
+
     if ($failures.Count -gt 0) {
         Write-Host "Watch-Soak self-test FAILED" -ForegroundColor Red
         $failures | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
@@ -465,11 +522,22 @@ if (-not $summary.Settled) {
 }
 else {
     Write-Host ("  span                 {0} h over {1} settled samples" -f $summary.SpanHours, $summary.Samples)
+    Write-Host ("  PRIVATE (the verdict){0,8} MB/hour" -f $summary.PrivateMbPerHour) -ForegroundColor Cyan
     Write-Host ("  working set          {0} -> {1} MB   ({2} MB/hour)" -f
         $summary.FirstWorkingSetMB, $summary.LastWorkingSetMB, $summary.WorkingSetMbPerHour)
-    Write-Host ("  private              {0} MB/hour" -f $summary.PrivateMbPerHour)
     Write-Host ("  CPU                  {0} s/min" -f $summary.CpuSecondsPerMinute)
     Write-Host ("  handles / GDI        {0:+#;-#;0} / {1:+#;-#;0}" -f $summary.HandleDelta, $summary.GdiDelta)
+
+    # The two series disagreeing is the signature of something OUTSIDE the application moving the
+    # working set, and it is loud when it happens - tens of megabytes in a single sample.
+    if ($summary.Perturbed) {
+        Write-Host ''
+        Write-Warning ("Working set and private bytes disagree by {0} MB/hour. Something outside " -f
+            [math]::Round([math]::Abs($summary.WorkingSetMbPerHour - $summary.PrivateMbPerHour), 1))
+        Write-Host '  the application moved the working set: another process taking memory, this' -ForegroundColor Yellow
+        Write-Host '  window being minimised, or your own dump faulting every page into residency.' -ForegroundColor Yellow
+        Write-Host '  Read the private figure. The working-set one is not about this application.' -ForegroundColor Yellow
+    }
 }
 
 if (Test-Path $counterPath) {
