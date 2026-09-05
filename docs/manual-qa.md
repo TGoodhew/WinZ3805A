@@ -369,11 +369,21 @@ means nothing. Hold these equal between the two runs, or the comparison is worth
 | Any navigation done first | Visiting pages allocates legitimately. Do the same visits, then let it settle. |
 | Receiver state | A locked receiver and one in holdover poll differently. |
 | Duration | Growth is a rate, and a rate needs the same denominator. |
+| Who else is on the machine | Another process taking memory trims this one's working set. It cannot touch private bytes, which is the other reason to read those. |
+
+**The verdict is private bytes, not working set.** Working set is what the operating system
+currently keeps resident, so anything at all can move it without the application allocating or
+freeing a byte — another process taking memory, the window being minimised, your own dump faulting
+every page back in. On 4 Sep 2026 one three-hour run read **−16.35 MB/hour** as working set and
+**−0.07 MB/hour** as private bytes, and the private figure was the true one: a peer session's bench
+work had trimmed 38 MB out of residency in a single sample while committed memory did not move.
+`Watch-Soak.ps1` leads with private and warns when the two disagree; if it warns, the working-set
+number is not about this application and should not be quoted.
 
 **Read it in this order**, because each instrument answers what the one before it cannot:
 
-1. **Working set** — is anything growing at all. This is also the only instrument that sees a GDI,
-   handle or native leak, none of which appear on a managed heap.
+1. **Private bytes** — is anything growing at all, with **working set alongside** as the only
+   instrument that sees a GDI, handle or native leak, none of which appear on a managed heap.
 2. **The heap sizes from `dotnet-counters`** — *which* heap. #399 was 147.6 MB of large object heap
    against 4.4 MB of gen2, and that one line would have aimed the whole investigation a day earlier.
 3. **The gcdump totals and type lines** — *which type*. #399's finding was 69.5 MB of
@@ -392,7 +402,8 @@ stated as unproven. A trace would have named the caller in five minutes.
 
 > **Attaching changes the reading.** A diagnostic session allocates its buffers inside the process
 > being measured: one gcdump taken mid-soak on 4 Sep 2026 moved the working set 8 MB in the very
-> next sample. That is why the script dumps at the two ends and not throughout, and why
+> next sample, and a `dotnet-dump collect --type Heap` moved it **120 MB** by faulting every page
+> into residency to read it — while private bytes fell slightly, which is how you tell. That is why the script dumps at the two ends and not throughout, and why
 > `-SkipDumps` exists for when another measurement is already in flight. If you attach anything by
 > hand during a run, the run is contaminated — start the window again.
 
