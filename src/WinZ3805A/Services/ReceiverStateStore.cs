@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using WinZ3805A.Device.Models;
 
@@ -34,6 +34,9 @@ public sealed class ReceiverStateStore : INotifyPropertyChanged
     private readonly double?[] _timeInterval = new double?[TimeIntervalWindow];
     private int _timeIntervalNext;
     private int _timeIntervalCount;
+
+    /// <summary>The ordered ring as last built, handed to every reader until the next sample (#403).</summary>
+    private IReadOnlyList<double?> _recentTimeInterval = [];
 
     private ReceiverStatus? _status;
     private string? _syncState;
@@ -135,19 +138,33 @@ public sealed class ReceiverStateStore : INotifyPropertyChanged
     /// application runs, and §9.10.2's ring only ever draws the last sixty. Persisting a longer
     /// history is P1-2, and a different concern from what the medallion needs to redraw.
     /// </remarks>
-    public IReadOnlyList<double?> RecentTimeInterval
-    {
-        get
-        {
-            double?[] ordered = new double?[_timeIntervalCount];
-            int start = _timeIntervalCount == TimeIntervalWindow ? _timeIntervalNext : 0;
-            for (int i = 0; i < _timeIntervalCount; i++)
-            {
-                ordered[i] = _timeInterval[(start + i) % TimeIntervalWindow];
-            }
+    /// <remarks>
+    /// <b>Built when a sample arrives, not when one is read (#403).</b> This used to allocate a
+    /// fresh array on every read, which looked harmless and was not: the medallion is assigned
+    /// <c>Samples</c> on every render, a fresh array is a fresh managed object, and handing a
+    /// managed object to WinRT mints a COM callable wrapper the runtime records in storage it never
+    /// shrinks. It also defeated the reference comparison guarding that assignment, which could
+    /// never match and so never skipped anything - measured at 0.47 MB an hour, unchanged by every
+    /// other guard added for #399 and #403 until this one.
+    /// <para>
+    /// Readers get the same instance until the next sample, so an unchanged ring is recognisable as
+    /// unchanged. The snapshot is replaced rather than mutated, so a caller holding the previous one
+    /// still sees a coherent ring.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<double?> RecentTimeInterval => _recentTimeInterval;
 
-            return ordered;
+    /// <summary>Rebuilds the ordered snapshot. Called only when the ring changes.</summary>
+    private void SnapshotTimeInterval()
+    {
+        double?[] ordered = new double?[_timeIntervalCount];
+        int start = _timeIntervalCount == TimeIntervalWindow ? _timeIntervalNext : 0;
+        for (int i = 0; i < _timeIntervalCount; i++)
+        {
+            ordered[i] = _timeInterval[(start + i) % TimeIntervalWindow];
         }
+
+        _recentTimeInterval = ordered;
     }
 
     /// <summary>
@@ -185,6 +202,7 @@ public sealed class ReceiverStateStore : INotifyPropertyChanged
         _timeInterval[_timeIntervalNext] = onePpsTiNanoseconds;
         _timeIntervalNext = (_timeIntervalNext + 1) % TimeIntervalWindow;
         _timeIntervalCount = Math.Min(_timeIntervalCount + 1, TimeIntervalWindow);
+        SnapshotTimeInterval();
         OnPropertyChanged(nameof(RecentTimeInterval));
 
         LastFastPoll = _timeProvider.GetUtcNow();
