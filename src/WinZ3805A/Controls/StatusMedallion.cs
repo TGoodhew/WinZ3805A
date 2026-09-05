@@ -265,9 +265,11 @@ public sealed class StatusMedallion : Control
     /// next matching assignment would be skipped - a wrong reading that no test would catch.
     /// </para>
     /// <para>
-    /// <see cref="Samples"/> compares by reference on purpose: the view model hands over a fresh
-    /// list only when the window has moved on, and comparing several hundred nullable doubles on
-    /// every render would cost more than the assignment it saves.
+    /// <see cref="Samples"/> compares by reference, and that only works because the store hands
+    /// back the same instance until a sample arrives. It did not always: it once rebuilt the array
+    /// on every read, which made this comparison never match and the guard inert for as long as it
+    /// existed (#403). If that ever changes again this guard silently stops working, so the store's
+    /// snapshot is the thing to protect.
     /// </para>
     /// </remarks>
     private ReceiverMode _modeShown = ReceiverMode.Disconnected;
