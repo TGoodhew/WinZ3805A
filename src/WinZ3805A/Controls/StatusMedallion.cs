@@ -1,6 +1,6 @@
 ﻿using System.Globalization;
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Automation;
+using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Markup;
 using Microsoft.UI.Xaml.Media;
@@ -245,7 +245,6 @@ public sealed class StatusMedallion : Control
         ApplySize();
         UpdateVisualState();
         Redraw();
-        UpdateAnnouncement();
     }
 
 
@@ -286,8 +285,6 @@ public sealed class StatusMedallion : Control
     /// <inheritdoc cref="_modeShown" />
     private string? _modeDetailShown;
 
-    /// <summary>The sentence last given to the automation name, so an identical one is not set again (#403).</summary>
-    private string? _announcementShown;
 
     /// <summary>Records what a dependency property now holds, for the shadow comparisons.</summary>
     /// <remarks>Called from every change callback, which is where all writers converge.</remarks>
@@ -320,7 +317,6 @@ public sealed class StatusMedallion : Control
         var medallion = (StatusMedallion)d;
         medallion.RecordShown(e);
         medallion.UpdateVisualState();
-        medallion.UpdateAnnouncement();
     }
 
     private static void OnVisualChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -348,7 +344,6 @@ public sealed class StatusMedallion : Control
     {
         StatusMedallion medallion = (StatusMedallion)d;
         medallion.RecordShown(e);
-        medallion.UpdateAnnouncement();
 
         // SatelliteCount is drawn as well as announced now (#279), and it shares this callback with
         // the other two properties that only feed the sentence. Redrawing the centre for all three
@@ -604,7 +599,7 @@ public sealed class StatusMedallion : Control
     /// restatement of the number already spoken here, and announcing sixty unnamed marks would bury
     /// the meaning.
     /// </remarks>
-    private void UpdateAnnouncement()
+    private string Announcement()
     {
         List<string> parts = [ReceiverModes.TextOf(Mode)];
 
@@ -624,16 +619,32 @@ public sealed class StatusMedallion : Control
             parts.Add($"time interval {formatted} nanoseconds");
         }
 
-        string sentence = string.Join(", ", parts) + ".";
+        return string.Join(", ", parts) + ".";
+    }
 
-        // SetName takes the control, so every call hands this medallion across to WinRT and mints a
-        // COM callable wrapper the runtime records in a per-object list it never shrinks (#403).
-        if (string.Equals(_announcementShown, sentence, StringComparison.Ordinal))
-        {
-            return;
-        }
+    /// <inheritdoc />
+    /// <remarks>
+    /// <b>The sentence is pulled, not pushed (#403).</b> <c>AutomationProperties.SetName</c> takes
+    /// the control, so every call handed this medallion across to WinRT and minted a COM callable
+    /// wrapper the runtime records in a per-object list it never shrinks. The sentence carries the
+    /// time interval, which changes on every reading, so guarding it by equality could only ever
+    /// help a little - the sentence really was different each time.
+    /// <para>
+    /// Built on demand instead, so the boundary is crossed once when the framework creates this
+    /// peer. The time interval a screen reader hears is now the one current at the moment it asks,
+    /// which is fresher than anything a push could manage.
+    /// </para>
+    /// <para>
+    /// <b>The trade:</b> this raises no automation property-changed event where SetName did.
+    /// Deliberate - <c>LiveRegion</c> and <c>StateAnnouncer</c> are how this application tells
+    /// somebody something happened (A11Y-9), and a time interval ticking is not that.
+    /// </para>
+    /// </remarks>
+    protected override AutomationPeer OnCreateAutomationPeer() => new StatusMedallionPeer(this);
 
-        _announcementShown = sentence;
-        AutomationProperties.SetName(this, sentence);
+    /// <summary>Answers with the medallion's sentence as it stands when asked (#403).</summary>
+    private sealed class StatusMedallionPeer(StatusMedallion owner) : FrameworkElementAutomationPeer(owner)
+    {
+        protected override string GetNameCore() => ((StatusMedallion)Owner).Announcement();
     }
 }
