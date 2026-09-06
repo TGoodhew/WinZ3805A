@@ -2,7 +2,7 @@
 using System.Globalization;
 
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Automation;
+using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Documents;
 using Microsoft.UI.Xaml.Media;
@@ -422,8 +422,43 @@ public sealed class ReadoutTile : Control
 
 
 
-        // One phrase rather than three adjacent runs, which a screen reader would otherwise read as
-        // disconnected fragments.
-        AutomationProperties.SetName(this, ReadoutFormatter.ToSpokenText(Label, formatted, Unit));
+        // NO SetName HERE (#403). See SpokenText and OnCreateAutomationPeer: the name is computed
+        // when a screen reader asks for it rather than pushed on every reading.
+    }
+
+    /// <summary>
+    /// The one phrase this tile reads as, built from its current state.
+    /// </summary>
+    /// <remarks>
+    /// One phrase rather than three adjacent runs, which a screen reader would otherwise read as
+    /// disconnected fragments.
+    /// </remarks>
+    internal string SpokenText =>
+        ReadoutFormatter.ToSpokenText(Label, ReadoutFormatter.Format(Value, DecimalPlaces), Unit);
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <b>The name is pulled, not pushed (#403).</b> <c>AutomationProperties.SetName</c> takes the
+    /// control, so every call hands this tile across to WinRT and mints a COM callable wrapper that
+    /// the runtime records in a per-object list it never shrinks. A tile's value changes on every
+    /// reading, so pushing the name cost one such entry per reading for the life of the process.
+    /// <para>
+    /// Computing it here instead means the boundary is crossed once, when the framework creates
+    /// this peer, and the phrase is built when something actually asks for it - so it is also
+    /// impossible for it to be stale, which pushing could not guarantee.
+    /// </para>
+    /// <para>
+    /// <b>The trade this makes:</b> setting the name raises an automation property-changed event and
+    /// this does not. Deliberate - <c>LiveRegion</c> and <c>StateAnnouncer</c> are how this
+    /// application tells somebody that something changed (A11Y-9), and a readout quietly counting
+    /// is not that. Verified by a Narrator pass, or reported as a bug if one is skipped.
+    /// </para>
+    /// </remarks>
+    protected override AutomationPeer OnCreateAutomationPeer() => new ReadoutTilePeer(this);
+
+    /// <summary>Answers with the tile's phrase as it stands when asked (#403).</summary>
+    private sealed class ReadoutTilePeer(ReadoutTile owner) : FrameworkElementAutomationPeer(owner)
+    {
+        protected override string GetNameCore() => ((ReadoutTile)Owner).SpokenText;
     }
 }
