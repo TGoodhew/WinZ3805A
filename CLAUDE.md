@@ -209,6 +209,7 @@ pwsh build/Test-PointerTargets.ps1       # A11Y-5 / §9.6.3
 pwsh build/Test-DocumentReferences.ps1   # #321 — the documents, not the source
 pwsh build/Test-GuideCoverage.ps1        # #358 — the guide, which is also the F1 help
 pwsh build/Test-PageTeardown.ps1         # #388 — page lifetimes, not tokens
+pwsh build/Test-NoCachedDispatcherHandlers.ps1 # #403 — delegate lifetimes, not tokens
 ```
 
 The guide-coverage gate was added 30 Aug 2026 for #358, and it is the second that checks a
@@ -233,7 +234,7 @@ described **cannot be set at all** — and every word of that would have passed 
 shipping an undocumented option impossible; it cannot make writing something wrong impossible. That
 is what `docs/manual-qa.md` and a reader are for.
 
-The page-teardown gate was added 3 Sep 2026 for #388, and it is the only one about **object
+The page-teardown gate was added 3 Sep 2026 for #388, and it is the first of two about **object
 lifetime** rather than about tokens, text or commands. Every page in the Details window built a view
 model in `OnNavigatedTo` and subscribed to it; every view model subscribed to `ReceiverStateStore`,
 which is registered for the application's lifetime. Store → model → page is a chain anchored at
@@ -249,6 +250,33 @@ teardown is impossible to write however carefully you try. `Unloaded` is not acc
 is what the pages already had, and it stopped the staleness ticker, which was never what kept them
 alive. **The gate found four more instances the moment it first ran**, one of them in the very change
 that introduced it.
+
+The cached-dispatcher-handler gate was added 6 Sep 2026 for #403, and it is the second about object
+lifetime — this time a **delegate's**. `DispatcherQueue.TryEnqueue` mints a COM callable wrapper on
+**every call**; it does not reuse one by delegate identity. The runtime records each wrapper in a
+`List<ManagedObjectWrapperHolder>` hung off the wrapped object by a dependent handle, and that list is
+only ever appended to. So the list lives exactly as long as the delegate does: a fresh delegate's list
+dies with it at the next gen0, while **a delegate cached in a field owns a list that grows for the
+life of the process**. Ten views and two services cached one; `MainPage` renders about 2.6 times a
+second and its list reached 8,192 slots — one array of 65,560 bytes — in 38 minutes, while every other
+holder array in the same dump was 56 or 88 bytes.
+
+**The field was deliberate, which is the whole argument for a gate.** It was written as the fix for
+#399 on the guess that the wrapper was cached by delegate identity, so that one delegate would mean
+one wrapper. It is not — so caching never reduced the minting and did nothing but give the record an
+immortal owner. Its comment, "a field rather than a lambda so the hop allocates nothing", is true,
+irrelevant, and was copied into twelve places; two of them stated the inverted belief outright. Review
+cannot hold this rule, because the defective form reads as the careful one.
+
+Three things worth not rediscovering. A method group, a lambda and `new DispatcherQueueHandler(...)`
+**all allocate a fresh delegate per call** — measured, not assumed — so the field was the only thing
+making anything immortal; the tree uses the delegate creation expression because it is *specified* to
+produce a new instance where the other two are merely uncached by today's compiler. The chain that
+identifies this is one hop longer than it looks: `gcroot` shows `MainPage → DispatcherQueueHandler →
+List` and **reading it one hop short blames the page**, which cost four rounds of guarding values that
+were never the problem. And the verdict metric is the **largest single holder array**, not the total:
+totals move with the gen0 window and can fall while a leak runs, but a dominant array is the leak
+itself.
 
 The document-references gate was added 30 Aug 2026 for #321, and it is the only one that checks
 the **documents** rather than the source. The #316 audit read sixteen of them by hand and found some 360
@@ -287,7 +315,7 @@ pwsh build/Capture-Fixtures.ps1 -SelfTest # #4 / #185 — the harness, not the a
 pwsh build/Watch-Soak.ps1 -SelfTest       # #385 / #399 — the soak's arithmetic, not the memory
 ```
 
-`.github/workflows/ci.yml` runs all fifteen in their own dependency-free jobs, alongside the
+`.github/workflows/ci.yml` runs all sixteen in their own dependency-free jobs, alongside the
 build rather than ahead of it — they need no restore, so a token, accessibility, or safety
 regression fails in seconds rather than after a full build. A separate matrix job builds both
 Configuration × Platform combinations — Debug and Release against x64, the only platform

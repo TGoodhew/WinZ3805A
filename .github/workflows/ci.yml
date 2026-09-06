@@ -168,6 +168,17 @@ jobs:
         shell: pwsh
         run: ./build/Test-PageTeardown.ps1
 
+      # #403, and the second gate about object lifetime rather than tokens. TryEnqueue mints a COM
+      # callable wrapper per call and the runtime records it in a list owned by the delegate, so a
+      # delegate cached in a field owns a list that grows for the life of the process. Ten views and
+      # two services did exactly that; MainPage's reached 65,560 bytes in 38 minutes while every
+      # other holder array in the dump was under 90. The cached field was written deliberately, as
+      # the fix for #399, and its reasoning was copied into twelve places - which is why this is a
+      # gate and not a review note.
+      - name: Dispatcher handlers are built fresh rather than cached
+        shell: pwsh
+        run: ./build/Test-NoCachedDispatcherHandlers.ps1
+
   # ---------------------------------------------------------------------------
   # P0-7 / §8.4. Separate from the design-system gates because it guards a
   # different thing: that no excluded command is named anywhere but the single
