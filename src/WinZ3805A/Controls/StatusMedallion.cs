@@ -286,6 +286,9 @@ public sealed class StatusMedallion : Control
     /// <inheritdoc cref="_modeShown" />
     private string? _modeDetailShown;
 
+    /// <summary>The sentence last given to the automation name, so an identical one is not set again (#403).</summary>
+    private string? _announcementShown;
+
     /// <summary>Records what a dependency property now holds, for the shadow comparisons.</summary>
     /// <remarks>Called from every change callback, which is where all writers converge.</remarks>
     private void RecordShown(DependencyPropertyChangedEventArgs e)
@@ -325,7 +328,12 @@ public sealed class StatusMedallion : Control
         var medallion = (StatusMedallion)d;
         medallion.RecordShown(e);
         medallion.Redraw();
-        medallion.UpdateAnnouncement();
+
+        // NO ANNOUNCEMENT HERE (#403). This callback serves Samples and PlainRingThickness, and
+        // neither appears in the sentence - it is built from Mode, ModeDetail, SatelliteCount and
+        // TimeIntervalNanoseconds, which have their own callback. Samples changes on every reading,
+        // so this rebuilt a sentence that could not have changed and handed this control to WinRT
+        // to set it, once per reading, for nothing.
     }
 
     private static void OnSizeChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -616,6 +624,16 @@ public sealed class StatusMedallion : Control
             parts.Add($"time interval {formatted} nanoseconds");
         }
 
-        AutomationProperties.SetName(this, string.Join(", ", parts) + ".");
+        string sentence = string.Join(", ", parts) + ".";
+
+        // SetName takes the control, so every call hands this medallion across to WinRT and mints a
+        // COM callable wrapper the runtime records in a per-object list it never shrinks (#403).
+        if (string.Equals(_announcementShown, sentence, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _announcementShown = sentence;
+        AutomationProperties.SetName(this, sentence);
     }
 }
