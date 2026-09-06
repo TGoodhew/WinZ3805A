@@ -31,15 +31,6 @@ public sealed class TrayIconService : IDisposable
     private readonly DispatcherQueue _dispatcher;
     private readonly TrayIcon _icon;
 
-    /// <summary>
-    /// The one handler this service hands the dispatcher, reused for every notification (#399).
-    /// </summary>
-    /// <remarks>
-    /// A fresh lambda per hop is a fresh COM callable wrapper the runtime's table can never reuse.
-    /// See <see cref="WinZ3805A.Views.MainPage"/> for the measurement.
-    /// </remarks>
-    private readonly DispatcherQueueHandler _push;
-
     private ConnectionStatus _connection = ConnectionStatus.Disconnected;
 
     /// <summary>The mode last handed to the UI thread, or null before the first (#399).</summary>
@@ -71,7 +62,6 @@ public sealed class TrayIconService : IDisposable
         _session = session;
         _dispatcher = dispatcher;
         _icon = new TrayIcon(displayName, logger);
-        _push = Push;
 
         _store.PropertyChanged += OnStoreChanged;
         _session.StatusChanged += OnSessionChanged;
@@ -151,7 +141,10 @@ public sealed class TrayIconService : IDisposable
         }
 
         _pushed = mode;
-        _dispatcher.TryEnqueue(_push);
+        // A fresh handler, never a cached field: TryEnqueue mints a COM callable wrapper per call
+        // and the runtime records it in a list hung off the delegate, so a reused delegate owns a
+        // list that never dies. See MainPage.EnqueueRender for the accounting (#403).
+        _dispatcher.TryEnqueue(new DispatcherQueueHandler(Push));
     }
 
     /// <summary>Shows whatever the mode is now, on the UI thread.</summary>

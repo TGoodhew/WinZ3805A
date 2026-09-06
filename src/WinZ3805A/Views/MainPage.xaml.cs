@@ -57,29 +57,6 @@ public sealed partial class MainPage : Page
     /// </remarks>
     private readonly bool _ready;
 
-    /// <summary>
-    /// The one handler this page hands the dispatcher, reused for every notification (#399).
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// One delegate rather than a fresh lambda or method-group conversion per notification, so the
-    /// hop allocates nothing. <b>This is hygiene, not the fix for #399</b> — it was tried as the fix
-    /// first, on the guess that <c>TryEnqueue</c>'s wrapper was cached by delegate identity, and a
-    /// soak showed the leak entirely unchanged. What the trace then showed is below.
-    /// </para>
-    /// <para>
-    /// The leak is the <i>rate of rendering</i>. Every value crossing into WinRT as an
-    /// <c>IInspectable</c> — an attached property, a boxed value on a dependency property — mints a
-    /// COM callable wrapper, and the runtime appends every one of them to a diagnostics list that
-    /// never shrinks: <c>ComWrappers.RegisterManagedObjectWrapperForDiagnostics</c>, whose
-    /// <c>List</c> doubling is the staircase in the working set. Nine hours reached 8.4 million
-    /// slots and 69.5 MB of large object heap at 19 MB an hour. The remedy is to render less and
-    /// set less: <see cref="_renders"/> collapses a burst into one render, and the fields
-    /// under it skip a value that has not changed.
-    /// </para>
-    /// </remarks>
-    private readonly DispatcherQueueHandler _render;
-
     /// <summary>The visual state last requested, so an unchanged one is not requested again (#403).</summary>
     private string? _stateShown;
 
@@ -113,12 +90,6 @@ public sealed partial class MainPage : Page
         InitializeComponent();
 
         _renders = new RenderCoalescer(EnqueueRender);
-
-        _render = () =>
-        {
-            _renders.Begin();
-            Render();
-        };
 
         // §12: resolved by device key, never constructed here. The Details window binds to the
         // same context, and a page that built its own session would give it a second port.
@@ -481,8 +452,38 @@ public sealed partial class MainPage : Page
     /// </remarks>
     private void OnModelChanged(object? sender, PropertyChangedEventArgs e) => _renders.Request();
 
-    /// <summary>Hands the cached handler to the dispatcher. A method, so the one delegate is reused.</summary>
-    private bool EnqueueRender() => DispatcherQueue.TryEnqueue(_render);
+    /// <summary>Reopens the coalescer's gate, then renders. Runs on the UI thread.</summary>
+    private void RenderCoalesced()
+    {
+        _renders.Begin();
+        Render();
+    }
+
+    /// <summary>Hands the dispatcher a fresh handler for one coalesced render.</summary>
+    /// <remarks>
+    /// <para>
+    /// <b>A new delegate per hop, deliberately.</b> <c>TryEnqueue</c> mints a COM callable wrapper
+    /// for the handler on every call - it does not reuse one by delegate identity - and the runtime
+    /// records each wrapper in a list hung off the wrapped object by a dependent handle. Hand it the
+    /// same instance every time and that list has an owner that never dies, so it grows for the life
+    /// of the process: at about 2.6 renders a second it reached 8,192 slots in 38 minutes, and it was
+    /// every byte of what remained of the leak after #399 (#403).
+    /// </para>
+    /// <para>
+    /// A fresh handler gives each wrapper a list that dies with it, for one gen0 allocation per
+    /// render. The field this replaced was introduced as the #399 fix on the guess that the wrapper
+    /// was cached by delegate identity. It is not - so caching the delegate never reduced the
+    /// minting, and did nothing but give the record an immortal owner. <b>Do not turn this back into
+    /// a field.</b>
+    /// </para>
+    /// <para>
+    /// <c>new DispatcherQueueHandler(...)</c> rather than a method group or a lambda: a delegate
+    /// creation expression is specified to produce a fresh instance, where the other two forms are
+    /// merely uncached by the compiler we happen to build with today.
+    /// </para>
+    /// </remarks>
+    private bool EnqueueRender() =>
+        DispatcherQueue.TryEnqueue(new DispatcherQueueHandler(RenderCoalesced));
 
     /// <summary>
     /// The installed version, for the §10.3 footer.
