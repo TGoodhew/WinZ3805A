@@ -87,16 +87,6 @@ public sealed partial class SatellitesPage : Page
 
     private readonly DispatcherTimer _stalenessTicker = new() { Interval = TimeSpan.FromSeconds(1) };
 
-    /// <summary>
-    /// The one handler this page hands the dispatcher, reused for every notification (#399).
-    /// </summary>
-    /// <remarks>
-    /// A field rather than a lambda or a method group so the hop allocates nothing. See
-    /// <see cref="MainPage"/> for why that is hygiene and not the fix, and for what the leak
-    /// in #399 actually turned out to be.
-    /// </remarks>
-    private readonly DispatcherQueueHandler _render;
-
     /// <summary>Collapses a burst of notifications into one render (#399).</summary>
     private readonly RenderCoalescer _renders;
 
@@ -106,12 +96,6 @@ public sealed partial class SatellitesPage : Page
         InitializeComponent();
 
         _renders = new RenderCoalescer(EnqueueRender);
-
-        _render = () =>
-        {
-            _renders.Begin();
-            Render();
-        };
 
         // Empty until the receiver says otherwise (#320), for the reason §10.8's duration limit is:
         // a hard-coded 10 reads as the receiver's current mask and is not one. That it happened to
@@ -152,8 +136,20 @@ public sealed partial class SatellitesPage : Page
     /// <summary>Renders on a model notification. Named so <see cref="Detach"/> can remove it (#388).</summary>
     private void OnModelChanged(object? sender, PropertyChangedEventArgs e) => _renders.Request();
 
-    /// <summary>Hands the cached handler to the dispatcher. A method, so the one delegate is reused.</summary>
-    private bool EnqueueRender() => DispatcherQueue.TryEnqueue(_render);
+    /// <summary>Reopens the coalescer's gate, then renders. Runs on the UI thread.</summary>
+    private void RenderCoalesced()
+    {
+        _renders.Begin();
+        Render();
+    }
+
+    /// <summary>Hands the dispatcher a fresh handler for one coalesced render.</summary>
+    /// <remarks>
+    /// A fresh delegate per hop rather than a cached field, which is load-bearing rather than
+    /// wasteful - see <see cref="MainPage"/> for the wrapper accounting that makes it so (#403).
+    /// </remarks>
+    private bool EnqueueRender() =>
+        DispatcherQueue.TryEnqueue(new DispatcherQueueHandler(RenderCoalesced));
 
     /// <inheritdoc />
     /// <remarks>

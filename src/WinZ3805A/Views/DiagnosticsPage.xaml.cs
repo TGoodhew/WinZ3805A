@@ -56,16 +56,6 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
 
     private readonly DispatcherTimer _loadingTimer = new() { Interval = TimeSpan.FromMilliseconds(100) };
 
-    /// <summary>
-    /// The one handler this page hands the dispatcher, reused for every notification (#399).
-    /// </summary>
-    /// <remarks>
-    /// A field rather than a lambda or a method group so the hop allocates nothing. See
-    /// <see cref="MainPage"/> for why that is hygiene and not the fix, and for what the leak
-    /// in #399 actually turned out to be.
-    /// </remarks>
-    private readonly Microsoft.UI.Dispatching.DispatcherQueueHandler _render;
-
     /// <summary>The self-test button's label as last written, so an unchanged one is skipped (#403).</summary>
     private string? _runLabelShown;
 
@@ -80,12 +70,6 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
         InitializeComponent();
 
         _renders = new RenderCoalescer(EnqueueRender);
-
-        _render = () =>
-        {
-            _renders.Begin();
-            Render();
-        };
 
         _loadingTimer.Tick += (_, _) => ApplyLoadingIndicator();
 
@@ -161,8 +145,21 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
     /// <summary>Renders on a model notification. Named so <see cref="Detach"/> can remove it (#388).</summary>
     private void OnModelChanged(object? sender, PropertyChangedEventArgs e) => _renders.Request();
 
-    /// <summary>Hands the cached handler to the dispatcher. A method, so the one delegate is reused.</summary>
-    private bool EnqueueRender() => DispatcherQueue.TryEnqueue(_render);
+    /// <summary>Reopens the coalescer's gate, then renders. Runs on the UI thread.</summary>
+    private void RenderCoalesced()
+    {
+        _renders.Begin();
+        Render();
+    }
+
+    /// <summary>Hands the dispatcher a fresh handler for one coalesced render.</summary>
+    /// <remarks>
+    /// A fresh delegate per hop rather than a cached field, which is load-bearing rather than
+    /// wasteful - see <see cref="MainPage"/> for the wrapper accounting that makes it so (#403).
+    /// </remarks>
+    private bool EnqueueRender() =>
+        DispatcherQueue.TryEnqueue(
+            new Microsoft.UI.Dispatching.DispatcherQueueHandler(RenderCoalesced));
 
     /// <inheritdoc />
     /// <remarks>
