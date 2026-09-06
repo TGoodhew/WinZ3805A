@@ -80,6 +80,9 @@ public sealed partial class MainPage : Page
     /// </remarks>
     private readonly DispatcherQueueHandler _render;
 
+    /// <summary>The visual state last requested, so an unchanged one is not requested again (#403).</summary>
+    private string? _stateShown;
+
     /// <summary>Collapses a burst of notifications into one render (#399).</summary>
     private readonly RenderCoalescer _renders;
 
@@ -229,10 +232,43 @@ public sealed partial class MainPage : Page
     /// </para>
     /// </remarks>
     private void ApplyLayoutState() =>
-        VisualStateManager.GoToState(
-            this,
-            _compact ? "CompactDensity" : ActualHeight < ShortLayoutHeight ? "ShortLayout" : "Normal",
-            useTransitions: false);
+        GoToStateIfChanged(
+            _compact ? "CompactDensity" : ActualHeight < ShortLayoutHeight ? "ShortLayout" : "Normal");
+
+    /// <summary>
+    /// Moves to a visual state, but only when it is not the state already (#403).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>This is what #403 turned out to be.</b> <c>GoToState</c> takes the control as its first
+    /// argument, so every call hands this page across to WinRT and mints a COM callable wrapper -
+    /// and the runtime appends every wrapper to a per-object list it never shrinks. A heap dump
+    /// after eight hours found one such list holding <b>65,536 slots for this page</b> against 214
+    /// live wrappers in the whole process, which is what the growth was.
+    /// </para>
+    /// <para>
+    /// The call is a no-op inside XAML when the state is already current, and that is exactly what
+    /// made it invisible: nothing on screen changed, nothing was slow, and the cost was paid at the
+    /// boundary before the framework ever looked at the name. Four earlier rounds of guards all
+    /// targeted values being <i>assigned</i> and none of them moved the rate, because the object
+    /// being handed over was the page itself, as an argument.
+    /// </para>
+    /// <para>
+    /// Compared against what was last requested rather than asked of the framework, for the same
+    /// reason every other guard here does: a read crosses the same boundary a write does.
+    /// </para>
+    /// </remarks>
+    /// <param name="state">The state to move to.</param>
+    private void GoToStateIfChanged(string state)
+    {
+        if (string.Equals(_stateShown, state, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _stateShown = state;
+        VisualStateManager.GoToState(this, state, useTransitions: false);
+    }
 
     /// <summary>Raised when the user asks for the §10.4 Details window.</summary>
     /// <remarks>
@@ -518,12 +554,14 @@ public sealed partial class MainPage : Page
         // Staleness, so the pill's three channels cannot get out of step with each other.
         FooterStalenessPill.Text = Staleness.LabelOf(_model.AgeSeverity) ?? string.Empty;
 
-        VisualStateManager.GoToState(this, _model.AgeSeverity switch
+        // ONLY WHEN THE STATE CHANGES, AND THIS IS #403's CAUSE (see _stateShown). The staleness
+        // state changes when a poll goes late; this method runs several times a second.
+        GoToStateIfChanged(_model.AgeSeverity switch
         {
             Severity.Critical => "AgeCritical",
             Severity.Caution => "AgeCaution",
             _ => "AgeFresh",
-        }, useTransitions: false);
+        });
 
         // The label and its tooltip move together. The tooltip carries the accelerator, which is
         // registered on the window's content root rather than on this button (§9.6.2 collapses the
