@@ -1,0 +1,240 @@
+using System.Globalization;
+
+namespace WinZ3805A.Device.Drivers.Uccm;
+
+/// <summary>
+/// The <c>C5</c> time-code line a UCCM emits — 44 two-digit hex values on one line (#416).
+/// </summary>
+/// <remarks>
+/// <para>
+/// <b>Everything here is reverse-engineered and none of it is vendor-documented.</b> The field
+/// meanings come from Lady Heather's comments in <c>parse_uccm_time()</c> (heathgps.cpp), MIT
+/// licensed, © 2008-2016 Mark S. Sims. Heather's own comments hedge several of them with question
+/// marks, and they are reproduced with those doubts intact rather than tidied into false confidence.
+/// <b>Nothing in this class has been checked against hardware.</b>
+/// </para>
+/// <para>
+/// <b>The line is not only a response.</b> Heather has a dedicated <c>uccm_time_line()</c> whose
+/// comment says it "handles the case where the Symmetricom units send a time code packet in the
+/// middle of another message's response". So a UCCM interleaves unsolicited time codes with ordinary
+/// query answers, and any reader of this family must tolerate one turning up anywhere. That is why
+/// this parses a single line rather than a whole response, and why the status parser lifts these
+/// lines out wherever it meets them.
+/// </para>
+/// <para>
+/// The line is scanned from the <c>C5 </c> marker, three characters per value — two hex digits and a
+/// separator — so value 0 is the <c>C5</c> marker itself and the indices below are Heather's.
+/// </para>
+/// </remarks>
+public sealed record UccmTimeCode
+{
+    /// <summary>GPS time began at midnight UTC on 6 January 1980.</summary>
+    private static readonly DateTimeOffset GpsEpoch = new(1980, 1, 6, 0, 0, 0, TimeSpan.Zero);
+
+    /// <summary>How many values the line carries, at three characters each.</summary>
+    private const int ValueCount = 44;
+
+    private UccmTimeCode(IReadOnlyList<int> values)
+    {
+        Values = values;
+    }
+
+    /// <summary>Every value as read, so a field nobody has decoded yet is still available.</summary>
+    /// <remarks>
+    /// Kept whole deliberately. Two thirds of these 44 values have no known meaning, and a field
+    /// report about an unfamiliar firmware is only actionable if the raw line survived the parse.
+    /// </remarks>
+    public IReadOnlyList<int> Values { get; }
+
+    /// <summary>Seconds since the GPS epoch, from values 27 to 30, most significant first.</summary>
+    public long GpsSeconds { get; private init; }
+
+    /// <summary>The receiver's time on the GPS scale.</summary>
+    public DateTimeOffset GpsTime => GpsEpoch.AddSeconds(GpsSeconds);
+
+    /// <summary>
+    /// The receiver's time on the UTC scale, or <see langword="null"/> when the leap offset is
+    /// absent and the two scales therefore cannot be related.
+    /// </summary>
+    /// <remarks>
+    /// GPS time runs ahead of UTC by the current leap-second count, so UTC is the GPS reading less
+    /// <see cref="LeapSecondOffset"/>. Heather applies exactly this correction and only when it is
+    /// in a UTC timing mode. A zero offset is treated as absent rather than as a real zero, because
+    /// Heather itself refuses to adopt it (<c>if(!user_set_utc_ofs &amp;&amp; vals[32])</c>) and the
+    /// offset has not been zero since 1980.
+    /// </remarks>
+    public DateTimeOffset? UtcTime =>
+        LeapSecondOffset is int offset ? GpsTime.AddSeconds(-offset) : null;
+
+    /// <summary>Leap seconds between GPS and UTC (value 32), or null when the receiver reported 0.</summary>
+    public int? LeapSecondOffset { get; private init; }
+
+    /// <summary>The PPS and phase state byte (value 33), undecoded.</summary>
+    /// <remarks>
+    /// Heather: <c>40</c> PPS validity, <c>41</c> phase settling, <c>50</c> PPS invalid, <c>60</c>
+    /// stable, <c>62</c> stable with a leap pending. Power-up runs <c>41 → 43 → 63 → 60/62</c>.
+    /// </remarks>
+    public int PpsState { get; private init; }
+
+    /// <summary>
+    /// Whether a leap second is pending, from bit <c>0x02</c> of <see cref="PpsState"/>.
+    /// </summary>
+    /// <remarks>
+    /// <b>Believed unreliable during power-up and deliberately reported anyway.</b> Heather reads
+    /// this single bit, but its own recorded power-up sequence passes through <c>43</c> and
+    /// <c>63</c>, both of which have that bit set while the receiver is plainly still warming up.
+    /// So this is expected to read true spuriously for a few seconds after power-on. It is surfaced
+    /// as-is rather than suppressed because suppressing it would mean inventing a rule no
+    /// observation supports; the caller decides what to do with it, and the hardware sitting will
+    /// settle whether the bit means what Heather guessed.
+    /// </remarks>
+    public bool LeapPending => (PpsState & 0x02) != 0;
+
+    /// <summary>The antenna state byte (value 34), undecoded.</summary>
+    /// <remarks>Heather: <c>00</c> at power-up, <c>04</c> normal, <c>0C</c> open or shorted, <c>06</c> normal(?).</remarks>
+    public int AntennaState { get; private init; }
+
+    /// <summary>Whether the antenna reads as connected and healthy.</summary>
+    public bool? AntennaOk => AntennaState switch
+    {
+        0x04 or 0x06 => true,
+        0x0C => false,
+        _ => null,
+    };
+
+    /// <summary>The manufacturer-dependent lock byte (value 35), undecoded.</summary>
+    /// <remarks>
+    /// <b>The single most vendor-specific value on the line.</b> Symmetricom: <c>8F</c> settling,
+    /// FFOM above zero, or no antenna; <c>85</c> locked with FFOM zero. Trimble: <c>41</c> power-up,
+    /// <c>4F</c> settling, <c>45</c> locked. A driver hard-coding Symmetricom's <c>85</c> reports a
+    /// locked Trimble as unlocked, which is the failure #418 exists to prevent.
+    /// </remarks>
+    public int LockState { get; private init; }
+
+    /// <summary>The date-validity byte (value 36), undecoded.</summary>
+    /// <remarks>Heather: Symmetricom <c>40</c> valid, <c>50</c>/<c>60</c> invalid; Trimble <c>80</c> valid, <c>90</c> invalid.</remarks>
+    public int DateValidityState { get; private init; }
+
+    /// <summary>
+    /// What the lock and date bytes suggest about the vendor, or <see cref="UccmVendor.Unknown"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>A hypothesis drawn from five observations, and labelled as one.</b> Across every value
+    /// Heather records, the low nibble of <see cref="LockState"/> carries the state — <c>F</c>
+    /// settling, <c>5</c> locked, <c>1</c> powering up — while the high nibble is constant per
+    /// vendor: <c>8</c> for Symmetricom, <c>4</c> for Trimble.
+    /// </para>
+    /// <para>
+    /// <b>And the high nibble of the date byte is the other way round</b> — Symmetricom <c>4</c>,
+    /// Trimble <c>8</c> — so "high nibble means vendor" is not a rule that generalises across the
+    /// line, and reading it as one would silently invert the answer. Both bytes are checked here
+    /// and they must agree before this returns a vendor.
+    /// </para>
+    /// <para>
+    /// This is a <i>suggestion</i>. The authoritative signal is <c>DIAG:LOOP?</c>'s shape, which is
+    /// a structural difference rather than an inference from five samples. This exists because the
+    /// status line arrives first and often, so it can offer an early guess that the loop reply then
+    /// confirms or overrides — and if hardware disagrees with it, this method is wrong and the loop
+    /// reply is still right.
+    /// </para>
+    /// </remarks>
+    public UccmVendor SuggestedVendor
+    {
+        get
+        {
+            UccmVendor byLock = (LockState & 0xF0) switch
+            {
+                0x80 => UccmVendor.Symmetricom,
+                0x40 => UccmVendor.Trimble,
+                _ => UccmVendor.Unknown,
+            };
+
+            UccmVendor byDate = (DateValidityState & 0xF0) switch
+            {
+                0x40 or 0x50 or 0x60 => UccmVendor.Symmetricom,
+                0x80 or 0x90 => UccmVendor.Trimble,
+                _ => UccmVendor.Unknown,
+            };
+
+            return byLock == byDate ? byLock : UccmVendor.Unknown;
+        }
+    }
+
+    /// <summary>Whether a line looks like a time code, without parsing it.</summary>
+    public static bool IsTimeCodeLine(string? line) => MarkerIndex(line) >= 0;
+
+    /// <summary>
+    /// Reads a time-code line, or returns <see langword="null"/> when it is not one or is truncated.
+    /// </summary>
+    /// <remarks>
+    /// Never throws (§11.1). A short line, a line with non-hex where a value should be, or a line
+    /// that simply is not a time code all come back as <see langword="null"/>; the caller treats
+    /// that as "no reading", never as an error.
+    /// </remarks>
+    public static UccmTimeCode? TryParse(string? line)
+    {
+        int start = MarkerIndex(line);
+        if (start < 0 || line is null)
+        {
+            return null;
+        }
+
+        int[] values = new int[ValueCount];
+        for (int value = 0; value < ValueCount; value++)
+        {
+            int at = start + (value * 3);
+            if (at + 2 > line.Length ||
+                !int.TryParse(
+                    line.AsSpan(at, 2),
+                    NumberStyles.HexNumber,
+                    CultureInfo.InvariantCulture,
+                    out values[value]))
+            {
+                // A truncated or corrupt line is not half a reading. Heather reads a fixed 131
+                // characters and would take whatever followed; refusing outright is the §11.1
+                // answer, because a time built from a partly-read counter is wrong rather than
+                // absent, and wrong is the one thing a clock display must not be.
+                return null;
+            }
+        }
+
+        int leap = values[32];
+
+        return new UccmTimeCode(values)
+        {
+            // Assembled through uint so the compiler is not asked to or a sign-extended int with an
+            // unsigned one. Each value is a byte by construction, so nothing can be lost.
+            GpsSeconds =
+                ((uint)values[27] << 24) | ((uint)values[28] << 16) | ((uint)values[29] << 8) | (uint)values[30],
+            LeapSecondOffset = leap == 0 ? null : leap,
+            PpsState = values[33],
+            AntennaState = values[34],
+            LockState = values[35],
+            DateValidityState = values[36],
+        };
+    }
+
+    /// <summary>Where the <c>C5</c> marker starts, or -1.</summary>
+    /// <remarks>
+    /// Heather looks for the literal <c>"C5 "</c> with its separator. We accept the marker at the
+    /// start of a line too, since <c>decode_uccm_msg</c> also tests <c>[0]=='C'</c> and
+    /// <c>[1]=='5'</c> on a line it has already trimmed — the two checks disagree in Heather itself,
+    /// and accepting both is the tolerant reading.
+    /// </remarks>
+    private static int MarkerIndex(string? line)
+    {
+        if (string.IsNullOrEmpty(line))
+        {
+            return -1;
+        }
+
+        int at = line.IndexOf("C5 ", StringComparison.OrdinalIgnoreCase);
+        if (at >= 0)
+        {
+            return at;
+        }
+
+        return line.StartsWith("C5", StringComparison.OrdinalIgnoreCase) ? 0 : -1;
+    }
+}
