@@ -36,21 +36,20 @@
     <!-- The real token dictionary, embedded under the same logical name the application uses, so
          that ThemePalette reads the same bytes here as it does in the packaged app. This is what
          lets the guard and the ramp be tested headlessly without restating a single colour. -->
-    <EmbeddedResource Include="..\..\src\WinZ3805A\Themes\Colors.xaml"
-                      LogicalName="WinZ3805A.Themes.Colors.xaml" />
+    <EmbeddedResource Include="..\..\src\WinZ3805A\Themes\Colors.xaml" LogicalName="WinZ3805A.Themes.Colors.xaml" />
 
     <!-- The control styles, for the same reason and by the same route: a rule about what every
          control declares is only worth having if it is checked against the file the application
          actually loads. #22 is why - Control.IsTabStop defaults to True, five controls said
          otherwise and the sixth did not, and Tab landed in a hole nobody could see. -->
-    <EmbeddedResource Include="..\..\src\WinZ3805A\Themes\Generic.xaml"
-                      LogicalName="WinZ3805A.Themes.Generic.xaml" />
+    <EmbeddedResource Include="..\..\src\WinZ3805A\Themes\Generic.xaml" LogicalName="WinZ3805A.Themes.Generic.xaml" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\WinZ3805A.Device\WinZ3805A.Device.csproj" />
     <!-- #310: the tutorial's simulated talker, for the NMEA tests. The driver under test does not depend on it. -->
     <ProjectReference Include="..\..\tools\NmeaSimulator\NmeaSimulator.csproj" />
+    <ProjectReference Include="..\..\tools\UccmSimulator\UccmSimulator.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -71,290 +70,201 @@
          WinZ3805A.Device.Commands - no WinUI at all - which is what lets the real command catalog
          be walked here and every editor's opening value checked against the validator that will
          judge it. A default is the one value nobody re-reads. -->
-    <Compile Include="..\..\src\WinZ3805A\ViewModels\ParameterDefaults.cs"
-             Link="ViewModels\ParameterDefaults.cs" />
+    <Compile Include="..\..\src\WinZ3805A\ViewModels\ParameterDefaults.cs" Link="ViewModels\ParameterDefaults.cs" />
     <!-- #399's render coalescing. The dispatcher arrives as a Func<bool>, so the race the
          views depend on - a notification arriving mid-render must not be swallowed - is
          assertable here without WinUI. It was the last part of that fix that was only
          reasoned about, and reasoning is what got #399 wrong the first time. -->
-    <Compile Include="..\..\src\WinZ3805A\ViewModels\RenderCoalescer.cs"
-             Link="ViewModels\RenderCoalescer.cs" />
-    <Compile Include="..\..\src\WinZ3805A\Services\HelpDocument.cs"
-             Link="Services\HelpDocument.cs" />
-    <Compile Include="..\..\src\WinZ3805A\Services\HighContrast.cs"
-             Link="Services\HighContrast.cs" />
+    <Compile Include="..\..\src\WinZ3805A\ViewModels\RenderCoalescer.cs" Link="ViewModels\RenderCoalescer.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Services\HelpDocument.cs" Link="Services\HelpDocument.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Services\HighContrast.cs" Link="Services\HighContrast.cs" />
     <!-- #290's accent source. Linked for the same reason as the rest: AccentPalette speaks WinUI and
          cannot come in, but the rule deciding which ramp was actually applied is a boolean pair. It
          is tested here because the case that matters - the Windows accent chosen and the read
          failing - cannot be produced by running the application, which is how the defect survived
          from the log line's arrival on 21 Aug 2026 (#165) to its fix on 29 Aug (#290). -->
-    <Compile Include="..\..\src\WinZ3805A\Services\AccentSource.cs"
-             Link="Services\AccentSource.cs" />
-    <Compile Include="..\..\src\WinZ3805A\Controls\ReadoutFormatter.cs"
-             Link="Formatting\ReadoutFormatter.cs" />
-    <Compile Include="..\..\src\WinZ3805A\Controls\MedallionRingMath.cs"
-             Link="Controls\MedallionRingMath.cs" />
-    <Compile Include="..\..\src\WinZ3805A\Controls\Severity.cs"
-             Link="Controls\Severity.cs" />
-    <Compile Include="..\..\src\WinZ3805A\Controls\ReceiverMode.cs"
-             Link="Controls\ReceiverMode.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Services\AccentSource.cs" Link="Services\AccentSource.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Controls\ReadoutFormatter.cs" Link="Formatting\ReadoutFormatter.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Controls\MedallionRingMath.cs" Link="Controls\MedallionRingMath.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Controls\Severity.cs" Link="Controls\Severity.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Controls\ReceiverMode.cs" Link="Controls\ReceiverMode.cs" />
     <!-- §11.1's two signal-strength scales differ by a factor of five, so which one a reading is on
          is not a detail a control may guess. Split out of SatelliteStrengthBar precisely so it can
          be linked here: the control speaks WinUI, the scale is arithmetic. -->
-    <Compile Include="..\..\src\WinZ3805A\Controls\SignalStrengthScale.cs"
-             Link="Controls\SignalStrengthScale.cs" />
-    <Compile Include="..\..\src\WinZ3805A\Controls\ThemePalette.cs"
-             Link="Controls\ThemePalette.cs" />
-    <Compile Include="..\..\src\WinZ3805A\Controls\ColourDifference.cs"
-             Link="Controls\ColourDifference.cs" />
-    <Compile Include="..\..\src\WinZ3805A\Controls\AccentGuard.cs"
-             Link="Controls\AccentGuard.cs" />
-    <Compile Include="..\..\src\WinZ3805A\Controls\AccentRamp.cs"
-             Link="Controls\AccentRamp.cs" />
-    <Compile Include="..\..\src\WinZ3805A\Controls\TrayIconRaster.cs"
-             Link="Controls\TrayIconRaster.cs" />
-    <Compile Include="..\..\src\WinZ3805A\Controls\TrayIconState.cs"
-             Link="Controls\TrayIconState.cs" />
-    <Compile Include="..\..\src\WinZ3805A\Services\AppearancePreferences.cs"
-             Link="Services\AppearancePreferences.cs" />
-    <Compile Include="..\..\src\WinZ3805A\ViewModels\AppearanceViewModel.cs"
-             Link="ViewModels\AppearanceViewModel.cs" />
-    <Compile Include="..\..\src\WinZ3805A\Controls\SkyPlotGeometry.cs"
-             Link="Controls\SkyPlotGeometry.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Controls\SignalStrengthScale.cs" Link="Controls\SignalStrengthScale.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Controls\ThemePalette.cs" Link="Controls\ThemePalette.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Controls\ColourDifference.cs" Link="Controls\ColourDifference.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Controls\AccentGuard.cs" Link="Controls\AccentGuard.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Controls\AccentRamp.cs" Link="Controls\AccentRamp.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Controls\TrayIconRaster.cs" Link="Controls\TrayIconRaster.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Controls\TrayIconState.cs" Link="Controls\TrayIconState.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Services\AppearancePreferences.cs" Link="Services\AppearancePreferences.cs" />
+    <Compile Include="..\..\src\WinZ3805A\ViewModels\AppearanceViewModel.cs" Link="ViewModels\AppearanceViewModel.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Controls\SkyPlotGeometry.cs" Link="Controls\SkyPlotGeometry.cs" />
 
     <!-- The sky plot's other silent half. §9.10.2 says only "arrow keys move a ring through markers
          in PRN order", which is complete until the constellation changes underneath the ring - and
          it changes on the poll cadence, not when the user chooses. The cases that matter are a
          satellite appearing or disappearing at a chosen moment, which a bench cannot arrange. -->
-    <Compile Include="..\..\src\WinZ3805A\Controls\SkyPlotCursor.cs"
-             Link="Controls\SkyPlotCursor.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Controls\SkyPlotCursor.cs" Link="Controls\SkyPlotCursor.cs" />
 
     <!-- §9.10.2's TrendChart, following the same split as the sky plot: the geometry is arithmetic
          and is tested here, the control only draws. This half is why #38 rejected LiveCharts - the
          min/max-per-column rule is what stops a one-second excursion vanishing at the 7-day range,
          and it is the kind of thing that looks correct in a screenshot of a smooth trace. -->
-    <Compile Include="..\..\src\WinZ3805A\Controls\FirstRun.cs"
-             Link="Controls\FirstRun.cs" />
-    <Compile Include="..\..\src\WinZ3805A\Controls\ConnectionBanner.cs"
-             Link="Controls\ConnectionBanner.cs" />
-    <Compile Include="..\..\src\WinZ3805A\Controls\CommandRetryPolicy.cs"
-             Link="Controls\CommandRetryPolicy.cs" />
-    <Compile Include="..\..\src\WinZ3805A\Controls\SurveyRefusalAdvice.cs"
-             Link="Controls\SurveyRefusalAdvice.cs" />
-    <Compile Include="..\..\src\WinZ3805A\Controls\TrendDecimation.cs"
-             Link="Controls\TrendDecimation.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Controls\FirstRun.cs" Link="Controls\FirstRun.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Controls\ConnectionBanner.cs" Link="Controls\ConnectionBanner.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Controls\CommandRetryPolicy.cs" Link="Controls\CommandRetryPolicy.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Controls\SurveyRefusalAdvice.cs" Link="Controls\SurveyRefusalAdvice.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Controls\TrendDecimation.cs" Link="Controls\TrendDecimation.cs" />
     <!-- #387's redraw throttle. Linked for the same reason as the rest: it is arithmetic over a
          TimeSpan and a width, with no WinUI in it, and the rule it encodes - a redraw shows nothing
          until a whole pixel column of new data exists - is exactly the kind of claim that should be
          asserted rather than believed. The page that consumes it cannot be tested headlessly; this
          is the part of it that can. -->
-    <Compile Include="..\..\src\WinZ3805A\Controls\TrendRefreshPolicy.cs"
-             Link="Controls\TrendRefreshPolicy.cs" />
-    <Compile Include="..\..\src\WinZ3805A\Controls\AllanDeviation.cs"
-             Link="Controls\AllanDeviation.cs" />
-    <Compile Include="..\..\src\WinZ3805A\Controls\SkyPlotExport.cs"
-             Link="Controls\SkyPlotExport.cs" />
-    <Compile Include="..\..\src\WinZ3805A\ViewModels\SelfTestViewModel.cs"
-             Link="ViewModels\SelfTestViewModel.cs" />
-    <Compile Include="..\..\src\WinZ3805A\ViewModels\StabilityViewModel.cs"
-             Link="ViewModels\StabilityViewModel.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Controls\TrendRefreshPolicy.cs" Link="Controls\TrendRefreshPolicy.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Controls\AllanDeviation.cs" Link="Controls\AllanDeviation.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Controls\SkyPlotExport.cs" Link="Controls\SkyPlotExport.cs" />
+    <Compile Include="..\..\src\WinZ3805A\ViewModels\SelfTestViewModel.cs" Link="ViewModels\SelfTestViewModel.cs" />
+    <Compile Include="..\..\src\WinZ3805A\ViewModels\StabilityViewModel.cs" Link="ViewModels\StabilityViewModel.cs" />
 
     <!-- P1-2's durable trend history. #50's own verification is "an integration test writing and
          reloading a multi-day series", which is only possible because the store speaks SQLite and
          no UI type - the same reason the session layer is linked rather than referenced. -->
-    <Compile Include="..\..\src\WinZ3805A\Services\TrendStore.cs"
-             Link="Services\TrendStore.cs" />
-    <Compile Include="..\..\src\WinZ3805A\Controls\SkyPlotSatellite.cs"
-             Link="Controls\SkyPlotSatellite.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Services\TrendStore.cs" Link="Services\TrendStore.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Controls\SkyPlotSatellite.cs" Link="Controls\SkyPlotSatellite.cs" />
 
     <!-- Same reasoning for the session layer. §6.2 places these under the app's Services/, but
          neither touches a UI type: they compose the Device library, Channels, and TimeProvider.
          Linking keeps them testable against FakeTransport without the test project taking on
          WinUI. If a UI using ever appears in one of them, this build breaks - which is the point. -->
-    <Compile Include="..\..\src\WinZ3805A\Services\ConnectionStatus.cs"
-             Link="Services\ConnectionStatus.cs" />
-    <Compile Include="..\..\src\WinZ3805A\Services\DeviceSessionService.cs"
-             Link="Services\DeviceSessionService.cs" />
-    <Compile Include="..\..\src\WinZ3805A\Services\ReceiverStateStore.cs"
-             Link="Services\ReceiverStateStore.cs" />
-    <Compile Include="..\..\src\WinZ3805A\Services\PollingService.cs"
-             Link="Services\PollingService.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Services\ConnectionStatus.cs" Link="Services\ConnectionStatus.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Services\DeviceSessionService.cs" Link="Services\DeviceSessionService.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Services\ReceiverStateStore.cs" Link="Services\ReceiverStateStore.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Services\PollingService.cs" Link="Services\PollingService.cs" />
 
     <!-- #319: the one expression the notification area, the taskbar badge and the window all show
          a mode through. It was declared at the bottom of TaskbarOverlayService.cs, which speaks
          WinUI and cannot be linked here - so MainViewModel, which is linked, could not call it and
          restated it instead. Its own file, linked, is what makes the single copy reachable. -->
-    <Compile Include="..\..\src\WinZ3805A\Services\ShellMode.cs"
-             Link="Services\ShellMode.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Services\ShellMode.cs" Link="Services\ShellMode.cs" />
 
     <!-- §15 step 10's tier C path. The dialog stays in the app; what is linked is everything that
          decides what it says, whether the confirm button may enable at all (P0-8), what §7.2's
          error-queue read makes of the answer, and §10.8's power-up guard - none of which needs a
          XamlRoot to be wrong in a way that matters. -->
-    <Compile Include="..\..\src\WinZ3805A\Services\CommandOutcome.cs"
-             Link="Services\CommandOutcome.cs" />
-    <Compile Include="..\..\src\WinZ3805A\Services\ReadingPlausibility.cs"
-             Link="Services\ReadingPlausibility.cs" />
-    <Compile Include="..\..\src\WinZ3805A\Services\CommandInvoker.cs"
-             Link="Services\CommandInvoker.cs" />
-    <Compile Include="..\..\src\WinZ3805A\Services\PowerUpGuard.cs"
-             Link="Services\PowerUpGuard.cs" />
-    <Compile Include="..\..\src\WinZ3805A\ViewModels\CommandConfirmationViewModel.cs"
-             Link="ViewModels\CommandConfirmationViewModel.cs" />
-    <Compile Include="..\..\src\WinZ3805A\ViewModels\PositionFieldBounds.cs"
-             Link="ViewModels\PositionFieldBounds.cs" />
-    <Compile Include="..\..\src\WinZ3805A\ViewModels\RangeValidation.cs"
-             Link="ViewModels\RangeValidation.cs" />
-    <Compile Include="..\..\src\WinZ3805A\ViewModels\RegisterMaskEdit.cs"
-             Link="ViewModels\RegisterMaskEdit.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Services\CommandOutcome.cs" Link="Services\CommandOutcome.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Services\ReadingPlausibility.cs" Link="Services\ReadingPlausibility.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Services\CommandInvoker.cs" Link="Services\CommandInvoker.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Services\PowerUpGuard.cs" Link="Services\PowerUpGuard.cs" />
+    <Compile Include="..\..\src\WinZ3805A\ViewModels\CommandConfirmationViewModel.cs" Link="ViewModels\CommandConfirmationViewModel.cs" />
+    <Compile Include="..\..\src\WinZ3805A\ViewModels\PositionFieldBounds.cs" Link="ViewModels\PositionFieldBounds.cs" />
+    <Compile Include="..\..\src\WinZ3805A\ViewModels\RangeValidation.cs" Link="ViewModels\RangeValidation.cs" />
+    <Compile Include="..\..\src\WinZ3805A\ViewModels\RegisterMaskEdit.cs" Link="ViewModels\RegisterMaskEdit.cs" />
 
     <!-- #137's drift fit. Every judgement in it is one a screenshot cannot check: a slope looks
          equally plausible whether or not the 24-hour term was removed from it first, and a
          classification that names the wrong fault is still a sentence. Synthetic series with a
          known slope, a known daily cycle and a known settling period are the only way to tell. -->
-    <Compile Include="..\..\src\WinZ3805A\ViewModels\EfcDrift.cs"
-             Link="ViewModels\EfcDrift.cs" />
+    <Compile Include="..\..\src\WinZ3805A\ViewModels\EfcDrift.cs" Link="ViewModels\EfcDrift.cs" />
 
     <!-- #182's sentences. The fit was always testable and the sentences reporting it were not, so
          a card whose arithmetic agreed with an independent fit to five decimal places printed
          "0.00 %" for two numbers that were not zero. Wording that states a measurement is a
          measurement. -->
-    <Compile Include="..\..\src\WinZ3805A\ViewModels\DriftAdvisory.cs"
-             Link="ViewModels\DriftAdvisory.cs" />
-    <Compile Include="..\..\src\WinZ3805A\ViewModels\Staleness.cs"
-             Link="ViewModels\Staleness.cs" />
-    <Compile Include="..\..\src\WinZ3805A\ViewModels\LoadingIndicator.cs"
-             Link="ViewModels\LoadingIndicator.cs" />
-    <Compile Include="..\..\src\WinZ3805A\Controls\CardColumnMath.cs"
-             Link="Controls\CardColumnMath.cs" />
+    <Compile Include="..\..\src\WinZ3805A\ViewModels\DriftAdvisory.cs" Link="ViewModels\DriftAdvisory.cs" />
+    <Compile Include="..\..\src\WinZ3805A\ViewModels\Staleness.cs" Link="ViewModels\Staleness.cs" />
+    <Compile Include="..\..\src\WinZ3805A\ViewModels\LoadingIndicator.cs" Link="ViewModels\LoadingIndicator.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Controls\CardColumnMath.cs" Link="Controls\CardColumnMath.cs" />
 
     <!-- §10.7's sigma. A deviation is exactly the kind of figure that looks plausible while being
          wrong by a factor of the sample count, and the caption naming its window is a §9.11 honesty
          claim rather than decoration. -->
-    <Compile Include="..\..\src\WinZ3805A\ViewModels\SampleDeviation.cs"
-             Link="ViewModels\SampleDeviation.cs" />
-    <Compile Include="..\..\src\WinZ3805A\ViewModels\DisplayTime.cs"
-             Link="ViewModels\DisplayTime.cs" />
-    <Compile Include="..\..\src\WinZ3805A\ViewModels\MainViewModel.cs"
-             Link="ViewModels\MainViewModel.cs" />
-    <Compile Include="..\..\src\WinZ3805A\ViewModels\StateAnnouncer.cs"
-             Link="ViewModels\StateAnnouncer.cs" />
-    <Compile Include="..\..\src\WinZ3805A\ViewModels\OverviewViewModel.cs"
-             Link="ViewModels\OverviewViewModel.cs" />
-    <Compile Include="..\..\src\WinZ3805A\ViewModels\DiagnosticsViewModel.cs"
-             Link="ViewModels\DiagnosticsViewModel.cs" />
-    <Compile Include="..\..\src\WinZ3805A\ViewModels\SatellitesViewModel.cs"
-             Link="ViewModels\SatellitesViewModel.cs" />
-    <Compile Include="..\..\src\WinZ3805A\ViewModels\PositionViewModel.cs"
-             Link="ViewModels\PositionViewModel.cs" />
-    <Compile Include="..\..\src\WinZ3805A\ViewModels\TimingViewModel.cs"
-             Link="ViewModels\TimingViewModel.cs" />
-    <Compile Include="..\..\src\WinZ3805A\ViewModels\HoldoverViewModel.cs"
-             Link="ViewModels\HoldoverViewModel.cs" />
-    <Compile Include="..\..\src\WinZ3805A\ViewModels\TimeViewModel.cs"
-             Link="ViewModels\TimeViewModel.cs" />
+    <Compile Include="..\..\src\WinZ3805A\ViewModels\SampleDeviation.cs" Link="ViewModels\SampleDeviation.cs" />
+    <Compile Include="..\..\src\WinZ3805A\ViewModels\DisplayTime.cs" Link="ViewModels\DisplayTime.cs" />
+    <Compile Include="..\..\src\WinZ3805A\ViewModels\MainViewModel.cs" Link="ViewModels\MainViewModel.cs" />
+    <Compile Include="..\..\src\WinZ3805A\ViewModels\StateAnnouncer.cs" Link="ViewModels\StateAnnouncer.cs" />
+    <Compile Include="..\..\src\WinZ3805A\ViewModels\OverviewViewModel.cs" Link="ViewModels\OverviewViewModel.cs" />
+    <Compile Include="..\..\src\WinZ3805A\ViewModels\DiagnosticsViewModel.cs" Link="ViewModels\DiagnosticsViewModel.cs" />
+    <Compile Include="..\..\src\WinZ3805A\ViewModels\SatellitesViewModel.cs" Link="ViewModels\SatellitesViewModel.cs" />
+    <Compile Include="..\..\src\WinZ3805A\ViewModels\PositionViewModel.cs" Link="ViewModels\PositionViewModel.cs" />
+    <Compile Include="..\..\src\WinZ3805A\ViewModels\TimingViewModel.cs" Link="ViewModels\TimingViewModel.cs" />
+    <Compile Include="..\..\src\WinZ3805A\ViewModels\HoldoverViewModel.cs" Link="ViewModels\HoldoverViewModel.cs" />
+    <Compile Include="..\..\src\WinZ3805A\ViewModels\TimeViewModel.cs" Link="ViewModels\TimeViewModel.cs" />
 
     <!-- P0-1's §10.12 dialog. The registry walk and the LocalSettings container behind these are
          Windows-only and stay in the app; what is linked is the part with the decisions in it -
          which port comes back selected after a refresh, what the progress line says on the fifth of
          eight probes, and which row of §9.11 a failure belongs to. -->
-    <Compile Include="..\..\src\WinZ3805A\Services\SerialPortInfo.cs"
-             Link="Services\SerialPortInfo.cs" />
-    <Compile Include="..\..\src\WinZ3805A\Services\ConnectionPreferences.cs"
-             Link="Services\ConnectionPreferences.cs" />
-    <Compile Include="..\..\src\WinZ3805A\ViewModels\ConnectionViewModel.cs"
-             Link="ViewModels\ConnectionViewModel.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Services\SerialPortInfo.cs" Link="Services\SerialPortInfo.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Services\ConnectionPreferences.cs" Link="Services\ConnectionPreferences.cs" />
+    <Compile Include="..\..\src\WinZ3805A\ViewModels\ConnectionViewModel.cs" Link="ViewModels\ConnectionViewModel.cs" />
 
     <!-- §12's composition root, or the half of it that can leave the app project. What is linked is
          the registration shape - one context per device key, never shared across keys, no static
          state - which is the part §12 actually constrains. The rest of Compose() reaches the
          registry and the user's profile and stays in App. -->
-    <Compile Include="..\..\src\WinZ3805A\Services\DeviceContext.cs"
-             Link="Services\DeviceContext.cs" />
-    <Compile Include="..\..\src\WinZ3805A\Services\DeviceRegistration.cs"
-             Link="Services\DeviceRegistration.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Services\DeviceContext.cs" Link="Services\DeviceContext.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Services\DeviceRegistration.cs" Link="Services\DeviceRegistration.cs" />
 
     <!-- §15 step 8's Details shell. The window is what talks to NavigationView; what is linked is
          the pane's contents as data - how many destinations there are, in what order, and which
          Ctrl+n reaches each - because §10.2's cap of eight plus Settings is a counting rule that a
          XAML item list cannot state and a reviewer cannot check by eye. -->
-    <Compile Include="..\..\src\WinZ3805A\ViewModels\DetailsDestination.cs"
-             Link="ViewModels\DetailsDestination.cs" />
-    <Compile Include="..\..\src\WinZ3805A\Services\DetailsViewPreferences.cs"
-             Link="Services\DetailsViewPreferences.cs" />
-    <Compile Include="..\..\src\WinZ3805A\Services\CommandTranscript.cs"
-             Link="Services\CommandTranscript.cs" />
-    <Compile Include="..\..\src\WinZ3805A\Services\LockWatch.cs"
-             Link="Services\LockWatch.cs" />
+    <Compile Include="..\..\src\WinZ3805A\ViewModels\DetailsDestination.cs" Link="ViewModels\DetailsDestination.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Services\DetailsViewPreferences.cs" Link="Services\DetailsViewPreferences.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Services\CommandTranscript.cs" Link="Services\CommandTranscript.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Services\LockWatch.cs" Link="Services\LockWatch.cs" />
 
     <!-- #12's survey trail. A survey runs for two hours and is polled every second, so what to
          write down is a policy rather than a formatting choice, and it is one that can be replayed
          in a millisecond instead of waited out. -->
-    <Compile Include="..\..\src\WinZ3805A\Services\SurveyWatch.cs"
-             Link="Services\SurveyWatch.cs" />
-    <Compile Include="..\..\src\WinZ3805A\Services\AdvancedPreferences.cs"
-             Link="Services\AdvancedPreferences.cs" />
-    <Compile Include="..\..\src\WinZ3805A\ViewModels\AdvancedConsole.cs"
-             Link="ViewModels\AdvancedConsole.cs" />
-    <Compile Include="..\..\src\WinZ3805A\ViewModels\LeapSecondReading.cs"
-             Link="ViewModels\LeapSecondReading.cs" />
-    <Compile Include="..\..\src\WinZ3805A\ViewModels\TimeCodeReading.cs"
-             Link="ViewModels\TimeCodeReading.cs" />
-    <Compile Include="..\..\src\WinZ3805A\ViewModels\ExperimentalQueryRow.cs"
-             Link="ViewModels\ExperimentalQueryRow.cs" />
-    <Compile Include="..\..\src\WinZ3805A\ViewModels\SatelliteTrackingState.cs"
-             Link="ViewModels\SatelliteTrackingState.cs" />
-    <Compile Include="..\..\src\WinZ3805A\ViewModels\SatelliteChoice.cs"
-             Link="ViewModels\SatelliteChoice.cs" />
-    <Compile Include="..\..\src\WinZ3805A\Services\JsonPreferenceFile.cs"
-             Link="Services\JsonPreferenceFile.cs" />
-    <Compile Include="..\..\src\WinZ3805A\Services\SatellitesViewPreferences.cs"
-             Link="Services\SatellitesViewPreferences.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Services\SurveyWatch.cs" Link="Services\SurveyWatch.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Services\AdvancedPreferences.cs" Link="Services\AdvancedPreferences.cs" />
+    <Compile Include="..\..\src\WinZ3805A\ViewModels\AdvancedConsole.cs" Link="ViewModels\AdvancedConsole.cs" />
+    <Compile Include="..\..\src\WinZ3805A\ViewModels\LeapSecondReading.cs" Link="ViewModels\LeapSecondReading.cs" />
+    <Compile Include="..\..\src\WinZ3805A\ViewModels\TimeCodeReading.cs" Link="ViewModels\TimeCodeReading.cs" />
+    <Compile Include="..\..\src\WinZ3805A\ViewModels\ExperimentalQueryRow.cs" Link="ViewModels\ExperimentalQueryRow.cs" />
+    <Compile Include="..\..\src\WinZ3805A\ViewModels\SatelliteTrackingState.cs" Link="ViewModels\SatelliteTrackingState.cs" />
+    <Compile Include="..\..\src\WinZ3805A\ViewModels\SatelliteChoice.cs" Link="ViewModels\SatelliteChoice.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Services\JsonPreferenceFile.cs" Link="Services\JsonPreferenceFile.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Services\SatellitesViewPreferences.cs" Link="Services\SatellitesViewPreferences.cs" />
 
     <!-- A11Y-13. WzMotionService itself is a UISettings wrapper and stays in the app; what is
          linked is the rule it feeds - that reduced motion overrides the direction rather than
          combining with it, and that a page change with nothing behind it does not slide. Getting
          that wrong produces a window that animates for a user who asked it not to, which is a bug
          nobody sitting at a machine with animations on will ever see. -->
-    <Compile Include="..\..\src\WinZ3805A\Services\MotionPolicy.cs"
-             Link="Services\MotionPolicy.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Services\MotionPolicy.cs" Link="Services\MotionPolicy.cs" />
 
     <!-- #127's log file. The ILogger plumbing stays in the app; what is linked is when a file
          rolls, what survives the roll, and what happens when the disk says no - the last of which
          has to be "nothing visible", because a logger that propagates a full disk into the serial
          loop takes the process down exactly when its output was worth having. -->
-    <Compile Include="..\..\src\WinZ3805A\Services\FileLogWriter.cs"
-             Link="Services\FileLogWriter.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Services\FileLogWriter.cs" Link="Services\FileLogWriter.cs" />
 
     <!-- P0-13's CSV export. The picker, the file and the button stay in the app; what is linked is
          the part with rules - RFC 4180 escaping, invariant formatting, and the encoding, which the
          acceptance criterion names explicitly. Escaping is exactly the kind of thing that looks
          right in a screenshot of four well-behaved log lines and corrupts the one entry containing
          a comma. -->
-    <Compile Include="..\..\src\WinZ3805A\Services\CsvDocument.cs"
-             Link="Services\CsvDocument.cs" />
-    <Compile Include="..\..\src\WinZ3805A\Services\DiagnosticLogCsv.cs"
-             Link="Services\DiagnosticLogCsv.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Services\CsvDocument.cs" Link="Services\CsvDocument.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Services\DiagnosticLogCsv.cs" Link="Services\DiagnosticLogCsv.cs" />
 
     <!-- P0-3's window-state persistence. The window is what talks to AppWindow and DisplayArea;
          what is linked is the decision it delegates - given a saved rectangle and the displays
          attached now, where does the window open? The display topologies that make that question
          worth asking (a monitor removed, a monitor at negative coordinates, a resolution reduced
          under the window) are reachable here and not on a bench with one screen. -->
-    <Compile Include="..\..\src\WinZ3805A\Services\WindowPlacement.cs"
-             Link="Services\WindowPlacement.cs" />
-    <Compile Include="..\..\src\WinZ3805A\Services\WindowPlacementPolicy.cs"
-             Link="Services\WindowPlacementPolicy.cs" />
-    <Compile Include="..\..\src\WinZ3805A\Services\WindowSizing.cs"
-             Link="Services\WindowSizing.cs" />
-    <Compile Include="..\..\src\WinZ3805A\Services\LocalWindowPlacementStore.cs"
-             Link="Services\LocalWindowPlacementStore.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Services\WindowPlacement.cs" Link="Services\WindowPlacement.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Services\WindowPlacementPolicy.cs" Link="Services\WindowPlacementPolicy.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Services\WindowSizing.cs" Link="Services\WindowSizing.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Services\LocalWindowPlacementStore.cs" Link="Services\LocalWindowPlacementStore.cs" />
 
     <!-- The preference store is linked because it no longer speaks WinRT. It was written over
          ApplicationData.Current.LocalSettings, which killed the process outright; a JSON file has
          no such problem and, unlike the container, can be round-tripped in a headless test. -->
-    <Compile Include="..\..\src\WinZ3805A\Services\LocalConnectionPreferenceStore.cs"
-             Link="Services\LocalConnectionPreferenceStore.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Services\LocalConnectionPreferenceStore.cs" Link="Services\LocalConnectionPreferenceStore.cs" />
   </ItemGroup>
 
 </Project>
