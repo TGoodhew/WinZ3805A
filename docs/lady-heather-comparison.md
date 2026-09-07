@@ -9,6 +9,11 @@ Z3801A/Z3805A/58503A today are running it, and it has had two decades to accumul
 exactly this family. Anything it does that is genuinely useful and that §13 has no row for is a gap
 in the **specification**, not merely in the code.
 
+**This document compares the two applications.** For a sentence-by-sentence comparison of the two
+NMEA implementations — written later, for [#417](https://github.com/TGoodhew/WinZ3805A/issues/417),
+and reaching a different kind of conclusion — see
+[nmea-against-lady-heather.md](nmea-against-lady-heather.md).
+
 ## Where this document's facts come from
 
 Provenance matters here more than usual, because a comparison written from impression rather than
