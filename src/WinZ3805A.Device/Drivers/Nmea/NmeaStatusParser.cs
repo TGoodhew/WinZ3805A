@@ -192,12 +192,20 @@ public static class NmeaStatusParser
             }
         }
 
-        if (pages.Count > 0)
+        // Page accounting is PER CONSTELLATION, because a multi-constellation talker runs a
+        // separate GSV cycle for each with its own paging - $GPGSV 1..3 and $GLGSV 1..2 interleaved
+        // in one second. NmeaSentence.Key strips the talker on purpose, so they arrive here as one
+        // run of pages; counting them against the first page's total compared five against three
+        // and warned on every cycle from a receiver that was working perfectly (#417). A permanent
+        // stream of spurious warnings is the parser's own version of a gate that cries wolf.
+        foreach (IGrouping<string, NmeaSentence> constellation in
+                 pages.GroupBy(page => page.Talker, StringComparer.Ordinal))
         {
-            int? declaredPages = ParseInt(pages[0].Field(0));
-            if (declaredPages is int expected && pages.Count != expected)
+            int? declaredPages = ParseInt(constellation.First().Field(0));
+            int actual = constellation.Count();
+            if (declaredPages is int expected && actual != expected)
             {
-                warnings.Add($"the cycle carried {pages.Count} GSV page(s) of {expected}");
+                warnings.Add($"the {constellation.Key} cycle carried {actual} GSV page(s) of {expected}");
             }
         }
 
