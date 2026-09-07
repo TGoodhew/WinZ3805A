@@ -13,6 +13,11 @@ string talker = "GP";
 int fixAfter = 20;
 int threeDAfter = 40;
 bool toStdout = false;
+int outageAfter = 0;
+int outageFor = 0;
+string? extraTalker = null;
+int extraFirstPrn = 65;
+int spacingMs = 0;
 
 for (int i = 0; i < args.Length; i++)
 {
@@ -33,18 +38,39 @@ for (int i = 0; i < args.Length; i++)
         case "--3d-after" when i + 1 < args.Length:
             threeDAfter = int.Parse(args[++i], CultureInfo.InvariantCulture);
             break;
+        case "--outage-after" when i + 1 < args.Length:
+            outageAfter = int.Parse(args[++i], CultureInfo.InvariantCulture);
+            break;
+        case "--outage-for" when i + 1 < args.Length:
+            outageFor = int.Parse(args[++i], CultureInfo.InvariantCulture);
+            break;
+        case "--extra-talker" when i + 1 < args.Length:
+            extraTalker = args[++i];
+            break;
+        case "--extra-first-prn" when i + 1 < args.Length:
+            extraFirstPrn = int.Parse(args[++i], CultureInfo.InvariantCulture);
+            break;
+        case "--sentence-spacing-ms" when i + 1 < args.Length:
+            spacingMs = int.Parse(args[++i], CultureInfo.InvariantCulture);
+            break;
         case "--stdout":
             toStdout = true;
             break;
         default:
-            Console.Error.WriteLine("usage: NmeaSimulator (--port COMn [--baud 4800] | --stdout) [--talker GP] [--fix-after 20] [--3d-after 40]");
+            Console.Error.WriteLine(
+                "usage: NmeaSimulator (--port COMn [--baud 4800] | --stdout) [--talker GP] " +
+                "[--fix-after 20] [--3d-after 40] [--outage-after N --outage-for N] " +
+                "[--extra-talker GL [--extra-first-prn 65]] [--sentence-spacing-ms 0]");
             return 2;
     }
 }
 
 if (port is null && !toStdout)
 {
-    Console.Error.WriteLine("usage: NmeaSimulator (--port COMn [--baud 4800] | --stdout) [--talker GP] [--fix-after 20] [--3d-after 40]");
+    Console.Error.WriteLine(
+        "usage: NmeaSimulator (--port COMn [--baud 4800] | --stdout) [--talker GP] " +
+        "[--fix-after 20] [--3d-after 40] [--outage-after N --outage-for N] " +
+        "[--extra-talker GL [--extra-first-prn 65]] [--sentence-spacing-ms 0]");
     return 2;
 }
 
@@ -52,7 +78,14 @@ NmeaTalkerSimulator simulator = new(
     TimeProvider.System,
     talker,
     fixAfter: TimeSpan.FromSeconds(fixAfter),
-    threeDimensionalAfter: TimeSpan.FromSeconds(threeDAfter));
+    threeDimensionalAfter: TimeSpan.FromSeconds(threeDAfter),
+    outages: outageFor > 0
+        ? [new NmeaOutage(TimeSpan.FromSeconds(outageAfter), TimeSpan.FromSeconds(outageFor))]
+        : null,
+    extraConstellations: extraTalker is null
+        ? null
+        : [new NmeaConstellation(extraTalker, extraFirstPrn, Count: 6)],
+    sentenceSpacing: TimeSpan.FromMilliseconds(spacingMs));
 
 using CancellationTokenSource stopping = new();
 Console.CancelKeyPress += (_, e) =>
