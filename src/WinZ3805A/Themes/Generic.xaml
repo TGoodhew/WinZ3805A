@@ -506,10 +506,27 @@
                             Raw to automation, like the glyph. The medallion's automation name is
                             built as a whole sentence in code and already carries the count; a
                             screen reader finding a bare numeral here as well would hear it twice.
+
+                            TextLineBounds="Tight" IS LOAD-BEARING (#430). Centring a TextBlock
+                            centres its LINE BOX, which runs from the font's ascent to its descent —
+                            not the glyph. Segoe UI's are markedly asymmetric (hhea ascent 1.079 em,
+                            descent 0.251 em, cap height 0.700 em), so the baseline sits low in the
+                            box and a lining digit lands about 0.064 em BELOW the box's centre: 3 px
+                            measured on a 64 px medallion, and worse on a larger one, because
+                            ApplySize drives the font size from the diameter. Tight trims the box to
+                            cap-height-to-baseline — exactly the digit's extent — so centring the box
+                            centres the number.
+
+                            The reflex answer is that a digit sits HIGH, since it does not use the
+                            descender. That holds for fonts whose ascent is near the cap height and
+                            is wrong here; the sign came from an element capture, not from reasoning.
+                            Do not replace this with a corrective Margin: a margin would be right at
+                            one diameter and wrong at every other.
                         -->
                         <TextBlock x:Name="Count"
                                    HorizontalAlignment="Center"
                                    VerticalAlignment="Center"
+                                   TextLineBounds="Tight"
                                    FontWeight="SemiBold"
                                    Foreground="{ThemeResource WzNeutralBrush}"
                                    AutomationProperties.AccessibilityView="Raw"
