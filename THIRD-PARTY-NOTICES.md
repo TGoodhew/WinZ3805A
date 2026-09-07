@@ -46,6 +46,28 @@ package; §3 of those terms permits redistribution of the binplaced files and
 attaches conditions this application meets by shipping them unmodified. That
 text is not reproduced here.
 
+## Derived protocol knowledge — Lady Heather
+
+**Nothing here ships**, which is why it is not a row in the table above: that list
+is scoped to files in the package, and this is knowledge rather than a file.
+
+The UCCM driver (`src/WinZ3805A.Device/Drivers/Uccm/`) was written by reading
+**Lady Heather**, © 2008–2016 Mark S. Sims, Win32 port by John Miles KE5FX,
+which is **MIT licensed** — the same licence reproduced in full below. No source
+was copied. What was taken is what that program's author established by
+observation and recorded in comments: the field meanings of the UCCM `C5` time
+code, the two vendor-specific shapes of the `DIAG:LOOP?` reply, the manufacturer
+codes for lock and date validity, the receiver's error and echo conventions, and
+the ±2.00E-7 sanity band for a spurious oscillator reading.
+
+Protocol layouts are facts and facts are not copyrightable; a decoder is
+expression. This driver is a fresh implementation and takes the facts, so the MIT
+condition that the notice accompany "substantial portions of the Software" is not
+engaged. The acknowledgement is here anyway, because the distinction is a
+judgement and the work was genuinely useful — and because a reader of that driver
+should be able to find where its claims came from. Each file cites it, and the
+driver states plainly that none of it has been verified against hardware.
+
 ## Trademarks
 
 HP, Hewlett-Packard, Agilent, Keysight and Symmetricom are marks of their
