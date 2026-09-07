@@ -51,12 +51,19 @@ Heather, the tool most people run on these receivers today, is in
 | Symmetricom 59551A | — |
 | Symmetricom Z3816A | — |
 | **Any NMEA 0183 GNSS talker** — a u-blox module, a marine receiver; proven against the simulator under `tools/`, not yet against hardware | 4800-8-N-1 (the standard), commonly 9600 |
+| **Symmetricom and Trimble UCCM / UCCM-P** — telecom GPSDO modules; **written from a third-party implementation and never yet run against one** | 9600-8-N-1 assumed, unverified |
 
 The SmartClock units share the 58503A/B command set. The NMEA family is the
 second driver ([docs/tutorial-nmea-driver.md](docs/tutorial-nmea-driver.md)): it
 gets the monitoring core — fix state, satellites, position and time — and is
 never written to once recognised; a talker has no disciplined oscillator, so the
-timing pages show dashes. Because the defaults
+timing pages show dashes. The UCCM family is the third, and it comes with a
+caveat the other two do not: it was written by reading another program's source
+rather than a vendor document or a capture from real hardware, so **treat what it
+reports as provisional until a module has been on the bench**. It is read-only —
+the several writes those modules accept are deliberately absent from its catalog,
+because deciding their safety tier without watching one execute would be guessing
+at consequences. Because the defaults
 differ between siblings, every serial parameter is user-settable — baud, data
 bits, parity, and stop bits — and the connection dialog offers an auto-detect
 that walks every registered driver's likely combinations, listening first for a

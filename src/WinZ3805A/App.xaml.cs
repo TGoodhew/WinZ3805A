@@ -14,6 +14,7 @@ using Windows.ApplicationModel;
 
 using WinZ3805A.Device.Drivers;
 using WinZ3805A.Device.Drivers.Nmea;
+using WinZ3805A.Device.Drivers.Uccm;
 using WinZ3805A.Device.Transport;
 using WinZ3805A.Services;
 using WinZ3805A.Views;
@@ -470,6 +471,14 @@ public partial class App : Application
         // is claimed by what it says, before any identity is asked for.
         services.AddSingleton<IReceiverDriver>(
             provider => new NmeaDriver(provider.GetRequiredService<TimeProvider>()));
+
+        // #416: the third family — Symmetricom and Trimble UCCM telecom modules. Registered last,
+        // and it claims only an identity whose model names a UCCM, because THIS DRIVER HAS NEVER
+        // MET A RECEIVER: it is written from Lady Heather's source rather than from a capture, and
+        // a driver that over-claims applies unmeasured timeouts to hardware they were not taken on.
+        // See the remarks on UccmDriver before trusting anything it reports.
+        services.AddSingleton<IReceiverDriver>(
+            provider => new UccmDriver(provider.GetRequiredService<TimeProvider>()));
 
         services.AddDevice(DeviceKeys.Primary, (port, settings) => new SerialTransport(port, settings));
 
