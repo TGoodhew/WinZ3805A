@@ -251,6 +251,14 @@ jobs:
         shell: pwsh
         run: ./build/Watch-Soak.ps1 -SelfTest
 
+      # #420. Same bargain as the two above: this runs once, on the day a talker is finally on the
+      # bench, and a bug found afterwards cannot be retried without borrowing the hardware again.
+      # The half that needs no serial port - the checksum accounting, which is what tells a wrong
+      # baud rate from a real cycle, and the provenance note - is checked on every push.
+      - name: The talker capture harness still counts sentences
+        shell: pwsh
+        run: ./build/Capture-Talker.ps1 -SelfTest
+
   # ---------------------------------------------------------------------------
   # §6.1 requires x64 only and forbids AnyCPU, x86 and ARM64. The matrix keeps its
   # shape for the two configurations, not for a second architecture: ARM64 is not a
