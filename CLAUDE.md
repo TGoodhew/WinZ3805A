@@ -310,15 +310,26 @@ verbatim — so the description of the rule tripped the rule. Both are now descr
 It is a small thing and it is the whole argument for the gate: these are exactly the references nobody
 re-reads.
 
-Two more scripts run in CI and are **not** gates on the source — they check tools rather
+Three more scripts run in CI and are **not** gates on the source — they check tools rather
 than rules, and share one job:
 
 ```powershell
 pwsh build/Capture-Fixtures.ps1 -SelfTest # #4 / #185 — the harness, not the app
 pwsh build/Watch-Soak.ps1 -SelfTest       # #385 / #399 — the soak's arithmetic, not the memory
+pwsh build/Capture-Talker.ps1 -SelfTest   # #420 — the checksum accounting, not the receiver
 ```
 
-`.github/workflows/ci.yml` runs all sixteen in their own dependency-free jobs, alongside the
+`Capture-Talker.ps1` is the third of these and exists because **`Capture-Fixtures.ps1` cannot
+capture a talker**: that script sends a mnemonic and strips the echoed command and the `scpi > `
+prompt, and a talker answers nothing — it broadcasts a cycle a second whether anyone listens or not.
+It writes **bytes**, never lines, into `tests/WinZ3805A.Tests/Nmea/Captures/` and not into
+`Fixtures/`, because `FixtureCorpusTests` globs every `*.txt` there and asserts each one *is* a
+SmartClock screen. Its provenance sidecar is `.md` for the reason #221 established: `.txt` gets
+collected as a fixture and `.log` is gitignored, so a note written to either never arrives. The
+self-tested half is the **checksum accounting**, which is what distinguishes a real cycle from the
+plausible-looking rubbish a wrong baud rate produces.
+
+`.github/workflows/ci.yml` runs every one of them in its own dependency-free job, alongside the
 build rather than ahead of it — they need no restore, so a token, accessibility, or safety
 regression fails in seconds rather than after a full build. A separate matrix job builds both
 Configuration × Platform combinations — Debug and Release against x64, the only platform

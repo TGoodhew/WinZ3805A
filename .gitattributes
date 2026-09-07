@@ -50,6 +50,12 @@
 # verbatim (§11.1) and their exact bytes, including line endings, are the point.
 tests/WinZ3805A.Tests/Fixtures/** -text
 
+# Captured talker output, for the same reason (#420). A talker emits a bare LF where
+# CRLF was expected, a sentence split across reads, and a truncated line when a cable
+# is pulled - all of which the parser has to survive, and none of which survives an
+# end-of-line conversion. The .md notes beside the captures are prose and are excluded.
+tests/WinZ3805A.Tests/Nmea/Captures/*.nmea -text
+
 # ---------------------------------------------------------------------------
 # The specification is byte-exact and must stay that way.
 # ---------------------------------------------------------------------------
