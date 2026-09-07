@@ -218,21 +218,43 @@ public static class NmeaStatusParser
         // best available wins, and a two-digit year is read as this century - a GPS module's own
         // week-rollover handling is its firmware's business, and one that has it wrong reports a
         // date this parser cannot correct without knowing which module it is.
-        string? hhmmss = zda?.Field(0) ?? rmc?.Field(0) ?? gga?.Field(0);
+        // THE TIME AND THE DATE MUST COME FROM THE SAME SENTENCE (#420).
+        //
+        // They used to be chosen independently - the time from whichever sentence had one, the date
+        // from ZDA and failing that from RMC. A cycle takes tens of milliseconds to reach the wire,
+        // so one straddling midnight has sentences on both sides of it, and a ZDA carrying a time
+        // but no readable date paired its 23:59:59 with RMC's date for the following day: a
+        // 24-hour error built from two sentences that were each correct. Narrow, and silent, and
+        // only ever at midnight, which is the worst combination to debug from a field report.
+        string? hhmmss = null;
+        int? year = null;
+        int? month = null;
+        int? day = null;
+
+        if (zda is not null &&
+            ParseInt(zda.Field(3)) is int zdaYear &&
+            ParseInt(zda.Field(2)) is int zdaMonth &&
+            ParseInt(zda.Field(1)) is int zdaDay)
+        {
+            (hhmmss, year, month, day) = (zda.Field(0), zdaYear, zdaMonth, zdaDay);
+        }
+        else if (rmc?.Field(8) is { Length: 6 } ddmmyy && ParseInt(ddmmyy[4..]) is int yy)
+        {
+            hhmmss = rmc.Field(0);
+            day = ParseInt(ddmmyy[..2]);
+            month = ParseInt(ddmmyy[2..4]);
+            year = 2000 + yy;
+        }
+        else
+        {
+            // No sentence carries both. Take a time so the "time but no date" warning below can
+            // say so, which is more useful than reporting nothing at all.
+            hhmmss = zda?.Field(0) ?? rmc?.Field(0) ?? gga?.Field(0);
+        }
+
         if (hhmmss is null || hhmmss.Length < 6)
         {
             return null;
-        }
-
-        int? year = ParseInt(zda?.Field(3));
-        int? month = ParseInt(zda?.Field(2));
-        int? day = ParseInt(zda?.Field(1));
-
-        if (year is null && rmc?.Field(8) is { Length: 6 } ddmmyy)
-        {
-            day = ParseInt(ddmmyy[..2]);
-            month = ParseInt(ddmmyy[2..4]);
-            year = ParseInt(ddmmyy[4..]) is int yy ? 2000 + yy : null;
         }
 
         if (year is null || month is null || day is null)

@@ -18,6 +18,36 @@ public enum FixPhase
 }
 
 /// <summary>
+/// A window during which the receiver has no fix, whatever it had before (#420).
+/// </summary>
+/// <remarks>
+/// <b>The simulator's phases only ever moved forward — power-up, 2D, 3D — so a fix had never been
+/// taken away from the driver.</b> A receiver that loses its fix and regains it is ordinary
+/// behaviour: an antenna knocked, a van parked alongside, a building passed. It was the largest
+/// untested ordinary case, and it is the one a user is most likely to meet.
+/// </remarks>
+/// <param name="StartsAfter">How long after start-up the fix goes.</param>
+/// <param name="Duration">How long it stays gone.</param>
+public readonly record struct NmeaOutage(TimeSpan StartsAfter, TimeSpan Duration);
+
+/// <summary>
+/// A second constellation reporting its own GSV cycle alongside the first (#417, #420).
+/// </summary>
+/// <remarks>
+/// A multi-constellation receiver emits <b>a separate GSV run per constellation</b>, each with its
+/// own page numbering, interleaved in the same second. Every talker this project had tested against
+/// was one of two, so the interleaving had never been produced at all.
+/// </remarks>
+/// <param name="Talker">The talker identifier — <c>GL</c> GLONASS, <c>GA</c> Galileo, <c>GB</c> BeiDou, <c>GQ</c> QZSS.</param>
+/// <param name="FirstPrn">
+/// The first satellite number. NMEA 4.10 gives each constellation its own range — GLONASS 65-96,
+/// SBAS 33-64 — and setting this into another constellation's range is how #424's collision is
+/// reproduced deliberately.
+/// </param>
+/// <param name="Count">How many satellites it reports.</param>
+public readonly record struct NmeaConstellation(string Talker, int FirstPrn, int Count);
+
+/// <summary>
 /// A GPS receiver that exists only as sentences: one NMEA 0183 cycle per call, scripted from
 /// power-up through a 2D fix to a 3D one (#310).
 /// </summary>
@@ -73,6 +103,10 @@ public sealed class NmeaTalkerSimulator
     private readonly double _height;
     private readonly TimeSpan _fixAfter;
     private readonly TimeSpan _threeDimensionalAfter;
+    private readonly IReadOnlyList<NmeaOutage> _outages;
+    private readonly TimeSpan _reacquireAfter;
+    private readonly IReadOnlyList<NmeaConstellation> _extraConstellations;
+    private readonly TimeSpan _sentenceSpacing;
 
     /// <summary>Creates a receiver that starts cold at the clock's current time.</summary>
     /// <param name="timeProvider">The clock every sentence's time comes from.</param>
@@ -82,6 +116,19 @@ public sealed class NmeaTalkerSimulator
     /// <param name="heightMetres">The antenna's height above mean sea level.</param>
     /// <param name="fixAfter">How long after start the first (2D) fix arrives.</param>
     /// <param name="threeDimensionalAfter">How long after start the fix becomes 3D.</param>
+    /// <param name="outages">Windows during which the fix is lost, relative to start-up (#420).</param>
+    /// <param name="reacquireAfter">
+    /// How long after an outage ends the fix is only 2D before returning to 3D. A hot start, not a
+    /// cold one: a receiver that has just lost its fix still has almanac and ephemeris, so it comes
+    /// back in seconds rather than repeating <paramref name="fixAfter"/>.
+    /// </param>
+    /// <param name="extraConstellations">Further constellations reporting their own GSV runs (#417).</param>
+    /// <param name="sentenceSpacing">
+    /// How much time passes between one sentence of a cycle and the next. Zero — the default and
+    /// the old behaviour — makes a cycle instantaneous. A real talker takes tens of milliseconds to
+    /// put a cycle on the wire, and setting this is what lets a cycle <b>straddle midnight</b>, so
+    /// that the sentences carrying the date and the sentences carrying the time disagree.
+    /// </param>
     public NmeaTalkerSimulator(
         TimeProvider timeProvider,
         string talker = "GP",
@@ -89,7 +136,11 @@ public sealed class NmeaTalkerSimulator
         double longitudeDegrees = -122.3493,
         double heightMetres = 56.0,
         TimeSpan? fixAfter = null,
-        TimeSpan? threeDimensionalAfter = null)
+        TimeSpan? threeDimensionalAfter = null,
+        IReadOnlyList<NmeaOutage>? outages = null,
+        TimeSpan? reacquireAfter = null,
+        IReadOnlyList<NmeaConstellation>? extraConstellations = null,
+        TimeSpan? sentenceSpacing = null)
     {
         ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentException.ThrowIfNullOrWhiteSpace(talker);
@@ -107,22 +158,54 @@ public sealed class NmeaTalkerSimulator
         {
             _threeDimensionalAfter = _fixAfter;
         }
+
+        _outages = outages ?? [];
+        _reacquireAfter = reacquireAfter ?? TimeSpan.FromSeconds(3);
+        _extraConstellations = extraConstellations ?? [];
+        _sentenceSpacing = sentenceSpacing ?? TimeSpan.Zero;
     }
 
     /// <summary>The talker identifier every sentence carries.</summary>
     public string Talker => _talker;
 
     /// <summary>Where the receiver is in its start-up, at the clock's current time.</summary>
-    public FixPhase Phase
+    public FixPhase Phase => PhaseAt(_timeProvider.GetUtcNow());
+
+    /// <summary>Where the receiver is at a given moment, outages included (#420).</summary>
+    /// <remarks>
+    /// An outage wins over the start-up script, and a reacquisition is a hot start: the fix comes
+    /// back as 2D for <c>reacquireAfter</c> and then returns to whatever the script says. That
+    /// produces the sequence a real receiver produces — <c>3D → none → 2D → 3D</c> — rather than
+    /// snapping straight back to 3D, which would let a driver pass without ever seeing a downgrade.
+    /// </remarks>
+    private FixPhase PhaseAt(DateTimeOffset when)
     {
-        get
+        TimeSpan elapsed = when - _startedAt;
+
+        foreach (NmeaOutage outage in _outages)
         {
-            TimeSpan elapsed = _timeProvider.GetUtcNow() - _startedAt;
-            return elapsed >= _threeDimensionalAfter ? FixPhase.ThreeDimensional
-                : elapsed >= _fixAfter ? FixPhase.TwoDimensional
-                : FixPhase.NoFix;
+            TimeSpan ends = outage.StartsAfter + outage.Duration;
+
+            if (elapsed >= outage.StartsAfter && elapsed < ends)
+            {
+                return FixPhase.NoFix;
+            }
+
+            if (elapsed >= ends && elapsed < ends + _reacquireAfter)
+            {
+                // Never better than the script: an outage during warm-up must not hand out a fix
+                // the receiver had not earned yet.
+                return Scripted(elapsed) == FixPhase.NoFix ? FixPhase.NoFix : FixPhase.TwoDimensional;
+            }
         }
+
+        return Scripted(elapsed);
     }
+
+    private FixPhase Scripted(TimeSpan elapsed) =>
+        elapsed >= _threeDimensionalAfter ? FixPhase.ThreeDimensional
+            : elapsed >= _fixAfter ? FixPhase.TwoDimensional
+            : FixPhase.NoFix;
 
     /// <summary>Satellites in view with a signal, at the clock's current time.</summary>
     public int SatellitesTracked => Satellites().Count(s => s.Snr > 0);
@@ -146,8 +229,22 @@ public sealed class NmeaTalkerSimulator
         List<(int Prn, int Elevation, int Azimuth, int Snr)> satellites = Satellites();
         bool fixed_ = phase != FixPhase.NoFix;
 
-        string time = now.ToString("HHmmss", CultureInfo.InvariantCulture) + ".00";
-        string date = now.ToString("ddMMyy", CultureInfo.InvariantCulture);
+        // Each sentence carries the time it was put on the wire, not the time the cycle began. With
+        // the default zero spacing they are all the same instant and this is the old behaviour; with
+        // a real talker's tens of milliseconds, a cycle beginning just before midnight ends after
+        // it, and the sentences carrying the date disagree with the sentences carrying the time.
+        int pages = PageCount(satellites.Count);
+        foreach (NmeaConstellation extra in _extraConstellations)
+        {
+            pages += PageCount(extra.Count);
+        }
+
+        DateTimeOffset rmcAt = now;
+        DateTimeOffset ggaAt = now + _sentenceSpacing;
+        DateTimeOffset zdaAt = now + (_sentenceSpacing * (3 + pages));
+
+        string time = Hhmmss(rmcAt);
+        string date = rmcAt.ToString("ddMMyy", CultureInfo.InvariantCulture);
         (string lat, string ns) = fixed_ ? Latitude(_latitude) : (string.Empty, string.Empty);
         (string lon, string ew) = fixed_ ? Longitude(_longitude) : (string.Empty, string.Empty);
 
@@ -155,7 +252,7 @@ public sealed class NmeaTalkerSimulator
         [
             NmeaSentence.Format(_talker, "RMC", time, fixed_ ? "A" : "V", lat, ns, lon, ew, fixed_ ? "0.0" : null, fixed_ ? "0.0" : null, date, null, null),
             NmeaSentence.Format(
-                _talker, "GGA", time, lat, ns, lon, ew,
+                _talker, "GGA", Hhmmss(ggaAt), lat, ns, lon, ew,
                 fixed_ ? "1" : "0",
                 SatellitesUsed.ToString("00", CultureInfo.InvariantCulture),
                 fixed_ ? (phase == FixPhase.ThreeDimensional ? "1.2" : "2.4") : null,
@@ -168,16 +265,50 @@ public sealed class NmeaTalkerSimulator
             Gsa(phase, satellites),
         ];
 
-        cycle.AddRange(Gsv(satellites));
+        cycle.AddRange(Gsv(_talker, satellites));
+
+        // Each further constellation runs its OWN GSV cycle with its own page numbering, which is
+        // the shape that broke the parser's page accounting in #417.
+        foreach (NmeaConstellation extra in _extraConstellations)
+        {
+            cycle.AddRange(Gsv(extra.Talker, ConstellationSatellites(extra)));
+        }
+
         cycle.Add(NmeaSentence.Format(
-            _talker, "ZDA", time,
-            now.ToString("dd", CultureInfo.InvariantCulture),
-            now.ToString("MM", CultureInfo.InvariantCulture),
-            now.ToString("yyyy", CultureInfo.InvariantCulture),
+            _talker, "ZDA", Hhmmss(zdaAt),
+            zdaAt.ToString("dd", CultureInfo.InvariantCulture),
+            zdaAt.ToString("MM", CultureInfo.InvariantCulture),
+            zdaAt.ToString("yyyy", CultureInfo.InvariantCulture),
             "00",
             "00"));
 
         return cycle;
+    }
+
+    private static string Hhmmss(DateTimeOffset when) =>
+        when.ToString("HHmmss", CultureInfo.InvariantCulture) + ".00";
+
+    private static int PageCount(int satellites) =>
+        (satellites + SatellitesPerPage - 1) / SatellitesPerPage;
+
+    /// <summary>
+    /// A further constellation's satellites, taken from the same sky and renumbered into its range.
+    /// </summary>
+    private List<(int Prn, int Elevation, int Azimuth, int Snr)> ConstellationSatellites(NmeaConstellation extra)
+    {
+        List<(int, int, int, int)> primary = Satellites();
+        List<(int, int, int, int)> satellites = new(extra.Count);
+
+        for (int i = 0; i < extra.Count && i < primary.Count; i++)
+        {
+            (_, int elevation, int azimuth, int snr) = primary[i];
+
+            // Offset around the sky so the two constellations are not drawn on top of each other,
+            // which would make a sky plot look right for the wrong reason.
+            satellites.Add((extra.FirstPrn + i, elevation, (azimuth + 180) % 360, snr));
+        }
+
+        return satellites;
     }
 
     /// <summary>One cycle as the wire carries it: every sentence followed by CR LF.</summary>
@@ -244,9 +375,9 @@ public sealed class NmeaTalkerSimulator
         return NmeaSentence.Format(_talker, "GSA", fields);
     }
 
-    private IEnumerable<string> Gsv(List<(int Prn, int Elevation, int Azimuth, int Snr)> satellites)
+    private static IEnumerable<string> Gsv(string talker, List<(int Prn, int Elevation, int Azimuth, int Snr)> satellites)
     {
-        int pages = (satellites.Count + SatellitesPerPage - 1) / SatellitesPerPage;
+        int pages = PageCount(satellites.Count);
         for (int page = 0; page < pages; page++)
         {
             List<string?> fields =
@@ -264,7 +395,7 @@ public sealed class NmeaTalkerSimulator
                 fields.Add(snr == 0 ? null : snr.ToString("00", CultureInfo.InvariantCulture));
             }
 
-            yield return NmeaSentence.Format(_talker, "GSV", [.. fields]);
+            yield return NmeaSentence.Format(talker, "GSV", [.. fields]);
         }
     }
 
