@@ -12,7 +12,8 @@ everything the NMEA family had ever been tested against came from `tools/NmeaSim
 | `vk162-steady-state` | 30 min | 927 KB | The boring case at length. A differential 3D fix in all 1,800 cycles, and **exactly 1,800 of each per-second sentence** — so a gap in any other capture is the receiver's doing, not the harness's. |
 | `vk162-cold-start` | 5.6 min | 186 KB | Power-on. The **only no-fix cycle** anywhere in the corpus, then all three GGA qualities and all three RMC mode indicators in order. |
 | `vk162-microwave` | — | — | The same receiver at the edge of its sensitivity, ~10 dB down, with a fifth of its satellites in view but untracked. |
-| `vk162-glonass-only` | 14 min | 352 KB | The only capture taken with the receiver **reconfigured**, and the only non-`GP` talker. **152 consecutive no-fix cycles** — the corpus's longest — then acquisition, and the fix ladder without SBAS. |
+| `vk162-glonass-only` | 14 min | 352 KB | The only non-`GP` talker. **152 consecutive no-fix cycles** — the corpus's longest — then acquisition, and the fix ladder without SBAS. |
+| `vk162-gns-no-gga` | 12 min | 353 KB | **720 `GNS` and not one `GGA`** — #429's configuration, made with `UBX-CFG-MSG`. Proves the fix survives `GGA`'s absence, and that the altitude and the per-constellation mode string are what its absence costs. |
 
 Each has a `.md` beside it saying what was happening; read those rather than this table.
 
@@ -37,7 +38,11 @@ gap somebody later assumes is covered.
   constellations *in one cycle* and cannot be answered here. It also needs a receiver that numbers
   satellites per constellation, and this one does not: its GLONASS PRNs are **67–85**, inside NMEA
   4.10's 65–96 range.
-- **`GNS`.** Never emitted, so #429 is likewise unanswerable here.
+- ~~**`GNS`.** Never emitted, so #429 is likewise unanswerable here.~~ **Answered 8 Sep 2026.** It is
+  not emitted *by default*, but two `UBX-CFG-MSG` frames turn `GNS` on and `GGA` off, and
+  `vk162-gns-no-gga` is twelve minutes of the result. #429 said the reachability of that
+  configuration "is unknown"; it is two frames. What remains open on that issue is the decision of
+  whether to read `GNS`, not the evidence for it.
 - **A dynamic model that changes anything the driver sees.** `CFG-NAV5` was set to **stationary**
   and a 12-minute sitting taken on 8 Sep 2026. The sentence set was identical and the latitude
   spread was **12.04 m against 12.98 m** for the portable `vk162-steady-state` — indistinguishable.

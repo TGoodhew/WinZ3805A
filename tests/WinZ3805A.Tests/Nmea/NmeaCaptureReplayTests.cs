@@ -132,8 +132,20 @@ public sealed class NmeaCaptureReplayTests
 
         Assert.True(candidates >= 100, $"{name} holds {candidates} candidate sentences, which is not a sitting.");
         Assert.True(valid * 100 >= candidates * 95, $"{name}: only {valid} of {candidates} sentences passed their checksum.");
+        // RMC is required by construction: it is this driver's cycle boundary, so a capture without
+        // one would never complete a cycle and could not be evidence of anything.
         Assert.Contains("RMC", identifiers);
-        Assert.Contains("GGA", identifiers);
+
+        // A position-bearing sentence, but NOT specifically GGA (#429).
+        //
+        // This asserted GGA until 8 Sep 2026, which quietly encoded the very assumption #429 exists
+        // to question — that a receiver always sends it. It does not: `vk162-gns-no-gga` is the same
+        // VK-162 with `UBX-CFG-MSG` used to enable GNS and disable GGA, and it emits 720 GNS and not
+        // one GGA. The capture is valid talker output and this test rejected it, so the assertion
+        // was describing the corpus it happened to have rather than what makes a capture a capture.
+        Assert.True(
+            identifiers.Contains("GGA") || identifiers.Contains("GNS"),
+            $"{name} carries neither GGA nor GNS, so nothing in it reports a position.");
 
         DeviceIdentity? identity = new NmeaDriver(new FakeTimeProvider(Whenever)).Overhear(lines);
         Assert.Equal(NmeaDriver.FamilyName, identity?.Manufacturer);
