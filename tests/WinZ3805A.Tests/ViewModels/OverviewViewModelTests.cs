@@ -2,6 +2,7 @@
 
 using WinZ3805A.Controls;
 using WinZ3805A.Device.Drivers;
+using WinZ3805A.Device.Drivers.Nmea;
 using WinZ3805A.Device.Models;
 using WinZ3805A.Services;
 using WinZ3805A.ViewModels;
@@ -350,5 +351,67 @@ public sealed class OverviewViewModelTests
 
         Assert.True(raised > 0);
         Assert.Equal("Z3805A", model.IdentityModel);
+    }
+
+    // ---- #435: captions that said nothing where the family can never say anything ---------------
+
+    /// <summary>The talker the #435 audit ran against, with the same readings pushed in.</summary>
+    /// <remarks>
+    /// The real <c>NmeaDriver</c> and not a stub: the claim under test is that this view model reads
+    /// its driver's answer, and a stub would let it pass while the shipped driver said otherwise.
+    /// The store is filled exactly as <see cref="Connected"/> fills it, so the only difference
+    /// between the two cases is the driver — which is what makes the assertions below about
+    /// capability rather than about missing data.
+    /// </remarks>
+    private static OverviewViewModel Talker()
+    {
+        FakeTimeProvider clock = new(Captured);
+        ReceiverStateStore store = new(clock);
+
+        store.UpdateFast("LOCK", tfom: 3, ffom: 0, onePpsTiNanoseconds: -33.1,
+            oscillatorControl: 4.2, trackedCount: 6);
+
+        return new OverviewViewModel(store, new NmeaDriver(clock))
+        {
+            Connection = ConnectionStatus.Connected,
+        };
+    }
+
+    /// <remarks>
+    /// The dash under a TFOM pill is §9.11's "not arrived yet". For a family with no figure of merit
+    /// it never will, and the caption is already prose — it is where a reason belongs, which is why
+    /// the pill itself is left reading "TFOM —" rather than blanked.
+    /// </remarks>
+    [Fact]
+    public void TheMeritCaptionsSayWhenTheFamilyHasNoFigureOfMerit()
+    {
+        OverviewViewModel talker = Talker();
+
+        Assert.Equal(
+            "This receiver does not report a time figure of merit. The NMEA 0183 protocol does not carry it.",
+            talker.TfomDetail);
+        Assert.Equal(
+            "This receiver does not report a frequency figure of merit. The NMEA 0183 protocol does not carry it.",
+            talker.FfomDetail);
+
+        // The SmartClock path is untouched: these captions are what §10.4's wireframe shows.
+        (OverviewViewModel smartClock, _) = Connected();
+        Assert.DoesNotContain("does not report", smartClock.TfomDetail, StringComparison.Ordinal);
+        Assert.DoesNotContain("does not report", smartClock.FfomDetail, StringComparison.Ordinal);
+    }
+
+    /// <remarks>
+    /// "Unknown" invites another look. A family that reports no output validity reads the same on
+    /// every look there ever is, and this one renders in a pill, so it has to say that in the words
+    /// a pill has room for.
+    /// </remarks>
+    [Fact]
+    public void OutputsAreNotCalledUnknownWhenTheFamilyNeverReportsThem()
+    {
+        Assert.Equal("Outputs not reported", Talker().OutputsText);
+
+        (OverviewViewModel smartClock, _) = Connected();
+        Assert.StartsWith("Outputs ", smartClock.OutputsText, StringComparison.Ordinal);
+        Assert.NotEqual("Outputs not reported", smartClock.OutputsText);
     }
 }

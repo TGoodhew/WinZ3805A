@@ -207,7 +207,15 @@ public sealed class OverviewViewModel : INotifyPropertyChanged, IDisposable
         : OutputValidity.Unknown;
 
     /// <summary>The outputs badge text, which §9.4.3 requires alongside the colour and shape.</summary>
-    public string OutputsText => Outputs switch
+    /// <remarks>
+    /// <b>"Outputs unknown" is not the same as having no outputs to speak of (#435).</b> Unknown
+    /// invites another look; a family that reports no output validity will read the same on every
+    /// look there ever is. The wording stays short because this renders in a pill and a sentence
+    /// would not fit — the pill's job is to stop claiming a state, not to explain the protocol.
+    /// </remarks>
+    public string OutputsText => !Driver.Reports(ReceiverReading.OutputValidity)
+        ? "Outputs not reported"
+        : Outputs switch
     {
         OutputValidity.Valid => "Outputs valid",
         OutputValidity.ValidReduced => "Outputs valid, reduced accuracy",
@@ -242,10 +250,26 @@ public sealed class OverviewViewModel : INotifyPropertyChanged, IDisposable
     /// The number on its own tells a user nothing; the range behind it is what they came to find
     /// out. Sourced from the 58503A guide (#34), not inferred.
     /// </remarks>
-    public string TfomDetail => FiguresOfMerit.TimeError(Tfom) ?? ReadoutFormatter.NoValue;
+    public string TfomDetail => !Driver.Reports(ReceiverReading.Tfom)
+        ? NotReported("a time figure of merit")
+        : FiguresOfMerit.TimeError(Tfom) ?? ReadoutFormatter.NoValue;
 
     /// <summary>What the FFOM says about the 10 MHz output — the wireframe's "PLL stable".</summary>
-    public string FfomDetail => FiguresOfMerit.PllState(Ffom) ?? ReadoutFormatter.NoValue;
+    public string FfomDetail => !Driver.Reports(ReceiverReading.Ffom)
+        ? NotReported("a frequency figure of merit")
+        : FiguresOfMerit.PllState(Ffom) ?? ReadoutFormatter.NoValue;
+
+    /// <summary>
+    /// The sentence a caption shows for a reading this family can never supply (#435).
+    /// </summary>
+    /// <remarks>
+    /// The pills above these captions still read <c>TFOM —</c>, deliberately. A figure of merit is
+    /// a severity as well as a number and the pill is where §9.4.3's shape lives; blanking it would
+    /// take the row out of the card's shape for no gain, where the caption underneath is already
+    /// prose and is exactly where a reason belongs.
+    /// </remarks>
+    private string NotReported(string what) =>
+        $"This receiver does not report {what}. The {Driver.Family} protocol does not carry it.";
 
     /// <summary>The longer FFOM explanation, for a tooltip.</summary>
     public string? FfomTooltip => FiguresOfMerit.PllDetail(Ffom);

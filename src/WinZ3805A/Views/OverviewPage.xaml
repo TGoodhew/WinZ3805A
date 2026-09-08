@@ -149,7 +149,23 @@
                     <StackPanel Spacing="{ThemeResource WzSpaceSm}">
                         <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Holdover uncertainty" />
 
-                        <Grid RowSpacing="{ThemeResource WzSpaceXs}" ColumnSpacing="{ThemeResource WzSpaceXl}">
+                        <!--
+                            #435. Three dashes and the words "Not in holdover" are a claim about a
+                            receiver with an oscillator to hold over. A family that has none does
+                            not merely fail to report holdover; there is nothing there to report,
+                            and the readings are replaced by the sentence rather than left looking
+                            unread.
+                        -->
+                        <TextBlock x:Name="HoldoverUnavailableText"
+                                   Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}"
+                                   HorizontalAlignment="Left"
+                                   TextWrapping="Wrap"
+                                   Visibility="Collapsed" />
+
+                        <Grid x:Name="HoldoverReadings"
+                              RowSpacing="{ThemeResource WzSpaceXs}" ColumnSpacing="{ThemeResource WzSpaceXl}">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" MinWidth="160" />
                                 <ColumnDefinition Width="*" />
@@ -228,6 +244,21 @@
                                    TextWrapping="Wrap"
                                    Visibility="Collapsed" />
 
+                        <!--
+                            #435. Distinct from SelfTestUnsupportedText above it, which is about the
+                            *command*: a family could report health it will not let anyone re-test.
+                            This one is about the reading, and it replaces the summary rather than
+                            joining it, because "no health items" and "no health monitor" are not
+                            the same statement.
+                        -->
+                        <TextBlock x:Name="HealthUnavailableText"
+                                   Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}"
+                                   HorizontalAlignment="Left"
+                                   TextWrapping="Wrap"
+                                   Visibility="Collapsed" />
+
                         <TextBlock x:Name="HealthSummaryText"
                                    Style="{ThemeResource WzBodyTextStyle}"
                                    Foreground="{ThemeResource WzTextSecondaryBrush}" />
@@ -269,6 +300,20 @@
                                        Text="Oscillator control (EFC)" />
                         </StackPanel>
 
+                        <!--
+                            #435. The whole card - the readout and the trend under it - is one
+                            reading, so it takes one sentence. A talker has no oscillator to
+                            control, which also makes the trend's own empty state ("the trend fills
+                            as the receiver is polled") a promise that could never be kept.
+                        -->
+                        <TextBlock x:Name="OscillatorUnavailableText"
+                                   Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}"
+                                   HorizontalAlignment="Left"
+                                   TextWrapping="Wrap"
+                                   Visibility="Collapsed" />
+
                         <controls:ReadoutTile x:Name="OscillatorControl"
                                               Label="Current"
                                               Unit="%"
@@ -295,7 +340,8 @@
                             than the quantity means the next chart added here does not silently join a
                             group it should not be in.
                         -->
-                        <StackPanel Orientation="Horizontal"
+                        <StackPanel x:Name="OscillatorRangeSelector"
+                                    Orientation="Horizontal"
                                     Spacing="{ThemeResource WzSpaceXs}">
                             <RadioButton x:Name="OverviewRange1h" Content="1 h"
                                          GroupName="OverviewTrendRange"
@@ -424,6 +470,22 @@
                                    Foreground="{ThemeResource WzTextSecondaryBrush}"
                                    TextWrapping="Wrap"
                                    IsTextSelectionEnabled="True"
+                                   Visibility="Collapsed" />
+
+                        <!--
+                            #435. A caption rather than replacing the rows, because this card is
+                            mixed: model and manufacturer are always supplied - a driver invents
+                            them from what it overheard where it must - while a serial number and a
+                            firmware revision come from an identity string some families never
+                            send. Two of four rows keep their values, so the card keeps its shape
+                            and the sentence says which two will stay dashes.
+                        -->
+                        <TextBlock x:Name="IdentityUnavailableText"
+                                   Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}"
+                                   HorizontalAlignment="Left"
+                                   TextWrapping="Wrap"
                                    Visibility="Collapsed" />
                     </StackPanel>
                 </Border>
