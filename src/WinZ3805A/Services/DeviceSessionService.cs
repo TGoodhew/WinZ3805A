@@ -416,18 +416,68 @@ public sealed class DeviceSessionService : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Runs on the wire immediately before a deliberate disconnect tears the transport down.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For the one thing that has to happen while there is still a link: putting back something the
+    /// application borrowed from the receiver. <see cref="ActivityLamp"/> is the case it exists for
+    /// (#440) — by the time <see cref="StatusChanged"/> reports <c>Disconnected</c> the port is
+    /// closed, so a subscriber cannot do it.
+    /// </para>
+    /// <para>
+    /// <b>Best effort, and bounded.</b> A hook that throws, hangs or fails must not be able to keep
+    /// the user's Disconnect from happening, so it is wrapped and given its own budget. Deliberate
+    /// disconnects only: an unexpected one has no wire left to run over.
+    /// </para>
+    /// </remarks>
+    public Func<CancellationToken, Task>? BeforeTearDown { get; set; }
+
+    /// <summary>How long <see cref="BeforeTearDown"/> gets before the disconnect proceeds anyway.</summary>
+    /// <remarks>
+    /// Three seconds. The only caller writes one <c>:LED:</c> command, which the receiver services
+    /// on its 1 Hz tick and answers in about 999 ms (#440), so this is three times the measured
+    /// cost — generous enough not to fire in normal use and short enough that a user who pressed
+    /// Disconnect is not left watching a spinner.
+    /// </remarks>
+    private static readonly TimeSpan BeforeTearDownBudget = TimeSpan.FromSeconds(3);
+
     /// <summary>Closes the link deliberately, which is not a fault (§9.11).</summary>
     public async Task DisconnectAsync()
     {
         await _lifecycle.WaitAsync().ConfigureAwait(false);
         try
         {
+            await RunBeforeTearDownAsync().ConfigureAwait(false);
             await TearDownAsync().ConfigureAwait(false);
             SetStatus(ConnectionStatus.Disconnected, "Disconnected.");
         }
         finally
         {
             _lifecycle.Release();
+        }
+    }
+
+    /// <summary>Gives <see cref="BeforeTearDown"/> its turn, and never lets it stop the disconnect.</summary>
+    private async Task RunBeforeTearDownAsync()
+    {
+        if (BeforeTearDown is not Func<CancellationToken, Task> hook)
+        {
+            return;
+        }
+
+        try
+        {
+            using CancellationTokenSource budget = new(BeforeTearDownBudget, _timeProvider);
+            await hook(budget.Token).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException and not StackOverflowException)
+        {
+            // A courtesy that failed is not a disconnect that failed. The user asked for the link to
+            // close; it closes.
+            _logger.LogInformation(
+                exception, "The pre-disconnect hook did not finish. Disconnecting anyway.");
         }
     }
 

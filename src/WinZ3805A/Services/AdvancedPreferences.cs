@@ -28,6 +28,19 @@ public sealed record AdvancedPreferences
     /// </remarks>
     public bool AreExperimentalQueriesEnabled { get; init; }
 
+    /// <summary>
+    /// Whether the receiver's front-panel Active lamp is lit while this application holds the link
+    /// (#440).
+    /// </summary>
+    /// <remarks>
+    /// <b>Off by default, because it writes to the receiver.</b> Every other thing the application
+    /// does unasked is a read; this is the one switch that makes it change something on the
+    /// instrument on its own initiative, and that is a decision for the person who owns the
+    /// instrument. It is also the only preference whose effect is visible with the screen turned
+    /// off, which is the point of it.
+    /// </remarks>
+    public bool IsActivityLampEnabled { get; init; }
+
     /// <summary>Whether losing GPS lock raises a Windows notification (P1-9).</summary>
     /// <remarks>
     /// <b>On by default</b>, unlike the two switches above it, and for the opposite reason: those

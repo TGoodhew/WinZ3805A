@@ -67,7 +67,15 @@ public static class DeviceRegistration
                 loggers?.CreateLogger<PollingService>(),
                 provider.GetService<TrendStore>());
 
-            return new DeviceContext((string)resolvedKey!, session, store, poller, time);
+            // Optional for the same reason the trend store is: a headless registration test has no
+            // preference file, and a receiver whose lamp is never lit is a working receiver (#440).
+            return new DeviceContext(
+                (string)resolvedKey!,
+                session,
+                store,
+                poller,
+                time,
+                provider.GetService<IAdvancedPreferenceStore>());
         });
 
         return services;

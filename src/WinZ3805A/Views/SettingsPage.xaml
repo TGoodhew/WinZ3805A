@@ -156,6 +156,35 @@
                                       AutomationProperties.Name="Enable undocumented read-only queries"
                                       Toggled="OnExperimentalToggled" />
                     </tk:SettingsCard>
+
+                    <!--
+                        #440. The only switch that makes the application write to the receiver on its
+                        own initiative, so it says so plainly and is off by default.
+
+                        Per session, not per sweep, and that is a measurement rather than a taste: a
+                        :LED: write costs 999 ms because the receiver services the node on its own
+                        1 Hz tick, so flashing once a sweep would cost 194 % of the poll budget.
+                    -->
+                    <tk:SettingsCard Style="{ThemeResource WzSettingsCardStyle}"
+                                     Header="Front-panel Active lamp">
+                        <tk:SettingsCard.Description>
+                            <StackPanel Spacing="{ThemeResource WzSpaceXxs}">
+                                <TextBlock MaxWidth="{ThemeResource WzProseMaxWidth}"
+                                           HorizontalAlignment="Left"
+                                           TextWrapping="Wrap"
+                                           Text="Light the receiver's front-panel Active lamp while this application is connected, so you can tell which unit in a rack it is talking to without a screen. The lamp is read first and put back as it was found when you disconnect." />
+                                <TextBlock MaxWidth="{ThemeResource WzProseMaxWidth}"
+                                           HorizontalAlignment="Left"
+                                           TextWrapping="Wrap"
+                                           Text="This is the only setting that makes the application change something on the receiver by itself. It changes no timing and nothing that outlives the lamp. If the application closes unexpectedly the lamp is left on; the Diagnostics page can set it back." />
+                            </StackPanel>
+                        </tk:SettingsCard.Description>
+                        <ToggleSwitch x:Name="ActivityLampSwitch"
+                                      OnContent="Lit"
+                                      OffContent="Left alone"
+                                      AutomationProperties.Name="Light the front-panel Active lamp while connected"
+                                      Toggled="OnActivityLampToggled" />
+                    </tk:SettingsCard>
                 </StackPanel>
 
                 <!-- ============================== Appearance =============================== -->

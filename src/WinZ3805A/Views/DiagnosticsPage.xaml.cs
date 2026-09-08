@@ -147,6 +147,65 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
     /// <summary>Renders on a model notification. Named so <see cref="Detach"/> can remove it (#388).</summary>
     private void OnModelChanged(object? sender, PropertyChangedEventArgs e) => _renders.Request();
 
+    /// <summary>True while a render is writing the lamp switch, so its Toggled event is ignored.</summary>
+    /// <remarks>
+    /// <b>Setting <c>IsOn</c> raises <c>Toggled</c>, which cannot be told from a click.</b> Without
+    /// this, every render that reflected the receiver's state would send the state straight back to
+    /// the receiver — a write a second on a node that costs a second to answer (#440).
+    /// </remarks>
+    private bool _writingLampSwitch;
+
+    /// <summary>Puts the receiver's own lamp state on the switch, without sending anything.</summary>
+    private void RenderActiveLamp()
+    {
+        bool supported = _device?.Lamp.IsSupported == true;
+        bool connected = _device?.Session.Status == ConnectionStatus.Connected;
+
+        ActiveLampSwitch.IsEnabled = supported && connected;
+        ActiveLampCaption.Text = supported
+            ? "The one front-panel indicator under software control. Use this to put the lamp back if the application was closed while it was lit. It takes about a second to answer, the receiver servicing the lamp on its own once-a-second tick."
+            : Capability.NotOffered(_device?.Driver, "the front-panel lamp");
+    }
+
+    /// <summary>
+    /// Sets the receiver's Active lamp from the switch (#440).
+    /// </summary>
+    /// <remarks>
+    /// No confirmation and no success bar: <c>:LED:ACTive</c> is tier S, and §9.11 gives a safe
+    /// setter no UI at all — the switch's own position is the feedback. A write that fails puts the
+    /// switch back where it was, which is the only honest thing a control over hardware can do.
+    /// </remarks>
+    private async void OnActiveLampToggled(object sender, RoutedEventArgs e)
+    {
+        if (_writingLampSwitch || !_ready || _device is not DeviceContext device)
+        {
+            return;
+        }
+
+        bool wanted = ActiveLampSwitch.IsOn;
+        ActiveLampSwitch.IsEnabled = false;
+
+        try
+        {
+            if (!await device.Lamp.SetManuallyAsync(wanted))
+            {
+                _writingLampSwitch = true;
+                ActiveLampSwitch.IsOn = !wanted;
+                _writingLampSwitch = false;
+            }
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException and not StackOverflowException)
+        {
+            _writingLampSwitch = true;
+            ActiveLampSwitch.IsOn = !wanted;
+            _writingLampSwitch = false;
+        }
+        finally
+        {
+            RenderActiveLamp();
+        }
+    }
+
     /// <summary>Reopens the coalescer's gate, then renders. Runs on the UI thread.</summary>
     private void RenderCoalesced()
     {
@@ -451,6 +510,8 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
         GpsEngineEmptyText.Visibility = model.GpsEngineFields.Count > 0 ? Visibility.Collapsed : Visibility.Visible;
         GpsEngineEmptyText.Text = model.GpsEngineText;
         GpsEngineCaption.Text = model.GpsEngineCaption;
+
+        RenderActiveLamp();
 
         if (_selfTest is SelfTestViewModel selfTest)
         {
