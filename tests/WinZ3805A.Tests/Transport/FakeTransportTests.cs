@@ -150,6 +150,44 @@ public sealed class FakeTransportTests
         Assert.Contains("WaitForReaderToConsume", thrown.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Waiting for a command that never comes fails rather than hanging (#449).
+    /// </summary>
+    /// <remarks>
+    /// <b>Every call site in the suite awaits <c>ReadCommandAsync</c> with no timeout of its own</b>
+    /// — seven of them in <c>ResynchronisationTests</c> alone, the file whose test kept taking the
+    /// host down. A command that never reaches the wire, because the protocol is blocked before the
+    /// write rather than slow at it, stops the test dead instead of failing it.
+    /// </remarks>
+    [Fact]
+    public async Task WaitingForACommandThatNeverComesFailsRatherThanHanging()
+    {
+        await using FakeTransport transport = new()
+        {
+            PausedWriteTimeout = TimeSpan.FromMilliseconds(250),
+        };
+
+        await transport.OpenAsync();
+
+        // Nothing ever writes to this transport.
+        TimeoutException thrown = await Assert.ThrowsAsync<TimeoutException>(
+            async () => await transport.ReadCommandAsync().AsTask().WaitAsync(Patience));
+
+        Assert.Contains("blocked before the write", thrown.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>A command that does arrive is returned, and the budget does not interfere.</summary>
+    [Fact]
+    public async Task ACommandThatArrivesIsStillReturned()
+    {
+        await using FakeTransport transport = new() { EchoCommands = false, EmitPrompt = false };
+        await transport.OpenAsync();
+
+        await transport.WriteAsync(Encoding.Latin1.GetBytes("SYNC:STAT?\r\n"));
+
+        Assert.Equal("SYNC:STAT?", await transport.ReadCommandAsync().AsTask().WaitAsync(Patience));
+    }
+
     /// <summary>Without the pause there is no deadlock to guard against, and no budget applied.</summary>
     [Fact]
     public async Task AnUnpausedEmitIsNotBounded()

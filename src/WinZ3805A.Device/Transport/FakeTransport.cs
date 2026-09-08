@@ -104,7 +104,8 @@ public sealed class FakeTransport : ITransport
     public bool WaitForReaderToConsume { get; init; }
 
     /// <summary>
-    /// How long a paused write may wait for the reader before it is called a deadlock (#449).
+    /// How long a paused write — or a wait for a command — may block before it is called a
+    /// deadlock (#449).
     /// </summary>
     /// <remarks>
     /// <para>
@@ -186,9 +187,38 @@ public sealed class FakeTransport : ITransport
     /// </remarks>
     public void DiscardInput() => Interlocked.Increment(ref _discardCount);
 
-    /// <summary>Waits for the next command the protocol writes.</summary>
-    public ValueTask<string> ReadCommandAsync(CancellationToken cancellationToken = default)
-        => _commands.Reader.ReadAsync(cancellationToken);
+    /// <summary>
+    /// Waits for the next command the protocol writes, and gives up rather than waiting for ever.
+    /// </summary>
+    /// <remarks>
+    /// <b>Bounded for the same reason <see cref="EmitAsync(ReadOnlyMemory{byte}, CancellationToken)"/>
+    /// is (#449).</b> Every call site in the suite awaits this with no timeout of its own, so a
+    /// command that never reaches the wire — because the protocol is blocked somewhere upstream —
+    /// stops the test dead instead of failing it. That is a hung test host with nothing marked
+    /// failed, which took three CI runs and a downloaded dump to attribute the first time.
+    /// </remarks>
+    /// <exception cref="TimeoutException">
+    /// When no command was written within <see cref="PausedWriteTimeout"/>.
+    /// </exception>
+    public async ValueTask<string> ReadCommandAsync(CancellationToken cancellationToken = default)
+    {
+        using CancellationTokenSource budget = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        budget.CancelAfter(PausedWriteTimeout);
+
+        try
+        {
+            return await _commands.Reader.ReadAsync(budget.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            // The caller's own token is untouched, so this is the budget. A TimeoutException rather
+            // than a cancellation, because these tests catch OperationCanceledException to mean "the
+            // transaction was abandoned" and would swallow this as an expected outcome.
+            throw new TimeoutException(
+                $"No command reached the FakeTransport within {PausedWriteTimeout.TotalSeconds:N0}s. "
+                + "The protocol never wrote one — it is blocked before the write, not slow at it.");
+        }
+    }
 
     /// <summary>Sends raw text to the reader, exactly as given — no echo, no prompt, no terminator.</summary>
     public ValueTask EmitAsync(string text, CancellationToken cancellationToken = default)

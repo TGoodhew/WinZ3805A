@@ -382,6 +382,27 @@ simulator in five ways that mattered, and the one that mattered most was a
 sentence the simulator sends every cycle and the receiver never sends at all —
 see the end of the tutorial. A simulator only emits what its author thought of.
 
+**There are three capture harnesses, because there are three link shapes**, and
+picking the wrong one destroys the evidence rather than merely failing:
+
+| Shape | Script | What it does with the echo |
+|---|---|---|
+| Query/response with a prompt (SmartClock) | `Capture-Fixtures.ps1` | **Strips** it, and the `scpi > ` prompt, to leave a status screen |
+| Broadcast talker (NMEA) | `Capture-Talker.ps1` | Nothing to strip: a talker is never asked |
+| Query/response with **no** prompt (UCCM) | `Capture-Uccm.ps1` | **Keeps** it — the echo is the evidence |
+
+That last row is the one worth reading twice. A UCCM is believed to echo each
+command before answering, so `Capture-Fixtures.ps1` would remove exactly the
+thing a first sitting exists to confirm. **If your family is a fourth shape,
+write a fourth script rather than bending one of these** — and give it a
+`-SelfTest` that runs in CI, because a capture harness is used perhaps once a
+season and a bug in it is found the day the hardware has gone home.
+
+**Report your protocol beliefs as counts, never assume them.** `Capture-Uccm.ps1`
+is built around this: it states the echo, the interleaved time code and the
+terminator as measurements out of *n* replies, because a harness that assumes a
+hypothesis confirms it by construction — which is the one result worth nothing.
+
 ### Step 2 — decide what `ReceiverStatus` can hold
 
 [`Models/ReceiverStatus.cs`](../src/WinZ3805A.Device/Models/ReceiverStatus.cs)
