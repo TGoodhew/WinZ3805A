@@ -176,11 +176,41 @@ public sealed class NmeaSessionTests
             Assert.True(condition(), $"The condition never held; the session is {Session.Status}.");
         }
 
+        /// <summary>
+        /// One fake second: a cycle from the talker, then the clock moved on.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// <b>The emit is bounded, and that is not belt and braces (#449).</b>
+        /// <c>WaitForReaderToConsume</c> builds the pipe with a one-byte
+        /// <c>pauseWriterThreshold</c>, so <c>EmitAsync</c> does not return until something drains
+        /// it. If the listener has stopped — the session faulted, the poller was stopped, the
+        /// transport was disposed under it — nothing ever will, and the emit waits for ever.
+        /// </para>
+        /// <para>
+        /// <b>The loops above cannot save it.</b> <see cref="UntilAsync"/> and
+        /// <see cref="RunAsync"/> both carry a <see cref="TestTimeout"/> budget, but they check it
+        /// between ticks; a tick that never returns is never re-checked. So the bound has to be on
+        /// the await, not on the loop around it. Without it the test does not fail — the host dies
+        /// five minutes later with nothing marked failed, which is #445 in a second place and #381
+        /// in a third.
+        /// </para>
+        /// </remarks>
         private async Task TickAsync()
         {
             if (Talking && Transport.IsOpen)
             {
-                await Transport.EmitAsync(Talker.NextCycleText());
+                try
+                {
+                    await Transport.EmitAsync(Talker.NextCycleText()).AsTask().WaitAsync(TestTimeout);
+                }
+                catch (TimeoutException)
+                {
+                    Assert.Fail(
+                        "A talker cycle was never consumed, so the emit blocked for "
+                        + $"{TestTimeout.TotalSeconds:N0} s. The pipe pauses its writer after one byte, "
+                        + $"so nothing is reading the transport — the session is {Session.Status}.");
+                }
             }
 
             await Task.Delay(5);
