@@ -12,8 +12,9 @@ device's 80×24 terminal screen.
 
 Every receiver-specific fact sits behind a driver (§12, `src/WinZ3805A.Device/Drivers/`).
 The SmartClock family is the first driver; a generic NMEA 0183 talker (#310) is the second,
-proven against the simulator under `tools/` rather than against hardware, and it shows only
-what NMEA carries. The UCCM family (#416, #418) is the third, and it is weaker evidence than
+proven against the simulator under `tools/` and, since 7 Sep 2026, against a real receiver —
+three VK-162 captures under `tests/WinZ3805A.Tests/Nmea/Captures/`, replayed cycle by cycle in
+CI (#420). It shows only what NMEA carries. The UCCM family (#416, #418) is the third, and it is weaker evidence than
 either: it was written from Lady Heather's source rather than from a capture or a vendor
 document, so **every command, timeout and state code in it is a hypothesis with a citation**.
 It says so itself, at length, and that caveat stays until a receiver has been on the bench.

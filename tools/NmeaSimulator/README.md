@@ -8,9 +8,10 @@ the sky and time that advances. It is the tutorial's receiver on the bench (#310
 the desk.
 
 It is not a particular product. There are no proprietary sentences, no lock or holdover state —
-NMEA has none — and no serial quirks. When a real talker is captured, its behaviour is compared
-against this; none has been yet (#309, the BG7TBL, was deferred because that unit puts no NMEA on
-the port the application can reach).
+NMEA has none — and no serial quirks. A real talker was captured on 7 Sep 2026 — a VK-162, under
+[`tests/WinZ3805A.Tests/Nmea/Captures/`](../../tests/WinZ3805A.Tests/Nmea/Captures/) (#420) — and
+what it does that this does not is recorded there and in
+[`docs/tutorial-nmea-driver.md`](../../docs/tutorial-nmea-driver.md).
 
 ## In-process
 

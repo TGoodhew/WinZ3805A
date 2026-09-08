@@ -16,8 +16,10 @@ namespace WinZ3805A.Device.Drivers.Nmea;
 /// <c>docs/adding-a-receiver.md</c> with this file as the result. This folder is the whole
 /// driver: the sentence codec, the cycle parser and this class. Nothing in it depends on the
 /// simulator under <c>tools/</c>; the simulator depends on the codec. The family is proven against
-/// that simulator, <c>tools/NmeaSimulator</c>, and against no real talker yet — the bench unit that
-/// was to be one carried no NMEA on its port (#309, deferred).
+/// that simulator, <c>tools/NmeaSimulator</c>, and — since 7 Sep 2026 — against a real receiver:
+/// three VK-162 captures under <c>tests/WinZ3805A.Tests/Nmea/Captures/</c>, replayed cycle by cycle
+/// by <c>NmeaCaptureReplayTests</c> (#420). That receiver is GPS-only and never lost its fix, so a
+/// second constellation and an outage remain the simulator's alone.
 /// </para>
 /// <para>
 /// <b>The family is the opposite shape to the SmartClock</b>, which is why it was chosen. A talker

@@ -5,8 +5,14 @@ sentence. A review, not a rewrite — this driver is smaller on purpose, and the
 decision rather than an oversight.*
 
 The asymmetry that makes this worth doing: Lady Heather has been exercised against a great many real
-receivers over many years, and `NmeaDriver` (#310) **has never met a real talker**. Heather has seen
-wild inputs we have not.
+receivers over many years, and `NmeaDriver` (#310) **had never met a real talker** on the day this
+was written. Heather has seen wild inputs we have not.
+
+> *Corrected 7 Sep 2026 by #420.* It has now met one — a VK-162, three captures under
+> `tests/WinZ3805A.Tests/Nmea/Captures/`. **That narrows the asymmetry rather than retiring it**:
+> one GPS-only puck on one afternoon, against Heather's many receivers over many years. Every
+> "needs hardware" verdict below still needs it, because what the sitting produced was ordinary
+> correct output rather than the wild input this review is worried about.
 
 What the review actually found was not what was expected. **Two of the differences are defects in
 Heather**, one is a defect of ours that is now fixed, one is a real limitation of ours that needs

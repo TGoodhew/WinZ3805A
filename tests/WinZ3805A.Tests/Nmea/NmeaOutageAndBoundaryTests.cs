@@ -11,9 +11,16 @@ namespace WinZ3805A.Tests.Nmea;
 /// taken away and coming back, two constellations at once, and a cycle straddling midnight.
 /// </summary>
 /// <remarks>
-/// These are still synthetic — the driver has never met a real talker (#310) — but they are the
-/// cases a generator can anticipate, and #420 puts them first precisely because they are cheap.
-/// What is left for hardware is what no generator can anticipate.
+/// These are synthetic, and they stay that way: they are the cases a generator can anticipate, and
+/// #420 puts them first precisely because they are cheap.
+/// <para>
+/// <b>The hardware sitting on 7 Sep 2026 produced none of the three</b>, which is the argument for
+/// this file rather than against it. No enclosure to hand would stop an 11-satellite fix, so the
+/// outage never happened; the receiver is GPS-only, so a second constellation was never possible;
+/// and all three captures fall between 00:08 and 01:07 UTC on one date, so the midnight crossing
+/// missed by eight minutes. A generator produces on demand what an afternoon with a receiver may
+/// simply decline to show.
+/// </para>
 /// </remarks>
 public sealed class NmeaOutageAndBoundaryTests
 {

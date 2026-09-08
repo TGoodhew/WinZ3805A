@@ -51,10 +51,10 @@ for a minute, into a file, gives sixty cycles in the shape a real talker's captu
 tests do the same thing in-process: every expectation in
 [`NmeaDriverTests`](../tests/WinZ3805A.Tests/Nmea/NmeaDriverTests.cs) is asserted against a
 simulated cycle, and the file says so in its remarks, because a value asserted against your own
-simulator proves consistency and not truth. **No real talker has been captured yet** — #309, the
-BG7TBL, was deferred when the bench unit turned out to put no NMEA on its RS-232 port — and when
-one is, its capture is what these get compared against, with whatever disagrees folded back into
-both.
+simulator proves consistency and not truth. A real talker **was** captured on 7 Sep 2026 (#420) and
+is replayed by [`NmeaCaptureReplayTests`](../tests/WinZ3805A.Tests/Nmea/NmeaCaptureReplayTests.cs)
+against different assertions; what it turned out to say, and where it caught this simulator being
+narrower than reality, is the last section of this document.
 
 > **Finding 1 — the capture harness sends.** `build/Capture-Fixtures.ps1` asks for the status
 > screen, strips the echoed command and the prompt, and waits for a state it has not seen. A
@@ -306,10 +306,48 @@ and the application connected to the other with *Auto-detect settings*. What to 
 - Overview: *"No health data"*. Holdover: dashes. Diagnostics: no receiver log, no error queue.
 - Advanced Console: `$--RMC` and its siblings as reads; nothing to send.
 
-**No real talker is on the bench.** [#309](https://github.com/TGoodhew/WinZ3805A/issues/309) set
-out to capture a BG7TBL GPSDO and found its DB9 carries a ~10 kHz square wave gated by DTR and no
-NMEA at all, so it was closed as deferred with the bench evidence recorded on it. Resuming needs a
-receiver that emits NMEA 0183 at RS-232 levels — or the right pins and a TTL adapter — and a listen
-with DTR released first, then asserted: the application asserts DTR and RTS on open (§7.1), which
-that unit reacted to, and control-line policy on open is now #304's item 4. Then the capture,
-compared with the simulator, with every difference folded back into this tutorial and the guide.
+---
+
+## What the real talker turned out to say
+
+**A receiver reached the bench on 7 September 2026** — a VK-162 USB puck, u-blox `UBX-G70xx`,
+PROTVER 14.00, at 9600 baud. Three captures are under
+[`tests/WinZ3805A.Tests/Nmea/Captures/`](../tests/WinZ3805A.Tests/Nmea/Captures/) with a provenance
+note each: 30 minutes of steady state, a power-on, and six minutes of heavily attenuated signal.
+The driver read all three without a single parse warning, which is the headline and also the least
+interesting part of this section.
+
+**The simulator was not wrong. It was narrower**, in five ways, and each is a code path that had
+been exercised only by input written to exercise it:
+
+1. **The simulator sends `ZDA` every cycle. The VK-162 never sends it at all.** This is the one that
+   matters. `NmeaStatusParser.Time` prefers `ZDA` because it carries a four-digit year, and falls
+   back to `RMC`'s two-digit one. So every simulator-driven test takes the `ZDA` path, and **real
+   hardware takes the fallback** — the branch with the most coverage is the branch the receiver does
+   not use. Nothing was broken; it simply had not been demonstrated.
+2. **`GGA` quality `2`.** The simulator emits `1` when fixed and `0` when not, never `2`. The real
+   unit reported `2` — an SBAS-corrected differential fix — in all 1,800 cycles of the steady
+   capture, so `ModeDetail`'s differential branch had never seen a byte of hardware.
+3. **PRNs above 32.** SBAS satellites **46 and 48** appear in `GSV` *and* in every one of the 1,800
+   `GSA` lists of satellites used in the fix. Anything assuming a PRN fits in the GPS 1–32 range
+   breaks here, and the simulator's constellation is GPS-numbered throughout.
+4. **Sentences beyond the plan.** The receiver sends `VTG` and `GLL`, which the driver claims into
+   the cycle and never reads, and `TXT`, which it does not claim at all — seven of them at power-on,
+   carrying the boot banner and `ANTSTATUS=OK`. They are the corpus's only supply of lines the
+   listener must hear and discard without complaint.
+5. **The page count moves within a sitting.** 3 `GSV` pages while 12 satellites were in view, 4
+   while 13 were — 1,339 cycles and 461 cycles of the same capture. That is the per-constellation
+   page accounting from #417 being exercised by a *single*-constellation talker.
+
+**And what the receiver refused to show is the argument for keeping the simulator.** None of
+[`NmeaOutageAndBoundaryTests`](../tests/WinZ3805A.Tests/Nmea/NmeaOutageAndBoundaryTests.cs)'s three
+cases occurred: no enclosure to hand would stop an 11-satellite fix, so there was **no outage**; the
+puck is GPS-only, so **no second constellation**; and all three captures fall between 00:08 and 01:07
+UTC on one date, so the **midnight crossing missed by eight minutes**. A generator produces on demand
+what an afternoon with hardware may simply decline to show. Keep both.
+
+**The earlier attempt is worth recording too.**
+[#309](https://github.com/TGoodhew/WinZ3805A/issues/309) set out to capture a BG7TBL GPSDO and found
+its DB9 carries a ~10 kHz square wave gated by DTR and no NMEA at all, so it was closed as deferred
+with the bench evidence on it. Control-line policy on open is still #304's item 4, and still
+unresolved: the VK-162 is a USB device and never exercised it.
