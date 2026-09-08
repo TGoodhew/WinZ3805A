@@ -114,6 +114,14 @@ public partial class App : Application
 
         _services = Compose();
 
+        // Before this, a crash left no trace anywhere the developer could reach. app.log simply
+        // stopped mid-session, and the only artefact was a WER minidump taken after the stack had
+        // already unwound - so `clrstack` on the UI thread showed the message loop and nothing
+        // else, and `pe` reported no managed exception at all. A crash that destroys its own
+        // evidence costs a bench session per occurrence, because the only way back to it is to
+        // reproduce it with a debugger attached to a packaged app.
+        HookUnhandledExceptions();
+
         _window = new MainWindow(_services);
         _window.Closed += OnMainWindowClosed;
 
@@ -595,6 +603,56 @@ public partial class App : Application
         }
 
         await ShutDownAsync();
+    }
+
+    /// <summary>
+    /// Writes whatever killed the process into <c>app.log</c> before it dies.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>This logs and does not handle.</b> Setting <c>Handled</c> would keep a process alive
+    /// whose XAML tree has already failed mid-operation, and this application's whole proposition
+    /// is a window a lab user trusts for weeks — a silently wrong one is worse than a crash. The
+    /// job here is to make the crash explicable, not to hide it.
+    /// </para>
+    /// <para>
+    /// <see cref="FileLogWriter"/> runs with <c>AutoFlush</c>, so the line is on disk before the
+    /// handler returns; the explicit flush covers a provider that ever stops doing that. All three
+    /// hooks are needed and catch different things: the XAML one gets exceptions thrown on the UI
+    /// thread, including inside a navigation or a rendering pass, which is where a page crash
+    /// lands; the <see cref="AppDomain"/> one gets a background thread taking the process down;
+    /// and the <see cref="TaskScheduler"/> one gets a faulted task nobody awaited, which does not
+    /// terminate but is exactly how a poll loop dies quietly and leaves a window that has simply
+    /// stopped updating.
+    /// </para>
+    /// </remarks>
+    private void HookUnhandledExceptions()
+    {
+        if (_services?.GetService<ILoggerFactory>()?.CreateLogger("Crash") is not ILogger log)
+        {
+            return;
+        }
+
+        UnhandledException += (_, e) =>
+        {
+            log.LogCritical(e.Exception, "Unhandled exception on the UI thread: {Message}", e.Message);
+            _services?.GetService<FileLogWriter>()?.Flush();
+        };
+
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+        {
+            log.LogCritical(
+                e.ExceptionObject as Exception,
+                "Unhandled exception off the UI thread; terminating: {Terminating}.",
+                e.IsTerminating);
+            _services?.GetService<FileLogWriter>()?.Flush();
+        };
+
+        TaskScheduler.UnobservedTaskException += (_, e) =>
+        {
+            log.LogError(e.Exception, "A faulted task was never observed.");
+            _services?.GetService<FileLogWriter>()?.Flush();
+        };
     }
 
     /// <summary>Whether the close button should hide rather than exit.</summary>
