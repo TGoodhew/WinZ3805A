@@ -576,8 +576,12 @@ public sealed partial class TimingPage : Page, ICsvExportSource
         }
 
         // Nothing persisted yet. The ring buffer is what there is, and the caption says so.
+        //
+        // The caption arrives finished (#441). Composing one here is what produced "σ from the no
+        // samples yet.": the view model's two branches are not the same shape of phrase, so the
+        // wrapper that suited one could only ever be wrong about the other.
         Deviation.Value = model.TimeIntervalDeviation;
-        DeviationWindowText.Text = $"σ from the {model.DeviationWindow}.";
+        DeviationWindowText.Text = model.DeviationWindow;
     }
 
     /// <summary>

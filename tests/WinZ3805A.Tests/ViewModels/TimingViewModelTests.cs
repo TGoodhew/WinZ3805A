@@ -183,7 +183,7 @@ public sealed class TimingViewModelTests
         ReceiverStateStore store = new(clock);
         TimingViewModel model = new(store) { Connection = ConnectionStatus.Connected };
 
-        Assert.Equal("no samples yet", model.DeviationWindow);
+        Assert.Equal("Not enough samples yet.", model.DeviationWindow);
 
         for (int i = 0; i < 5; i++)
         {
@@ -191,7 +191,48 @@ public sealed class TimingViewModelTests
         }
 
         Assert.Equal(5, model.DeviationSampleCount);
-        Assert.Equal("last 5 s", model.DeviationWindow);
+        Assert.Equal("σ from the last 5 s.", model.DeviationWindow);
+    }
+
+    /// <summary>
+    /// The caption is a whole sentence, and it never reads "σ from the no samples yet." (#441).
+    /// </summary>
+    /// <remarks>
+    /// The defect was a fragment wrapped by the view, so asserting the finished string here is what
+    /// makes it impossible: there is no composition left for a caller to get wrong, and a future
+    /// change back to a fragment fails this rather than looking fine in both files.
+    /// </remarks>
+    [Fact]
+    public void TheDeviationCaptionIsAWholeSentence()
+    {
+        FakeTimeProvider clock = new(Captured);
+        ReceiverStateStore store = new(clock);
+        TimingViewModel model = new(store) { Connection = ConnectionStatus.Connected };
+
+        for (int count = 0; count <= 5; count++)
+        {
+            if (count > 0)
+            {
+                store.UpdateFast("LOCK", 3, 0, count, 1.0, 6);
+            }
+
+            string caption = model.DeviationWindow;
+
+            Assert.EndsWith(".", caption, StringComparison.Ordinal);
+            Assert.DoesNotContain("the no samples", caption, StringComparison.Ordinal);
+
+            // The caption and the value it captions switch together. Below the threshold the
+            // readout is an em dash, and a caption naming a window would describe a σ that is not
+            // on screen; at or above it there is a figure, and the caption says what it is over.
+            if (model.TimeIntervalDeviation is null)
+            {
+                Assert.Equal("Not enough samples yet.", caption);
+            }
+            else
+            {
+                Assert.Equal($"σ from the last {count} s.", caption);
+            }
+        }
     }
 
     [Fact]
