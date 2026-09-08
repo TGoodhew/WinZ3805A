@@ -13,10 +13,12 @@ namespace WinZ3805A.Tests.Nmea;
 /// the full parse, and the never-throw rule.
 /// </summary>
 /// <remarks>
-/// The simulator stands in for a capture here because no real talker has been captured — #309,
-/// the BG7TBL, was deferred when its bench unit's port turned out to carry no NMEA. When one is,
-/// its capture is what these expectations get compared against, and whatever disagrees is folded
-/// back into both.
+/// The simulator is still deliberately what these assertions run against, now that a real talker
+/// has been captured (#420) rather than in spite of it: they pin the driver against input whose
+/// every field is known, which a capture cannot do. Captured bytes are held to different
+/// assertions in <see cref="NmeaCaptureReplayTests"/>, because what can be asserted about output a
+/// receiver chose to send is narrower — that file's remarks say why. Nothing here was contradicted
+/// when a VK-162 was finally put through it on 7 Sep 2026.
 /// </remarks>
 public sealed class NmeaDriverTests
 {

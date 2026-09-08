@@ -414,6 +414,60 @@ stated as unproven. A trace would have named the caller in five minutes.
 
 ---
 
+## 15. A talker on the bench (#420)
+
+**Why.** The NMEA family was written against `tools/NmeaSimulator` and shipped having never heard a
+receiver (#310). A simulator only emits what its author thought of, so until 7 Sep 2026 the whole
+family rested on one person's idea of what a talker says. Three VK-162 captures now sit in
+`tests/WinZ3805A.Tests/Nmea/Captures/` and are replayed in CI for ever — but a capture cannot be
+re-taken without the hardware in front of you, which is why this is a procedure rather than a note.
+
+Run the self-test first; it needs no port and checks the half that can be checked:
+
+```
+pwsh build\Capture-Talker.ps1                 # no -Port: lists the ports present, and stops
+pwsh build\Capture-Talker.ps1 -SelfTest
+pwsh build\Capture-Talker.ps1 -Port COM4 -Label <what-this-sitting-is> -DurationMinutes 30
+```
+
+**Exit the application first.** It holds the port, and closing its window only hides it.
+
+**A USB talker's port number is not stable.** It is enumerated per socket on a bridge chip with no
+unique serial, so the same receiver in a different socket can appear as a different `COM`. List the
+ports before and after plugging it in rather than assuming.
+
+**Fill in the note's "What was happening" on the day.** `NmeaCaptureReplayTests` fails a capture
+whose note still carries the placeholder, so a capture committed without one breaks the build —
+deliberately.
+
+### The states, and how much they actually cost
+
+| State | How to reach it | Cost on 7 Sep 2026 |
+|---|---|---|
+| Steady state | Leave it somewhere with a clear view of the sky and walk away. | Free. 30 min gave 1,800 cycles with not one dropped. |
+| Power-on, acquisition | Unplug, wait several minutes, plug in. Start the capture on the port *appearing*, or the boot banner is missed. | Easy, but yielded **one** no-fix cycle: a hot start with signal reacquires in a second. |
+| Fix quality ladder | Nothing. It walks `0` → `1` → `2` on its own as SBAS corrections arrive. | Free, and it is the whole `ModeDetail` ladder. |
+| Weak signal | Any partial obstruction. | Easy, and more useful than it sounds — see below. |
+| **Fix lost while powered** | **Needs a real enclosure. See the warning.** | **Not achieved.** |
+
+> **Do not repeat the improvised shielding.** Two attempts failed and the measurements are worth
+> having: an inverted metal cover gave about **5 dB** of attenuation (mean C/N 31.1 against 36.6 in
+> the open) and a **microwave oven with the door shut** about **10 dB** (27.4). The oven still held
+> a fix on 7 to 11 satellites in every one of 387 cycles. Adding a saucepan inside the oven changed
+> nothing measurable. A GPS receiver is far more sensitive than household metalwork, so budget for a
+> proper screened enclosure — or accept that this state stays uncaptured.
+>
+> The failure was still worth keeping: at 17% of satellites in view but untracked, against 6.6% in
+> the open, that capture is the corpus's best source of weak-signal input and of satellites crossing
+> the tracked boundary. **A shielding attempt that fails is a weak-signal capture that succeeded**,
+> so label and keep it rather than deleting it.
+
+**What a GPS-only puck cannot give you at all**, however long you sit with it: a second
+constellation (#424) and `GNS` (#429). Those need a GLONASS- or Galileo-capable module, and no
+amount of patience with this one substitutes.
+
+---
+
 ## Before a release
 
 Sections 1–4, 8, 9, 11 and 13 in full, then **12 on the published artifact** — which means the release
@@ -422,7 +476,9 @@ worth catching after it is published rather than not at all, and the fix is anot
 only if the hardware is being moved, with sections 7 and 10 alongside it since they need the same
 antenna; section 6 if survey behaviour has been touched; **section 14 if anything on the polling,
 rendering or shell-badge path has changed** — it costs an hour of waiting and perhaps five minutes of
-attention, and both leaks that have shipped would have been caught by it.
+attention, and both leaks that have shipped would have been caught by it. Section 15 is not a release
+gate at all: run it when a talker is to hand, because the captures it produces are permanent and the
+opportunity is not.
 
 Open a QA-run issue for the release and record each section's result there — the issues this
 checklist cites track defects rather than runs, so there is no standing place otherwise — and if

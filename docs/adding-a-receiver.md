@@ -2,8 +2,8 @@
 
 WinZ3805A ships speaking to two families of hardware — the HP/Symmetricom
 SmartClock GPS-disciplined oscillators it was written for, and any NMEA 0183
-GNSS talker (proven against the simulator under `tools/`; no real talker has
-been captured yet, #309 having been deferred) — because every piece of
+GNSS talker (proven against the simulator under `tools/` and, since 7 Sep
+2026, against a captured VK-162, #420) — because every piece of
 device-specific knowledge sits behind one
 interface, `IReceiverDriver`, so that supporting another receiver means
 **writing a driver, not modifying the application**. This document is the
@@ -367,14 +367,20 @@ Save the bytes verbatim. Do not tidy whitespace: column positions carry
 meaning, and trailing spaces are often significant. The fixtures directory is
 marked `-text` in `.gitattributes` so line endings survive.
 
-**A talker is captured by listening**, not by asking: open the port at the
-rate you believe in and save a minute of what arrives. Keep the file beside
-your driver's tests rather than under `Fixtures/` — `FixtureCorpusTests`
-asserts every `*.txt` there is a status screen. With no hardware,
+**A talker is captured by listening**, not by asking, which is why
+`Capture-Fixtures.ps1` cannot do it: that script sends a mnemonic and strips
+the echoed command, and a talker answers nothing. Use
+`build/Capture-Talker.ps1`, which writes bytes rather than lines and a
+provenance note beside them. Keep the file beside your driver's tests rather
+than under `Fixtures/` — `FixtureCorpusTests` asserts every `*.txt` there is a
+status screen. With no hardware,
 `dotnet run --project tools\NmeaSimulator -- --stdout` gives a capture in the
-shape a real talker's will take; the tutorial's tests are written against it,
-and no real talker has been captured yet — #309 was deferred when the bench
-unit turned out to put no NMEA on the port the application can reach.
+shape a real talker's will take.
+
+**Do both.** The VK-162 captured on 7 Sep 2026 (#420) differed from the
+simulator in five ways that mattered, and the one that mattered most was a
+sentence the simulator sends every cycle and the receiver never sends at all —
+see the end of the tutorial. A simulator only emits what its author thought of.
 
 ### Step 2 — decide what `ReceiverStatus` can hold
 
