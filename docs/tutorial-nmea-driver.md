@@ -341,10 +341,21 @@ been exercised only by input written to exercise it:
 
 **And what the receiver refused to show is the argument for keeping the simulator.** None of
 [`NmeaOutageAndBoundaryTests`](../tests/WinZ3805A.Tests/Nmea/NmeaOutageAndBoundaryTests.cs)'s three
-cases occurred: no enclosure to hand would stop an 11-satellite fix, so there was **no outage**; the
-puck is GPS-only, so **no second constellation**; and all three captures fall between 00:08 and 01:07
-UTC on one date, so the **midnight crossing missed by eight minutes**. A generator produces on demand
-what an afternoon with hardware may simply decline to show. Keep both.
+cases occurred: no enclosure to hand would stop an 11-satellite fix, so there was **no outage**; only
+one constellation was ever switched on, so **no second constellation**; and all three captures fall
+between 00:08 and 01:07 UTC on one date, so the **midnight crossing missed by eight minutes**. A
+generator produces on demand what an afternoon with hardware may simply decline to show. Keep both.
+
+> *Amended 8 Sep 2026.* The second of those read "the puck is GPS-only", and it was not — the
+> receiver had simply never been asked. Its ROM carries GLONASS, and `UBX-CFG-GNSS` turns it on;
+> `vk162-glonass-only` is the result. **Two of the three refusals above were a configuration rather
+> than a limitation**, the other being `GNS`, which `UBX-CFG-MSG` produces just as easily.
+>
+> That strengthens the paragraph's conclusion rather than weakening it. What the receiver still
+> genuinely refused was the **outage** — the one case no configuration reaches, and the one the
+> simulator supplies on demand. And a second constellation *concurrently* is still beyond this
+> module: GPS and GLONASS together are NAKed. **Ask the hardware what it can do before writing down
+> what it cannot.**
 
 **The earlier attempt is worth recording too.**
 [#309](https://github.com/TGoodhew/WinZ3805A/issues/309) set out to capture a BG7TBL GPSDO and found
