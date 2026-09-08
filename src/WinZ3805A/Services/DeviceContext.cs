@@ -30,7 +30,8 @@ public sealed class DeviceContext : IAsyncDisposable
         DeviceSessionService session,
         ReceiverStateStore store,
         PollingService poller,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        IAdvancedPreferenceStore? advanced = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(key);
         ArgumentNullException.ThrowIfNull(session);
@@ -44,6 +45,13 @@ public sealed class DeviceContext : IAsyncDisposable
         Poller = poller;
         TimeProvider = timeProvider;
         PowerUp = new PowerUpGuard(timeProvider);
+        _advanced = advanced;
+        Lamp = new ActivityLamp(session);
+
+        // Restoring the lamp has to happen while there is still a wire (#440), and the disconnect
+        // path is the only place that knows it is about to go. A status subscriber is too late: by
+        // the time Disconnected is raised the port is closed.
+        Session.BeforeTearDown = Lamp.RestoreAsync;
 
         // The guard is fed here rather than by the page that reads it, because §10.8's figure is
         // accumulated over the whole session and a page that only started watching when the user
@@ -94,6 +102,12 @@ public sealed class DeviceContext : IAsyncDisposable
     /// <summary>§10.11's record of everything this device has been sent, always recording.</summary>
     public CommandTranscript Transcript { get; } = new();
 
+    /// <summary>The front-panel Active lamp, lit while this application holds the link (#440).</summary>
+    public ActivityLamp Lamp { get; }
+
+    /// <summary>Where the opt-in switches live, or null in a test that has none.</summary>
+    private readonly IAdvancedPreferenceStore? _advanced;
+
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
@@ -121,7 +135,44 @@ public sealed class DeviceContext : IAsyncDisposable
         if (e.Status != ConnectionStatus.Connected)
         {
             PowerUp.ObservationBroken();
+            return;
         }
+
+        LightTheLampIfAsked();
+    }
+
+    /// <summary>
+    /// Lights the front-panel lamp on connect, when the user has asked for it (#440).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Fire and forget, deliberately. The write costs about a second — the receiver services the
+    /// <c>:LED:</c> node on its own 1 Hz tick — and nothing about the connection depends on the
+    /// answer, so awaiting it would delay the first readings for a lamp.
+    /// </para>
+    /// <para>
+    /// The preference is read here rather than held, so turning the switch off and reconnecting
+    /// does what it says without anything having to be notified.
+    /// </para>
+    /// </remarks>
+    private void LightTheLampIfAsked()
+    {
+        if (_advanced?.Load().IsActivityLampEnabled != true)
+        {
+            return;
+        }
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Lamp.ArmAsync().ConfigureAwait(false);
+            }
+            catch (Exception exception) when (exception is not OutOfMemoryException and not StackOverflowException)
+            {
+                // A lamp that would not light is not a connection that failed.
+            }
+        });
     }
 }
 

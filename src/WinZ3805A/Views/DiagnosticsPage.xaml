@@ -472,6 +472,52 @@
                     </StackPanel>
                 </Border>
 
+                <!-- ============================ Front panel ================================ -->
+                <!--
+                    #440. The Active lamp is the one indicator under software control. This is the
+                    manual half: the escape hatch for a lamp left lit by an application that died
+                    mid-session, and the only way to exercise the command without the Settings
+                    switch.
+
+                    Tier S, so no confirmation dialog and no success toast: §9.11 says a safe setter
+                    gets no UI at all, and the switch's own position is the feedback. Note it takes
+                    about a second to answer, the receiver servicing this node on its 1 Hz tick.
+                -->
+                <Border Style="{ThemeResource WzCardStyle}">
+                    <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                        <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Front panel" />
+
+                        <Grid ColumnSpacing="{ThemeResource WzSpaceXl}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" MinWidth="140" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Grid.Column="0"
+                                       VerticalAlignment="Center"
+                                       Style="{ThemeResource WzBodyTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                       Text="Active lamp" />
+                            <ToggleSwitch x:Name="ActiveLampSwitch"
+                                          Grid.Column="1"
+                                          MinHeight="32"
+                                          MinWidth="32"
+                                          OnContent="On"
+                                          OffContent="Off"
+                                          AutomationProperties.Name="Active lamp"
+                                          ToolTipService.ToolTip="Turns the receiver's front-panel Active lamp on or off. Takes about a second to answer."
+                                          Toggled="OnActiveLampToggled" />
+                        </Grid>
+
+                        <TextBlock x:Name="ActiveLampCaption"
+                                   Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextTertiaryBrush}"
+                                   TextWrapping="Wrap"
+                                   HorizontalAlignment="Left"
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}" />
+                    </StackPanel>
+                </Border>
+
                 <!-- ============================= GPS receiver ============================== -->
                 <!--
                     #443. :DIAG:IDEN:GPS? is documented in the Z3801A guide's Table 4-2 and answers

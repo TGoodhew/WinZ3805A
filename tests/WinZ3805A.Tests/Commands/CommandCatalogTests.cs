@@ -133,13 +133,19 @@ public class CommandCatalogTests
     }
 
     /// <summary>
-    /// The two recovery actions §8.2 singles out. They are actions rather than queries and are
-    /// still Safe, because they move the unit toward lock and cannot damage anything — the one
-    /// place in the model where "not a query" does not imply "needs confirming".
+    /// The Safe non-queries: §8.2's two recovery actions, and the front-panel lamp.
     /// </summary>
+    /// <remarks>
+    /// The recovery actions are Safe because they move the unit toward lock and cannot damage
+    /// anything. <c>:LED:ACTive</c> is Safe for a different reason and was added later (#440): it
+    /// changes no receiver behaviour at all — no timing, no discipline, nothing that outlives the
+    /// lamp — so §8.3's confirmation would be asking permission to change nothing. Between them
+    /// they are the whole of the model where "not a query" does not imply "needs confirming".
+    /// </remarks>
     [Theory]
     [InlineData(":SYNC:HOLD:REC:INIT")]
     [InlineData(":SYNC:HOLD:REC:LIM:IGN")]
+    [InlineData(":LED:ACTive")]
     public void TheRecoveryActionsAreSafeDespiteNotBeingQueries(string mnemonic)
     {
         ScpiCommand? command = CommandCatalog.Find(mnemonic);

@@ -117,7 +117,7 @@ public sealed class HelpDocumentTests
         HelpTable table = Assert.Single(Tables(), t => HelpDocument.PlainText(t.Header[0]) == "Setting");
 
         Assert.Equal(3, table.Header.Count);
-        Assert.Equal(6, table.Rows.Count);
+        Assert.Equal(7, table.Rows.Count);
         Assert.All(table.Rows, row => Assert.Contains(row[0], inline => inline is HelpInlineImage));
     }
 

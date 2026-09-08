@@ -509,7 +509,8 @@ All queries plus non-disruptive actions.
 :PTIM:TIME:STR?
 :PTIM:TZON?
 :PTIM:LEAP:ACC?      :PTIM:LEAP:DATE?        :PTIM:LEAP:DUR?    :PTIM:LEAP:STAT?
-:LED:ALAR?           :LED:GPSL?              :LED:HOLD?
+:LED:ALAR?           :LED:GPSL?              :LED:HOLD?         :LED:ACT?
+:LED:ACTive <ON|OFF>
 :DIAG:ROSC:EFC:REL?  :DIAG:LIF:COUN?         :DIAG:QUER:RESP?
 :DIAG:LOG:COUN?      :DIAG:LOG:READ?         :DIAG:LOG:READ? <n>
 :DIAG:LOG:READ:ALL?  :DIAG:TEST:RES?         :DIAG:IDEN:GPS?
@@ -528,6 +529,8 @@ All queries plus non-disruptive actions.
 ```
 
 `:SYNC:HOLD:REC:INIT` and `:SYNC:HOLD:REC:LIM:IGN` are classed Safe: they move the unit *toward* lock, which is the desired state, and cannot damage anything.
+
+**`:LED:ACTive` is the third Safe non-query, and the only Safe command that takes a value** (added 7 Sep 2026, #440). It drives the front-panel Active lamp, the one indicator under software control, and it is documented — `z3801.pdf` Table 4-2, *"Sets or queries Active LED"* — so §8.4's permanent block on undocumented set forms does not reach it. It is Safe because it changes no receiver behaviour: no timing, no discipline, nothing that outlives the lamp, so a §8.3 confirmation would be asking permission to change nothing. **§9.11's other half follows from the same ruling** — a Safe setter gets no success toast, so the §10.9 control is a toggle whose own position is the feedback. Both spellings are confirmed on the bench: `1`/`0` and `ON`/`OFF`.
 
 ### 8.3 Tier C — Confirm (modal confirmation with explicit consequence text)
 
@@ -2606,6 +2609,12 @@ warns. The card's own footnote, which reads `:DIAG:TEST:RES?` separately, showed
 **Corrected 30 Aug 2026:** #316 recorded that no such query existed in the catalog and this requirement was nearly struck on that basis. `:DIAG:LIF:COUN?` is in it, as *Power-on hours — reads the receiver's accumulated running time*, and the manual lists `:DIAGnostic:LIFetime:COUNt?`. What was wrong was this card's label: the receiver reports **hours**, not a count. The wireframe above is amended to match.
 
 Worth the card on an instrument whose oscillator ages with running time — §10.4's EFC trend shows the drift, and this is the figure that says how much life produced it.
+
+**A *Front panel* card carries a toggle for the Active lamp** (added 7 Sep 2026, #440). It is the manual half of the lamp feature: the escape hatch for a lamp left lit by an application that closed unexpectedly, and the only way to exercise `:LED:ACTive` without the Settings switch. Tier S, so no confirmation and — per §9.11 — no success bar; the toggle's own position is the feedback, and a write that fails puts it back. It answers in about a second, which the card's caption says, because a control that appears to hang is worse than a slow one that admits it.
+
+**The lamp is lit per session, and that is a measurement rather than a preference.** #440 asked for a link-*activity* indicator driven around each poll sweep. A `:LED:` write costs **999 ms** — measured on the bench Z3805A over ten runs, with the delay entirely before the first byte, because the receiver services the node on its own 1 Hz tick. It is not the wire and not the lamp: `*CLS` is also a write and costs 15 ms, and setting the lamp to the value it already has costs the same 999 ms. A per-sweep flash of read + on + restore is therefore 1,941 ms against a 1,000 ms cadence — **194 % of the whole poll budget**, or the wire time of sixty readings. Per session costs two writes, about two seconds, once. What it buys is weaker and honest: not *the application is talking* but **the application is connected to *this* unit**, which in front of a rack is the question being asked. Off by default, in Settings → Advanced, because it is the only thing the application changes on the receiver unasked.
+
+**The receiver owns the lamp.** The baseline is read before the lamp is lit and put back verbatim on disconnect, so a user who left it on gets it back on. Nothing is retained between sessions or across a reconnect — a remembered value is wrong the moment a missed reply or a person changes it. **An unexpected disconnect leaves the lamp lit and that is accepted, not overlooked:** there is no wire left to restore over, and because nothing is retained the next connect adopts the lit lamp as the value to restore. The application cannot tell *the user wanted it on* from *we left it on*, which is exactly why the manual toggle above exists.
 
 **A third card, *GPS receiver*, reads `:DIAG:IDEN:GPS?`** (added 7 Sep 2026, #443). A SmartClock is a disciplining chassis wrapped around somebody else's GPS engine, and the two revise on separate schedules: the footer's revision is the instrument's, and this is the module's. The command is **documented** — Z3801A User's Guide, Table 4-2, `:DIAGnostic:IDENtification:GPSystem?`, "returns a sequence of quoted strings", described as "the model number, serial number, and revision of the internal GPS receiver" — so it is an ordinary tier A query in §8.2 and not one of §8.5's undocumented six. Read with *Refresh* beside the lifetime hours, never polled: the module inside cannot change while the instrument is powered.
 

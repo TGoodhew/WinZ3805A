@@ -198,6 +198,15 @@ public static class CommandCatalog
             Query(":LED:ALAR?", "Alarm lamp", "Reads the state of the alarm indicator.", ResponseFormat.Keyword),
             Query(":LED:GPSL?", "GPS lock lamp", "Reads the state of the GPS lock indicator.", ResponseFormat.Keyword),
             Query(":LED:HOLD?", "Holdover lamp", "Reads the state of the holdover indicator.", ResponseFormat.Keyword),
+            Query(":LED:ACT?", "Active lamp", "Reads the state of the front-panel Active indicator.", ResponseFormat.Keyword),
+
+            // The one lamp that is under software control, and the third Safe non-query in the
+            // catalog (#440). It is documented — z3801.pdf Table 4-2, "Sets or queries Active LED" —
+            // so §8.4's permanent block on undocumented set forms does not reach it, and it is Safe
+            // because a front-panel indicator changes no receiver behaviour: no timing, no
+            // discipline, nothing that survives as a setting anyone else depends on.
+            Setting(":LED:ACTive", "Set active lamp", "Turns the front-panel Active indicator on or off.",
+                new ParameterSpec("State", ParameterKind.Keyword, Choices: ["ON", "OFF"])),
 
             // ---- Diagnostics -----------------------------------------------------------------
             Query(":DIAG:ROSC:EFC:REL?", "Oscillator control voltage", "Reads the oscillator's electronic frequency control as a relative value.", ResponseFormat.Decimal),
@@ -636,6 +645,24 @@ public static class CommandCatalog
     private static ScpiCommand Action(string mnemonic, string displayName, string description) =>
         new(mnemonic, ScpiCommand.ToShortForm(mnemonic), SafetyTier.Safe, IsQuery: false,
             displayName, description, [], ResponseFormat.None);
+
+    /// <summary>
+    /// A tier S command that takes a value — <see cref="Action"/> with parameters (#440).
+    /// </summary>
+    /// <remarks>
+    /// <b>Deliberately rare.</b> Almost every setter in this catalog is tier C, because almost every
+    /// setter changes something a user would want to be asked about first. This exists for the one
+    /// that does not: a front-panel lamp alters no receiver behaviour, so §8.3's ceremony would be
+    /// asking permission to change nothing. §9.11 is the other half of that ruling — a tier S setter
+    /// gets no success toast either, and <c>CommandCatalogTests</c> enforces it.
+    /// </remarks>
+    private static ScpiCommand Setting(
+        string mnemonic,
+        string displayName,
+        string description,
+        params ParameterSpec[] parameters) =>
+        new(mnemonic, ScpiCommand.ToShortForm(mnemonic), SafetyTier.Safe, IsQuery: false,
+            displayName, description, parameters, ResponseFormat.None);
 
     private static ScpiCommand OptInQuery(string mnemonic, string displayName, string description) =>
         new(mnemonic, ScpiCommand.ToShortForm(mnemonic), SafetyTier.Safe, IsQuery: true,

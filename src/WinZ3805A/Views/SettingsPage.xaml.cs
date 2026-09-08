@@ -72,6 +72,7 @@ public sealed partial class SettingsPage : Page
         AdvancedPreferences stored = _preferences?.Load() ?? AdvancedPreferences.Default;
         ConsoleSwitch.IsOn = stored.IsConsoleEnabled;
         ExperimentalSwitch.IsOn = stored.AreExperimentalQueriesEnabled;
+        ActivityLampSwitch.IsOn = stored.IsActivityLampEnabled;
         LockNotificationsSwitch.IsOn = stored.AreLockNotificationsEnabled;
         KeepRunningSwitch.IsOn = stored.KeepRunningWhenClosed;
         StartMinimisedSwitch.IsOn = stored.StartMinimised;
@@ -161,6 +162,42 @@ public sealed partial class SettingsPage : Page
 
     private void OnExperimentalToggled(object sender, RoutedEventArgs e) => Save();
 
+    /// <summary>
+    /// Applies the lamp switch to the receiver that is connected now (#440).
+    /// </summary>
+    /// <remarks>
+    /// <b>Immediately, rather than at the next connect.</b> A switch whose effect appears the next
+    /// time you plug something in is a switch a user cannot tell they have set — and this one's
+    /// whole purpose is a light they can look at. Turning it off restores what the lamp read before
+    /// the application borrowed it, which is the same thing a disconnect does.
+    /// </remarks>
+    private async void OnActivityLampToggled(object sender, RoutedEventArgs e)
+    {
+        Save();
+
+        if (!_ready || App.Services?.GetKeyedService<DeviceContext>(DeviceKeys.Primary) is not DeviceContext device)
+        {
+            return;
+        }
+
+        try
+        {
+            if (ActivityLampSwitch.IsOn)
+            {
+                await device.Lamp.ArmAsync();
+            }
+            else
+            {
+                await device.Lamp.RestoreAsync();
+            }
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException and not StackOverflowException)
+        {
+            // A lamp that would not change is not a setting that failed to save. The preference is
+            // already written above, and the Diagnostics page can set the lamp by hand.
+        }
+    }
+
     private void OnLockNotificationsToggled(object sender, RoutedEventArgs e) => Save();
 
     private void OnKeepRunningToggled(object sender, RoutedEventArgs e) => Save();
@@ -205,6 +242,7 @@ public sealed partial class SettingsPage : Page
         {
             IsConsoleEnabled = ConsoleSwitch.IsOn,
             AreExperimentalQueriesEnabled = ExperimentalSwitch.IsOn,
+            IsActivityLampEnabled = ActivityLampSwitch.IsOn,
             AreLockNotificationsEnabled = LockNotificationsSwitch.IsOn,
             KeepRunningWhenClosed = KeepRunningSwitch.IsOn,
             StartMinimised = StartMinimisedSwitch.IsOn,
