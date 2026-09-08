@@ -407,6 +407,12 @@ changes**. This page is for finding out why a summary bit is set; most people ne
   different.
 - **Lifetime** — **power-on hours**, how long the receiver has run in total. An oven-controlled
   oscillator ages with running time, so this is the figure behind the drift the Timing page reports.
+- **GPS receiver** — what the GPS receiver *inside* the instrument calls itself. A Z3805A is a
+  disciplining chassis built around a separate GPS module with its own firmware, so the revision
+  here and the one in the window footer are two different things and need not agree. The bench
+  Z3805A reports a Furuno GT-80 running software version 005. Each line is quoted exactly as the
+  receiver prints it, including the `#` marks; most receivers leave several of these fields empty
+  and those are simply not shown.
 - **Error queue** — **Read errors** reads the receiver's error queue. Reading it empties it: each
   read removes the entry it returns, so what is shown is what was read.
 - **Undocumented queries** — present only when *Undocumented read-only queries* is on in Settings.

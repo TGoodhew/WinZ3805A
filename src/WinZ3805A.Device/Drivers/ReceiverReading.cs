@@ -1,4 +1,4 @@
-namespace WinZ3805A.Device.Drivers;
+﻿namespace WinZ3805A.Device.Drivers;
 
 /// <summary>
 /// A reading the interface shows, which a receiver family may have no way of ever supplying (#435).
@@ -77,6 +77,17 @@ public enum ReceiverReading
 
     /// <summary>How long the receiver has been powered in total (§10.9).</summary>
     PowerOnHours,
+
+    /// <summary>
+    /// The internal GPS receiver's own model and firmware identity (§10.9).
+    /// </summary>
+    /// <remarks>
+    /// Distinct from <see cref="DeviceIdentity"/>, which is the instrument's. A SmartClock is a
+    /// disciplining chassis wrapped around somebody else's GPS engine, and the two revise on
+    /// separate schedules — the bench Z3805A reports firmware <c>1.01.03-A</c> while the engine
+    /// inside it reports a Furuno GT-80 running software version 005.
+    /// </remarks>
+    GpsEngineIdentity,
 
     /// <summary>The health monitor and its per-subsystem items (§10.4, §10.9).</summary>
     HealthMonitor,

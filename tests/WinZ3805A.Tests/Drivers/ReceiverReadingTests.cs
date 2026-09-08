@@ -2,6 +2,7 @@ using Microsoft.Extensions.Time.Testing;
 
 using WinZ3805A.Device.Drivers;
 using WinZ3805A.Device.Drivers.Nmea;
+using WinZ3805A.Device.Drivers.Uccm;
 
 namespace WinZ3805A.Tests.Drivers;
 
@@ -69,8 +70,40 @@ public sealed class ReceiverReadingTests
     [InlineData(ReceiverReading.ErrorQueue)]
     [InlineData(ReceiverReading.StatusScreen)]
     [InlineData(ReceiverReading.ElevationMask)]
+    [InlineData(ReceiverReading.GpsEngineIdentity)]
     public void ATalkerRefusesTheDisciplinedOscillatorReadings(ReceiverReading reading) =>
         Assert.False(((IReceiverDriver)new NmeaDriver(new FakeTimeProvider(Whenever))).Reports(reading));
+
+    /// <summary>
+    /// A UCCM refuses the GPS engine identity, and claims everything else (#443).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Both halves are the assertion. <c>:DIAG:IDEN:GPS?</c> is a SmartClock node absent from
+    /// <c>UccmCommands</c>, so the driver knows without hardware that it cannot answer — and a
+    /// driver that cannot ask must not let the card imply the value is merely unread.
+    /// </para>
+    /// <para>
+    /// The rest staying <c>true</c> is deliberate and is pinned here so nobody "completes" the
+    /// switch on the way past. This driver has never met a receiver; a full set of answers would be
+    /// twenty guesses presented as knowledge, which is the one thing #416 asks it not to do.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void AUccmRefusesOnlyTheReadingItKnowsItCannotSupply()
+    {
+        IReceiverDriver driver = new UccmDriver(new FakeTimeProvider(Whenever));
+
+        Assert.False(driver.Reports(ReceiverReading.GpsEngineIdentity));
+
+        foreach (ReceiverReading reading in Enum.GetValues<ReceiverReading>())
+        {
+            if (reading != ReceiverReading.GpsEngineIdentity)
+            {
+                Assert.True(driver.Reports(reading), $"{reading} should be left unclaimed either way.");
+            }
+        }
+    }
 
     /// <summary>
     /// But not the fix itself, which is the one thing NMEA is actually for.
@@ -95,7 +128,8 @@ public sealed class ReceiverReadingTests
     public void EveryDriverAnswersEveryReadingWithoutThrowing()
     {
         FakeTimeProvider clock = new(Whenever);
-        IReceiverDriver[] drivers = [new NmeaDriver(clock), new SmartClockDriver(clock), new SilentDriver()];
+        IReceiverDriver[] drivers =
+            [new NmeaDriver(clock), new SmartClockDriver(clock), new UccmDriver(clock), new SilentDriver()];
 
         foreach (IReceiverDriver driver in drivers)
         {

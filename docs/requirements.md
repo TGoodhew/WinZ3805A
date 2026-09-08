@@ -512,7 +512,7 @@ All queries plus non-disruptive actions.
 :LED:ALAR?           :LED:GPSL?              :LED:HOLD?
 :DIAG:ROSC:EFC:REL?  :DIAG:LIF:COUN?         :DIAG:QUER:RESP?
 :DIAG:LOG:COUN?      :DIAG:LOG:READ?         :DIAG:LOG:READ? <n>
-:DIAG:LOG:READ:ALL?  :DIAG:TEST:RES?
+:DIAG:LOG:READ:ALL?  :DIAG:TEST:RES?         :DIAG:IDEN:GPS?
 :STAT:OPER:COND?     :STAT:OPER:EVEN?        :STAT:OPER:ENAB?
 :STAT:OPER:NTR?      :STAT:OPER:PTR?
 :STAT:OPER:HARD:COND?    :STAT:OPER:HARD:EVEN?    :STAT:OPER:HARD:ENAB?
@@ -2606,6 +2606,19 @@ warns. The card's own footnote, which reads `:DIAG:TEST:RES?` separately, showed
 **Corrected 30 Aug 2026:** #316 recorded that no such query existed in the catalog and this requirement was nearly struck on that basis. `:DIAG:LIF:COUN?` is in it, as *Power-on hours — reads the receiver's accumulated running time*, and the manual lists `:DIAGnostic:LIFetime:COUNt?`. What was wrong was this card's label: the receiver reports **hours**, not a count. The wireframe above is amended to match.
 
 Worth the card on an instrument whose oscillator ages with running time — §10.4's EFC trend shows the drift, and this is the figure that says how much life produced it.
+
+**A third card, *GPS receiver*, reads `:DIAG:IDEN:GPS?`** (added 7 Sep 2026, #443). A SmartClock is a disciplining chassis wrapped around somebody else's GPS engine, and the two revise on separate schedules: the footer's revision is the instrument's, and this is the module's. The command is **documented** — Z3801A User's Guide, Table 4-2, `:DIAGnostic:IDENtification:GPSystem?`, "returns a sequence of quoted strings", described as "the model number, serial number, and revision of the internal GPS receiver" — so it is an ordinary tier A query in §8.2 and not one of §8.5's undocumented six. Read with *Refresh* beside the lifetime hours, never polled: the module inside cannot change while the instrument is powered.
+
+**Confirmed against the receiver on 7 Sep 2026 (#443), and the manual is wrong about it.** Asked of the bench Z3805A, serial 3625A02931, firmware `1.01.03-A`, with the error queue verified empty immediately before and after so the answer is attributable to this command alone:
+
+```
+:DIAG:IDEN:GPS?
+"--","SFTW P/N # 4850266","SOFTWARE VER # 005","--","--","MODEL # FURUNO GT-80","--","--","--","--"
+```
+
+Ten fields, seven of them `--`. The three that are populated **label themselves**, and the one the documentation was most specific about — the serial number — is among the empty ones. So the card assigns **no meaning to position**: it shows the populated fields in receiver order, in the receiver's own words, one to a line. A firmware that fills two more slots gains two more lines; one that reorders them loses nothing. This is the same rule §8.5 applies to `:DIAG:ROSC:EFC:ABSolute?`'s `+436061` — where nothing documents what a value means, nothing may assume it.
+
+**Confirming it was the requirement, and a negative would have been a result.** §8.5 is the standing evidence that a sibling model's manual does not predict this firmware's parser: five of its six Z3801A keywords answer `E-113` here. This one answered, and the asking is what made it a fact rather than a hypothesis.
 
 **The diagnostic log is bounded and scrolled, not grown** (#345). The receiver holds up to 222 entries and the card was as tall as all of them, so reaching the cards below it meant scrolling past a screen and a half of log — and the filter box and the Export and Clear buttons scrolled away with it, which are exactly the controls someone reading the log wants. It is a 360 px scrolling region, about fourteen entries: the log alternates *GPS lock started* and *Holdover started* as the receiver cycles, so fourteen is roughly six events — enough to see a pattern without the card owning the page. `MaxHeight` and not `Height`, so a receiver with four entries shows four rather than four and a wall of empty card. §9.11's skeleton is sized to match, because a placeholder of a different size makes the card jump as the answer lands.
 

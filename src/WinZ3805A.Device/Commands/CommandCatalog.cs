@@ -202,6 +202,7 @@ public static class CommandCatalog
             // ---- Diagnostics -----------------------------------------------------------------
             Query(":DIAG:ROSC:EFC:REL?", "Oscillator control voltage", "Reads the oscillator's electronic frequency control as a relative value.", ResponseFormat.Decimal),
             Query(":DIAG:LIF:COUN?", "Power-on hours", "Reads the receiver's accumulated running time.", ResponseFormat.Integer),
+            Query(":DIAG:IDEN:GPS?", "GPS receiver identity", "Reads the model and firmware of the GPS receiver inside the instrument.", ResponseFormat.ValueList),
             Query(":DIAG:QUER:RESP?", "Query response test", "Reads a fixed response, used to prove the link is alive.", ResponseFormat.Text),
             Query(":DIAG:LOG:COUN?", "Log entry count", "Reads how many entries the diagnostic log holds.", ResponseFormat.Integer),
             Query(":DIAG:LOG:READ?", "Read log entry", "Reads one diagnostic log entry, or the whole log when no entry is given.", ResponseFormat.MultiLine,

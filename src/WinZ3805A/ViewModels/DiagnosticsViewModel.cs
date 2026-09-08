@@ -30,6 +30,7 @@ public sealed class DiagnosticsViewModel : INotifyPropertyChanged
     private readonly List<string> _errors = [];
     private int? _logCount;
     private double? _powerOnHours;
+    private IReadOnlyList<string> _gpsEngine = [];
     private IReadOnlyList<string> _parseWarnings = [];
     private bool _isReading;
     private string? _fault;
@@ -159,6 +160,35 @@ public sealed class DiagnosticsViewModel : INotifyPropertyChanged
     public string PowerOnHoursCaption => _session.Driver.Reports(ReceiverReading.PowerOnHours)
         ? "How long the receiver has run in total. An oven-controlled oscillator ages with running time, so this is the figure behind the drift the Overview page's EFC trend shows."
         : NotReported("how long it has been powered");
+
+    /// <summary>
+    /// What the GPS receiver inside the instrument calls itself, from <c>:DIAG:IDEN:GPS?</c> (#443).
+    /// </summary>
+    /// <remarks>
+    /// <b>Every line is the receiver's own wording.</b> The reply labels its own populated fields
+    /// — <c>MODEL # FURUNO GT-80</c>, <c>SOFTWARE VER # 005</c> — and
+    /// <see cref="GpsEngineIdentityParser"/> assigns no meaning to position, so this list is
+    /// whatever the receiver said, in the order it said it. Nothing is relabelled into friendlier
+    /// prose: the manual's account of these fields is already wrong about one of them, and
+    /// rewriting text we do not understand is how that error would be inherited.
+    /// </remarks>
+    public IReadOnlyList<string> GpsEngineFields => _gpsEngine;
+
+    /// <summary>The GPS engine identity as one line, or §11.1's em dash when there is none.</summary>
+    public string GpsEngineText =>
+        _gpsEngine.Count > 0 ? string.Join(" · ", _gpsEngine) : ReadoutFormatter.NoValue;
+
+    /// <summary>
+    /// The caption under the GPS receiver card.
+    /// </summary>
+    /// <remarks>
+    /// The same three-way distinction the rest of the page draws since #435 and d79e38f: a family
+    /// that cannot carry this reading is told so in words, and a family that can gets the em dash
+    /// that means "not read yet" rather than a sentence implying the hardware is silent.
+    /// </remarks>
+    public string GpsEngineCaption => _session.Driver.Reports(ReceiverReading.GpsEngineIdentity)
+        ? "The GPS receiver inside the instrument, which is a separate module with its own firmware. It revises independently of the instrument's own, so the two revisions in the footer and here need not agree."
+        : NotReported("what GPS receiver is inside it");
 
     /// <summary>
     /// Re-reads <c>:DIAG:TEST:RES?</c> after a test has run (#53).
@@ -333,6 +363,12 @@ public sealed class DiagnosticsViewModel : INotifyPropertyChanged
             _powerOnHours = double.TryParse(hours, NumberStyles.Float, CultureInfo.InvariantCulture, out double parsedHours)
                 ? parsedHours
                 : null;
+
+            // Read beside the hours and for the same reason: the GPS engine's model and firmware
+            // cannot change while the instrument is powered, so polling for them would spend wire
+            // time on a line that is fixed for the session (#443).
+            string? engine = await ReadTextAsync(":DIAG:IDEN:GPS?", cancellationToken).ConfigureAwait(true);
+            _gpsEngine = GpsEngineIdentityParser.Parse(engine);
 
             Transaction transaction = await ExecuteAsync(":DIAG:LOG:READ:ALL?", cancellationToken)
                 .ConfigureAwait(true);
