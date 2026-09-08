@@ -187,6 +187,7 @@ public sealed class NmeaDriver(TimeProvider timeProvider) : IReceiverDriver
         ReceiverReading.LeapSecond => false,
         ReceiverReading.TimeCodeFormat => false,
         ReceiverReading.PowerOnHours => false,
+        ReceiverReading.GpsEngineIdentity => false,
         ReceiverReading.HealthMonitor => false,
         ReceiverReading.StatusRegisters => false,
         ReceiverReading.DiagnosticLog => false,

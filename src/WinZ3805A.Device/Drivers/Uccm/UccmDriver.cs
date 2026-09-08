@@ -125,6 +125,29 @@ public sealed class UccmDriver(TimeProvider timeProvider) : IReceiverDriver
     public ScpiCommand? Find(string? mnemonic) => UccmCommands.Find(mnemonic);
 
     /// <summary>
+    /// The one reading this driver knows it cannot supply.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Not a general audit of what a UCCM reports.</b> The interface defaults every reading to
+    /// <c>true</c> and this driver has never met a receiver, so a full switch here would be twenty
+    /// hypotheses wearing the costume of a measurement — exactly what the class remarks forbid.
+    /// This is the narrow case where the answer is known without hardware: <c>:DIAG:IDEN:GPS?</c>
+    /// is a SmartClock node, it is not in <see cref="UccmCommands"/>, and a driver that cannot ask
+    /// the question may not let a card imply the value is merely unread (#304, #435).
+    /// </para>
+    /// <para>
+    /// If a UCCM turns out to answer some equivalent, this becomes a real entry with a capture
+    /// behind it. Until then <c>false</c> is the honest answer and the only one available.
+    /// </para>
+    /// </remarks>
+    public bool Reports(ReceiverReading reading) => reading switch
+    {
+        ReceiverReading.GpsEngineIdentity => false,
+        _ => true,
+    };
+
+    /// <summary>
     /// Nothing is excluded, because nothing here can do harm: the catalog holds queries only.
     /// </summary>
     /// <remarks>

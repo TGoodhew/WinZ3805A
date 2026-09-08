@@ -282,6 +282,7 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
             Capability.Offers(driver, ":DIAG:TEST:RES?") ||
             Capability.Offers(driver, ":DIAG:LOG:COUN?") ||
             Capability.Offers(driver, ":DIAG:LIF:COUN?") ||
+            Capability.Offers(driver, ":DIAG:IDEN:GPS?") ||
             Capability.Offers(driver, ":DIAG:LOG:READ:ALL?");
 
         if (driver is not null)
@@ -441,6 +442,15 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
 
         PowerOnHoursText.Text = model.PowerOnHoursText;
         PowerOnHoursCaption.Text = model.PowerOnHoursCaption;
+
+        // One line per populated field, or a single em dash when there are none. The dash is a
+        // separate TextBlock rather than a placeholder row so that an empty list renders §11.1's
+        // "not read" mark and never an empty card (#443).
+        GpsEngineRows.ItemsSource = model.GpsEngineFields;
+        GpsEngineRows.Visibility = model.GpsEngineFields.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        GpsEngineEmptyText.Visibility = model.GpsEngineFields.Count > 0 ? Visibility.Collapsed : Visibility.Visible;
+        GpsEngineEmptyText.Text = model.GpsEngineText;
+        GpsEngineCaption.Text = model.GpsEngineCaption;
 
         if (_selfTest is SelfTestViewModel selfTest)
         {

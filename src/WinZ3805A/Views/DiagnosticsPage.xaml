@@ -472,6 +472,46 @@
                     </StackPanel>
                 </Border>
 
+                <!-- ============================= GPS receiver ============================== -->
+                <!--
+                    #443. :DIAG:IDEN:GPS? is documented in the Z3801A guide's Table 4-2 and answers
+                    on the bench Z3805A with ten quoted strings, seven of them the receiver's own
+                    placeholder. Only the populated ones are shown, in receiver order and in the
+                    receiver's own words, because the manual's account of which field is which is
+                    wrong about the serial number: it promises one and the receiver leaves that
+                    slot empty.
+
+                    Read with Refresh, not polled: the module inside cannot change while the
+                    instrument is powered.
+                -->
+                <Border Style="{ThemeResource WzCardStyle}">
+                    <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                        <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="GPS receiver" />
+
+                        <TextBlock x:Name="GpsEngineEmptyText"
+                                   controls:CopyMenu.IsCopyable="True"
+                                   Style="{ThemeResource WzMonoTextStyle}" />
+
+                        <ItemsControl x:Name="GpsEngineRows">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="x:String">
+                                    <TextBlock controls:CopyMenu.IsCopyable="True"
+                                               Style="{ThemeResource WzMonoTextStyle}"
+                                               TextWrapping="Wrap"
+                                               Text="{x:Bind}" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <TextBlock x:Name="GpsEngineCaption"
+                                   Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextTertiaryBrush}"
+                                   TextWrapping="Wrap"
+                                   HorizontalAlignment="Left"
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}" />
+                    </StackPanel>
+                </Border>
+
                 <!-- ============================== Error queue =============================== -->
                 <Border Style="{ThemeResource WzCardStyle}">
                     <StackPanel Spacing="{ThemeResource WzSpaceSm}">
