@@ -11,6 +11,7 @@ using Microsoft.UI.Xaml.Navigation;
 
 using WinZ3805A.Controls;
 using WinZ3805A.Device.Commands;
+using WinZ3805A.Device.Drivers;
 using WinZ3805A.Device.Models;
 using WinZ3805A.Services;
 using WinZ3805A.ViewModels;
@@ -248,6 +249,30 @@ public sealed partial class OverviewPage : Page
 
         HealthSummaryText.Text = model.HealthSummary;
 
+        // #435: three cards whose every reading belongs to one capability, so each takes one
+        // sentence in place of its readings rather than a column of dashes that look unread.
+        ApplyReadingCapability(
+            ReceiverReading.Holdover,
+            "holdover",
+            HoldoverUnavailableText,
+            HoldoverReadings);
+
+        ApplyReadingCapability(
+            ReceiverReading.HealthMonitor,
+            "a health monitor",
+            HealthUnavailableText,
+            HealthSummaryText,
+            HealthItems);
+
+        ApplyReadingCapability(
+            ReceiverReading.OscillatorControl,
+            "an oscillator control voltage",
+            OscillatorUnavailableText,
+            OscillatorControl,
+            OscillatorRangeSelector,
+            EfcTrend,
+            TrendSummaryText);
+
         // THE EXPENSIVE LINE ON THIS PAGE (#399). Rebuilding the card meant a new SeverityPill per
         // item, an AutomationProperties.SetName on each, and a fresh ItemsSource that made the
         // ItemsControl regenerate every container - all of it several times a second, for a card
@@ -269,6 +294,14 @@ public sealed partial class OverviewPage : Page
 
         IdentityRawText.Text = model.UnparsedIdentity ?? string.Empty;
         IdentityRawText.Visibility = model.UnparsedIdentity is null ? Visibility.Collapsed : Visibility.Visible;
+
+        // A caption, not a replacement: this card is mixed, and the two rows that keep their values
+        // are the reason it stays worth showing (#435).
+        bool identity = Capability.Reports(_device?.Driver, ReceiverReading.DeviceIdentity);
+        IdentityUnavailableText.Text = identity
+            ? string.Empty
+            : Capability.NotReported(_device?.Driver, "a serial number or a firmware revision");
+        IdentityUnavailableText.Visibility = identity ? Visibility.Collapsed : Visibility.Visible;
 
         FooterText.Text = model.AgeDescription;
 
@@ -343,6 +376,50 @@ public sealed partial class OverviewPage : Page
     /// needs the severity in text as well as colour, and "TFOM 3" is that text — the range below it
     /// is the part a user could not have worked out.
     /// </remarks>
+    /// <summary>
+    /// Shows one sentence in place of a card's readings when the family can never supply them (#435).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Replaces rather than annotates.</b> A card of em dashes with an explanation beside it still
+    /// reads as a card waiting for values; §9.11 defines the dash as a field that has not arrived,
+    /// and leaving a row of them under a sentence saying they never will asks the user to believe
+    /// the sentence over the thing they can see.
+    /// </para>
+    /// <para>
+    /// <b>Not the same as <see cref="Capability.NotOffered"/>'s gating.</b> That one greys a control
+    /// and leaves it visible, because a disabled control still tells you what the page can do. A
+    /// reading is not a control: there is nothing to press and nothing to learn from the shape of
+    /// an empty grid.
+    /// </para>
+    /// <para>
+    /// The text is written on every render like the rest of this page. It changes only when the
+    /// driver does, but a comparison here would cost more to read than the assignment saves — the
+    /// #403 cases on this page are the boxed <c>Content</c> and attached-property sets, not
+    /// <c>TextBlock.Text</c>, which is strongly typed.
+    /// </para>
+    /// </remarks>
+    /// <param name="reading">The capability the whole card depends on.</param>
+    /// <param name="what">The reading as a noun phrase, for the sentence.</param>
+    /// <param name="explanation">The block that carries the sentence.</param>
+    /// <param name="readings">Everything that is shown instead when the family does supply it.</param>
+    private void ApplyReadingCapability(
+        ReceiverReading reading,
+        string what,
+        TextBlock explanation,
+        params FrameworkElement[] readings)
+    {
+        bool reported = Capability.Reports(_device?.Driver, reading);
+
+        explanation.Text = reported ? string.Empty : Capability.NotReported(_device?.Driver, what);
+        explanation.Visibility = reported ? Visibility.Collapsed : Visibility.Visible;
+
+        foreach (FrameworkElement element in readings)
+        {
+            element.Visibility = reported ? Visibility.Visible : Visibility.Collapsed;
+        }
+    }
+
     private static void RenderMerit(SeverityPill pill, TextBlock caption, string label, int? value, string detail)
     {
         pill.Text = value is int merit ? $"{label} {merit}" : $"{label} {ReadoutFormatter.NoValue}";
