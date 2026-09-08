@@ -150,6 +150,56 @@ function Get-TalkerSummary {
 
 <#
 .SYNOPSIS
+    Takes the complete lines out of the live buffer, leaving a partial sentence behind.
+
+.DESCRIPTION
+    The live progress summarises what has arrived since the last report, and a report falls where
+    the clock says rather than where a sentence ends. Clearing the whole buffer therefore threw
+    away the half sentence at the boundary AND counted it as rejected - once per report, for the
+    life of the capture. Measured against the first real sitting: the file held 14,868 good
+    sentences and 0 rejected read whole, and 14,688 good with 158 REJECTED read in 5,000-byte
+    chunks, none of which was a rejected sentence.
+
+    That is not a cosmetic error in a progress line. The rejected count is the one number here
+    that says a capture is worthless - it is how a wrong baud rate announces itself, because
+    framing errors produce sentences that look like sentences and fail their checksum. A count
+    that manufactures rejects from nothing is the diagnostic crying wolf.
+#>
+function Split-CompleteLines {
+    [CmdletBinding()]
+    param([System.Text.StringBuilder] $Buffer)
+
+    $text = $Buffer.ToString()
+    $cut = $text.LastIndexOf("`n")
+    if ($cut -lt 0) { return '' }
+
+    [void]$Buffer.Clear()
+    [void]$Buffer.Append($text.Substring($cut + 1))
+    $text.Substring(0, $cut + 1)
+}
+
+<#
+.SYNOPSIS
+    Adds one summary to a running total, so that summarising a stream in pieces and summarising it
+    whole give the same answer.
+#>
+function Add-TalkerSummary {
+    [CmdletBinding()]
+    param([object] $Total, [object] $Next)
+
+    if ($null -eq $Total) { return $Next }
+
+    [pscustomobject]@{
+        Good        = $Total.Good + $Next.Good
+        Bad         = $Total.Bad + $Next.Bad
+        Talkers     = @(($Total.Talkers + $Next.Talkers) | Sort-Object -Unique)
+        Identifiers = @(($Total.Identifiers + $Next.Identifiers) | Sort-Object -Unique)
+        RmcStatus   = if ($Next.RmcStatus) { $Next.RmcStatus } else { $Total.RmcStatus }
+    }
+}
+
+<#
+.SYNOPSIS
     The provenance sidecar. A capture nobody can date or attribute is a file, not evidence.
 #>
 function Write-Provenance {
@@ -162,7 +212,8 @@ function Write-Provenance {
         [long] $Bytes,
         [datetime] $StartedAt,
         [datetime] $EndedAt,
-        [object] $Summary)
+        [object] $Summary,
+        [int] $PartialBytes = 0)
 
     $lines = @(
         "# $LogName",
@@ -181,6 +232,11 @@ function Write-Provenance {
         "| Sentences, rejected | $($Summary.Bad) |",
         "| Talkers seen | $(($Summary.Talkers -join ', ')) |",
         "| Sentences seen | $(($Summary.Identifiers -join ', ')) |",
+        # A capture stops on a clock, not on a sentence boundary, so a file ending mid-sentence is
+        # the normal case rather than damage - and it is one of the things the parser has to
+        # survive (§11.1). It is reported as its own row instead of being counted as a rejected
+        # sentence, because a reader who sees "rejected" reaches for the baud rate.
+        "| Ends mid-sentence | $(if ($PartialBytes -gt 0) { "yes, $PartialBytes byte(s)" } else { 'no' }) |",
         '',
         '## What was happening',
         '',
@@ -228,6 +284,49 @@ if ($SelfTest) {
     # Nothing at all is not a crash.
     $empty = Get-TalkerSummary -Text ''
     if ($empty.Good -ne 0 -or $empty.Bad -ne 0) { $failures += 'empty input did not summarise to zero' }
+
+    # THE DEFECT THIS CHECK EXISTS FOR. Summarising a stream in pieces must total the same as
+    # summarising it whole. It did not: the live buffer was cleared at every report, so the
+    # sentence straddling the boundary was lost from the good count and counted as rejected. The
+    # first real sitting read 14,868 good and 0 rejected whole, and 14,688 good with 158 REJECTED
+    # in 5,000-byte pieces - a wrong-baud-rate alarm raised by a receiver that was working
+    # perfectly. A serial read ends where the bytes stop arriving, never where a sentence ends, so
+    # the boundary case is the normal one here rather than the awkward one.
+    $stream = ''
+    foreach ($ignored in 1..20) { $stream += "`$$good1*$(Checksum $good1)`n`$$good2*$(Checksum $good2)`n" }
+
+    $whole = Get-TalkerSummary -Text $stream
+    if ($whole.Good -ne 40 -or $whole.Bad -ne 0) {
+        $failures += "the whole stream summarised to $($whole.Good) good and $($whole.Bad) rejected, not 40 and 0"
+    }
+
+    $buffer = [System.Text.StringBuilder]::new()
+    $piecewise = $null
+    for ($i = 0; $i -lt $stream.Length; $i += 37) {
+        [void]$buffer.Append($stream.Substring($i, [Math]::Min(37, $stream.Length - $i)))
+        $piecewise = Add-TalkerSummary -Total $piecewise -Next (Get-TalkerSummary -Text (Split-CompleteLines -Buffer $buffer))
+    }
+
+    if ($piecewise.Good -ne $whole.Good -or $piecewise.Bad -ne $whole.Bad) {
+        $failures += "37-byte pieces gave $($piecewise.Good) good and $($piecewise.Bad) rejected, where the whole stream gives $($whole.Good) and $($whole.Bad)"
+    }
+
+    if ($buffer.Length -ne 0) {
+        $failures += "$($buffer.Length) byte(s) were held back from a stream that ended on a line ending"
+    }
+
+    # A capture stops on a clock rather than on a sentence, so ending mid-sentence is the normal
+    # case. The half sentence is held back, not counted as a reject.
+    $cut = [System.Text.StringBuilder]::new()
+    [void]$cut.Append("`$$good1*$(Checksum $good1)`n`$GPGGA,0007")
+    $ended = Get-TalkerSummary -Text (Split-CompleteLines -Buffer $cut)
+    if ($ended.Good -ne 1 -or $ended.Bad -ne 0) {
+        $failures += "a capture ending mid-sentence summarised to $($ended.Good) good and $($ended.Bad) rejected, not 1 and 0"
+    }
+
+    if ($cut.Length -ne 11) {
+        $failures += "the half sentence left behind was $($cut.Length) byte(s), not the 11 it holds"
+    }
 
     # The provenance writer round-trips.
     $tmp = Join-Path ([System.IO.Path]::GetTempPath()) "talker-selftest-$([guid]::NewGuid()).md"
@@ -328,18 +427,10 @@ try {
         }
 
         if (((Get-Date) - $lastReport).TotalSeconds -ge 5) {
-            $chunk = $tail.ToString()
-            [void]$tail.Clear()
-            $s = Get-TalkerSummary -Text $chunk
-            $cumulative = if ($null -eq $cumulative) { $s } else {
-                [pscustomobject]@{
-                    Good        = $cumulative.Good + $s.Good
-                    Bad         = $cumulative.Bad + $s.Bad
-                    Talkers     = @(($cumulative.Talkers + $s.Talkers) | Sort-Object -Unique)
-                    Identifiers = @(($cumulative.Identifiers + $s.Identifiers) | Sort-Object -Unique)
-                    RmcStatus   = if ($s.RmcStatus) { $s.RmcStatus } else { $cumulative.RmcStatus }
-                }
-            }
+            # Complete lines only. Whatever sentence is half-arrived stays in the buffer for the
+            # next report rather than being summarised as a broken one and thrown away.
+            $s = Get-TalkerSummary -Text (Split-CompleteLines -Buffer $tail)
+            $cumulative = Add-TalkerSummary -Total $cumulative -Next $s
 
             $elapsed = [Math]::Round(((Get-Date) - $startedAt).TotalMinutes, 1)
             $fixWord = switch ($cumulative.RmcStatus) {
@@ -360,12 +451,15 @@ finally {
     $serial.Close()
     $serial.Dispose()
 
-    if ($null -eq $cumulative) {
-        $cumulative = Get-TalkerSummary -Text $tail.ToString()
-    }
+    # Whatever arrived since the last report still counts, including on a capture that ended before
+    # the first one. What is left in the buffer afterwards is the half sentence the receiver was
+    # mid-way through when the clock ran out; it is reported as such rather than as a reject.
+    $cumulative = Add-TalkerSummary -Total $cumulative -Next (Get-TalkerSummary -Text (Split-CompleteLines -Buffer $tail))
+    $partialBytes = $tail.Length
 
     Write-Provenance -Path $notePath -LogName (Split-Path $logPath -Leaf) -Port $Port `
-        -BaudRate $BaudRate -Bytes $total -StartedAt $startedAt -EndedAt $endedAt -Summary $cumulative
+        -BaudRate $BaudRate -Bytes $total -StartedAt $startedAt -EndedAt $endedAt -Summary $cumulative `
+        -PartialBytes $partialBytes
 
     Write-Host ''
     Write-Host "Wrote $total bytes to $logPath"
