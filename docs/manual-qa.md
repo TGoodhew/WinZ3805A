@@ -468,13 +468,83 @@ amount of patience with this one substitutes.
 
 ---
 
+## 16. The front-panel Active lamp (#440)
+
+**Why.** This is the one feature in the application whose entire output is a light on a piece of
+metal. Nothing in CI can see it, no UI Automation assertion can see it, and the receiver's own
+`:LED:ACT?` read-back **cannot see it either** — it reports the register the write landed in, not the
+lamp. Everything that shipped in v1.0.14 was verified through that register. **Nobody has yet
+watched the panel while the application drove it.**
+
+Two claims therefore stand unverified, and both are one look away:
+
+- That `:LED:ACTive` drives the lamp **labelled Active** and not some other indicator.
+- That the per-session behaviour is what a person actually sees: lit on connect, restored on
+  disconnect.
+
+**You need to be in front of the unit.** Everything below is two minutes.
+
+### The manual control (Diagnostics)
+
+1. Note which lamps are lit on the front panel before starting. Write it down; the whole feature is
+   about putting the panel back as it was found.
+2. Details → Diagnostics → **Front panel** → toggle **Active lamp** on.
+   **It takes about a second to answer** — the receiver services this node on its own 1 Hz tick
+   (§10.9), so a pause is correct behaviour, not a hang.
+3. **Look at the panel.** The *Active* lamp should be lit and nothing else should have changed.
+4. Toggle it off. The lamp goes out.
+
+### The per-session behaviour (Settings)
+
+5. Settings → Advanced → **Front-panel Active lamp** → on. The lamp should light **immediately**,
+   not at the next connect.
+6. Disconnect. The lamp returns to whatever step 1 recorded.
+7. Now the case the design turns on: **set the lamp on by hand** (step 2), then connect and
+   disconnect with the switch still on. The lamp must still be **on** at the end — the application
+   borrows the lamp and gives back what it found, so a user's *on* survives a session. If it comes
+   back off, the borrowing logic is wrong and that is the defect to file.
+8. Turn the setting off. The lamp returns to what it was.
+
+### Kill the application while the lamp is lit
+
+9. With the lamp lit by the application, end the process from Task Manager.
+10. The lamp **stays lit**. This is expected and documented: there is no wire left to restore over.
+    Confirm the escape hatch works — reconnect and use the Diagnostics toggle to put it out.
+
+### While you are there: what does `:LED:ENABled` look like?
+
+**Still unknown, and it is the one open question on #440.** The node is settable and confirmed by
+read-back — `1` and `0` both accepted with a clean error queue — but **nobody has seen what it
+does**. It is not wired into the application precisely because of that. Exit the application first,
+then:
+
+```powershell
+# COM3, 9600-8-N-1. Read the baseline FIRST and put it back at the end.
+:LED:ENAB?      # baseline, expected +0
+:LED:ENAB 1     # watch the panel
+:LED:ENAB 0     # and back
+:SYST:ERR?      # expect +0,"No error"
+```
+
+Record what changed, if anything. If it drives a second, distinguishable indicator, "connected" and
+"talking" become separable and #440's original per-command idea becomes worth revisiting — with the
+999 ms write cost still ruling out anything per-sweep.
+
+> **Every `:LED:` write costs about a second**, first byte to prompt, because the receiver services
+> the node on its 1 Hz tick. That is measured, not estimated (#440), and it is why the lamp is lit
+> once per session rather than flashed. Budget for it; do not read a one-second pause as a fault.
+
+---
+
 ## Before a release
 
 Sections 1–4, 8, 9, 11 and 13 in full, then **12 on the published artifact** — which means the release
 exists before the last check passes. That is the right way round: a release nobody can install is
 worth catching after it is published rather than not at all, and the fix is another tag. Section 5
 only if the hardware is being moved, with sections 7 and 10 alongside it since they need the same
-antenna; section 6 if survey behaviour has been touched; **section 14 if anything on the polling,
+antenna; **section 16 the first time anyone is in front of the receiver**, since the lamp shipped in
+v1.0.14 verified only through a register read and the two minutes it costs are the only way anyone
+will ever know it drives the right light; section 6 if survey behaviour has been touched; **section 14 if anything on the polling,
 rendering or shell-badge path has changed** — it costs an hour of waiting and perhaps five minutes of
 attention, and both leaks that have shipped would have been caught by it. Section 15 is not a release
 gate at all: run it when a talker is to hand, because the captures it produces are permanent and the
