@@ -54,13 +54,17 @@ public class DeviceSessionServiceTests
     /// the moment the source is registered: a single jump made before registration would schedule
     /// the timeout from the new "now" and wait forever.
     /// </remarks>
+    /// <remarks>
+    /// <b>Bounded, because the unbounded form hangs rather than fails (#445).</b> If the timeout is
+    /// never registered this loop spins for ever and takes the test host with it — which is what the
+    /// twin of this helper did on a CI runner, tripping --blame-hang five minutes after the rest of
+    /// the suite had passed and reporting only a guess at which test was responsible. The shared
+    /// bound lives with the other one so both fail the same way.
+    /// </remarks>
     private static async Task<T> AdvanceUntilComplete<T>(FakeTimeProvider clock, Task<T> task)
     {
-        while (!task.IsCompleted)
-        {
-            clock.Advance(TimeSpan.FromSeconds(2));
-            await Task.Delay(5);
-        }
+        await Transport.ResynchronisationTests.AdvanceUntilCompleteAsync(
+            clock, task, TimeSpan.FromSeconds(2), "the task under a pinned clock");
 
         return await task;
     }
