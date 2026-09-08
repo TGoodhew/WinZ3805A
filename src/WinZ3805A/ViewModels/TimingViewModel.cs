@@ -17,6 +17,17 @@ namespace WinZ3805A.ViewModels;
 /// </remarks>
 public sealed class TimingViewModel : INotifyPropertyChanged, IDisposable
 {
+    /// <summary>
+    /// The fewest samples a standard deviation is computed from, and captioned for (#441).
+    /// </summary>
+    /// <remarks>
+    /// Two points define a line, so a deviation from fewer than three is arithmetic without meaning.
+    /// Named because <see cref="TimeIntervalDeviation"/> and <see cref="DeviationWindow"/> both need
+    /// it and they disagreed: the value switched at three and its caption at one, which put an em
+    /// dash under a sentence describing a σ over two samples.
+    /// </remarks>
+    internal const int MinimumDeviationSamples = 3;
+
     private readonly ReceiverStateStore _store;
 
     private ConnectionStatus _connection = ConnectionStatus.Disconnected;
@@ -274,8 +285,9 @@ public sealed class TimingViewModel : INotifyPropertyChanged, IDisposable
             double[] samples = [.. TimeIntervalSamples.OfType<double>()];
 
             // Two points define a line; a deviation from fewer than three is arithmetic without
-            // meaning.
-            if (samples.Length < 3)
+            // meaning. The threshold is named rather than repeated, because DeviationWindow
+            // captions this value and the two switching at different counts is #441's second half.
+            if (samples.Length < MinimumDeviationSamples)
             {
                 return null;
             }
@@ -292,10 +304,29 @@ public sealed class TimingViewModel : INotifyPropertyChanged, IDisposable
     /// <summary>How many samples that deviation is over.</summary>
     public int DeviationSampleCount => TimeIntervalSamples.Count(sample => sample is not null);
 
-    /// <summary>The window the deviation covers, named honestly.</summary>
-    public string DeviationWindow => DeviationSampleCount > 0
-        ? $"last {DeviationSampleCount} s"
-        : "no samples yet";
+    /// <summary>
+    /// The caption under §10.7's σ readout — a finished sentence, not a fragment.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Finished, because a fragment was composed wrongly and read as nonsense (#441).</b> This
+    /// returned <c>"last 5 s"</c> or <c>"no samples yet"</c> and the view wrote
+    /// <c>$"σ from the {…}."</c> around it, which is right for the first and gives
+    /// <i>"σ from the no samples yet."</i> for the second. No single wrapper can be right for both:
+    /// one branch is a noun phrase and the other is a clause. The wrapper lived in the view and the
+    /// values here, so neither half looked wrong on its own — a caption that arrives finished has
+    /// nowhere left to go wrong.
+    /// </para>
+    /// <para>
+    /// <b>It switches on the same threshold as the value it captions.</b> It previously switched at
+    /// one sample while <see cref="TimeIntervalDeviation"/> returns null below three, so one or two
+    /// samples drew an em dash under a caption claiming a σ over them. One rule, stated once, and
+    /// the readout and its caption cannot disagree.
+    /// </para>
+    /// </remarks>
+    public string DeviationWindow => DeviationSampleCount >= MinimumDeviationSamples
+        ? $"σ from the last {DeviationSampleCount} s."
+        : "Not enough samples yet.";
 
     /// <summary>How old the fast-tier readings are.</summary>
     public TimeSpan? Age => _store.AgeOf(_store.LastFastPoll);
