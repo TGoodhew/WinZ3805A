@@ -259,6 +259,20 @@ jobs:
         shell: pwsh
         run: ./build/Capture-Talker.ps1 -SelfTest
 
+      # #416. The same bargain again, and the starkest case of it: the UCCM driver has never met a
+      # receiver at all, so this script is the one that turns an unknown module into evidence. It
+      # will run once, on the day one is on the bench, and it must be right the first time - the
+      # unit is on loan and a bug found afterwards cannot be retried.
+      #
+      # The half checked here is the reply anatomy: whether the module echoes its command, whether
+      # a C5 time code arrived mid-reply or merely after it, and whether COMMAND COMPLETE
+      # terminates. Those three are the hypotheses the whole driver rests on, and the distinction
+      # between an interleaved time code and a trailing one is the one a careless reading gets
+      # wrong in the direction that CONFIRMS the hypothesis.
+      - name: The UCCM capture harness still reads a reply's anatomy
+        shell: pwsh
+        run: ./build/Capture-Uccm.ps1 -SelfTest
+
   # ---------------------------------------------------------------------------
   # §6.1 requires x64 only and forbids AnyCPU, x86 and ARM64. The matrix keeps its
   # shape for the two configurations, not for a second architecture: ARM64 is not a

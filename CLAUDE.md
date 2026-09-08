@@ -318,6 +318,7 @@ than rules, and share one job:
 pwsh build/Capture-Fixtures.ps1 -SelfTest # #4 / #185 — the harness, not the app
 pwsh build/Watch-Soak.ps1 -SelfTest       # #385 / #399 — the soak's arithmetic, not the memory
 pwsh build/Capture-Talker.ps1 -SelfTest   # #420 — the checksum accounting, not the receiver
+pwsh build/Capture-Uccm.ps1   -SelfTest   # #416 — a reply's anatomy, not the module
 ```
 
 `Capture-Talker.ps1` is the third of these and exists because **`Capture-Fixtures.ps1` cannot
@@ -329,6 +330,29 @@ SmartClock screen. Its provenance sidecar is `.md` for the reason #221 establish
 collected as a fixture and `.log` is gitignored, so a note written to either never arrives. The
 self-tested half is the **checksum accounting**, which is what distinguishes a real cycle from the
 plausible-looking rubbish a wrong baud rate produces.
+
+`Capture-Uccm.ps1` is the fourth, and it exists because **a UCCM is a third shape neither of the
+others fits**: it is query/response, so the talker script has nothing to do; and it has no `scpi > `
+prompt while its **echo is evidence rather than noise**, so the fixture script would strip the very
+thing worth keeping. It writes into `tests/WinZ3805A.Tests/Uccm/Captures/`, which is deliberately
+not `Fixtures/` — see that folder's README.
+
+**Its whole job is #416's step one, which is identification and not code.** The UCCM driver has
+never met a receiver, and three of its load-bearing claims come from Lady Heather's source alone:
+that the module echoes each command before answering, that unsolicited `C5` time codes interleave
+*mid*-reply, and that `COMMAND COMPLETE` terminates. The script **reports each as a count and
+assumes none of them** — a harness built on a hypothesis confirms it by construction, which is the
+one outcome worth nothing.
+
+The self-tested half is the **reply anatomy**, and the check that matters most is the distinction
+between a time code arriving *in the middle* of a reply and one arriving *after* it. Only the first
+is hypothesis 2; a trailing broadcast is ordinary. Conflating them makes every sitting appear to
+confirm the hypothesis, which is the failure direction that would never be questioned. Both halves
+were tested against deliberate violations.
+
+**A count of zero for the time codes does not refute anything**, because an interleaved broadcast
+depends on timing. The note says so, in the file, so nobody later reads a quiet sitting as a
+finding.
 
 `.github/workflows/ci.yml` runs every one of them in its own dependency-free job, alongside the
 build rather than ahead of it — they need no restore, so a token, accessibility, or safety
