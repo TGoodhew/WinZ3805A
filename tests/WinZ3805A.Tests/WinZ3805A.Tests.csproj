@@ -101,6 +101,7 @@
     <Compile Include="..\..\src\WinZ3805A\Services\AppearancePreferences.cs" Link="Services\AppearancePreferences.cs" />
     <Compile Include="..\..\src\WinZ3805A\ViewModels\AppearanceViewModel.cs" Link="ViewModels\AppearanceViewModel.cs" />
     <Compile Include="..\..\src\WinZ3805A\Controls\SkyPlotGeometry.cs" Link="Controls\SkyPlotGeometry.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Controls\MaskSliderMath.cs" Link="Controls\MaskSliderMath.cs" />
 
     <!-- The sky plot's other silent half. §9.10.2 says only "arrow keys move a ring through markers
          in PRN order", which is complete until the constellation changes underneath the ring - and
