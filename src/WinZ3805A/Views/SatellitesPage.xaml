@@ -490,11 +490,21 @@
                                     degrees against a 0-90 range is a fact a track shows and a
                                     number does not.
 
-                                    TWO CONTROLS OVER ONE VALUE, not two values. They share MaskBox's
-                                    Value through a two-way binding, so the validator, the Apply
-                                    button's enabled state and the command all keep reading the one
-                                    field they always did - the slider is another way to move it, not
-                                    a second source of truth.
+                                    TWO CONTROLS OVER ONE VALUE, not two values. MaskBox holds it and
+                                    the slider mirrors it, so the validator, the Apply button's
+                                    enabled state and the command all keep reading the one field they
+                                    always did - the slider is another way to move it, not a second
+                                    source of truth.
+
+                                    THE MIRROR IS IN CODE, NOT AN x:Bind, AND THAT IS THE FIX FOR A
+                                    CRASH. This was Value="{x:Bind MaskBox.Value, Mode=TwoWay}",
+                                    which is the obvious way to write it and is fatal: an empty
+                                    NumberBox holds double.NaN - that IS NumberBox's "no value" -
+                                    and Slider inherits RangeBase, whose Value setter throws
+                                    ArgumentException on NaN. The binding initialises during
+                                    Loading, before any code can put a number in, so navigating to
+                                    this page killed the process every time, for every receiver.
+                                    See OnMaskSliderValueChanged and MaskSliderMath.
 
                                     §9.11's validation rule is what settles the range: the bounds
                                     come from the driver's catalog entry, and a slider physically
@@ -507,7 +517,7 @@
                                         StepFrequency="1"
                                         TickFrequency="15"
                                         TickPlacement="Outside"
-                                        Value="{x:Bind MaskBox.Value, Mode=TwoWay}"
+                                        ValueChanged="OnMaskSliderValueChanged"
                                         AutomationProperties.Name="Elevation mask in degrees"
                                         ToolTipService.ToolTip="Drag to set the elevation mask, then Apply" />
 

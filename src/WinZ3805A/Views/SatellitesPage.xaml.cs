@@ -9,6 +9,7 @@ using System.ComponentModel;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Navigation;
 
 using WinZ3805A.Controls;
@@ -67,6 +68,11 @@ public sealed partial class SatellitesPage : Page
 
     /// <summary>Whether the number in the mask editor is the user's rather than the receiver's.</summary>
     private bool _maskEdited;
+
+    /// <summary>
+    /// Guards the field and the slider against echoing each other, since each writes to the other.
+    /// </summary>
+    private bool _syncingMask;
 
     /// <summary>Which form of the sky is showing.</summary>
     private SkyView _skyView = SkyView.Plot;
@@ -188,11 +194,16 @@ public sealed partial class SatellitesPage : Page
 
         MaskBox.ValueChanged += (_, args) =>
         {
-            if (!(args?.NewValue ?? double.NaN).Equals(_seededMask))
+            double value = args?.NewValue ?? double.NaN;
+            if (!value.Equals(_seededMask))
             {
                 _maskEdited = true;
             }
+
+            MirrorMaskToSlider(value);
         };
+
+        MirrorMaskToSlider(MaskBox.Value);
 
         _model = new SatellitesViewModel(device.Store) { Connection = device.Session.Status };
         _model.PropertyChanged += OnModelChanged;
@@ -296,6 +307,63 @@ public sealed partial class SatellitesPage : Page
         // cannot leave its range, which is why the error text below it is for typed entry only.
         MaskSlider.Minimum = maskRange?.Minimum ?? 0;
         MaskSlider.Maximum = maskRange?.Maximum ?? 90;
+
+        // The bounds have moved, so where the slider should sit has moved with them. Without this a
+        // driver whose range starts above the old position leaves the two controls disagreeing.
+        MirrorMaskToSlider(MaskBox.Value);
+    }
+
+    /// <summary>
+    /// Puts the field's value on the slider, coerced to something <c>RangeBase</c> will accept.
+    /// </summary>
+    /// <remarks>
+    /// See <see cref="MaskSliderMath"/> for why this is code rather than the two-way <c>x:Bind</c>
+    /// it replaced, and why an empty field parks the slider rather than emptying it.
+    /// </remarks>
+    private void MirrorMaskToSlider(double value)
+    {
+        if (_syncingMask)
+        {
+            return;
+        }
+
+        _syncingMask = true;
+        try
+        {
+            MaskSlider.Value = MaskSliderMath.Coerce(value, MaskSlider.Minimum, MaskSlider.Maximum);
+        }
+        finally
+        {
+            _syncingMask = false;
+        }
+    }
+
+    /// <summary>Writes a slider movement back into the field, when the user made it.</summary>
+    private void OnMaskSliderValueChanged(object sender, RangeBaseValueChangedEventArgs e)
+    {
+        if (_syncingMask || e is null)
+        {
+            return;
+        }
+
+        if (!MaskSliderMath.ShouldWriteBack(e.NewValue, MaskBox.Value, MaskSlider.Minimum))
+        {
+            return;
+        }
+
+        _syncingMask = true;
+        try
+        {
+            MaskBox.Value = e.NewValue;
+        }
+        finally
+        {
+            _syncingMask = false;
+        }
+
+        _maskEdited = true;
+        _mask?.Revalidate();
+        Render();
     }
 
     private void Render()
