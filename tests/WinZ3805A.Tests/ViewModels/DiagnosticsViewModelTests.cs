@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Time.Testing;
 
 using WinZ3805A.Controls;
+using WinZ3805A.Device.Drivers.Nmea;
 using WinZ3805A.Device.Transport;
 using WinZ3805A.Services;
 using WinZ3805A.ViewModels;
@@ -20,6 +21,23 @@ public sealed class DiagnosticsViewModelTests
         new(new DeviceSessionService(
             (_, _) => new FakeTransport(),
             new FakeTimeProvider()));
+
+    /// <summary>
+    /// The same page with a talker selected — the family the #435 audit actually ran against.
+    /// </summary>
+    /// <remarks>
+    /// The real <c>NmeaDriver</c> rather than a fake that answers false: what is being tested is
+    /// that this page reads the driver's own answer, and a stub would let the test pass while the
+    /// shipped driver said something else.
+    /// </remarks>
+    private static DiagnosticsViewModel TalkerModel()
+    {
+        FakeTimeProvider clock = new();
+        return new DiagnosticsViewModel(new DeviceSessionService(
+            (_, _) => new FakeTransport(),
+            clock,
+            drivers: [new NmeaDriver(clock)]));
+    }
 
     /// <remarks>
     /// The negative is the point. §11.1 makes an unreadable field render as a dash, which tells a
@@ -99,5 +117,60 @@ public sealed class DiagnosticsViewModelTests
     public void LifetimeReadsAsNoValueUntilItIsRead()
     {
         Assert.Equal(ReadoutFormatter.NoValue, Model().PowerOnHoursText);
+    }
+
+    // ---- #435: three cards that asserted SmartClock facts to whatever was connected -------------
+
+    /// <summary>
+    /// The Lifetime caption stops explaining an oven-controlled oscillator to a receiver without one.
+    /// </summary>
+    /// <remarks>
+    /// The sentence was a literal in the XAML, which is why it survived: nothing that reads the view
+    /// model could see it, and nothing that reads the XAML knows what is connected. Asserting it
+    /// here puts the claim where the condition is.
+    /// </remarks>
+    [Fact]
+    public void TheLifetimeCaptionDoesNotExplainAnOscillatorToATalker()
+    {
+        Assert.Contains("oven-controlled oscillator", Model().PowerOnHoursCaption, StringComparison.Ordinal);
+
+        string caption = TalkerModel().PowerOnHoursCaption;
+
+        Assert.DoesNotContain("oscillator", caption, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(
+            "This receiver does not report how long it has been powered. The NMEA 0183 protocol does not carry it.",
+            caption);
+    }
+
+    /// <remarks>
+    /// "No errors." is the useful negative for a receiver that keeps a queue, and a clean bill of
+    /// health invented from nothing for one that does not. The count branches stay untouched — this
+    /// is about whether the queue exists, not about how many entries came out of it.
+    /// </remarks>
+    [Fact]
+    public void TheErrorCardDoesNotReportAnEmptyQueueThatDoesNotExist()
+    {
+        Assert.Equal("No errors.", Model().ErrorSummaryText);
+
+        Assert.Equal(
+            "This receiver does not report an error queue. The NMEA 0183 protocol does not carry it.",
+            TalkerModel().ErrorSummaryText);
+    }
+
+    /// <remarks>
+    /// §9.11's empty state says what <i>will</i> appear, which is a promise. For a family with no log
+    /// of its own it is one that cannot be kept, and "has not been read yet" invites a user to keep
+    /// pressing a button that will never fill it.
+    /// </remarks>
+    [Fact]
+    public void TheLogCardDoesNotPromiseEntriesThatCannotArrive()
+    {
+        Assert.Equal(
+            "The log has not been read yet, or the receiver has nothing in it.",
+            Model().LogEmptyText);
+
+        Assert.Equal(
+            "This receiver does not report a diagnostic log of its own. The NMEA 0183 protocol does not carry it.",
+            TalkerModel().LogEmptyText);
     }
 }

@@ -53,6 +53,8 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
     /// <summary>What the connected receiver's driver offers (#304).</summary>
     private bool _canSelfTest;
     private bool _canClearLog;
+    private bool _canRefresh;
+    private bool _canReadErrors;
 
     private readonly DispatcherTimer _loadingTimer = new() { Interval = TimeSpan.FromMilliseconds(100) };
 
@@ -268,6 +270,19 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
 
         _canSelfTest = Capability.Offers(driver, ":DIAG:TEST?");
         _canClearLog = Capability.Offers(driver, ":DIAG:LOG:CLEar");
+        _canReadErrors = Capability.Offers(driver, ":SYST:ERR?");
+
+        // ANY rather than ALL, which is the opposite of Offers' rule and deliberate. Refresh is
+        // four independent reads filling four separate cards, not one operation that half works:
+        // a driver with the log but no self test should still fill the log, and RefreshAsync
+        // already skips a mnemonic its driver lacks. What it must not do is stay enabled for a
+        // family that has none of them, which is where it raised a fault for a receiver that had
+        // done nothing wrong (#435).
+        _canRefresh =
+            Capability.Offers(driver, ":DIAG:TEST:RES?") ||
+            Capability.Offers(driver, ":DIAG:LOG:COUN?") ||
+            Capability.Offers(driver, ":DIAG:LIF:COUN?") ||
+            Capability.Offers(driver, ":DIAG:LOG:READ:ALL?");
 
         if (driver is not null)
         {
@@ -425,6 +440,7 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
         }
 
         PowerOnHoursText.Text = model.PowerOnHoursText;
+        PowerOnHoursCaption.Text = model.PowerOnHoursCaption;
 
         if (_selfTest is SelfTestViewModel selfTest)
         {
@@ -475,8 +491,14 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
         }
 
         ApplyLoadingIndicator();
-        RefreshButton.IsEnabled = model.CanRead;
-        ReadErrorsButton.IsEnabled = model.CanRead;
+
+        // Capability first, then state (#304) — these two were state only, so with a talker
+        // connected they sat enabled and inviting, and pressing either raised a fault InfoBar for a
+        // receiver that had done nothing wrong (#435). Neither needs its own sentence: every card
+        // they would have filled now says on its own face why it is empty, which is closer to the
+        // control than a caption on the button would be.
+        RefreshButton.IsEnabled = _canRefresh && model.CanRead;
+        ReadErrorsButton.IsEnabled = _canReadErrors && model.CanRead;
         ClearLogButton.IsEnabled = _canClearLog && model.CanRead;
 
         ClearLogUnsupportedText.Text = _canClearLog
