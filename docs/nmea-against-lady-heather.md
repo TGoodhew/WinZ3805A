@@ -10,9 +10,16 @@ was written. Heather has seen wild inputs we have not.
 
 > *Corrected 7 Sep 2026 by #420.* It has now met one — a VK-162, three captures under
 > `tests/WinZ3805A.Tests/Nmea/Captures/`. **That narrows the asymmetry rather than retiring it**:
-> one GPS-only puck on one afternoon, against Heather's many receivers over many years. Every
+> one puck on one afternoon, against Heather's many receivers over many years. Every
 > "needs hardware" verdict below still needs it, because what the sitting produced was ordinary
 > correct output rather than the wild input this review is worried about.
+>
+> *Amended 8 Sep 2026.* This said "one **GPS-only** puck", which was wrong in a way worth keeping
+> visible: the receiver was never asked what it could do, and its ROM carries GLONASS. Reconfigured
+> over UBX it produced a `GL` talker and, separately, `GNS` with no `GGA` — two more captures, and
+> two "needs hardware" questions answered without any. **The asymmetry is still real, but it was
+> being overstated by an assumption rather than measured.** What this puck genuinely cannot do is
+> run two constellations at once.
 
 What the review actually found was not what was expected. **Two of the differences are defects in
 Heather**, one is a defect of ours that is now fixed, one is a real limitation of ours that needs
