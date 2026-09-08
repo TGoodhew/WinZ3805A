@@ -197,6 +197,47 @@ function Format-UccmBytes {
     return $out -join "`n"
 }
 
+<#
+.SYNOPSIS
+    Which line terminators a reply actually used, and whether it ended on one.
+.DESCRIPTION
+    THE FIRST QUESTION ABOUT AN UNKNOWN MODULE, and the hex dump answers it only if somebody reads
+    the dump carefully. A smoke run against a SmartClock showed exactly that: the reply's CRLFs and
+    its unterminated trailing prompt were both in the bytes and neither was in the summary.
+
+    Heather's source says nothing about UCCM line endings, and our LineProtocol is line-oriented -
+    so a module using bare CR, or never terminating its last line, is a transport problem rather
+    than a parsing one, and it should be legible on the first sitting rather than the second.
+#>
+function Get-UccmLineEndings {
+    [CmdletBinding()]
+    param([byte[]] $Bytes)
+
+    $crlf = 0; $lf = 0; $cr = 0
+    for ($i = 0; $i -lt $Bytes.Length; $i++) {
+        if ($Bytes[$i] -eq 13) {
+            if ($i + 1 -lt $Bytes.Length -and $Bytes[$i + 1] -eq 10) { $crlf++; $i++ } else { $cr++ }
+        } elseif ($Bytes[$i] -eq 10) {
+            $lf++
+        }
+    }
+
+    $terminated = $Bytes.Length -gt 0 -and ($Bytes[-1] -eq 10 -or $Bytes[-1] -eq 13)
+
+    $forms = @()
+    if ($crlf -gt 0) { $forms += "CRLF x$crlf" }
+    if ($lf -gt 0) { $forms += "bare LF x$lf" }
+    if ($cr -gt 0) { $forms += "bare CR x$cr" }
+
+    [pscustomobject]@{
+        Crlf            = $crlf
+        BareLf          = $lf
+        BareCr          = $cr
+        EndsTerminated  = $terminated
+        Summary         = if ($forms.Count -eq 0) { 'no terminators at all' } else { $forms -join ', ' }
+    }
+}
+
 # ---------------------------------------------------------------------------------------------
 # Self-test
 # ---------------------------------------------------------------------------------------------
@@ -275,16 +316,48 @@ if ($SelfTest) {
     if ($dump -notmatch '41 42 0D 0A') { $failures += "the hex dump did not render CRLF: $dump" }
     if ($dump -notmatch 'AB\.\.') { $failures += 'the hex dump did not render unprintables as dots' }
 
+    # --- Line endings, reported rather than left in the hex ----------------------------------
+    $crlfOnly = Get-UccmLineEndings -Bytes ([byte[]][Text.Encoding]::ASCII.GetBytes("A`r`nB`r`n"))
+    if ($crlfOnly.Crlf -ne 2 -or $crlfOnly.BareLf -ne 0 -or $crlfOnly.BareCr -ne 0) {
+        $failures += "CRLF pairs were miscounted: $($crlfOnly.Summary)"
+    }
+    if (-not $crlfOnly.EndsTerminated) { $failures += 'a reply ending in CRLF was called unterminated' }
+
+    # THE CASE THE SMOKE RUN FOUND. A trailing prompt with no terminator is exactly what a
+    # SmartClock leaves, and a module that does the same would otherwise look line-oriented.
+    $unterminated = Get-UccmLineEndings -Bytes ([byte[]][Text.Encoding]::ASCII.GetBytes("A`r`nscpi > "))
+    if ($unterminated.EndsTerminated) { $failures += 'an unterminated trailing line was not reported as such' }
+
+    # A CR that is part of a CRLF must not also be counted as a bare CR - the defect that would
+    # make every CRLF module look like it used both conventions.
+    $mixed = Get-UccmLineEndings -Bytes ([byte[]][Text.Encoding]::ASCII.GetBytes("A`rB`r`nC`n"))
+    if ($mixed.Crlf -ne 1 -or $mixed.BareCr -ne 1 -or $mixed.BareLf -ne 1) {
+        $failures += "mixed terminators were miscounted: $($mixed.Summary)"
+    }
+
+    $none = Get-UccmLineEndings -Bytes ([byte[]]@())
+    if ($none.Summary -ne 'no terminators at all' -or $none.EndsTerminated) {
+        $failures += 'empty bytes did not report as having no terminators'
+    }
+
     if ($failures.Count -gt 0) {
         Write-Host 'FAIL' -ForegroundColor Red
         $failures | ForEach-Object { Write-Host "  $_" }
         exit 1
     }
 
-    Write-Host 'PASS - the reply anatomy, the echo rule and the time-code distinction are checked.'
-    Write-Host '  Opening a port, identifying a module and reading its answers are NOT, and'
-    Write-Host '  cannot be here. That half is exercised the day a UCCM is on the bench, and'
-    Write-Host '  until then every claim in the UCCM driver remains a hypothesis with a citation.'
+    Write-Host 'PASS - the reply anatomy, the echo rule, the time-code distinction and the'
+    Write-Host '  line-ending report are checked.'
+    Write-Host ''
+    Write-Host '  The serial half is not checked here and cannot be. It has however been SMOKE-RUN'
+    Write-Host '  against the bench Z3805A on 8 Sep 2026 - not a UCCM, but a real port and real'
+    Write-Host '  replies - so the baud walk, the identify step, the per-command read, the hex dump'
+    Write-Host '  and the note are known to work. It correctly reported 0 of 9 echoes and 0 of 9'
+    Write-Host '  COMMAND COMPLETE for a family that does neither, which is the answer that would'
+    Write-Host '  have been embarrassing to get wrong on the day.'
+    Write-Host ''
+    Write-Host '  What remains unexercised is the UCCM itself, and until then every claim in the'
+    Write-Host '  UCCM driver remains a hypothesis with a citation.'
     exit 0
 }
 
@@ -410,6 +483,7 @@ foreach ($command in $commands) {
     $results += [pscustomobject]@{ Command = $command; Anatomy = $anatomy; Bytes = $bytes }
 
     [void]$transcript.AppendLine("==== SENT: $command")
+    [void]$transcript.AppendLine("---- TERMINATORS: $((Get-UccmLineEndings -Bytes $bytes).Summary)")
     [void]$transcript.AppendLine('---- BYTES')
     [void]$transcript.AppendLine((Format-UccmBytes -Bytes $bytes))
     [void]$transcript.AppendLine('---- LINES')
@@ -433,6 +507,13 @@ $terminated = @($answered | Where-Object { $_.Anatomy.Terminated })
 $identity = ($results | Where-Object { $_.Command -eq '*IDN?' } | Select-Object -First 1)
 $identityText = if ($identity -and $identity.Anatomy.PayloadLines.Count -gt 0) { $identity.Anatomy.PayloadLines[0] } else { '(none)' }
 
+# Line endings across the whole sitting, because "what does this module terminate with" is a
+# property of the module rather than of any one reply.
+$allBytes = [byte[]]@()
+foreach ($r in $answered) { $allBytes += $r.Bytes }
+$endings = Get-UccmLineEndings -Bytes $allBytes
+$unterminatedCount = @($answered | Where-Object { -not (Get-UccmLineEndings -Bytes $_.Bytes).EndsTerminated }).Count
+
 $note = @"
 # $Label
 
@@ -446,6 +527,8 @@ re-terminated or trimmed. The echo and any interleaved time code are evidence, n
 | Identity (``*IDN?``) | ``$identityText`` |
 | Commands asked | $($commands.Count) |
 | Commands answered | $($answered.Count) |
+| Line terminators | $($endings.Summary) |
+| Replies ending unterminated | $unterminatedCount of $($answered.Count) |
 
 ## The three hypotheses this sitting was taken to settle
 
@@ -482,6 +565,8 @@ $notePath = Join-Path $OutputDirectory "$Label.md"
 
 Write-Host ''
 Write-Host ("Identity: {0}" -f $identityText)
+Write-Host ("Terminators:         {0}{1}" -f $endings.Summary,
+    $(if ($unterminatedCount -gt 0) { " ($unterminatedCount reply/replies end unterminated)" } else { '' }))
 Write-Host ("Echoed first:        {0} of {1}" -f $echoed.Count, $answered.Count)
 Write-Host ("Time code mid-reply: {0} of {1}" -f $interleaved.Count, $answered.Count)
 Write-Host ("COMMAND COMPLETE:    {0} of {1}" -f $terminated.Count, $answered.Count)

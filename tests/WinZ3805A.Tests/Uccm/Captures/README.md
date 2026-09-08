@@ -46,6 +46,28 @@ by that corpus. A UCCM transcript is not a status screen and must not be read as
 For the reason #221 established: `.txt` gets collected by the fixture corpus and `.log` is
 gitignored, so a note written to either never reaches the repository. Both have happened.
 
+## The script's serial half has been smoke-run, against the wrong receiver on purpose
+
+**8 Sep 2026, against the bench Z3805A on COM3.** Not a UCCM — but a real port, real replies, and
+the one chance to find out whether the machinery works before it matters. Every command it sends is
+a query, so the only cost was two entries in the receiver's error queue, drained afterwards.
+
+It walked the baud rates, identified the unit as `SYMMETRICOM,Z3805A,3625A02931,1.01.03-A`, read all
+nine commands, dumped the bytes and wrote the note. And it reported **0 of 9 echoes, 0 of 9
+`COMMAND COMPLETE`** — the right answer for a family that does neither, and the answer that would
+have been embarrassing to get wrong on the day.
+
+**It also found a gap in itself.** The reply's line endings were visible only to somebody reading
+the hex carefully, so the script now reports them outright: the SmartClock came back
+`CRLF x33 (9 replies end unterminated)`, the trailing `scpi > ` prompt having no terminator. For an
+unknown module that is a transport question rather than a parsing one, and `LineProtocol` is
+line-oriented — so it belongs in the summary rather than in the bytes.
+
+**One thing the smoke run confirms by contrast:** the SmartClock's `scpi > ` prompt is counted as a
+payload line, because this script does not know about it and must not. A UCCM is believed to have no
+prompt. If the module turns out to emit one, it will show up as an unexplained extra payload line on
+every reply — and the terminator summary is how you would notice.
+
 ## Why a third capture script
 
 Neither of the others can do this, and the reasons are the design:
