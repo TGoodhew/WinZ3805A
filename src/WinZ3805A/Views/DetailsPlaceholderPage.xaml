@@ -34,7 +34,8 @@
                        TextWrapping="Wrap"
                        Text="" />
 
-            <TextBlock Style="{ThemeResource WzCaptionTextStyle}"
+            <TextBlock x:Name="PageNote"
+                       Style="{ThemeResource WzCaptionTextStyle}"
                        Foreground="{ThemeResource WzTextTertiaryBrush}"
                        HorizontalAlignment="Left"
                        MaxWidth="{ThemeResource WzProseMaxWidth}"

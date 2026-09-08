@@ -145,6 +145,62 @@ public sealed class NmeaDriver(TimeProvider timeProvider) : IReceiverDriver
     public static DeviceIdentity IdentityFor(string talker) =>
         new(FamilyName, $"{talker} talker", string.Empty, string.Empty, ReceiverModel.Unknown);
 
+    /// <summary>
+    /// What NMEA 0183 can never carry, said once so that every page can stop guessing (#435).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Everything refused here is a disciplined-oscillator reading, and a talker has no
+    /// oscillator to discipline.</b> That is not a gap in this driver: TFOM, FFOM, the 1 PPS time
+    /// interval, holdover, EFC and the antenna delay do not appear anywhere in the standard's
+    /// sentences, so no talker will ever supply them however long anyone waits. The status
+    /// registers, error queue and diagnostic log are SCPI apparatus and equally absent, and a
+    /// broadcast talker has no status <i>screen</i> at all — reporting that the last one parsed
+    /// completely was a statement about something that never happened.
+    /// </para>
+    /// <para>
+    /// <b>The audit that prompted this found the interface asserting worse than blanks.</b> With a
+    /// VK-162 connected the Time page said the receiver had not answered the leap-second queries,
+    /// which had never been sent, and both Diagnostics and Status Registers showed an error icon
+    /// for a family that had done nothing wrong.
+    /// </para>
+    /// <para>
+    /// <b>Two of these are marked absent today and may not stay that way, which is why they are
+    /// listed rather than assumed.</b> <see cref="ReceiverReading.LeapSecond"/> is carried by
+    /// u-blox's proprietary <c>$PUBX,04</c> — measured on the bench unit as 18 s, decoded from the
+    /// satellites rather than a firmware default — and the same sentence carries a clock bias and
+    /// drift that stand in for the 1 PPS interval. It is a <i>poll</i>, though, and this driver
+    /// sends nothing at all (see <see cref="IsBlocked"/>), so consuming it is a decision about the
+    /// family's character rather than a parsing change. #435 holds the argument.
+    /// </para>
+    /// </remarks>
+    public bool Reports(ReceiverReading reading) => reading switch
+    {
+        ReceiverReading.Tfom => false,
+        ReceiverReading.Ffom => false,
+        ReceiverReading.OnePpsTimeInterval => false,
+        ReceiverReading.OscillatorControl => false,
+        ReceiverReading.Holdover => false,
+        ReceiverReading.AntennaDelay => false,
+        ReceiverReading.OutputValidity => false,
+        ReceiverReading.DeviceIdentity => false,
+        ReceiverReading.LeapSecond => false,
+        ReceiverReading.TimeCodeFormat => false,
+        ReceiverReading.PowerOnHours => false,
+        ReceiverReading.HealthMonitor => false,
+        ReceiverReading.StatusRegisters => false,
+        ReceiverReading.DiagnosticLog => false,
+        ReceiverReading.ErrorQueue => false,
+        ReceiverReading.StatusScreen => false,
+        ReceiverReading.ElevationMask => false,
+
+        // The one the standard does carry: GGA's quality indicator and GSA's mode say whether there
+        // is a fix and of what kind. What a talker has no notion of is a *held* position or a
+        // survey, so the page's survey half is gated by its commands rather than by this.
+        ReceiverReading.PositionHold => true,
+        _ => true,
+    };
+
     /// <inheritdoc />
     public string? ClassifyLine(string line)
     {

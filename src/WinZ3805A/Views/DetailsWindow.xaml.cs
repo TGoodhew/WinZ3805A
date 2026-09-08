@@ -22,6 +22,7 @@ using WinRT.Interop;
 using Microsoft.UI;
 
 using WinZ3805A.Controls;
+using WinZ3805A.Device.Drivers;
 using WinZ3805A.Services;
 using WinZ3805A.ViewModels;
 
@@ -134,6 +135,7 @@ public sealed partial class DetailsWindow : Window
         _scaling = new ScalingWatch(ApplyMinimumSize);
 
         BuildNavigation();
+        ApplyDestinationAvailability();
         AddAccelerators();
         RestorePlacement();
 
@@ -320,6 +322,87 @@ public sealed partial class DetailsWindow : Window
     }
 
     /// <summary>
+    /// Greys out the destinations the connected receiver could only show as dashes (#435).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Whole pages, not fields.</b> Timing, Holdover and Status Registers exist entirely to show
+    /// a disciplined oscillator and SCPI apparatus; against a talker every card on all three is
+    /// empty, and letting a user open them to find that out is a worse answer than saying so on the
+    /// way in. Every other destination keeps real content and is never gated — Diagnostics included,
+    /// because its application log is about this program rather than the receiver.
+    /// </para>
+    /// <para>
+    /// <b>The tooltip is not decoration.</b> Greying is a colour-and-contrast signal, which §9.4.3
+    /// says may not be the only channel, so the reason is also written into the item's automation
+    /// name for a screen reader. A disabled item that simply looks faint is indistinguishable from
+    /// a bug.
+    /// </para>
+    /// <para>
+    /// Re-applied on every connection change, because #287 re-selects a driver on each connect: the
+    /// receiver on the port can have been swapped for one with entirely different capabilities.
+    /// </para>
+    /// </remarks>
+    private void ApplyDestinationAvailability()
+    {
+        IReceiverDriver driver = _device.Session.Driver;
+
+        foreach (object entry in Nav.MenuItems.Concat(Nav.FooterMenuItems))
+        {
+            if (entry is not NavigationViewItem item ||
+                DetailsDestinations.ByTag((string?)item.Tag) is not DetailsDestination destination)
+            {
+                continue;
+            }
+
+            bool available = destination.Requires is not ReceiverReading reading || driver.Reports(reading);
+
+            // DIMMED, NOT DISABLED, and the difference is the whole reason this reads as it does.
+            // A disabled control receives no pointer input, so ToolTipService cannot fire on one and
+            // a user wondering why Timing will not open has no way whatever to ask. Dimming instead
+            // keeps the item answerable to the pointer, the keyboard and the screen reader.
+            //
+            // THE PANEL IS THE CHANNEL THAT IS KNOWN TO WORK. Selecting the entry navigates to a
+            // page saying the same thing at length, and that is deliberate rather than belt and
+            // braces: a tooltip is easy to miss and unreachable by touch, and no test here has
+            // managed to confirm one appears — a synthetic SetCursorPos hover does not drive WinUI's
+            // hover timer, so it reports "no tooltip" for enabled and disabled items alike and
+            // cannot tell them apart. The tooltip is set because it costs nothing and helps if it
+            // shows; nothing depends on it.
+            item.Opacity = available ? 1 : 0.5;
+
+            AutomationProperties.SetName(
+                item,
+                available ? destination.Label : $"{destination.Label}. {UnavailableReason(driver)}");
+
+            ToolTipService.SetToolTip(
+                item,
+                available ? ToolTipFor(destination) : UnavailableReason(driver));
+        }
+
+        // A page can become unreachable while the user is standing on it — a reconnect that finds a
+        // different receiver. Leaving them there would show a page of dashes under a pane entry that
+        // no longer matches what is on screen.
+        if (Nav.SelectedItem is NavigationViewItem selected &&
+            DetailsDestinations.ByTag((string?)selected.Tag) is DetailsDestination shown &&
+            shown.Requires is ReceiverReading needed &&
+            !driver.Reports(needed))
+        {
+            // Re-select rather than leave a real page on screen under a dimmed entry: the reconnect
+            // may have found a receiver that cannot fill the page the user was already reading.
+            Select(shown);
+        }
+    }
+
+    /// <summary>Why a destination cannot be opened on the receiver that is connected (#435).</summary>
+    /// <remarks>
+    /// Named for the family rather than for the page, because the limit is in what the receiver
+    /// speaks: the same page is perfectly reachable on a SmartClock.
+    /// </remarks>
+    private static string UnavailableReason(IReceiverDriver driver) =>
+        $"Not supported on a {driver.Family} receiver.";
+
+    /// <summary>
     /// §9.9's custom icon for a destination where one exists, and the stock glyph otherwise.
     /// </summary>
     /// <remarks>
@@ -490,7 +573,16 @@ public sealed partial class DetailsWindow : Window
         NavigationTransitionInfo transition = TransitionTo(index);
         _shownIndex = index;
 
-        if (Pages.TryGetValue(destination.Tag, out Type? page))
+        if (destination.Requires is ReceiverReading required && !_device.Session.Driver.Reports(required))
+        {
+            // The pane already dims this entry and says why on hover, but a tooltip is easy to miss
+            // and impossible to reach by touch. Selecting it shows the same sentence as a page (#435).
+            ContentFrame.Navigate(
+                typeof(DetailsPlaceholderPage),
+                new DetailsUnavailable(destination, UnavailableReason(_device.Session.Driver)),
+                transition);
+        }
+        else if (Pages.TryGetValue(destination.Tag, out Type? page))
         {
             ContentFrame.Navigate(page, _device, transition);
         }
@@ -644,6 +736,10 @@ public sealed partial class DetailsWindow : Window
     /// </remarks>
     private void RenderConnection()
     {
+        // A reconnect re-selects the driver (#287), so which destinations are worth opening can have
+        // changed under the user.
+        ApplyDestinationAvailability();
+
         (Severity severity, string text) = _device.Session.Status switch
         {
             ConnectionStatus.Connected => (Severity.Success, "Connected"),

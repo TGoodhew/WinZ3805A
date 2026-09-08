@@ -73,4 +73,39 @@ public static class Capability
         driver is null
             ? $"Not connected, so {what} cannot be set."
             : $"This receiver does not support {what}. The {driver.Family} driver has no command for it.";
+
+    // ---- The read side, added by #435 -----------------------------------------------------------
+
+    /// <summary>Whether the connected receiver's family can ever supply this reading.</summary>
+    /// <remarks>
+    /// True while disconnected, deliberately. "This receiver will never tell you" is a claim about
+    /// a family, and with no driver selected there is no family to make it about — so a page falls
+    /// back to §11.1's em dash, which is what an unknown value has always looked like.
+    /// </remarks>
+    public static bool Reports(IReceiverDriver? driver, ReceiverReading reading) =>
+        driver is null || driver.Reports(reading);
+
+    /// <summary>
+    /// The sentence a card shows for a reading the connected receiver can never supply.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Deliberately not <see cref="NotOffered"/>'s wording.</b> That one ends "the driver has no
+    /// command for it", which is right for a control that would have <i>sent</i> something and
+    /// wrong for a value: it invites the reading that the number exists and we neglected to ask.
+    /// The distinction is the whole point of #435 — the interface could not previously tell
+    /// "unread" from "unknowable", and two sentences that differ only in tone would not fix that.
+    /// </para>
+    /// <para>
+    /// §9.11's copy rules apply as they do to the command side: no apology, and it says what is
+    /// true rather than what is missing. A talker with no oscillator to discipline is not a
+    /// degraded SmartClock; it is a different instrument, and the page should read like one.
+    /// </para>
+    /// </remarks>
+    /// <param name="driver">The driver the session selected.</param>
+    /// <param name="what">The reading, as a noun phrase — "a time figure of merit".</param>
+    public static string NotReported(IReceiverDriver? driver, string what) =>
+        driver is null
+            ? $"Not connected, so {what} is unknown."
+            : $"This receiver does not report {what}. The {driver.Family} protocol does not carry it.";
 }

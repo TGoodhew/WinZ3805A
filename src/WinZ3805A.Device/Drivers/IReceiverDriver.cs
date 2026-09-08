@@ -286,4 +286,36 @@ public interface IReceiverDriver
     /// cycle — so it must be a line the talker sends exactly once per cycle. Never throw.
     /// </remarks>
     string? ClassifyLine(string line) => null;
+
+    // ---- Added by #435, when the audit found the interface unable to say "never" -----------------
+
+    /// <summary>
+    /// Can this family ever supply this reading, whatever the receiver happens to be doing? (#435)
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The read-side counterpart of the command catalog.</b> <see cref="Commands"/> answers
+    /// "what may I send", and §9.11 has said since #304 that a command a receiver lacks is disabled
+    /// and explained rather than hidden. Nothing answered "what may I ever <i>know</i>", so a
+    /// reading the family cannot carry was drawn as an em dash — which §9.11 defines under
+    /// <i>Partial / streaming</i> as a field that has not arrived <i>yet</i>. A user could not tell
+    /// a receiver that will never say from one that has not said so far.
+    /// </para>
+    /// <para>
+    /// <b>Answer about the family, never about this moment.</b> A receiver that is merely
+    /// disconnected, warming up, or failing to parse still <i>reports</i> a reading in this sense:
+    /// §11.1's rule already covers a value that could not be read, and it renders as an em dash on
+    /// purpose. Returning <see langword="false"/> is the stronger claim that no amount of waiting,
+    /// reconnecting or asking differently will ever produce one — so it must be a fact about the
+    /// protocol, not about the link.
+    /// </para>
+    /// <para>
+    /// <b>The default is <see langword="true"/>, and that is the safe direction.</b> A driver that
+    /// has not thought about a reading claims nothing: the interface goes on showing an em dash,
+    /// which is what it did before this member existed. The dangerous answer is a wrong
+    /// <see langword="false"/> — telling a user their receiver can never report something it
+    /// reports perfectly well is worse than a blank field, because it stops them looking.
+    /// </para>
+    /// </remarks>
+    bool Reports(ReceiverReading reading) => true;
 }

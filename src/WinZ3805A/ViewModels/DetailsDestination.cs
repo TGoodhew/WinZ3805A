@@ -1,4 +1,6 @@
-﻿namespace WinZ3805A.ViewModels;
+﻿using WinZ3805A.Device.Drivers;
+
+namespace WinZ3805A.ViewModels;
 
 /// <summary>
 /// One entry in the §9.7.1 navigation pane.
@@ -12,6 +14,25 @@ public sealed record DetailsDestination
 {
     /// <summary>Stable identifier, used as the item's tag and in the persisted pane state.</summary>
     public required string Tag { get; init; }
+
+    /// <summary>
+    /// The reading this whole page exists to show, where a family that cannot supply it makes the
+    /// page pointless rather than merely emptier (#435).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see langword="null"/> for a destination that is worth opening on any receiver, which is
+    /// most of them. Overview, Satellites, Position and Time all carry real NMEA data, and
+    /// Diagnostics keeps its application log — the part that is about this program rather than the
+    /// receiver — so none of them is gated.
+    /// </para>
+    /// <para>
+    /// <b>Only for a page that would be entirely dashes.</b> A page with one unavailable card
+    /// annotates that card; disabling the whole destination says something much stronger, and
+    /// saying it wrongly hides a page a user needed.
+    /// </para>
+    /// </remarks>
+    public ReceiverReading? Requires { get; init; }
 
     /// <summary>What the pane shows. Always visible in <c>Left</c> mode; a tooltip in the rail.</summary>
     public required string Label { get; init; }
@@ -111,6 +132,7 @@ public static class DetailsDestinations
         {
             Tag = "timing",
             Label = "Timing",
+            Requires = ReceiverReading.OnePpsTimeInterval,
             Glyph = "\uE916", // Stopwatch
             Summary = "Antenna delay with the cable calculator, 1 PPS alignment, and outputs (§10.7).",
         },
@@ -118,6 +140,7 @@ public static class DetailsDestinations
         {
             Tag = "holdover",
             Label = "Holdover",
+            Requires = ReceiverReading.Holdover,
             Glyph = "\uE769", // Pause, the fallback behind §9.9's custom holdover
             IconGeometryKey = "WzIconHoldover",
             Summary = "Holdover state, duration, uncertainty, and the recovery thresholds (§10.8).",
@@ -133,6 +156,7 @@ public static class DetailsDestinations
         {
             Tag = "registers",
             Label = "Status Registers",
+            Requires = ReceiverReading.StatusRegisters,
             Glyph = "\uE8A9", // ViewAll
             Summary = "Questionable and operation status registers, decoded bit by bit (§10.10).",
         },

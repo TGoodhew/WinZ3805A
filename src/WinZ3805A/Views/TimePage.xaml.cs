@@ -9,6 +9,7 @@ using Microsoft.UI.Xaml.Navigation;
 
 using WinZ3805A.Controls;
 using WinZ3805A.Device.Commands;
+using WinZ3805A.Device.Drivers;
 using WinZ3805A.Device.Models;
 using WinZ3805A.Device.Parsing;
 using WinZ3805A.Device.Transport;
@@ -181,8 +182,23 @@ public sealed partial class TimePage : Page
     }
 
     /// <summary>Reads the leap-second detail, asking only what the receiver will answer.</summary>
+    /// <remarks>
+    /// The family is asked first (#435). A driver that can never carry a leap second is not asked
+    /// and is not reported as having failed to answer: the sentence below used to say "the receiver
+    /// did not answer the leap-second queries" to a talker that had never been sent one, which is
+    /// an accusation rather than a reading.
+    /// </remarks>
     private async Task ReadLeapAsync(CancellationToken token)
     {
+        if (!Capability.Reports(_device?.Driver, ReceiverReading.LeapSecond))
+        {
+            _leap = LeapSecondReading.Unknown with
+            {
+                Error = Capability.NotReported(_device?.Driver, "a leap second or a GPS − UTC offset"),
+            };
+            return;
+        }
+
         try
         {
             int? accumulated = await AskAsync(LeapSecondQueries.Accumulated, token).ConfigureAwait(true);
@@ -230,6 +246,16 @@ public sealed partial class TimePage : Page
     /// </remarks>
     private async Task ReadTimeCodeAsync(CancellationToken token)
     {
+        if (!Capability.Reports(_device?.Driver, ReceiverReading.TimeCodeFormat))
+        {
+            // Same correction as the leap-second card above (#435): a family with no time code was
+            // being reported as having declined to name its format.
+            _timeCode = new TimeCodeReading(
+                TimeCodeFormat.Unknown,
+                Capability.NotReported(_device?.Driver, "a time code output"));
+            return;
+        }
+
         try
         {
             IReadOnlyList<string>? lines = await AskLinesAsync(TimeCodeFormats.Query, token)

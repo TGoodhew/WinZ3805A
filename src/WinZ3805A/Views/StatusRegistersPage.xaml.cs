@@ -194,6 +194,14 @@ public sealed partial class StatusRegistersPage : Page
 
         ErrorBar.IsOpen = model.Error is not null;
         ErrorBar.Message = model.Error ?? string.Empty;
+
+        // See DiagnosticsPage: a family with no status registers has not failed to read them (#435).
+        ErrorBar.Severity = model.ErrorIsUnsupported
+            ? Microsoft.UI.Xaml.Controls.InfoBarSeverity.Informational
+            : Microsoft.UI.Xaml.Controls.InfoBarSeverity.Error;
+        ErrorBar.Title = model.ErrorIsUnsupported
+            ? "Not available on this receiver"
+            : "Could not read the register";
     }
 
     private void OnDiscardMasksClicked(object sender, RoutedEventArgs e)
