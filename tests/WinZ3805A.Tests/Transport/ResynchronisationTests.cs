@@ -36,6 +36,54 @@ public class ResynchronisationTests
     // testing the other branch half the time. That is what the first version of the timeout test
     // did, and it failed five runs in six.
 
+    /// <summary>
+    /// Winds a pinned clock forward until a task completes, and <b>gives up</b> if it does not.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Stepping rather than jumping is the point: <c>FakeTimeProvider</c> fires the timers that
+    /// exist at the moment it advances, and a deadline registered on a continuation that has not
+    /// run yet is not one of them — a single jump past it lands before it exists and is lost.
+    /// </para>
+    /// <para>
+    /// <b>The bound is the reason this is a method (#445).</b> Written inline as
+    /// <c>while (!task.IsCompleted)</c>, the loop has no failure mode: if the deadline is never
+    /// registered it spins for ever, so the test does not fail — the <i>host</i> dies. That is what
+    /// happened on a CI runner, five minutes after 2,482 of 2,487 tests had passed, and the run
+    /// could only name "the test running when the crash occurred", which is a guess. A real-time
+    /// budget turns the same defect into a named assertion in under a second, and the virtual time
+    /// it reports is what says whether the deadline was missed or merely late.
+    /// </para>
+    /// </remarks>
+    /// <param name="clock">The pinned clock to wind.</param>
+    /// <param name="task">What is being waited for.</param>
+    /// <param name="step">How much virtual time each turn of the loop adds.</param>
+    /// <param name="what">Names the task in the failure message.</param>
+    internal static async Task AdvanceUntilCompleteAsync(
+        FakeTimeProvider clock,
+        Task task,
+        TimeSpan step,
+        string what)
+    {
+        // Real time, not iterations: a slow or contended runner is exactly where this fires, and an
+        // iteration count means something different on every machine.
+        using CancellationTokenSource giveUp = new(Settle);
+        TimeSpan wound = TimeSpan.Zero;
+
+        while (!task.IsCompleted && !giveUp.IsCancellationRequested)
+        {
+            clock.Advance(step);
+            wound += step;
+            await Task.Delay(5, CancellationToken.None);
+        }
+
+        Assert.True(
+            task.IsCompleted,
+            $"{what} never completed. Wound the clock {wound.TotalSeconds:N0} virtual seconds over "
+            + $"{Settle.TotalSeconds:N0} real ones, so its deadline was never registered rather than "
+            + "merely late.");
+    }
+
     /// <summary>Waits for something the protocol does on a continuation, without a fixed sleep.</summary>
     private static async Task UntilAsync(Func<bool> condition)
     {
@@ -194,11 +242,13 @@ public class ResynchronisationTests
         // Stepped rather than jumped. FakeTimeProvider fires the timers that exist when it advances,
         // and the realignment's deadline is registered on a continuation that may not have run yet —
         // one 61-second jump can land before it exists and be lost entirely.
-        while (!reaches.IsCompleted)
-        {
-            clock.Advance(TimeSpan.FromSeconds(10));
-            await Task.Delay(5, CancellationToken.None);
-        }
+        //
+        // BOUNDED, because an unbounded version of this loop does not fail — it HANGS, and takes the
+        // whole test host with it (#445). This spun for five minutes on a CI runner, tripped
+        // --blame-hang, and killed the process after 2,482 of 2,487 tests had passed; the run
+        // reported "the test running when the crash occurred", which is a guess rather than a
+        // finding. A bound turns that into a named assertion in under a second.
+        await AdvanceUntilCompleteAsync(clock, reaches, TimeSpan.FromSeconds(10), nameof(reaches));
 
         Assert.Equal(":SYNC:STAT?", await reaches.WaitAsync(Settle));
         await transport.EmitAsync($"LOCK\r\n{Prompt}");
