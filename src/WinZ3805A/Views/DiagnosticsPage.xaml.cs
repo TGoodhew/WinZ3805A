@@ -496,6 +496,16 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
 
         FaultBar.IsOpen = model.Fault is not null;
         FaultBar.Message = model.Fault ?? string.Empty;
+
+        // A capability gap is not a fault (#435). The severity and the title both change, because
+        // an error icon over "this receiver has no self test" says the application is broken when
+        // it is working exactly as designed.
+        FaultBar.Severity = model.FaultIsUnsupported
+            ? Microsoft.UI.Xaml.Controls.InfoBarSeverity.Informational
+            : Microsoft.UI.Xaml.Controls.InfoBarSeverity.Error;
+        FaultBar.Title = model.FaultIsUnsupported
+            ? "Not available on this receiver"
+            : "Could not read from the receiver";
     }
 
     /// <inheritdoc />

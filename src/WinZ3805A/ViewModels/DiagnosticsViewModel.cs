@@ -3,6 +3,7 @@ using System.Globalization;
 
 using WinZ3805A.Controls;
 using WinZ3805A.Device.Commands;
+using WinZ3805A.Device.Drivers;
 using WinZ3805A.Device.Models;
 using WinZ3805A.Device.Parsing;
 using WinZ3805A.Device.Transport;
@@ -32,6 +33,9 @@ public sealed class DiagnosticsViewModel : INotifyPropertyChanged
     private IReadOnlyList<string> _parseWarnings = [];
     private bool _isReading;
     private string? _fault;
+
+    /// <summary>Whether <see cref="Fault"/> is a capability gap rather than something going wrong (#435).</summary>
+    private bool _faultIsUnsupported;
 
     /// <summary>Creates a view model over the shared session.</summary>
     public DiagnosticsViewModel(DeviceSessionService session)
@@ -78,10 +82,20 @@ public sealed class DiagnosticsViewModel : INotifyPropertyChanged
     /// What the card says when the parser met nothing it could not read.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Stated rather than left blank: an empty card reads as "not implemented", and the useful fact
     /// here is the negative one — the screen parsed completely.
+    /// </para>
+    /// <para>
+    /// <b>Unless there is no screen (#435).</b> A broadcast talker sends a cycle of sentences and
+    /// has no status screen at all, so "the last status screen parsed completely" reported a
+    /// success at something that never happened — the audit found it saying exactly that with a
+    /// VK-162 connected.
+    /// </para>
     /// </remarks>
-    public string ParseWarningSummary => ParseWarnings.Count switch
+    public string ParseWarningSummary => !_session.Driver.Reports(ReceiverReading.StatusScreen)
+        ? $"This receiver does not send a status screen. The {_session.Driver.Family} protocol broadcasts sentences instead, and any that could not be read are counted above."
+        : ParseWarnings.Count switch
     {
         0 => "The last status screen parsed completely.",
         1 => "1 field in the last status screen could not be read.",
@@ -96,6 +110,17 @@ public sealed class DiagnosticsViewModel : INotifyPropertyChanged
 
     /// <summary>What went wrong, if anything did.</summary>
     public string? Fault => _fault;
+
+    /// <summary>
+    /// Whether <see cref="Fault"/> describes a family that never had the command, rather than a
+    /// read that failed (#435).
+    /// </summary>
+    /// <remarks>
+    /// The page shows an error bar for a fault and an informational one for this. A receiver doing
+    /// exactly what it was built to do must not be presented with an error icon, which is what a
+    /// talker got on this page and on §10.10's.
+    /// </remarks>
+    public bool FaultIsUnsupported => _faultIsUnsupported;
 
     /// <summary>The result of the last self-test the receiver ran.</summary>
     public string SelfTestResultText => string.IsNullOrWhiteSpace(_selfTestResult)
@@ -245,6 +270,7 @@ public sealed class DiagnosticsViewModel : INotifyPropertyChanged
 
         _isReading = true;
         _fault = null;
+        _faultIsUnsupported = false;
         RaiseAll();
 
         try
@@ -303,6 +329,7 @@ public sealed class DiagnosticsViewModel : INotifyPropertyChanged
 
         _isReading = true;
         _fault = null;
+        _faultIsUnsupported = false;
         _errors.Clear();
         RaiseAll();
 
@@ -338,7 +365,11 @@ public sealed class DiagnosticsViewModel : INotifyPropertyChanged
         // route around it.
         if (_session.Driver.Find(mnemonic) is not ScpiCommand command)
         {
-            _fault ??= $"{mnemonic} is not in the driver's command catalog.";
+            // §8.1 makes the catalog an allowlist, so a family that never had this command has done
+            // nothing wrong. Naming the mnemonic put raw SCPI in front of a user and an error icon on
+            // a page that was working correctly (#435).
+            _fault ??= $"This receiver does not support this reading. The {_session.Driver.Family} driver has no command for it.";
+            _faultIsUnsupported = true;
             return new Transaction
             {
                 Command = mnemonic,

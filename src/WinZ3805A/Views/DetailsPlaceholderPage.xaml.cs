@@ -27,10 +27,27 @@ public sealed partial class DetailsPlaceholderPage : Page
     {
         base.OnNavigatedTo(e);
 
-        if (e?.Parameter is DetailsDestination destination)
+        switch (e?.Parameter)
         {
-            PageTitle.Text = destination.Label;
-            PageSummary.Text = destination.Summary;
+            // A destination this receiver can never fill (#435). Same page, different claim: the
+            // note below is a statement about the receiver rather than a promise about a future
+            // release, and saying "not built yet" here would be simply false.
+            case DetailsUnavailable unavailable:
+                PageTitle.Text = unavailable.Destination.Label;
+                PageSummary.Text = unavailable.Reason;
+                PageNote.Text =
+                    $"{unavailable.Destination.Summary} None of that reaches this application from the receiver " +
+                    "on the port, so the page would show nothing but dashes. Connect a receiver whose protocol " +
+                    "carries it and this entry becomes available again.";
+                break;
+
+            case DetailsDestination destination:
+                PageTitle.Text = destination.Label;
+                PageSummary.Text = destination.Summary;
+                break;
+
+            default:
+                break;
         }
     }
 }

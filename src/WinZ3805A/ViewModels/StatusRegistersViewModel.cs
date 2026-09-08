@@ -3,6 +3,7 @@ using System.Globalization;
 
 using WinZ3805A.Controls;
 using WinZ3805A.Device.Commands;
+using WinZ3805A.Device.Drivers;
 using WinZ3805A.Device.Models;
 using WinZ3805A.Device.Transport;
 using WinZ3805A.Services;
@@ -33,6 +34,9 @@ public sealed class StatusRegistersViewModel : INotifyPropertyChanged
     private StatusRegisterReading? _reading;
     private bool _isReading;
     private string? _error;
+
+    /// <summary>Whether <see cref="Error"/> is a capability gap rather than a failure (#435).</summary>
+    private bool _errorIsUnsupported;
 
     /// <summary>The pending mask edit, rebuilt whenever a fresh reading arrives.</summary>
     private RegisterMaskEdit _edit = new(null, null, null);
@@ -78,6 +82,7 @@ public sealed class StatusRegistersViewModel : INotifyPropertyChanged
                 // screen under a new heading would be the most misleading thing this page could do.
                 _reading = null;
                 _error = null;
+                _errorIsUnsupported = false;
                 _edit = new RegisterMaskEdit(null, null, null);
                 RaiseAll();
             }
@@ -92,6 +97,13 @@ public sealed class StatusRegistersViewModel : INotifyPropertyChanged
 
     /// <summary>What went wrong, if anything did.</summary>
     public string? Error => _error;
+
+    /// <summary>
+    /// Whether <see cref="Error"/> describes a family with no status registers at all, rather than
+    /// a read that failed (#435). The page shows an informational bar for this and an error bar for
+    /// the other.
+    /// </summary>
+    public bool ErrorIsUnsupported => _errorIsUnsupported;
 
     /// <summary>Whether the page can ask the receiver anything.</summary>
     public bool CanRead => !_isReading && _session.Status == ConnectionStatus.Connected;
@@ -219,6 +231,7 @@ public sealed class StatusRegistersViewModel : INotifyPropertyChanged
 
         _isReading = true;
         _error = null;
+        _errorIsUnsupported = false;
         RaiseAll();
 
         try
@@ -247,7 +260,13 @@ public sealed class StatusRegistersViewModel : INotifyPropertyChanged
 
             if (!_reading.HasAnyValue)
             {
-                _error = "The receiver did not answer any of this register's fields.";
+                // A family with no status registers has not failed to answer — it was never asked,
+                // because it has no such command (#435). Reporting that as a read failure put an
+                // error icon on the page and made a working receiver look broken.
+                _errorIsUnsupported = !_session.Driver.Reports(ReceiverReading.StatusRegisters);
+                _error = _errorIsUnsupported
+                    ? $"This receiver does not have status registers. They are SCPI apparatus, and the {_session.Driver.Family} protocol does not carry them."
+                    : "The receiver did not answer any of this register's fields.";
             }
         }
         catch (OperationCanceledException)
@@ -272,7 +291,8 @@ public sealed class StatusRegistersViewModel : INotifyPropertyChanged
         // allowlist, and ExecuteAsync takes an ScpiCommand precisely so nothing can route around it.
         if (_session.Driver.Find(mnemonic) is not ScpiCommand command)
         {
-            _error = $"{mnemonic} is not in the driver's command catalog.";
+            _error = $"This receiver does not support reading this register. The {_session.Driver.Family} driver has no command for it.";
+            _errorIsUnsupported = true;
             return null;
         }
 
