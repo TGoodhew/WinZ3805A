@@ -462,9 +462,40 @@ deliberately.
 > the tracked boundary. **A shielding attempt that fails is a weak-signal capture that succeeded**,
 > so label and keep it rather than deleting it.
 
-**What a GPS-only puck cannot give you at all**, however long you sit with it: a second
-constellation (#424) and `GNS` (#429). Those need a GLONASS- or Galileo-capable module, and no
-amount of patience with this one substitutes.
+### The puck is not GPS-only, and that was worth finding out (8 Sep 2026)
+
+**This section previously said a second constellation "needs a GLONASS- or Galileo-capable module".
+The VK-162 is one.** Its ROM advertises `GPS;SBAS;GLO;QZSS` and `UBX-CFG-GNSS` carries a GLONASS
+block — supported, and merely disabled. Poll the receiver rather than believing a label:
+
+```powershell
+# UBX-MON-VER (0x0A 0x04) lists the constellations in the ROM.
+# UBX-CFG-GNSS (0x06 0x3E) says which are enabled.
+```
+
+**Ask for what you want and let the receiver refuse.** Three attempts, three answers:
+
+| Asked for | Answer |
+|---|---|
+| GPS + GLONASS concurrently | **NAK** — u-blox 7 runs one constellation at a time |
+| GLONASS + SBAS + QZSS, GPS off | **NAK** — SBAS and QZSS are GPS augmentations |
+| GLONASS alone, all augmentations off | **ACK** |
+
+**Send `CFG-GNSS` to RAM only — no `CFG-CFG` save — so unplugging reverts it**, and set it back
+explicitly afterwards anyway. `vk162-glonass-only.nmea` is the result, and it is the only capture in
+the corpus taken with the receiver reconfigured; its note says so, because a capture whose
+provenance is silent about that is misleading.
+
+**Two things came free that shielding could not buy.** GLONASS from cold with no almanac gave
+**152 consecutive no-fix cycles** — against *one* from the GPS cold start, which reacquires in a
+second — so it is the corpus's longest genuine no-fix stretch and cost nothing but patience. And
+with SBAS off the fix ladder stops at quality `1`, which is the **standalone** branch of
+`ModeDetail` that no other capture takes.
+
+**What is still genuinely out of reach here.** #424 needs two constellations *in one cycle* and this
+receiver cannot produce them at all; it also numbers GLONASS in 65–96 exactly as NMEA 4.10 says, so
+it would not collide even if it could. #429's `GNS` likewise. Both still need different hardware —
+but that is now a measurement rather than an assumption.
 
 ---
 
