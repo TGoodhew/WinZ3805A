@@ -242,6 +242,14 @@ public sealed partial class OverviewPage : Page
         }
 
         TimeInterval.Value = model.TimeIntervalNanoseconds;
+        TimeIntervalCaption.Text = model.TimeIntervalDetail;
+
+        // #435's last reading. Three captions that are each a full sentence do not belong side by
+        // side in columns sized for "PLL stable", so when the whole set is unobtainable one
+        // sentence stands in for the row. Mixed families keep the row (see NoMeritsReported).
+        MeritsUnavailableText.Text = model.NoMeritsReported ? model.MeritsUnavailableText : string.Empty;
+        MeritsUnavailableText.Visibility = model.NoMeritsReported ? Visibility.Visible : Visibility.Collapsed;
+        MeritRow.Visibility = model.NoMeritsReported ? Visibility.Collapsed : Visibility.Visible;
 
         HoldoverPredictedText.Text = WithUnit(model.HoldoverPredicted);
         HoldoverThresholdText.Text = WithUnit(model.HoldoverThreshold);

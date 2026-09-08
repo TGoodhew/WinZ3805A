@@ -400,6 +400,53 @@ public sealed class OverviewViewModelTests
         Assert.DoesNotContain("does not report", smartClock.FfomDetail, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The 1 PPS tile's caption is prose about a measurement a talker cannot make (#435).
+    /// </summary>
+    /// <remarks>
+    /// It was <c>"relative to GPS"</c>, a literal in the XAML, which is how it outlived every other
+    /// correction on this page — the same way the Lifetime card kept explaining an oven-controlled
+    /// oscillator to a receiver that has none. A talker has no 1 PPS to be relative to anything.
+    /// </remarks>
+    [Fact]
+    public void TheTimeIntervalCaptionSaysWhenTheFamilyHasNo1Pps()
+    {
+        Assert.Equal(
+            "This receiver does not report a 1 PPS time interval. The NMEA 0183 protocol does not carry it.",
+            Talker().TimeIntervalDetail);
+
+        (OverviewViewModel smartClock, _) = Connected();
+        Assert.Equal("relative to GPS", smartClock.TimeIntervalDetail);
+    }
+
+    /// <summary>
+    /// One sentence stands in for the whole row when none of the three figures can ever arrive.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Each caption is a full sentence for such a family, and the columns holding them were sized
+    /// for "PLL stable" — so three side by side is both a repetition and a layout the card was
+    /// never given. That is the design call #435 left open, and this pins it.
+    /// </para>
+    /// <para>
+    /// <b>The guard is the interesting half.</b> It is all three or none: a family supplying some
+    /// of these keeps the row, because one sentence over the set would claim more than it knows.
+    /// No family does that today, which is exactly why the assertion is here.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void TheWholeMeritRowIsReplacedOnlyWhenNoneOfItCanArrive()
+    {
+        Assert.True(Talker().NoMeritsReported);
+        Assert.Equal(
+            "This receiver does not report a figure of merit or a 1 PPS time interval. "
+            + "The NMEA 0183 protocol does not carry it.",
+            Talker().MeritsUnavailableText);
+
+        (OverviewViewModel smartClock, _) = Connected();
+        Assert.False(smartClock.NoMeritsReported);
+    }
+
     /// <remarks>
     /// "Unknown" invites another look. A family that reports no output validity reads the same on
     /// every look there ever is, and this one renders in a pill, so it has to say that in the words

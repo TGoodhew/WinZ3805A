@@ -260,6 +260,46 @@ public sealed class OverviewViewModel : INotifyPropertyChanged, IDisposable
         : FiguresOfMerit.PllState(Ffom) ?? ReadoutFormatter.NoValue;
 
     /// <summary>
+    /// The caption under the 1 PPS time-interval tile (#435).
+    /// </summary>
+    /// <remarks>
+    /// <b>The last literal on this page, and the last reading #435 left open.</b> It read
+    /// "relative to GPS" from the XAML, which is prose about a measurement a broadcast talker has
+    /// no way of making — it has no 1 PPS to compare against anything. Under an em dash that
+    /// invites the reading that the number is merely late. Same defect as the Lifetime card's
+    /// oven-controlled-oscillator sentence, and it survived for the same reason: a literal in the
+    /// markup is shown to whatever is connected.
+    /// </remarks>
+    public string TimeIntervalDetail => Driver.Reports(ReceiverReading.OnePpsTimeInterval)
+        ? "relative to GPS"
+        : NotReported("a 1 PPS time interval");
+
+    /// <summary>
+    /// Whether all three figures on the Synchronization card are unobtainable for this family.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When they are, the view replaces the whole row with one sentence rather than showing three.
+    /// Each caption is already a full sentence for such a family, and the columns holding them
+    /// were sized for "PLL stable" — so three of them side by side is both a repetition and a
+    /// layout the card was never given.
+    /// </para>
+    /// <para>
+    /// <b>All three, not any.</b> A family that supplies some of these keeps the row, because one
+    /// sentence covering the set would then be claiming more than it knows. No family does that
+    /// today; the distinction is here so the next one does not have to rediscover it.
+    /// </para>
+    /// </remarks>
+    public bool NoMeritsReported =>
+        !Driver.Reports(ReceiverReading.Tfom) &&
+        !Driver.Reports(ReceiverReading.Ffom) &&
+        !Driver.Reports(ReceiverReading.OnePpsTimeInterval);
+
+    /// <summary>The one sentence that replaces the figures when none of them can ever arrive.</summary>
+    public string MeritsUnavailableText =>
+        NotReported("a figure of merit or a 1 PPS time interval");
+
+    /// <summary>
     /// The sentence a caption shows for a reading this family can never supply (#435).
     /// </summary>
     /// <remarks>

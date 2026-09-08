@@ -107,7 +107,26 @@
                             The three headline figures. Each carries the number, its label, and what the
                             number means - the sub-caption is the whole point of showing TFOM at all.
                         -->
-                        <Grid ColumnSpacing="{ThemeResource WzSpaceMd}">
+                        <!--
+                            #435's last reading. All three figures here belong to capabilities a
+                            broadcast talker lacks, and each caption is already a full sentence for
+                            such a family - so three of them appear side by side in Auto-width
+                            columns that were sized for "PLL stable". One sentence replaces the row
+                            instead, which is the same rule the Holdover card below applies.
+
+                            Only when NONE of the three is reported. A family that supplies some of
+                            them keeps the row and lets each caption speak for itself, because the
+                            sentence would then be claiming more than it knows.
+                        -->
+                        <TextBlock x:Name="MeritsUnavailableText"
+                                   Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}"
+                                   HorizontalAlignment="Left"
+                                   TextWrapping="Wrap"
+                                   Visibility="Collapsed" />
+
+                        <Grid x:Name="MeritRow" ColumnSpacing="{ThemeResource WzSpaceMd}">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="Auto" />
@@ -136,9 +155,17 @@
                                                       MaxIntegerDigits="5"
                                                       AllowNegative="True"
                                                       Size="Medium" />
-                                <TextBlock Style="{ThemeResource WzCaptionTextStyle}"
+                                <!--
+                                    Written from the view model rather than as a literal (#435).
+                                    "relative to GPS" under an em dash is prose about a measurement
+                                    the receiver may have no way of making, and a literal here is
+                                    exactly how the Lifetime card's oven-controlled-oscillator
+                                    sentence survived.
+                                -->
+                                <TextBlock x:Name="TimeIntervalCaption"
+                                           Style="{ThemeResource WzCaptionTextStyle}"
                                            Foreground="{ThemeResource WzTextSecondaryBrush}"
-                                           Text="relative to GPS" />
+                                           TextWrapping="Wrap" />
                             </StackPanel>
                         </Grid>
                     </StackPanel>
