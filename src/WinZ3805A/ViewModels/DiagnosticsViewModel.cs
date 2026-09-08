@@ -147,6 +147,20 @@ public sealed class DiagnosticsViewModel : INotifyPropertyChanged
         : ReadoutFormatter.NoValue;
 
     /// <summary>
+    /// The caption under the Lifetime card.
+    /// </summary>
+    /// <remarks>
+    /// <b>It explained an OCXO to a receiver that has none (#435).</b> The sentence was a literal in
+    /// the XAML, so it was shown whatever was connected: with a talker on the port the card offered
+    /// an em dash above prose about an oven-controlled oscillator ageing with running time, which
+    /// invites the reading that the figure is obtainable and merely missing. A family that has no
+    /// oscillator has no hours behind one either.
+    /// </remarks>
+    public string PowerOnHoursCaption => _session.Driver.Reports(ReceiverReading.PowerOnHours)
+        ? "How long the receiver has run in total. An oven-controlled oscillator ages with running time, so this is the figure behind the drift the Overview page's EFC trend shows."
+        : NotReported("how long it has been powered");
+
+    /// <summary>
     /// Re-reads <c>:DIAG:TEST:RES?</c> after a test has run (#53).
     /// </summary>
     /// <returns>The raw reply, or null when it could not be read.</returns>
@@ -245,20 +259,50 @@ public sealed class DiagnosticsViewModel : INotifyPropertyChanged
     public bool IsLogEmpty => _log.Count == 0;
 
     /// <summary>What the log card says when it has no rows.</summary>
+    /// <remarks>
+    /// <b>"Has not been read yet" is a promise, and for some families it is one that cannot be kept
+    /// (#435).</b> §9.11's empty state says what <i>will</i> appear there, which is right when
+    /// something will; a receiver with no log of its own leaves that sentence describing a read that
+    /// is never going to happen. The filter message stays ahead of both, because a filter that
+    /// matches nothing is about the filter whatever the receiver is.
+    /// </remarks>
     public string LogEmptyText => _log.Count > 0
         ? $"No entry matches “{_filter}”."
-        : "The log has not been read yet, or the receiver has nothing in it.";
+        : _session.Driver.Reports(ReceiverReading.DiagnosticLog)
+            ? "The log has not been read yet, or the receiver has nothing in it."
+            : NotReported("a diagnostic log of its own");
 
     /// <summary>The error queue, oldest first, as read.</summary>
     public IReadOnlyList<string> Errors => _errors;
 
     /// <summary>What the error card says.</summary>
-    public string ErrorSummaryText => _errors.Count switch
+    /// <remarks>
+    /// <b>"No errors." is a positive claim about a queue that need not exist (#435).</b> It is the
+    /// useful answer for a receiver that keeps one — the negative fact is worth stating rather than
+    /// leaving the card blank — and it is a clean bill of health invented out of nothing for a
+    /// family that has no error queue at all. The audit found it saying exactly that with a talker
+    /// connected, beside a Read button that would have reported a fault if pressed.
+    /// </remarks>
+    public string ErrorSummaryText => !_session.Driver.Reports(ReceiverReading.ErrorQueue)
+        ? NotReported("an error queue")
+        : _errors.Count switch
     {
         0 => "No errors.",
         1 => "1 error read from the queue.",
         _ => $"{_errors.Count} errors read from the queue.",
     };
+
+    /// <summary>
+    /// The sentence a card shows for a reading this receiver's family can never supply (#435).
+    /// </summary>
+    /// <remarks>
+    /// Local rather than <c>Views.Capability.NotReported</c>, which says the same words: a view
+    /// model reaching into the view layer for a string would invert the dependency this project
+    /// keeps, and this class already wrote the sentence out once by hand for the status screen. Same
+    /// wording either way, so the two surfaces read alike.
+    /// </remarks>
+    private string NotReported(string what) =>
+        $"This receiver does not report {what}. The {_session.Driver.Family} protocol does not carry it.";
 
     /// <summary>Reads the self-test result, the log count and the log.</summary>
     public async Task RefreshAsync(CancellationToken cancellationToken = default)

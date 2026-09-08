@@ -457,12 +457,18 @@
                                        Style="{ThemeResource WzMonoTextStyle}" />
                         </Grid>
 
-                        <TextBlock Style="{ThemeResource WzCaptionTextStyle}"
+                        <!--
+                            Written from the view model rather than as a literal here (#435). It
+                            explained an oven-controlled oscillator to whatever was connected, and
+                            against a talker that is prose about hardware the receiver does not
+                            have, sitting under an em dash it makes look merely unread.
+                        -->
+                        <TextBlock x:Name="PowerOnHoursCaption"
+                                   Style="{ThemeResource WzCaptionTextStyle}"
                                    Foreground="{ThemeResource WzTextTertiaryBrush}"
                                    TextWrapping="Wrap"
                                    HorizontalAlignment="Left"
-                                   MaxWidth="{ThemeResource WzProseMaxWidth}"
-                                   Text="How long the receiver has run in total. An oven-controlled oscillator ages with running time, so this is the figure behind the drift the Overview page's EFC trend shows." />
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}" />
                     </StackPanel>
                 </Border>
 
