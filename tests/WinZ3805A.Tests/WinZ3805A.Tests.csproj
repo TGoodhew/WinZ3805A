@@ -27,6 +27,13 @@
          end-of-line conversion because the parser derives satellite columns from token positions,
          and MSBuild must not undo that on the way to the output folder. -->
     <Content Include="Fixtures\**\*.txt" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Captured talker output (#420). Bytes, not lines: a talker emits a bare LF where CRLF
+         was expected and a truncated sentence when a cable is pulled, and the replay tests exist
+         to prove the listener survives exactly that, so nothing may re-terminate them on the way
+         to the output folder either. These live outside Fixtures\ because FixtureCorpusTests
+         asserts every *.txt there IS a SmartClock status screen (#221). -->
+    <Content Include="Nmea\Captures\**\*.nmea" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Nmea\Captures\**\*.md" CopyToOutputDirectory="PreserveNewest" />
     <!-- The user's guide and its images, laid out exactly as the package lays them out
          (Help\...), so HelpDocumentTests can check that every image the document names is
          one the package will carry (#312). -->

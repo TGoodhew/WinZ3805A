@@ -3,8 +3,40 @@
 Raw bytes from a real NMEA 0183 talker, written by `build/Capture-Talker.ps1`. Nothing here has
 been decoded, re-terminated or trimmed.
 
-**Empty so far.** The NMEA driver has never met a real talker (#310, #420) — everything it has been
-tested against came from `tools/NmeaSimulator`. The first capture goes here.
+**The driver met its first real receiver on 7 September 2026** (#420) — a **VK-162** USB GPS puck,
+u-blox `UBX-G70xx`, ROM CORE 1.00 (59842), PROTVER 14.00, at 9600-8-N-1 on COM4. Before that day
+everything the NMEA family had ever been tested against came from `tools/NmeaSimulator` (#310).
+
+| Capture | Duration | Bytes | What it is for |
+|---|---|---|---|
+| `vk162-steady-state` | 30 min | 927 KB | The boring case at length. A differential 3D fix in all 1,800 cycles, and **exactly 1,800 of each per-second sentence** — so a gap in any other capture is the receiver's doing, not the harness's. |
+| `vk162-cold-start` | 5.6 min | 186 KB | Power-on. The **only no-fix cycle** anywhere in the corpus, then all three GGA qualities and all three RMC mode indicators in order. |
+| `vk162-microwave` | — | — | The same receiver at the edge of its sensitivity, ~10 dB down, with a fifth of its satellites in view but untracked. |
+
+Each has a `.md` beside it saying what was happening; read those rather than this table.
+
+`NmeaCaptureReplayTests` replays every one of them through the real `BroadcastListener` and
+`NmeaStatusParser`, cycle by cycle, and holds each cycle to what must be true of any of them.
+
+## What the corpus still does not contain
+
+Being explicit about this matters more than the table above, because a gap nobody wrote down is a
+gap somebody later assumes is covered.
+
+- **A fix lost while powered.** Every attempt on 7 September failed: an inverted metal cover
+  managed about 5 dB of attenuation and a microwave oven with the door shut about 10 dB, and
+  neither stopped an 11-satellite fix. It needs a real enclosure. This is the one item of #420's
+  stage 2 still outstanding, and the reason nothing here exercises a receiver going *from* a fix
+  *to* none.
+- **A second constellation.** This receiver is GPS-only — every sentence is `GP` — so #424, which
+  asks whether two constellations ever number their satellites the same way, cannot be answered
+  from these bytes at all. It needs a GLONASS- or Galileo-capable module.
+- **`GNS`.** Never emitted, so #429 is likewise unanswerable here.
+- **A truncated sentence from a cable pull.** `vk162-steady-state` ends mid-sentence, but only
+  because the capture's clock ran out — it stops one byte into the next sentence, on a lone `$`.
+  `vk162-cold-start` *was* ended by pulling the lead and still ends on a complete sentence, the
+  lead having come out during the idle gap between cycles. Truncation by cable pull is therefore
+  still unobserved, and it is luck rather than design that separates the two.
 
 ## Why not `Fixtures/`
 
@@ -19,7 +51,7 @@ corpus that would either reject it or, worse, accept it.
 
 ## The bytes are the point
 
-`.gitattributes` marks this folder `-text`, so git performs no end-of-line conversion in either
+`.gitattributes` marks `*.nmea` here `-text`, so git performs no end-of-line conversion in either
 direction on any platform — the same rule the SmartClock fixtures live under, for the same reason.
 
 A talker emits things the parser has to survive: a sentence split across reads, a bare LF where CRLF
@@ -33,19 +65,14 @@ a **"What was happening"** section left deliberately blank.
 
 **Fill that in on the day.** Where the antenna was, what was done to the receiver and when, anything
 seen on screen that the bytes alone will not explain. Only the person who was there can write it,
-and a capture nobody can attribute is a file rather than evidence.
+and a capture nobody can attribute is a file rather than evidence. `NmeaCaptureReplayTests` fails a
+capture whose note still carries the placeholder, so this is enforced rather than requested.
 
 The extension is `.md` on purpose: `.txt` gets collected by the fixture corpus, and `.log` is
 gitignored, so provenance written to either never reaches the repository. Both have happened (#221).
 
-## What a capture is for
+## The positions in these files are real
 
-Three open issues want one:
-
-- **#420** — the driver against actual receiver output, which is the whole point of stage 2
-- **#424** — whether two constellations ever number their satellites the same way, which needs a
-  multi-constellation receiver emitting `$GPGSV` and `$GLGSV` in one cycle
-- **#429** — whether `GNS` ever arrives without `GGA`
-
-A single log covering cold start, acquisition, steady state and a mid-session cable pull serves all
-three, and can be replayed indoors for ever afterwards.
+They were not scrubbed, and that was a decision rather than an oversight: a capture edited to be
+safe is no longer byte-exact, and byte-exact is the only property that makes it worth keeping.
+Anyone adding a capture should know that is what they are committing.
