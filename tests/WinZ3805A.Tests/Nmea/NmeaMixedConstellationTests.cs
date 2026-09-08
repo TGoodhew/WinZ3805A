@@ -143,6 +143,53 @@ public sealed class NmeaMixedConstellationTests
         Assert.Null(status.Position.HeightMetres);
     }
 
+    /// <summary>
+    /// The same claim, against a receiver that really was sending GNS and no GGA (#429).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>#429 said this configuration's reachability was unknown</b> — "no receiver we can test
+    /// against has ever been seen to omit `GGA`", and whether one could be configured that way "is
+    /// unknown". It is reachable, and trivially: `UBX-CFG-MSG` enables GNS and disables GGA on the
+    /// VK-162 already in the corpus. `vk162-gns-no-gga.nmea` is twelve minutes of the result — 720
+    /// GNS sentences and **not one GGA**.
+    /// </para>
+    /// <para>
+    /// So the test above is no longer the only evidence. This one asserts the same three things
+    /// against bytes a receiver actually sent, which is the difference between believing the
+    /// fallback works and knowing it.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void TheRealReceiverSendingGnsAndNoGgaStillShowsAFixAndAPosition()
+    {
+        string path = Path.Combine(
+            AppContext.BaseDirectory, "Nmea", "Captures", "vk162-gns-no-gga.nmea");
+        Assert.True(File.Exists(path), $"{path} is missing; the capture is the evidence.");
+
+        string[] lines = File.ReadAllText(path).Split('\n');
+
+        // The receiver's own bytes, not a hand-written cycle: one RMC and the GNS that follows it.
+        int rmc = Array.FindIndex(lines, l => l.StartsWith("$GPRMC", StringComparison.Ordinal) && l.Contains(",A,", StringComparison.Ordinal));
+        Assert.True(rmc >= 0, "the capture holds no RMC reporting a valid fix.");
+
+        string cycle = string.Join('\n', lines.Skip(rmc).Take(8).Select(l => l.TrimEnd('\r')));
+        Assert.DoesNotContain("$GPGGA", cycle, StringComparison.Ordinal);
+        Assert.Contains("$GPGNS", cycle, StringComparison.Ordinal);
+
+        ReceiverStatus status = NmeaStatusParser.Parse(cycle, Now);
+
+        // The fear #417 raised, refuted against hardware: the fix survives GGA's absence.
+        Assert.True(status.GpsOnePpsValid);
+        Assert.NotNull(status.Position);
+        Assert.InRange(status.Position.LatitudeDegrees!.Value, 47.0, 48.0);
+        Assert.InRange(status.Position.LongitudeDegrees!.Value, -123.0, -122.0);
+
+        // And the cost, also against hardware. Every one of the 720 GNS sentences carries an
+        // altitude in field 10; none of it reaches the model, because GNS is unparsed.
+        Assert.Null(status.Position.HeightMetres);
+    }
+
     [Fact]
     public void TwoConstellationsNumberingTheirSatellitesTheSameWayLoseOne()
     {
