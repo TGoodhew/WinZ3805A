@@ -103,6 +103,32 @@ public sealed class FakeTransport : ITransport
     /// </remarks>
     public bool WaitForReaderToConsume { get; init; }
 
+    /// <summary>
+    /// How long a paused write may wait for the reader before it is called a deadlock (#449).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>This is the difference between a test that fails and a test host that dies.</b> With
+    /// <see cref="WaitForReaderToConsume"/> the pipe has a one-byte <c>pauseWriterThreshold</c>, so
+    /// an emit does not return until something drains it. When the reader has stopped — the session
+    /// faulted, the poller was stopped, a transaction was abandoned — nothing ever will, and an
+    /// unbounded emit waits for the life of the process.
+    /// </para>
+    /// <para>
+    /// It cost three CI runs to find, because the failure has no failing test in it: the suite goes
+    /// green in ten seconds, the host is killed five minutes later, and <c>--blame-hang</c> names
+    /// "the test running when the crash occurred" — a different one each time, with its own caveat
+    /// that it may not be the source. Only the sequence file, which records
+    /// <c>Completed="False"</c>, names the test. A bound here turns all of that into one assertion
+    /// message.
+    /// </para>
+    /// <para>
+    /// Generous on purpose: this is a deadlock detector, not a performance assertion. A slow,
+    /// contended runner must never trip it, and the races it catches never resolve at any length.
+    /// </para>
+    /// </remarks>
+    public TimeSpan PausedWriteTimeout { get; init; } = TimeSpan.FromSeconds(30);
+
     /// <summary>Every command line received, in order.</summary>
     public IReadOnlyList<string> CommandsWritten => _commandsWritten;
 
@@ -172,10 +198,42 @@ public sealed class FakeTransport : ITransport
     }
 
     /// <summary>Sends raw bytes to the reader.</summary>
+    /// <exception cref="TimeoutException">
+    /// When <see cref="WaitForReaderToConsume"/> is set and nothing drained the write within
+    /// <see cref="PausedWriteTimeout"/>. See that property for why this is an exception rather than
+    /// a wait (#449).
+    /// </exception>
     public async ValueTask EmitAsync(ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken = default)
     {
         EnsureOpen();
-        await Pipe.Writer.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
+
+        if (!WaitForReaderToConsume)
+        {
+            // Nothing to deadlock on: the writer is never paused, so the write completes at once.
+            await Pipe.Writer.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        using CancellationTokenSource budget = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        budget.CancelAfter(PausedWriteTimeout);
+
+        try
+        {
+            await Pipe.Writer.WriteAsync(bytes, budget.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            // The caller's own token is untouched, so this is the budget and nothing else. Rethrown
+            // as a TimeoutException rather than a cancellation because no caller asked to stop:
+            // a cancellation would be caught by the very `catch (OperationCanceledException)` blocks
+            // these tests use to mean "the transaction was abandoned", and the deadlock would be
+            // swallowed as an expected outcome.
+            throw new TimeoutException(
+                $"A FakeTransport emit of {bytes.Length} byte(s) was never consumed within "
+                + $"{PausedWriteTimeout.TotalSeconds:N0}s. WaitForReaderToConsume pauses the writer "
+                + "after one byte, so nothing is reading this transport — the reader has stopped, "
+                + "or the emit ended mid-line and the protocol is correctly holding it back.");
+        }
     }
 
     /// <summary>

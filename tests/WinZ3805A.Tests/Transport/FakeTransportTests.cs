@@ -110,4 +110,59 @@ public sealed class FakeTransportTests
 
         await transport.DisposeAsync().AsTask().WaitAsync(Patience);
     }
+
+    /// <summary>
+    /// An emit nobody drains gives up and says so, instead of waiting for the life of the process.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>#449, and this is the deliberate violation the bound is worth nothing without.</b>
+    /// <see cref="FakeTransport.WaitForReaderToConsume"/> gives the pipe a one-byte
+    /// <c>pauseWriterThreshold</c>, so an emit does not return until something drains it. Here
+    /// nothing ever does — which is what a faulted session, a stopped poller or an abandoned
+    /// transaction leaves behind.
+    /// </para>
+    /// <para>
+    /// Unbounded, this test would not fail. It would hang, take the test host with it after five
+    /// minutes of silence, and report a green suite plus a guess at which test was responsible.
+    /// That is exactly how the defect reached CI three times.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AnEmitNobodyDrainsFailsRatherThanHanging()
+    {
+        await using FakeTransport transport = new()
+        {
+            WaitForReaderToConsume = true,
+            PausedWriteTimeout = TimeSpan.FromMilliseconds(250),
+        };
+
+        await transport.OpenAsync();
+
+        // A reader exists but never reads, so the writer pauses at the threshold and stays there.
+        _ = transport.Input;
+
+        TimeoutException thrown = await Assert.ThrowsAsync<TimeoutException>(
+            async () => await transport.EmitAsync("nobody is listening to this\r\n").AsTask().WaitAsync(Patience));
+
+        // The message has to name the mechanism, because the next person to meet this will be
+        // reading it instead of a stack of paused pipe internals.
+        Assert.Contains("WaitForReaderToConsume", thrown.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>Without the pause there is no deadlock to guard against, and no budget applied.</summary>
+    [Fact]
+    public async Task AnUnpausedEmitIsNotBounded()
+    {
+        await using FakeTransport transport = new()
+        {
+            PausedWriteTimeout = TimeSpan.FromMilliseconds(1),
+        };
+
+        await transport.OpenAsync();
+        _ = transport.Input;
+
+        // Would throw if the budget were applied regardless of the pause.
+        await transport.EmitAsync("this completes at once\r\n").AsTask().WaitAsync(Patience);
+    }
 }
