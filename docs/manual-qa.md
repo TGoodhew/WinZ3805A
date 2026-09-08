@@ -497,6 +497,23 @@ receiver cannot produce them at all; it also numbers GLONASS in 65–96 exactly 
 it would not collide even if it could. #429's `GNS` likewise. Both still need different hardware —
 but that is now a measurement rather than an assumption.
 
+### The stationary dynamic model, and why no capture came of it
+
+**`CFG-NAV5` sets it and u-center is not needed** — the same UBX route as `CFG-GNSS`, mask bit 0 so
+every other navigation setting is left as found, and read the value back afterwards because an ACK
+says the frame was accepted rather than that the value stuck.
+
+Done on 8 Sep 2026 with a 12-minute sitting, and **the result is a negative worth recording**: the
+sentence set was identical and the latitude spread was **12.04 m, against 12.98 m** for the portable
+`vk162-steady-state`. Indistinguishable. The dynamic model changes the navigation filter, not what
+reaches the driver.
+
+**The capture was deliberately not committed.** It would have been the only file in the corpus with
+nothing to say for itself, and a near-duplicate costs replay time in CI for no coverage. Where a
+capture earns its place by holding something no other holds, this one held nothing — so the
+measurement above is the artefact, and the bytes can be re-taken in twelve minutes if anyone doubts
+it.
+
 ---
 
 ## 16. The front-panel Active lamp (#440)
