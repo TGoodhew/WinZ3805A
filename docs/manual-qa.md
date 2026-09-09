@@ -559,24 +559,34 @@ Two claims therefore stand unverified, and both are one look away:
 10. The lamp **stays lit**. This is expected and documented: there is no wire left to restore over.
     Confirm the escape hatch works — reconnect and use the Diagnostics toggle to put it out.
 
-### While you are there: what does `:LED:ENABled` look like?
+### `:LED:ENABled` drives the lamp labelled *Enabled* — answered 9 Sep 2026
 
-**Still unknown, and it is the one open question on #440.** The node is settable and confirmed by
-read-back — `1` and `0` both accepted with a clean error queue — but **nobody has seen what it
-does**. It is not wired into the application precisely because of that. Exit the application first,
-then:
+**No longer an open question.** `:LED:ENAB 1` lights the front-panel lamp labelled **Enabled** and
+`:LED:ENAB 0` puts it out, watched by eye over two runs on the bench Z3805A and recorded on video.
+The other four lamp registers — `:LED:ACT?`, `:LED:ALAR?`, `:LED:GPSL?`, `:LED:HOLD?` — were
+sampled every two seconds throughout both runs and **never moved**, so *Enabled* is a genuinely
+separate indicator and not a second name for *Active*.
 
-```powershell
-# COM3, 9600-8-N-1. Read the baseline FIRST and put it back at the end.
-:LED:ENAB?      # baseline, expected +0
-:LED:ENAB 1     # watch the panel
-:LED:ENAB 0     # and back
-:SYST:ERR?      # expect +0,"No error"
-```
+**The guide had it all along**, which is the part worth feeling slightly foolish about:
+`z3801.pdf`, *Front Panel at a Glance*, item 2 — *"User-definable indicators labeled Enabled and
+Active. These can be turned on through the RS-422 port."* Table 4-2 gives `:LED:ENABled` as
+*"Sets or queries Enabled LED"*, word for word what it gives `:LED:ACTive`. **The panel carries six
+indicators and exactly two of them belong to the host software**; Power is hardwired and Alarm, GPS
+Lock and Holdover are the receiver's own, query-only.
 
-Record what changed, if anything. If it drives a second, distinguishable indicator, "connected" and
-"talking" become separable and #440's original per-command idea becomes worth revisiting — with the
-999 ms write cost still ruling out anything per-sweep.
+So "connected" and "talking" are separable after all — but **the cost that killed the per-sweep idea
+is unchanged**, a write still costing about a second against ~30 ms queries, so a second lamp buys
+semantics rather than activity. What to do with it is a design call and is **#462**, not a defect.
+
+**Keep the do-nothing baseline in any repeat of this.** The unit had been powered up minutes
+earlier, so "a lamp changed on its own while acquiring" was a live alternative explanation, and the
+first run could not exclude it. Five samples with the node untouched, all identical, is what does.
+
+> **`:LED:ALARm:USER` is not implemented on this receiver, so the Alarm lamp cannot be exercised.**
+> Both spellings answer `-113,"Undefined header"` in query form and `-108,"Parameter not allowed"`
+> in set form, with the ALARM register never moving and the queue cleared before each candidate so
+> the error belongs to that command alone. §8's reasoning for not cataloguing it is untouched by
+> this and remains the real argument; the node simply is not there to catalogue.
 
 > **Every `:LED:` write costs about a second**, first byte to prompt, because the receiver services
 > the node on its 1 Hz tick. That is measured, not estimated (#440), and it is why the lamp is lit
