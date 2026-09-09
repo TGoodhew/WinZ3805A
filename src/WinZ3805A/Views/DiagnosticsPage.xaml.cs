@@ -163,7 +163,7 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
 
         ActiveLampSwitch.IsEnabled = supported && connected;
         ActiveLampCaption.Text = supported
-            ? "The one front-panel indicator under software control. Use this to put the lamp back if the application was closed while it was lit. It takes about a second to answer, the receiver servicing the lamp on its own once-a-second tick."
+            ? "One of the two front-panel indicators under software control. Use this to put the lamp back if the application was closed while it was lit. It takes about a second to answer, the receiver servicing the lamp on its own once-a-second tick."
             : Capability.NotOffered(_device?.Driver, "the front-panel lamp");
     }
 

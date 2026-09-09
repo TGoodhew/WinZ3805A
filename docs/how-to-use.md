@@ -407,11 +407,12 @@ changes**. This page is for finding out why a summary bit is set; most people ne
   different.
 - **Lifetime** — **power-on hours**, how long the receiver has run in total. An oven-controlled
   oscillator ages with running time, so this is the figure behind the drift the Timing page reports.
-- **Front panel** — a switch for the **Active lamp**, the one front-panel indicator the receiver
-  puts under software control. Use it to identify which unit in a rack you are connected to, or to
-  put the lamp back if the application was closed while it was lit. It takes about a second to
-  answer: the receiver looks at this lamp once a second and no faster, so the switch waits for the
-  receiver rather than the other way round. Nothing else on the receiver changes.
+- **Front panel** — a switch for the **Active lamp**, one of the two front-panel indicators the
+  receiver puts under software control (the other is *Enabled*). Use it to identify which unit in a
+  rack you are connected to, or to put the lamp back if the application was closed while it was lit.
+  It takes about a second to answer: the receiver looks at this lamp once a second and no faster, so
+  the switch waits for the receiver rather than the other way round. Nothing else on the receiver
+  changes.
 - **GPS receiver** — what the GPS receiver *inside* the instrument calls itself. A Z3805A is a
   disciplining chassis built around a separate GPS module with its own firmware, so the revision
   here and the one in the window footer are two different things and need not agree. The bench
