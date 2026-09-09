@@ -180,6 +180,11 @@ public sealed partial class SettingsPage : Page
             return;
         }
 
+        // #462: the per-command flashing starts and stops with the switch rather than at the next
+        // connect, for the same reason the lamp itself is armed here — a setting that only takes
+        // effect the next time you plug something in is a switch a user cannot tell they have set.
+        device.Session.FlashLampPerCommand = ActivityLampSwitch.IsOn;
+
         try
         {
             if (ActivityLampSwitch.IsOn)

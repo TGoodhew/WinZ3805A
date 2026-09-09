@@ -864,8 +864,15 @@ public sealed class DeviceSessionService : IAsyncDisposable
             using CancellationTokenSource linked =
                 CancellationTokenSource.CreateLinkedTokenSource(sessionToken, pending.CancellationToken);
 
+            // #462: on, send the command, read the response, off.
+            await FlashLampAsync(protocol, on: true, pending.Command.Mnemonic, linked.Token)
+                .ConfigureAwait(false);
+
             Transaction transaction = await protocol
                 .ExecuteAsync(text, TimeoutFor(pending.Command), linked.Token)
+                .ConfigureAwait(false);
+
+            await FlashLampAsync(protocol, on: false, pending.Command.Mnemonic, linked.Token)
                 .ConfigureAwait(false);
 
             pending.Completion.TrySetResult(transaction);
@@ -923,6 +930,72 @@ public sealed class DeviceSessionService : IAsyncDisposable
     /// tested one.
     /// </remarks>
     private TimeSpan TimeoutFor(ScpiCommand command) => _driver.TimeoutFor(command.Mnemonic);
+
+    /// <summary>
+    /// Whether the front-panel Active lamp is driven on before every command and off after it
+    /// (#462).
+    /// </summary>
+    /// <remarks>
+    /// <b>Costs about 1.8 s per command</b>, because a <c>:LED:</c> write waits for the receiver's
+    /// 1 Hz tick. Set from the §10.9 preference by the owning <c>DeviceContext</c>, and read on each
+    /// served command so turning it off takes effect at once rather than at the next connect.
+    /// </remarks>
+    public bool FlashLampPerCommand { get; set; }
+
+    /// <summary>The lamp setter driven around each command, when asked (#462).</summary>
+    private const string LampWrite = ":LED:ACTive";
+
+    /// <summary>Prefix of the lamp subsystem, whose own commands are never flashed around.</summary>
+    private const string LampNode = ":LED:";
+
+    /// <summary>
+    /// Drives the front-panel Active lamp on before a served command and off after it (#462).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>This is expensive and that is not a bug.</b> A <c>:LED:</c> write costs about a second
+    /// because the receiver services the node on its own 1 Hz tick — measured at 810 ms and 903 ms
+    /// on 9 Sep 2026 against ~30 ms for a query on the same connection — so every command served
+    /// while this is on carries roughly <b>1.8 s of lamp</b> on top of its own wire time. A poll
+    /// sweep of several commands therefore takes many seconds rather than one. Off by default, and
+    /// the §10.9 caption says so.
+    /// </para>
+    /// <para>
+    /// It writes straight to the protocol rather than through <see cref="ExecuteAsync"/>, and it
+    /// must: this runs <i>inside</i> the pump that serves the queue, so queueing here would wait on
+    /// a pump that is waiting on this. That is also why the lamp's own commands are skipped — the
+    /// §10.9 manual toggle and the baseline read go through the queue like anything else, and
+    /// flashing around them would light the lamp to answer a question about the lamp.
+    /// </para>
+    /// <para>
+    /// A lamp that will not write is not a command that failed, so every fault here is swallowed.
+    /// The transaction the caller asked for is the one that gets to fail.
+    /// </para>
+    /// </remarks>
+    private async Task FlashLampAsync(
+        LineProtocol protocol,
+        bool on,
+        string mnemonic,
+        CancellationToken cancellationToken)
+    {
+        if (!FlashLampPerCommand
+            || mnemonic.StartsWith(LampNode, StringComparison.OrdinalIgnoreCase)
+            || _driver.Find(LampWrite) is not ScpiCommand lamp)
+        {
+            return;
+        }
+
+        try
+        {
+            await protocol
+                .ExecuteAsync(TextFor(lamp, on ? "ON" : "OFF"), TimeoutFor(lamp), cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException and not StackOverflowException)
+        {
+            // Deliberately swallowed: see the remarks above.
+        }
+    }
 
     /// <summary>
     /// Counts consecutive timeouts toward the §7.2 reconnect trigger, and resets on any success.

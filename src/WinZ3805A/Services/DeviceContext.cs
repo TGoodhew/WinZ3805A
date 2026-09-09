@@ -159,8 +159,15 @@ public sealed class DeviceContext : IAsyncDisposable
     {
         if (_advanced?.Load().IsActivityLampEnabled != true)
         {
+            Session.FlashLampPerCommand = false;
             return;
         }
+
+        // #462: the lamp is driven around every command, which is what it was asked for in #440 and
+        // was then ruled out on cost. The cost has not changed — about 1.8 s of lamp per command,
+        // the receiver servicing the node on its 1 Hz tick — so this is deliberately opt-in and the
+        // §10.9 caption says what it does to the poll rate.
+        Session.FlashLampPerCommand = true;
 
         _ = Task.Run(async () =>
         {

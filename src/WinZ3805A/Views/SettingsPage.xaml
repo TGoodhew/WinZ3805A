@@ -172,7 +172,7 @@
                                 <TextBlock MaxWidth="{ThemeResource WzProseMaxWidth}"
                                            HorizontalAlignment="Left"
                                            TextWrapping="Wrap"
-                                           Text="Light the receiver's front-panel Active lamp while this application is connected, so you can tell which unit in a rack it is talking to without a screen. The lamp is read first and put back as it was found when you disconnect." />
+                                           Text="Flash the receiver's front-panel Active lamp around every command: on before it is sent, off once the reply is in. The lamp is read first and put back as it was found when you disconnect. This makes the receiver visibly show which unit is being talked to, and it is slow — the receiver looks at this lamp once a second, so each command carries about two seconds of lamp and readings arrive far less often while it is on." />
                                 <TextBlock MaxWidth="{ThemeResource WzProseMaxWidth}"
                                            HorizontalAlignment="Left"
                                            TextWrapping="Wrap"
