@@ -530,7 +530,7 @@ All queries plus non-disruptive actions.
 
 `:SYNC:HOLD:REC:INIT` and `:SYNC:HOLD:REC:LIM:IGN` are classed Safe: they move the unit *toward* lock, which is the desired state, and cannot damage anything.
 
-**`:LED:ACTive` is the third Safe non-query, and the only Safe command that takes a value** (added 7 Sep 2026, #440). It drives the front-panel Active lamp, the one indicator under software control, and it is documented — `z3801.pdf` Table 4-2, *"Sets or queries Active LED"* — so §8.4's permanent block on undocumented set forms does not reach it. It is Safe because it changes no receiver behaviour: no timing, no discipline, nothing that outlives the lamp, so a §8.3 confirmation would be asking permission to change nothing. **§9.11's other half follows from the same ruling** — a Safe setter gets no success toast, so the §10.9 control is a toggle whose own position is the feedback. Both spellings are confirmed on the bench: `1`/`0` and `ON`/`OFF`.
+**`:LED:ACTive` is the third Safe non-query, and the only Safe command that takes a value** (added 7 Sep 2026, #440). It drives the front-panel Active lamp, **one of the two indicators under software control** (corrected 9 Sep 2026 — this sentence read "the one indicator", and `z3801.pdf`'s *Front Panel at a Glance* item 2 says otherwise: *"User-definable indicators labeled Enabled and Active"*. `:LED:ENABled` drives the second, confirmed on the bench by eye; what to do with it is #462), and it is documented — `z3801.pdf` Table 4-2, *"Sets or queries Active LED"* — so §8.4's permanent block on undocumented set forms does not reach it. It is Safe because it changes no receiver behaviour: no timing, no discipline, nothing that outlives the lamp, so a §8.3 confirmation would be asking permission to change nothing. **§9.11's other half follows from the same ruling** — a Safe setter gets no success toast, so the §10.9 control is a toggle whose own position is the feedback. Both spellings are confirmed on the bench: `1`/`0` and `ON`/`OFF`.
 
 ### 8.3 Tier C — Confirm (modal confirmation with explicit consequence text)
 
@@ -3272,6 +3272,14 @@ it lets the application assert an alarm the receiver is not reporting, which is 
 instrument's own front panel, where a lab user reads it without the application in front of them.
 §9.4.3 makes severity a claim about the receiver's state; this would make it a claim about the
 software's. **The three `:LED:*?` queries are catalogued and are the right half of this subsystem.**
+
+> **It is also not implemented on the bench Z3805A, measured 9 Sep 2026** — so on this receiver the
+> decision above is moot as well as right. Both spellings answer `-113,"Undefined header"` in query
+> form and `-108,"Parameter not allowed"` in set form, with the ALARM register unmoved and the error
+> queue cleared before each candidate so the error belongs to that command alone; `:LED:ENAB?` and
+> `:LED:ACT?` answered cleanly in the same run, which is the control that makes the result mean
+> something. **The reasoning is still the argument** — a firmware that grew the node tomorrow would
+> not change it — but this is now the `:PTIMe:PPS:EDGE` category too: settled by the hardware.
 
 **`:SENSe:DATA:` and `:SENSe:TSTamp<channel>:EDGE` — event time stamping (7 commands).**
 **Not implementable on this hardware.** The subsystem records the time of TTL edges arriving on
