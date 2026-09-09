@@ -155,6 +155,16 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
     /// </remarks>
     private bool _writingLampSwitch;
 
+    /// <summary>
+    /// Whether the switch has been seeded from the receiver for the current connection (#464).
+    /// </summary>
+    /// <remarks>
+    /// Cleared whenever the link is down, so the next connect seeds again. It is a
+    /// once-per-connection latch rather than a cached lamp state: the value on the switch is
+    /// whatever the receiver last said, and this only records that we have asked.
+    /// </remarks>
+    private bool _lampSeeded;
+
     /// <summary>Puts the receiver's own lamp state on the switch, without sending anything.</summary>
     private void RenderActiveLamp()
     {
@@ -165,6 +175,73 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
         ActiveLampCaption.Text = supported
             ? "One of the two front-panel indicators under software control. Use this to put the lamp back if the application was closed while it was lit. It takes about a second to answer, the receiver servicing the lamp on its own once-a-second tick."
             : Capability.NotOffered(_device?.Driver, "the front-panel lamp");
+
+        if (!connected || !supported)
+        {
+            _lampSeeded = false;
+            return;
+        }
+
+        if (!_lampSeeded)
+        {
+            _lampSeeded = true;
+            _ = SeedActiveLampAsync();
+        }
+    }
+
+    /// <summary>
+    /// Asks the receiver what the lamp is doing and puts that on the switch (#464).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The switch used to report its own writes rather than the lamp</b>, so an application that
+    /// closed while the lamp was lit came back showing <c>off</c> over a lit panel — and §16's
+    /// documented escape hatch, "use the Diagnostics toggle to put it out", took two clicks instead
+    /// of one because the first merely caught the control up with reality. §9.11 gives this control
+    /// no success bar precisely because the switch's own position is the feedback, and a position
+    /// that disagrees with the instrument is not feedback.
+    /// </para>
+    /// <para>
+    /// <b>Once per connection, not once per render.</b> Rendering happens on every reading, and a
+    /// query on that path would put <c>:LED:ACT?</c> on the poll loop. The read itself is cheap —
+    /// ~30 ms against the ~900 ms a <c>:LED:</c> <i>write</i> costs on the receiver's 1 Hz tick —
+    /// but cheap once a second is still once a second.
+    /// </para>
+    /// <para>
+    /// Writing <c>IsOn</c> raises <c>Toggled</c>, which cannot be told from a click, so the write is
+    /// made under <see cref="_writingLampSwitch"/>. Without it, seeding the switch from the receiver
+    /// would send the value straight back to it.
+    /// </para>
+    /// </remarks>
+    private async Task SeedActiveLampAsync()
+    {
+        if (_device is not DeviceContext device)
+        {
+            return;
+        }
+
+        try
+        {
+            if (await device.Lamp.ReadAsync() is not bool lit)
+            {
+                // Unreadable, so the switch is left as it is rather than guessing — §11.1's rule
+                // applied to a control: never show a value we do not have.
+                _lampSeeded = false;
+                return;
+            }
+
+            if (ActiveLampSwitch.IsOn != lit)
+            {
+                _writingLampSwitch = true;
+                ActiveLampSwitch.IsOn = lit;
+                _writingLampSwitch = false;
+            }
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException and not StackOverflowException)
+        {
+            // A lamp that would not answer is not a page that failed to render.
+            _lampSeeded = false;
+        }
     }
 
     /// <summary>
