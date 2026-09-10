@@ -1,10 +1,14 @@
 # Captured UCCM output
 
-**Empty, and that is the point.** Nothing here yet, because the UCCM driver has never met a
-receiver. Every command, timeout, field meaning and state code in
-`src/WinZ3805A.Device/Drivers/Uccm/` is read out of Lady Heather's source rather than a vendor
-document or a capture, and the driver says so at length. #416 is explicit that step one is
-**identification, not code**.
+**No longer empty.** A Trimble UCCM-P answered on 10 Sep 2026 -
+`trimble-uccm-p-2026-09-10.txt`, with its provenance beside it - so #416's step one,
+**identification, not code**, is done for one module of one variant.
+
+Until that day nothing was here, because the UCCM driver had never met a receiver: every command,
+timeout, field meaning and state code in `src/WinZ3805A.Device/Drivers/Uccm/` was read out of Lady
+Heather's source rather than a vendor document or a capture, and the driver says so at length. Most
+of it still is. One sitting settles what one module does; it does not settle the family, and a plain
+UCCM has still never been seen.
 
 `build/Capture-Uccm.ps1` fills this directory. Run its self-test now and the real thing the day a
 module is on the bench:
@@ -30,6 +34,25 @@ construction — the one outcome that would be worthless.
 
 **A count of zero for the second does not refute it.** An interleaved broadcast depends on timing, so
 zero means this sitting did not see one — a weaker statement, and the note records it as such.
+
+## What the 10 Sep 2026 sitting answered
+
+| Hypothesis | Verdict |
+|---|---|
+| 1. The module echoes the command | **Refuted.** 0 of 9. Replies begin with the answer. |
+| 2. `C5` time codes interleave | **The codes are binary, and the script could not see them.** |
+| 3. `COMMAND COMPLETE` terminates | **Confirmed.** 6 of 9, spelled `Command complete`. |
+
+Hypothesis 2 is the one worth reading twice. The codes are **44-byte binary packets**, `0xC5` to
+`0xCA`, broadcast about every 2 s and arriving with **no line terminator** — one came back appended
+directly to the prompt. The script had been matching the *characters* `C5` against text decoded with
+`Encoding.ASCII`, which renders every byte above `0x7F` as `?`, **so that row could only ever have
+read 0 whatever the module did**, and the self-test passed because it fed the analysis a time code
+written as hex text — a shape no module produces. Both are fixed; the search now runs over bytes.
+
+**The count is still 0 of 9 interleaved, and that still refutes nothing** — one packet was seen, and
+it arrived *after* its reply, which is an ordinary broadcast. Whether one lands mid-reply depends on
+timing and wants a longer sitting.
 
 ## Why the captures are `.txt` here but not in `Fixtures/`
 
@@ -67,6 +90,14 @@ line-oriented — so it belongs in the summary rather than in the bytes.
 payload line, because this script does not know about it and must not. A UCCM is believed to have no
 prompt. If the module turns out to emit one, it will show up as an unexplained extra payload line on
 every reply — and the terminator summary is how you would notice.
+
+> **That prediction fired, on the first sitting.** The UCCM-P emits `UCCM-P >`, on 9 replies of 9,
+> and it arrived exactly as described: one unexplained extra payload line each time, with `*IDN?`
+> reporting two payload lines where it has one value. The paragraph above is left standing because
+> the design worked — the anomaly announced itself instead of hiding — and because it is the better
+> argument for reporting an unknown than any rewrite of it would be. The script now names prompts,
+> which is evidence rather than assumption. **A plain UCCM has still never been seen**, so whether
+> it prompts is still open.
 
 ## Why a third capture script
 
