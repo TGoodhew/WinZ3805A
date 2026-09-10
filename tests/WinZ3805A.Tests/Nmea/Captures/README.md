@@ -7,6 +7,11 @@ been decoded, re-terminated or trimmed.
 u-blox `UBX-G70xx`, ROM CORE 1.00 (59842), PROTVER 14.00, at 9600-8-N-1 on COM4. Before that day
 everything the NMEA family had ever been tested against came from `tools/NmeaSimulator` (#310).
 
+**A second receiver arrived on 9 September 2026** — an **RCmall forM8N**, u-blox `HW UBX-M8130`,
+ROM CORE 3.01 (107888), PROTVER 18.00, whose one-time-programmable constellation set is `GPS;BDS`.
+It is what made #424 answerable, though not on the first attempt: see the table's `first-light` and
+`outdoors` rows, which are the same module on two different antennas.
+
 | Capture | Duration | Bytes | What it is for |
 |---|---|---|---|
 | `vk162-steady-state` | 30 min | 927 KB | The boring case at length. A differential 3D fix in all 1,800 cycles, and **exactly 1,800 of each per-second sentence** — so a gap in any other capture is the receiver's doing, not the harness's. |
@@ -14,6 +19,9 @@ everything the NMEA family had ever been tested against came from `tools/NmeaSim
 | `vk162-microwave` | — | — | The same receiver at the edge of its sensitivity, ~10 dB down, with a fifth of its satellites in view but untracked. |
 | `vk162-glonass-only` | 14 min | 352 KB | The only non-`GP` talker. **152 consecutive no-fix cycles** — the corpus's longest — then acquisition, and the fix ladder without SBAS. |
 | `vk162-gns-no-gga` | 12 min | 353 KB | **720 `GNS` and not one `GGA`** — #429's configuration, made with `UBX-CFG-MSG`. Proves the fix survives `GGA`'s absence, and that the altitude and the per-constellation mode string are what its absence costs. |
+| `form8n-gps-beidou-first-light` | 6.7 min | 202 KB | The forM8N as it arrived, on a GPS **timing** antenna. BeiDou is enabled, reports every cycle and **tracks nothing** — `$GBGSV,1,1,00` and a `GSA` row with only its system id. A talker advertising a constellation it cannot see. |
+| `form8n-gns-without-gga` | 2.2 min | 77 KB | The same module's `GNS` configuration, where the mode indicator is **four** characters (`ANNN`) against the VK-162's two — the field is one character per constellation, not a fixed code. |
+| `form8n-gps-beidou-outdoors` | 30 min | 1.1 MB | The same module on its **own patch antenna, outdoors**, where BeiDou does track. The corpus's **only** capture in which two talkers report the same satellite number — 1,217 of 1,800 cycles — and its **only** crossing of UTC midnight. |
 
 Each has a `.md` beside it saying what was happening; read those rather than this table.
 
@@ -38,6 +46,13 @@ gap somebody later assumes is covered.
   constellations *in one cycle* and cannot be answered here. It also needs a receiver that numbers
   satellites per constellation, and this one does not: its GLONASS PRNs are **67–85**, inside NMEA
   4.10's 65–96 range.
+
+  **Answered 9 September 2026, on the other receiver.** `form8n-gps-beidou-outdoors` runs GPS and
+  BeiDou together, numbers BeiDou per constellation — 6, 20, 23, 24, 25, all inside the GPS range —
+  and carries GPS 4 and BeiDou 4 in the same cycle 1,217 times out of 1,800. So the corpus now holds
+  one receiver of each kind: the VK-162, which cannot collide because its GLONASS PRNs are 67–85, and
+  the forM8N, which collides in 68% of its cycles. What remains open on #424 is the model change,
+  not the evidence for it.
 - ~~**`GNS`.** Never emitted, so #429 is likewise unanswerable here.~~ **Answered 8 Sep 2026.** It is
   not emitted *by default*, but two `UBX-CFG-MSG` frames turn `GNS` on and `GGA` off, and
   `vk162-gns-no-gga` is twelve minutes of the result. #429 said the reachability of that
