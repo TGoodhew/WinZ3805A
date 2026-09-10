@@ -51,7 +51,7 @@ Heather, the tool most people run on these receivers today, is in
 | Symmetricom 59551A | — |
 | Symmetricom Z3816A | — |
 | **Any NMEA 0183 GNSS talker** — a u-blox module, a marine receiver; proven against the simulator under `tools/`, not yet against hardware | 4800-8-N-1 (the standard), commonly 9600 |
-| **Symmetricom and Trimble UCCM / UCCM-P** — telecom GPSDO modules; **written from a third-party implementation and never yet run against one** | 9600-8-N-1 assumed, unverified |
+| **Symmetricom and Trimble UCCM / UCCM-P** — telecom GPSDO modules; **written from a third-party implementation**, and identified against one Trimble UCCM-P on 10 Sep 2026 | **57600-8-N-1** on that unit; other rates unverified |
 
 The SmartClock units share the 58503A/B command set. The NMEA family is the
 second driver ([docs/tutorial-nmea-driver.md](docs/tutorial-nmea-driver.md)): it
@@ -60,7 +60,12 @@ never written to once recognised; a talker has no disciplined oscillator, so the
 timing pages show dashes. The UCCM family is the third, and it comes with a
 caveat the other two do not: it was written by reading another program's source
 rather than a vendor document or a capture from real hardware, so **treat what it
-reports as provisional until a module has been on the bench**. It is read-only —
+reports as provisional**. One Trimble UCCM-P has now been on the bench
+([the capture](tests/WinZ3805A.Tests/Uccm/Captures/README.md)), which settled the
+line settings and two of the three protocol hypotheses — the module does **not**
+echo, and its `C5` time codes are **binary packets** rather than the text the
+capture harness had been looking for. That is one module of one variant: a plain
+UCCM has still never been seen, and most of the driver remains a citation. It is read-only —
 the several writes those modules accept are deliberately absent from its catalog,
 because deciding their safety tier without watching one execute would be guessing
 at consequences. Because the defaults
