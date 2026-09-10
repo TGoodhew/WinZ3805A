@@ -19,7 +19,8 @@
 
     `Capture-Fixtures.ps1` is built for the SmartClock: it sends a mnemonic and
     strips the echoed command and the `scpi > ` prompt to leave a status screen.
-    A UCCM has no such prompt, and its echo is evidence rather than noise.
+    A UCCM-P has a prompt of its own, `UCCM-P >`, and its echo would be evidence
+    rather than noise - but see below: it does not echo.
 
     `Capture-Talker.ps1` is built for a broadcast talker, which answers nothing
     and is never asked. A UCCM is query/response.
@@ -41,6 +42,23 @@
     carried an interleaved time code, whether `COMMAND COMPLETE` terminates them.
     A script that assumed the hypotheses would confirm them by construction,
     which is the one outcome that would be worthless.
+
+    WHAT A REAL MODULE SAID, 10 Sep 2026 - a Trimble UCCM-P,
+    `TRIMBLE,57964-80,40896646,V2.0.1.6-01`, at 57600-8-N-1:
+
+      1. ECHO IS REFUTED. 0 of 9 replies echoed. Replies begin with the answer.
+      3. `COMMAND COMPLETE` IS CONFIRMED, 6 of 9, spelled `Command complete`.
+      2. TIME CODES ARE BINARY, and this script could not see them. It matched
+         the CHARACTERS `C5` against text decoded with `Encoding.ASCII`, which
+         renders every byte above 0x7F as `?` - so the count could only ever have
+         been 0, whatever the module did. The packets are 44 bytes, `0xC5` to
+         `0xCA`, broadcast about every 2 s, and arrive with NO line terminator,
+         appended straight onto the prompt. Both properties had to change: the
+         search now runs over BYTES, before any text splitting.
+
+    THE SELF-TEST WAS PART OF THE DEFECT. It fed the analysis the STRING
+    `'C5 01 02 03 04 05 06'` - a time code rendered as hex text, a shape no
+    module produces - and passed. It now drives the byte path as well.
 
 .PARAMETER Port
     The serial port. Omit to list the ports present and stop, which is how to
@@ -102,6 +120,13 @@ function Get-UccmLineKind {
 
     # `C5 ` anywhere, or `C5` at the start. Anywhere, because the whole point of hypothesis 2 is
     # that it arrives in the middle of something else.
+    #
+    # THIS MATCHES A TIME CODE WRITTEN AS TEXT, WHICH IS NOT THE FORM THE HARDWARE SENDS. The
+    # Trimble UCCM-P broadcasts a BINARY packet - byte 0xC5, not the characters `C`,`5` - and a
+    # byte above 0x7F becomes `?` under Encoding.ASCII, so it can never reach this test. The
+    # binary form is found in the byte stream by `Get-UccmBinaryTimeCode` before any text
+    # splitting happens. This branch is kept because Heather renders codes as hex text in its
+    # own logs, and a transcript pasted from there should still classify.
     if ($text.IndexOf('C5 ', [StringComparison]::OrdinalIgnoreCase) -ge 0 -or
         $text.StartsWith('C5', [StringComparison]::OrdinalIgnoreCase)) {
         return 'TimeCode'
@@ -115,6 +140,13 @@ function Get-UccmLineKind {
         if ($text.IndexOf($marker, [StringComparison]::OrdinalIgnoreCase) -ge 0) { return 'Error' }
     }
 
+    # A trailing prompt, e.g. `UCCM-P >`. THE README PREDICTED THIS EXACTLY: "A UCCM is believed to
+    # have no prompt. If the module turns out to emit one, it will show up as an unexplained extra
+    # payload line on every reply." It did, on 10 Sep 2026, on every one of nine replies. Naming it
+    # is therefore evidence rather than assumption - and it must be named, because a prompt counted
+    # as a payload line silently inflates every value count the sitting reports.
+    if ($text -match '^[A-Za-z][A-Za-z0-9\-]*\s*>$') { return 'Prompt' }
+
     if (-not [string]::IsNullOrWhiteSpace($Sent)) {
         # Canonical form: letters, digits and '?' only, upper-cased. The module may echo with
         # different spacing or case from what was sent, and neither difference makes it not an echo.
@@ -123,6 +155,100 @@ function Get-UccmLineKind {
     }
 
     return 'Payload'
+}
+
+# The observed packet length, in bytes, of a UCCM-P `C5` time code: 0xC5, 42 payload bytes, 0xCA.
+# MEASURED, NOT DOCUMENTED - every packet in the 10 Sep 2026 sitting was exactly this long. It is
+# a constant here rather than a literal so that a module which disagrees is one edit to explore.
+$script:UccmTimeCodeLength = 44
+
+<#
+.SYNOPSIS
+    Finds binary `C5` time-code packets in a raw reply.
+.DESCRIPTION
+    HYPOTHESIS 2 IS ABOUT BINARY, AND EVERY TEXT-BASED TEST IS BLIND TO IT. The module broadcasts
+    byte 0xC5, and `Encoding.ASCII.GetString` maps anything above 0x7F to `?`, so a time code is
+    already destroyed by the time a line-splitting test could see it. It has to be found here, in
+    the bytes, before anything is turned into text.
+
+    FRAMING IS BY LENGTH, NOT BY TERMINATOR, AND THAT IS DELIBERATE. 0xCA also occurs INSIDE the
+    packet - the 10 Sep 2026 capture has one at offset 22 of a 44-byte code - so scanning forward
+    to the first 0xCA truncates the packet and leaves the tail to be misread as text. So a
+    candidate is 0xC5 plus `-PacketLength` bytes whose last byte is 0xCA.
+
+    A 0xC5 THAT DOES NOT FIT THAT SHAPE IS REPORTED RATHER THAN SWALLOWED, as `WellFormed = $false`.
+    The length is an observation from one sitting, and a harness that silently ignored everything
+    not matching its own guess would confirm that guess by construction - the failure this whole
+    script exists to avoid.
+#>
+function Get-UccmBinaryTimeCode {
+    [CmdletBinding()]
+    param([byte[]] $Bytes, [int] $PacketLength = $script:UccmTimeCodeLength)
+
+    # RETURNED AS A PLAIN ARRAY, NOT `, $found`. The comma form stops the array unrolling, and a
+    # caller writing @(Get-UccmBinaryTimeCode ...) then gets a one-element array holding the array.
+    # `.Length` on that reads the OUTER count - 1 - so every packet was cut to a single byte while
+    # the packet COUNT stayed right, which is why the totals looked correct and the split did not.
+    $found = @()
+    if ($null -eq $Bytes -or $Bytes.Length -eq 0) { return $found }
+
+    $i = 0
+    while ($i -lt $Bytes.Length) {
+        if ($Bytes[$i] -eq 0xC5) {
+            $end = $i + $PacketLength - 1
+            if ($end -lt $Bytes.Length -and $Bytes[$end] -eq 0xCA) {
+                $found += [pscustomobject]@{ Offset = $i; Length = $PacketLength; WellFormed = $true }
+                $i = $end + 1
+                continue
+            }
+            $found += [pscustomobject]@{ Offset = $i; Length = 0; WellFormed = $false }
+        }
+        $i++
+    }
+    return $found
+}
+
+<#
+.SYNOPSIS
+    Splits a raw reply into an ordered run of text and binary time-code segments.
+.DESCRIPTION
+    ORDER IS THE WHOLE POINT. Hypothesis 2 is not "a time code arrived" but "a time code arrived
+    IN THE MIDDLE", and only position answers that. Carving the well-formed packets out and
+    keeping the text between them preserves the sequence, so the existing mid-reply test works on
+    binary codes exactly as it does on textual ones.
+
+    Note the packets arrive with NO line terminator of their own - the 10 Sep 2026 capture has one
+    appended directly to the `UCCM-P >` prompt. Splitting the reply into lines first therefore
+    cannot ever recover it as its own item, which is the second, independent reason the text path
+    could not see these.
+#>
+function Split-UccmStream {
+    [CmdletBinding()]
+    param([byte[]] $Bytes)
+
+    $segments = @()
+    if ($null -eq $Bytes -or $Bytes.Length -eq 0) { return $segments }
+
+    $codes = @(Get-UccmBinaryTimeCode -Bytes $Bytes) | Where-Object { $_.WellFormed }
+    $codes = @($codes)
+    $cursor = 0
+
+    foreach ($code in $codes) {
+        if ($code.Offset -gt $cursor) {
+            $slice = $Bytes[$cursor..($code.Offset - 1)]
+            $segments += [pscustomobject]@{ Kind = 'Text'; Text = [Text.Encoding]::ASCII.GetString($slice); Bytes = $slice }
+        }
+        $slice = $Bytes[$code.Offset..($code.Offset + $code.Length - 1)]
+        $segments += [pscustomobject]@{ Kind = 'TimeCode'; Text = $null; Bytes = $slice }
+        $cursor = $code.Offset + $code.Length
+    }
+
+    if ($cursor -lt $Bytes.Length) {
+        $slice = $Bytes[$cursor..($Bytes.Length - 1)]
+        $segments += [pscustomobject]@{ Kind = 'Text'; Text = [Text.Encoding]::ASCII.GetString($slice); Bytes = $slice }
+    }
+
+    return $segments
 }
 
 <#
@@ -134,15 +260,40 @@ function Get-UccmLineKind {
 #>
 function Get-UccmReplyAnatomy {
     [CmdletBinding()]
-    param([string] $Response, [string] $Sent)
+    param([string] $Response, [string] $Sent, [byte[]] $Bytes)
 
     $lines = @()
-    if (-not [string]::IsNullOrEmpty($Response)) {
-        $lines = @($Response -split "`r?`n" | Where-Object { $_.Trim().Length -gt 0 })
-    }
-
     $kinds = @()
-    foreach ($line in $lines) { $kinds += Get-UccmLineKind -Line $line -Sent $Sent }
+    $binaryCodes = 0
+    $unframed = 0
+
+    if ($null -ne $Bytes -and $Bytes.Length -gt 0) {
+        # THE BYTE PATH IS THE REAL ONE. Anything that reaches this function as a string has
+        # already lost every byte above 0x7F, so a binary time code cannot be recovered from it.
+        $all = @(Get-UccmBinaryTimeCode -Bytes $Bytes)
+        $binaryCodes = @($all | Where-Object { $_.WellFormed }).Count
+        $unframed = @($all | Where-Object { -not $_.WellFormed }).Count
+
+        foreach ($segment in (Split-UccmStream -Bytes $Bytes)) {
+            if ($segment.Kind -eq 'TimeCode') {
+                $head = ($segment.Bytes | Select-Object -First 8 | ForEach-Object { '{0:X2}' -f $_ }) -join ' '
+                $lines += "<binary time code, $($segment.Bytes.Length) bytes: $head ...>"
+                $kinds += 'TimeCode'
+            }
+            else {
+                foreach ($line in ($segment.Text -split "`r?`n" | Where-Object { $_.Trim().Length -gt 0 })) {
+                    $lines += $line
+                    $kinds += Get-UccmLineKind -Line $line -Sent $Sent
+                }
+            }
+        }
+    }
+    else {
+        if (-not [string]::IsNullOrEmpty($Response)) {
+            $lines = @($Response -split "`r?`n" | Where-Object { $_.Trim().Length -gt 0 })
+        }
+        foreach ($line in $lines) { $kinds += Get-UccmLineKind -Line $line -Sent $Sent }
+    }
 
     $payload = @()
     for ($i = 0; $i -lt $lines.Count; $i++) {
@@ -173,6 +324,9 @@ function Get-UccmReplyAnatomy {
         TimeCodeAnywhere    = ($kinds -contains 'TimeCode')
         Terminated          = ($kinds -contains 'Complete')
         Errored             = ($kinds -contains 'Error')
+        Prompted            = ($kinds -contains 'Prompt')
+        BinaryTimeCodes     = $binaryCodes
+        UnframedC5          = $unframed
     }
 }
 
@@ -340,6 +494,75 @@ if ($SelfTest) {
         $failures += 'empty bytes did not report as having no terminators'
     }
 
+    # --- THE BINARY FORM, WHICH IS THE ONE THE HARDWARE ACTUALLY SENDS ------------------------
+    # Every case above states a time code as the TEXT "C5 01 02 ...". A Trimble UCCM-P sends the
+    # BYTE 0xC5, and the cases above are blind to it - which is exactly how a real sitting reported
+    # 0 of 9 interleaved while a packet sat in the transcript. These drive the byte path.
+
+    # A packet with 0xCA at offset 22 as well as at the end. The inner one is not decoration: the
+    # 10 Sep 2026 capture contains it, and scanning to the FIRST 0xCA would cut this packet in half
+    # and leave the tail to be read as text.
+    $code = New-Object byte[] $script:UccmTimeCodeLength
+    $code[0] = 0xC5
+    $code[22] = 0xCA
+    $code[$script:UccmTimeCodeLength - 1] = 0xCA
+
+    $binInterleaved = [byte[]]([Text.Encoding]::ASCII.GetBytes("SYNC:TINT?`r`n")) + $code +
+        [byte[]]([Text.Encoding]::ASCII.GetBytes("-1.234E-008`r`nCOMMAND COMPLETE`r`n"))
+
+    $g = Get-UccmReplyAnatomy -Bytes $binInterleaved -Sent 'SYNC:TINT?'
+
+    # THE PACKET LENGTH MUST SURVIVE THE ROUND TRIP, not just the packet count. The array-wrapping
+    # defect above kept the count right and silently cut every packet to one byte, so a test that
+    # only counted packets passed while the split was broken.
+    $lengths = @(Get-UccmBinaryTimeCode -Bytes $binInterleaved | Where-Object { $_.WellFormed })
+    if ($lengths.Count -ne 1 -or $lengths[0].Length -ne $script:UccmTimeCodeLength) {
+        $failures += "the packet length did not survive: got $($lengths[0].Length), expected $script:UccmTimeCodeLength"
+    }
+    if ($g.BinaryTimeCodes -ne 1) { $failures += "a binary time code was not found: got $($g.BinaryTimeCodes)" }
+    if ($g.UnframedC5 -ne 0) { $failures += 'a well-formed packet was reported as unframed' }
+    if (-not $g.TimeCodeInterleaved) { $failures += 'a BINARY time code mid-reply was not reported as interleaved' }
+    if ($g.PayloadLines.Count -ne 1) { $failures += "the binary packet leaked into the payload: $($g.PayloadLines.Count) line(s)" }
+    if ($g.PayloadLines.Count -ge 1 -and $g.PayloadLines[0] -ne '-1.234E-008') { $failures += 'the value was lost to a binary time code' }
+    if (-not $g.Terminated) { $failures += 'COMMAND COMPLETE after a binary code was missed' }
+
+    # A trailing packet appended straight onto the prompt, with NO terminator between them. This is
+    # the exact shape the 10 Sep 2026 GPS:POS:SURV:PROG? reply came back in.
+    $binTrailing = [byte[]]([Text.Encoding]::ASCII.GetBytes("Undefined header`r`nUCCM-P >")) + $code
+    $h = Get-UccmReplyAnatomy -Bytes $binTrailing -Sent 'GPS:POS:SURV:PROG?'
+    if (-not $h.Errored) { $failures += 'an errored reply carrying a binary code lost its error' }
+    if (-not $h.Prompted) { $failures += 'the UCCM-P prompt was not recognised' }
+    if (-not $h.TimeCodeAnywhere) { $failures += 'a trailing binary time code was not seen at all' }
+    if ($h.TimeCodeInterleaved) { $failures += 'a trailing binary time code was misreported as interleaved' }
+    # THE REGRESSION THIS WHOLE CHANGE EXISTS FOR: prompt plus appended binary used to arrive as one
+    # "payload line" of mojibake, i.e. binary garbage handed out as a value.
+    if ($h.PayloadLines.Count -ne 0) { $failures += "prompt+binary produced $($h.PayloadLines.Count) bogus payload line(s)" }
+
+    # WHY THE BYTE PATH HAD TO EXIST. Fed the same reply as a string, the analysis cannot see the
+    # code - Encoding.ASCII turns 0xC5 into '?'. Asserted so nobody "simplifies" back to text.
+    $blind = Get-UccmReplyAnatomy -Response ([Text.Encoding]::ASCII.GetString($binTrailing)) -Sent 'GPS:POS:SURV:PROG?'
+    if ($blind.TimeCodeAnywhere) { $failures += 'the text path claimed to see a binary time code; the test is not proving what it should' }
+
+    # A 0xC5 that is not a packet is REPORTED, not silently dropped - the length is one sitting's
+    # observation, and a harness that ignored everything not matching its own guess would confirm
+    # that guess by construction.
+    $stray = [byte[]]([Text.Encoding]::ASCII.GetBytes("A`r`n")) + [byte[]]@(0xC5, 0x01, 0x02)
+    $k = Get-UccmReplyAnatomy -Bytes $stray -Sent 'X?'
+    if ($k.UnframedC5 -ne 1) { $failures += "a stray 0xC5 was not reported as unframed: got $($k.UnframedC5)" }
+    if ($k.BinaryTimeCodes -ne 0) { $failures += 'a stray 0xC5 was counted as a packet' }
+
+    # Two codes back to back must both be found, and the scan must not stall.
+    $twin = [byte[]]$code + [byte[]]$code
+    $t = Get-UccmBinaryTimeCode -Bytes $twin
+    if (@($t | Where-Object { $_.WellFormed }).Count -ne 2) { $failures += 'two adjacent time codes were not both found' }
+
+    # Prompts, including the SmartClock's, which the smoke run showed counted as payload.
+    foreach ($p in @('UCCM-P >', 'UCCM >', 'scpi >')) {
+        if ((Get-UccmLineKind -Line $p -Sent 'X?') -ne 'Prompt') { $failures += "'$p' was not recognised as a prompt" }
+    }
+    # A value must NOT be mistaken for a prompt.
+    if ((Get-UccmLineKind -Line '-1.234E-008' -Sent 'X?') -ne 'Payload') { $failures += 'a value was misread as a prompt' }
+
     if ($failures.Count -gt 0) {
         Write-Host 'FAIL' -ForegroundColor Red
         $failures | ForEach-Object { Write-Host "  $_" }
@@ -356,8 +579,11 @@ if ($SelfTest) {
     Write-Host '  COMMAND COMPLETE for a family that does neither, which is the answer that would'
     Write-Host '  have been embarrassing to get wrong on the day.'
     Write-Host ''
-    Write-Host '  What remains unexercised is the UCCM itself, and until then every claim in the'
-    Write-Host '  UCCM driver remains a hypothesis with a citation.'
+    Write-Host ''
+    Write-Host '  The UCCM half is no longer unexercised. A Trimble UCCM-P answered on 10 Sep 2026'
+    Write-Host '  at 57600-8-N-1, which refuted the echo hypothesis (0 of 9), confirmed COMMAND'
+    Write-Host '  COMPLETE (6 of 9), and showed the time codes to be BINARY packets this script'
+    Write-Host '  had been searching for as text. The binary path above is what that sitting bought.'
     exit 0
 }
 
@@ -472,8 +698,8 @@ $results = @()
 foreach ($command in $commands) {
     Write-Host ("  {0,-22} " -f $command) -NoNewline
     $bytes = Invoke-UccmCommand -Serial $serial -Command $command -WaitMs 5000
-    $text = [Text.Encoding]::ASCII.GetString($bytes)
-    $anatomy = Get-UccmReplyAnatomy -Response $text -Sent $command
+    # BYTES, NOT TEXT. Passing the ASCII string here is what made every binary time code invisible.
+    $anatomy = Get-UccmReplyAnatomy -Bytes $bytes -Sent $command
 
     $verdict = if ($bytes.Length -eq 0) { 'SILENT' }
     elseif ($anatomy.Errored) { 'error' }
@@ -503,6 +729,17 @@ $answered = @($results | Where-Object { $_.Bytes.Length -gt 0 })
 $echoed = @($answered | Where-Object { $_.Anatomy.EchoFirst })
 $interleaved = @($answered | Where-Object { $_.Anatomy.TimeCodeInterleaved })
 $terminated = @($answered | Where-Object { $_.Anatomy.Terminated })
+$prompted = @($answered | Where-Object { $_.Anatomy.Prompted })
+
+# A plain loop rather than Measure-Object with a calculated property, which is PowerShell 7 only -
+# these scripts are run with pwsh, but a gate that silently sums nothing under 5.1 is worse than one
+# that will not start.
+$binaryCodes = 0
+$unframedC5 = 0
+foreach ($r in $answered) {
+    $binaryCodes += $r.Anatomy.BinaryTimeCodes
+    $unframedC5 += $r.Anatomy.UnframedC5
+}
 
 $identity = ($results | Where-Object { $_.Command -eq '*IDN?' } | Select-Object -First 1)
 $identityText = if ($identity -and $identity.Anatomy.PayloadLines.Count -gt 0) { $identity.Anatomy.PayloadLines[0] } else { '(none)' }
@@ -529,6 +766,9 @@ re-terminated or trimmed. The echo and any interleaved time code are evidence, n
 | Commands answered | $($answered.Count) |
 | Line terminators | $($endings.Summary) |
 | Replies ending unterminated | $unterminatedCount of $($answered.Count) |
+| Replies ending in a prompt | $($prompted.Count) of $($answered.Count) |
+| Binary ``C5`` packets seen | $binaryCodes |
+| ``0xC5`` bytes not matching the packet shape | $unframedC5 |
 
 ## The three hypotheses this sitting was taken to settle
 
@@ -540,6 +780,10 @@ driver treats them as hypotheses with citations until a receiver says otherwise.
 | The module echoes the command before answering it | **$($echoed.Count) of $($answered.Count)** replies began with an echo |
 | Unsolicited ``C5`` time codes interleave with replies | **$($interleaved.Count) of $($answered.Count)** replies had one mid-reply |
 | ``COMMAND COMPLETE`` terminates a reply | **$($terminated.Count) of $($answered.Count)** replies carried it |
+
+The time-code row counts **binary** packets - byte ``0xC5`` through ``0xCA`` - found in the raw
+stream. Until 10 Sep 2026 this script looked for the *characters* ``C5`` in text decoded as ASCII,
+which turns every byte above ``0x7F`` into ``?``, so the row could only ever have read 0.
 
 ## What was happening
 
@@ -567,8 +811,11 @@ Write-Host ''
 Write-Host ("Identity: {0}" -f $identityText)
 Write-Host ("Terminators:         {0}{1}" -f $endings.Summary,
     $(if ($unterminatedCount -gt 0) { " ($unterminatedCount reply/replies end unterminated)" } else { '' }))
+Write-Host ("Ends in a prompt:    {0} of {1}" -f $prompted.Count, $answered.Count)
 Write-Host ("Echoed first:        {0} of {1}" -f $echoed.Count, $answered.Count)
 Write-Host ("Time code mid-reply: {0} of {1}" -f $interleaved.Count, $answered.Count)
+Write-Host ("Binary C5 packets:   {0}{1}" -f $binaryCodes,
+    $(if ($unframedC5 -gt 0) { " ($unframedC5 stray 0xC5 byte(s) not matching the packet shape)" } else { '' }))
 Write-Host ("COMMAND COMPLETE:    {0} of {1}" -f $terminated.Count, $answered.Count)
 Write-Host ''
 Write-Host "Wrote $capturePath"
