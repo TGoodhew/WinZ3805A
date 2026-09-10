@@ -242,4 +242,140 @@ public sealed class NmeaMixedConstellationTests
                 $"talker {talker} contributed no satellites");
         }
     }
+
+    /// <summary>
+    /// A real receiver colliding, and the parser dropping one of the two (#424).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>NOT A FIX - A RECORD OF WHAT HAPPENS TODAY</b>, exactly as
+    /// <see cref="TwoConstellationsNumberingTheirSatellitesTheSameWayLoseOne"/> is. The difference is
+    /// the evidence. That test builds a collision to show what would happen, which is why #424 could
+    /// only ever call the defect "latent, not active" and reachable in principle. This one replays
+    /// <c>form8n-gps-beidou-outdoors.nmea</c>: the forM8N on its own patch antenna outdoors, where
+    /// BeiDou actually tracks.
+    /// </para>
+    /// <para>
+    /// It is neither latent nor rare. That receiver numbers BeiDou per constellation - 6, 20, 23, 24,
+    /// 25, all inside the GPS 1-32 range - and relies on the <c>GB</c> and <c>GP</c> talkers to tell
+    /// them apart. GPS 4 and BeiDou 4 are in view together in <b>1,217 of the sitting's 1,800
+    /// cycles</b>, and the parser's <c>HashSet&lt;int&gt;</c> of PRNs keeps the first and discards the
+    /// second in every one of them.
+    /// </para>
+    /// <para>
+    /// <b>It is also the only capture in the corpus that collides at all.</b> The other seven have
+    /// zero such cycles between them - the VK-162 cannot collide, its GLONASS PRNs being 67-85 - so
+    /// deleting this file would take the whole of #424's evidence with it, and the assertion below
+    /// says so rather than passing vacuously.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void ARealReceiverCollidesAndTheParserDropsASatellite()
+    {
+        string path = Path.Combine(
+            AppContext.BaseDirectory, "Nmea", "Captures", "form8n-gps-beidou-outdoors.nmea");
+        Assert.True(File.Exists(path), $"{path} is missing; the capture is the evidence.");
+
+        string[] lines = File.ReadAllText(path).Split('\n');
+
+        int cycles = 0;
+        int colliding = 0;
+        string? first = null;
+        int reportedInFirst = 0;
+
+        List<string> current = [];
+        foreach (string raw in lines)
+        {
+            string line = raw.TrimEnd('\r');
+            if (line.Length < 9 || line[0] != '$')
+            {
+                continue;
+            }
+
+            // RMC is this driver's cycle boundary, so a cycle is the run of sentences after one.
+            if (line.AsSpan(3, 3) is "RMC")
+            {
+                if (current.Count > 0)
+                {
+                    cycles++;
+                    int reported = Reported(current, out bool clashed);
+                    if (clashed)
+                    {
+                        colliding++;
+                        if (first is null)
+                        {
+                            first = string.Join('\n', current);
+                            reportedInFirst = reported;
+                        }
+                    }
+                }
+
+                current = [line];
+                continue;
+            }
+
+            current.Add(line);
+        }
+
+        Assert.Equal(1800, cycles);
+        Assert.True(
+            colliding >= 1000,
+            $"only {colliding} of {cycles} cycles collided, where this capture was measured at 1,217.");
+        Assert.NotNull(first);
+
+        // What the receiver reported, against what the parser kept.
+        ReceiverStatus status = NmeaStatusParser.Parse(first, Now);
+        Assert.Equal(reportedInFirst - 1, status.Tracked.Count + status.NotTracked.Count);
+
+        // And the loss is invisible: the number survives, once, so nothing on screen suggests a
+        // satellite is missing. That is the part of #424 that sends someone onto the roof.
+        int keptFour = status.Tracked.Count(satellite => satellite.Prn == 4)
+            + status.NotTracked.Count(satellite => satellite.Prn == 4);
+        Assert.Equal(1, keptFour);
+    }
+
+    /// <summary>
+    /// How many satellites a cycle's GSV pages report, counting a number claimed by two talkers as
+    /// the two satellites it is, and whether any such pair was present.
+    /// </summary>
+    private static int Reported(IEnumerable<string> cycle, out bool collided)
+    {
+        Dictionary<string, HashSet<int>> byTalker = new(StringComparer.Ordinal);
+
+        foreach (string line in cycle)
+        {
+            int star = line.LastIndexOf('*');
+            if (star < 0 || line.AsSpan(3, 3) is not "GSV")
+            {
+                continue;
+            }
+
+            string[] fields = line[1..star].Split(',');
+            string talker = fields[0][..2];
+
+            // Three header fields, then four per satellite: number, elevation, azimuth, C/N. This
+            // receiver's PROTVER 18 output appends a signal id, and the bound leaves it alone
+            // because a satellite block needs all four of its fields to be one.
+            for (int i = 4; i + 3 < fields.Length; i += 4)
+            {
+                if (int.TryParse(fields[i], out int prn) && prn > 0)
+                {
+                    if (!byTalker.TryGetValue(talker, out HashSet<int>? seen))
+                    {
+                        seen = [];
+                        byTalker[talker] = seen;
+                    }
+
+                    seen.Add(prn);
+                }
+            }
+        }
+
+        collided = byTalker.Values
+            .SelectMany(set => set)
+            .GroupBy(prn => prn)
+            .Any(group => group.Count() > 1);
+
+        return byTalker.Values.Sum(set => set.Count);
+    }
 }
