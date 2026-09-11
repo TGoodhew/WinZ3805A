@@ -34,6 +34,12 @@
          asserts every *.txt there IS a SmartClock status screen (#221). -->
     <Content Include="Nmea\Captures\**\*.nmea" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Nmea\Captures\**\*.md" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Captured UCCM output (#416). Also outside Fixtures\ for the #221 reason above, and also
+         copied verbatim: this family's screen is read by column position, and its rows end
+         0D 0A 00 rather than CRLF — an end-of-line conversion would take the NUL with it and
+         quietly delete the evidence the parser was written against. -->
+    <Content Include="Uccm\Captures\**\*.txt" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Uccm\Captures\**\*.md" CopyToOutputDirectory="PreserveNewest" />
     <!-- The user's guide and its images, laid out exactly as the package lays them out
          (Help\...), so HelpDocumentTests can check that every image the document names is
          one the package will carry (#312). -->
