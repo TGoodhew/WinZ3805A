@@ -136,6 +136,87 @@ else {
 }
 
 # ---------------------------------------------------------------------------
+# The runtime's two companion packages, which are not optional (#473).
+#
+# THE FRAMEWORK PACKAGE ON ITS OWN IS NOT ENOUGH, and the way it fails is the
+# reason this block is worth its length: the application installs, launches, and
+# exits about 200 ms later with no window, no crash dump, no error dialog and
+# nothing in its log. It is not crashing. The Windows App SDK runs a deployment
+# check as a module initializer - before Main, and long before the application
+# has composed anything that could write a log line - and that check gives up
+# when WinAppRuntime.Main and WinAppRuntime.Singleton are absent.
+#
+# They ship INSIDE the framework package, so nothing is downloaded here. A
+# machine with no internet connection can still do this, which is the promise
+# the zip makes.
+#
+# DONE ON EVERY RUN, not only when the framework was just installed. The
+# companions must match the framework's version, and a machine whose Windows App
+# Runtime is serviced independently of this zip ends up with a newer framework
+# beside older companions - at which point an application that had been working
+# for weeks starts exiting silently, with the same signature and no clue.
+# Measured on 11 Sep 2026: framework 2.4.0.0 against companions 2.3.1.0.
+# ---------------------------------------------------------------------------
+# THE FAMILY IS IN THE NAME, NOT IN THE VERSION, and sorting on the version picks the wrong
+# runtime on any machine with more than one. Microsoft.WindowsAppRuntime.1.8 carries version
+# 8000.946.1701.0 while Microsoft.WindowsAppRuntime.2 carries 2.4.0.0, so "newest version" is
+# 1.8 by a factor of four thousand. Measured, on the machine this was written on: the first
+# version of this block deployed 1.8's companions, left Main.2 absent, and DOWNGRADED the shared
+# Singleton — leaving the application in exactly the state this fix exists to prevent.
+#
+# The runtime shipped in this zip names its own package, so when it is here it is the authority.
+$frameworkName = if ($runtime) { [IO.Path]::GetFileNameWithoutExtension($runtime.Name) } else { $null }
+
+$installed = Get-AppxPackage -Name 'Microsoft.WindowsAppRuntime.*' -ErrorAction SilentlyContinue |
+    Where-Object { $_.Architecture -eq 'X64' }
+
+$framework = if ($frameworkName) {
+    $installed | Where-Object { $_.Name -eq $frameworkName } | Select-Object -First 1
+}
+else {
+    # No runtime in the download, so the family has to be guessed from what is installed. The
+    # suffix after "Microsoft.WindowsAppRuntime." IS the family — 1.7, 1.8, 2 — and comparing
+    # those as versions orders them the way the SDK numbers them.
+    $installed |
+        Sort-Object { [version]($_.Name -replace '^Microsoft\.WindowsAppRuntime\.', '') } -Descending |
+        Select-Object -First 1
+}
+
+if (-not $framework) {
+    throw 'The Windows App Runtime is not installed, so its companion packages cannot be found. ' +
+          'Install the runtime from this folder and run this installer again.'
+}
+
+$companions = Join-Path $framework.InstallLocation 'MSIX'
+
+foreach ($name in 'Main.msix', 'Singleton.msix') {
+    $package = Join-Path $companions $name
+    if (-not (Test-Path $package)) {
+        # A runtime laid out differently to the one this was written against. Say so rather than
+        # carrying on: the application would install and then exit without explaining itself.
+        throw "The Windows App Runtime at $($framework.InstallLocation) does not carry $name, " +
+              'so the application cannot be made to start. Report this with the runtime version: ' +
+              "$($framework.Version)."
+    }
+
+    try {
+        Add-AppxPackage -Path $package -ErrorAction Stop
+    }
+    catch {
+        # Already there at this version is the ordinary case on a re-run. A version mismatch is the
+        # case this block exists for, and it needs the force: the companion has to be replaced by
+        # the one belonging to the framework now installed, which may be a downgrade.
+        if ($_.Exception.Message -match '0x80073D06|already installed|higher version') {
+            continue
+        }
+
+        Add-AppxPackage -Path $package -ForceUpdateFromAnyVersion -ErrorAction Stop
+    }
+}
+
+Write-Ok "Runtime companions match the runtime ($($framework.Version))."
+
+# ---------------------------------------------------------------------------
 # 3. The application
 # ---------------------------------------------------------------------------
 Write-Step '3 of 3  WinZ3805A'
