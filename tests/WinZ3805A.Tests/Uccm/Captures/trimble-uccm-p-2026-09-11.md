@@ -12,6 +12,9 @@ re-terminated or trimmed. The echo and any interleaved time code are evidence, n
 | Commands answered | 9 |
 | Line terminators | CRLF x44 |
 | Replies ending unterminated | 9 of 9 |
+| Binary `C5` packets seen | 3, every one of them trailing |
+| `0xC5` bytes not matching the packet shape | 0 |
+| Replies ending on the prompt | 9 of 9 |
 
 ## The three hypotheses this sitting was taken to settle
 
@@ -21,8 +24,41 @@ driver treats them as hypotheses with citations until a receiver says otherwise.
 | Hypothesis | Measured |
 |---|---|
 | The module echoes the command before answering it | **0 of 9** replies began with an echo |
-| Unsolicited `C5` time codes interleave with replies | **0 of 9** replies had one mid-reply |
+| Unsolicited `C5` time codes interleave with replies | **3 packets arrived, 0 of them mid-reply** |
 | `COMMAND COMPLETE` terminates a reply | **6 of 9** replies carried it |
+
+## The time-code row was re-measured, because the harness that wrote it was blind
+
+**This sitting was taken with the pre-#469 harness**, which searched for the *characters* `C5` in
+text decoded with `Encoding.ASCII` — where every byte above `0x7F` becomes `?`. The module sends the
+**byte** `0xC5`, so that row could only ever have read 0 whatever the module did, and as first
+written this note reported *0 of 9 … mid-reply* as though it were a measurement. It was a constant.
+
+The `---- BYTES` sections are the evidence and are untouched, so the question could be asked again
+after the fact. Replaying them through the merged byte-aware analysis
+(`Get-UccmBinaryTimeCode` / `Get-UccmReplyAnatomy`) gives:
+
+| Reply | Packets | Position |
+|---|---|---|
+| `SYST:STAT?` | 1 | trailing |
+| `DIAG:LOOP?` | 1 | trailing |
+| `GPS:POS:SURV:PROG?` | 1 | trailing |
+
+Three well-formed 44-byte packets, `0xC5` through `0xCA`, and **no `0xC5` that failed to frame** —
+so nothing was silently swallowed. The replay reproduces the 10 Sep sitting's published figures
+exactly (0 echoes, 6 of 9 complete, 1 packet, 0 unframed), which is what licenses trusting it here.
+
+**The answer to hypothesis 2 did not change, but it is now an observation rather than an artefact.**
+Every packet arrived *after* its reply had finished, appended directly to the `UCCM-P >` prompt with
+no terminator of its own. That is an ordinary unsolicited broadcast. **A count of 0 mid-reply still
+refutes nothing**, because an interleaved broadcast depends on timing — it means two sittings have
+now failed to see one, which is a weaker statement and is recorded as such.
+
+**The `---- LINES` sections below the bytes are the old harness's rendering and were left as it
+wrote them.** They classify `UCCM-P >` as `[Payload]` rather than `[Prompt]`, and they absorb each
+binary packet into that line instead of reporting it — which is exactly the defect, preserved where
+it happened. Read the bytes, not those lines. A capture taken today renders both correctly; compare
+`trimble-uccm-p-2026-09-10.txt`.
 
 ## What was happening
 
@@ -57,6 +93,6 @@ does not ask, and the driver's remarks should be corrected rather than the code 
 If it is 9 of 9, the hypothesis is confirmed and can stop being
 hedged. Anything in between is the interesting case and needs reading line by line.
 
-The same applies to the time codes: **a count of 0 does not refute hypothesis 2**, because an
-interleaved broadcast depends on timing. It means this sitting did not see one, which is a weaker
-statement and should be recorded as such.
+Two sittings have now put the echo count at 0 of 9. The time codes are settled as to *form* — they
+are binary, 44 bytes, and real — and unsettled as to *placement*, which only a longer sitting can
+answer.
