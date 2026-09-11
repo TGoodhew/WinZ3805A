@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -411,7 +411,8 @@ public sealed class PollingService : IAsyncDisposable
             readings.Ffom,
             readings.TimeIntervalNanoseconds,
             readings.EfcPercent,
-            readings.SatellitesTracked);
+            readings.SatellitesTracked,
+            plan.FastTierCarries);
 
         FastSweeps++;
     }
@@ -548,7 +549,7 @@ public sealed class PollingService : IAsyncDisposable
         }
 
         ReceiverStatus status = driver.Parse(screen);
-        _store.UpdateFull(status);
+        _store.UpdateFull(status, driver.Plan.FastTierCarries);
         FullSweeps++;
 
         if (status.ParseWarnings.Count > 0)
