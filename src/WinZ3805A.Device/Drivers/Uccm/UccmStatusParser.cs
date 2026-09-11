@@ -25,8 +25,10 @@ namespace WinZ3805A.Device.Drivers.Uccm;
 /// <c>Uccm/Captures/trimble-uccm-p-2026-09-11.txt</c> is a Trimble UCCM-P tracking seven
 /// satellites on 11 Sep 2026, and what it returns to <c>SYST:STAT?</c> is an <b>80-column text
 /// screen</b> — not the <c>C5</c> hex line #416 predicted from Heather's <c>parse_uccm_time()</c>.
-/// The C5 frames are real but unsolicited: they arrive between a reply and its prompt, which is
-/// what #470 was opened for. Three things about that screen are measured rather than adapted, and
+/// The C5 frames are real but unsolicited: they arrive <b>after</b> the prompt, appended directly
+/// to it with no terminator of their own, which is what #470 was opened for. All four packets
+/// across the sittings of 10 and 11 Sep 2026 land there, and none mid-reply; the notes beside
+/// those captures record it. Three things about that screen are measured rather than adapted, and
 /// each has a test against the capture:
 /// </para>
 /// <list type="bullet">
