@@ -1,4 +1,4 @@
-# UCCM capture: trimble-uccm-p-first-sitting
+# UCCM capture: trimble-uccm-p-2026-09-11
 # Port COM3 at 57600-8-N-1
 # Taken 2026-09-11T11:40:21.2975827+10:00
 #

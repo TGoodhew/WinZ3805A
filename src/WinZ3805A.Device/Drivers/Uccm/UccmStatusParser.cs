@@ -22,7 +22,7 @@ namespace WinZ3805A.Device.Drivers.Uccm;
 /// </para>
 /// <para>
 /// <b>Half of it has now met a receiver, and the half that had not was wrong (#416).</b>
-/// <c>Uccm/Captures/trimble-uccm-p-first-sitting.txt</c> is a Trimble UCCM-P tracking seven
+/// <c>Uccm/Captures/trimble-uccm-p-2026-09-11.txt</c> is a Trimble UCCM-P tracking seven
 /// satellites on 11 Sep 2026, and what it returns to <c>SYST:STAT?</c> is an <b>80-column text
 /// screen</b> — not the <c>C5</c> hex line #416 predicted from Heather's <c>parse_uccm_time()</c>.
 /// The C5 frames are real but unsolicited: they arrive between a reply and its prompt, which is
