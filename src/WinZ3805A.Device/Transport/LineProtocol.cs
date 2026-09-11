@@ -22,9 +22,11 @@ namespace WinZ3805A.Device.Transport;
 /// </para>
 /// <para>
 /// <b>The terminator is a prompt, not a newline.</b> A transaction ends at the prompt —
-/// <c>scpi &gt; </c> or <c>E-nnn&gt; </c> — which is what makes a setter (prompt only) and a
-/// multi-line block (~1900 bytes for the status screen) the same shape of read. <c>ReadLine</c>
-/// cannot express that.
+/// <c>scpi &gt; </c> or <c>E-nnn&gt; </c> on the SmartClock — which is what makes a setter (prompt
+/// only) and a multi-line block (~1900 bytes for the status screen) the same shape of read.
+/// <c>ReadLine</c> cannot express that. <b>Which prompt is the driver's to say</b> (#470): see
+/// <see cref="PromptGrammar"/>, and note that a family may also send bytes this link never asked
+/// for, immediately after it.
 /// </para>
 /// <para>
 /// <b>The prompt straddles reads.</b> At 9600 baud a status screen arrives in dozens of chunks and
@@ -43,15 +45,9 @@ public sealed class LineProtocol
     private const byte Cr = (byte)'\r';
     private const byte Lf = (byte)'\n';
 
-    /// <summary>The word the ordinary prompt is built from.</summary>
-    private const string PromptWord = "scpi";
-
-    /// <summary>What the prompt shows instead of <see cref="PromptWord"/> while the error queue is not empty (§7.2).</summary>
-    private const string ErrorPromptPrefix = "E-";
-
     /// <summary>
-    /// The longest tail worth testing against the prompt grammar. Anything longer is a response line
-    /// that has not finished arriving, and testing it would only waste the decode.
+    /// The longest prompt worth looking for. Bounds the decode; it is not a limit on how much may
+    /// follow the prompt, which #470 made the difference it sounds like it is not.
     /// </summary>
     private const int MaxPromptLength = 32;
 
@@ -105,8 +101,22 @@ public sealed class LineProtocol
     /// </remarks>
     private bool _mayHaveStaleInput = true;
     private readonly ILogger _logger;
+    private readonly PromptGrammar _prompt;
 
-    public LineProtocol(ITransport transport, TimeProvider timeProvider, ILogger<LineProtocol>? logger = null)
+    /// <param name="transport">The open link. Not owned, and not disposed by this type.</param>
+    /// <param name="timeProvider">The clock every timeout here is measured against.</param>
+    /// <param name="logger">Where transaction faults are recorded.</param>
+    /// <param name="prompt">
+    /// What ends a transaction on this link (#470). Defaults to <see cref="PromptGrammar.SmartClock"/>,
+    /// so every construction site written before a second prompted family existed still says what it
+    /// meant. During auto-detect the caller passes the union of every registered driver's grammar,
+    /// because the prompt has to be recognised before the answer that selects a driver can be read.
+    /// </param>
+    public LineProtocol(
+        ITransport transport,
+        TimeProvider timeProvider,
+        ILogger<LineProtocol>? logger = null,
+        PromptGrammar? prompt = null)
     {
         ArgumentNullException.ThrowIfNull(transport);
         ArgumentNullException.ThrowIfNull(timeProvider);
@@ -114,6 +124,7 @@ public sealed class LineProtocol
         _transport = transport;
         _timeProvider = timeProvider;
         _logger = logger ?? NullLogger<LineProtocol>.Instance;
+        _prompt = prompt ?? PromptGrammar.SmartClock;
     }
 
     /// <summary>Runs one transaction with the timeout class §7.2 assigns to the command.</summary>
@@ -547,7 +558,7 @@ public sealed class LineProtocol
     /// read waits for genuinely new bytes rather than spinning on the same partial sentinel.
     /// </param>
     /// <param name="promptStatus">The prompt's error token when it carried one, otherwise null.</param>
-    private static bool TryReadTransaction(
+    private bool TryReadTransaction(
         in ReadOnlySequence<byte> buffer,
         List<string> lines,
         ref bool pendingLineFeed,
@@ -601,12 +612,28 @@ public sealed class LineProtocol
         examined = buffer.End;
 
         ReadOnlySequence<byte> unread = reader.UnreadSequence;
-        if (unread.Length is 0 or > MaxPromptLength)
+        if (unread.IsEmpty)
         {
             return false;
         }
 
-        if (!TryMatchPrompt(Decode(unread), out int promptLength, out string? status))
+        // LOOK AT THE START OF THE TAIL, NOT AT THE WHOLE OF IT (#470).
+        //
+        // This tested the entire tail and rejected anything longer than a prompt, on the reasoning
+        // that a longer tail must be a response line still arriving. That holds for a receiver which
+        // speaks only when spoken to. It is false for one that also broadcasts: a Trimble UCCM-P
+        // sends a ~40-byte binary time code with no line ending, and one landing straight after the
+        // prompt made the tail `UCCM-P >` followed by that frame — over the limit, so the matcher
+        // was never called and the transaction ran to its timeout with the answer already read.
+        //
+        // The decode stays bounded, which is all the length test was ever buying: a prompt is short,
+        // so only the first MaxPromptLength bytes can contain one. Latin1 is single-byte, so slicing
+        // a prefix cannot split a character.
+        ReadOnlySequence<byte> candidate = unread.Length > MaxPromptLength
+            ? unread.Slice(0, MaxPromptLength)
+            : unread;
+
+        if (!_prompt.TryMatch(Decode(candidate), out int promptLength, out string? status))
         {
             return false;
         }
@@ -614,94 +641,6 @@ public sealed class LineProtocol
         promptStatus = status;
         consumed = unread.GetPosition(promptLength);
         examined = consumed;
-        return true;
-    }
-
-    /// <summary>
-    /// Matches a complete prompt at the start of <paramref name="tail"/>.
-    /// </summary>
-    /// <param name="tail">The unterminated remainder of the buffer, which contains no line ending.</param>
-    /// <param name="promptLength">How many characters the prompt occupies.</param>
-    /// <param name="status">
-    /// The error token when the receiver is reporting one — <c>E-230</c> and the like — or null for
-    /// the ordinary prompt.
-    /// </param>
-    /// <remarks>
-    /// <para>
-    /// §7.2's prompt grammar has two forms, both observed on a Z3805A running firmware 1.01.03-A —
-    /// the literal <c>"scpi&gt; "</c> the section used to give never matches at all:
-    /// </para>
-    /// <para>
-    /// The ordinary prompt is <c>"scpi &gt; "</c>, with a space before the bracket. While the error
-    /// queue is not empty the word is replaced entirely, <c>"E-230&gt; "</c> and the like, with no
-    /// space — the prompt doubles as the queue indicator, not as a verdict on the last command. A
-    /// command that is rejected answers with *only* that prompt, so a protocol looking for the
-    /// literal string waits out its full timeout on every failed command and then does it again on
-    /// the next one.
-    /// </para>
-    /// <para>
-    /// Matching is deliberately narrow rather than "anything ending in &gt;": the tail is also where
-    /// a half-arrived response line sits, and a status screen line containing a bracket must not be
-    /// mistaken for the end of the transaction.
-    /// </para>
-    /// </remarks>
-    private static bool TryMatchPrompt(ReadOnlySpan<char> tail, out int promptLength, out string? status)
-    {
-        promptLength = 0;
-        status = null;
-
-        int index = 0;
-        while (index < tail.Length && tail[index] == ' ')
-        {
-            index++;
-        }
-
-        int tokenStart = index;
-        if (tail[index..].StartsWith(PromptWord, StringComparison.Ordinal))
-        {
-            index += PromptWord.Length;
-        }
-        else if (tail[index..].StartsWith(ErrorPromptPrefix, StringComparison.Ordinal))
-        {
-            index += ErrorPromptPrefix.Length;
-            int digits = index;
-            while (index < tail.Length && char.IsAsciiDigit(tail[index]))
-            {
-                index++;
-            }
-
-            if (index == digits)
-            {
-                // "E-" with nothing after it yet: either a truncated prompt or not one at all. Both
-                // mean wait, so neither needs distinguishing.
-                return false;
-            }
-        }
-        else
-        {
-            return false;
-        }
-
-        int tokenEnd = index;
-        while (index < tail.Length && tail[index] == ' ')
-        {
-            index++;
-        }
-
-        if (index >= tail.Length || tail[index] != '>')
-        {
-            return false;
-        }
-
-        index++;
-        if (index < tail.Length && tail[index] == ' ')
-        {
-            index++;
-        }
-
-        promptLength = index;
-        ReadOnlySpan<char> token = tail[tokenStart..tokenEnd];
-        status = token.Equals(PromptWord, StringComparison.Ordinal) ? null : token.ToString();
         return true;
     }
 
