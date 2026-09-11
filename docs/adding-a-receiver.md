@@ -133,6 +133,21 @@ Notes that do not fit in a table:
   query re-asked every second overflows the error queue and buries real faults.
   The poller stops asking it until the discriminator's answer changes. The
   index must never be `0` — the discriminator itself is read unconditionally.
+- **`Plan.FastTierCarries` names the fields your sweep answers, and there is no
+  default.** A null in `FastReadings` means *"asked, and the receiver did not
+  answer"*, and the store blanks the display on it — rightly, because a reading
+  the receiver has stopped giving must not go on standing. It cannot also mean
+  *"this family never asks here"*. So say which of the six your sweep covers;
+  whatever you leave out is the full screen's to supply, and `UpdateFull` fills
+  it from what your `Parse` returned. The obvious default would be
+  `FastFields.All` — true of the SmartClock, and exactly the assumption that
+  cost the UCCM driver three readings: a locked UCCM-P showed `TFOM —`,
+  `FFOM —` and no satellite count permanently, its sweep nulling ten times
+  between screens what each screen had just supplied (#475). One consequence
+  worth knowing before you split a plan: a screen-borne reading ages against
+  the full cadence, while the primary window shows a single page age taken from
+  the fast one, so its staleness is understated. Per-reading staleness is a
+  §9.11 question and is not answered today.
 - **`InterpretSweep` returns readings *and* a verdict, and the readings come
   back even when rejected.** The poller's state-change log records what was
   seen whether or not it stores it, and a rejection carries a sentence naming
