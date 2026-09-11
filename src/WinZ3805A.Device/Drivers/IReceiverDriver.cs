@@ -318,4 +318,26 @@ public interface IReceiverDriver
     /// </para>
     /// </remarks>
     bool Reports(ReceiverReading reading) => true;
+
+    // ---- Added by #470, when a second prompted family turned out not to prompt the same way ------
+
+    /// <summary>
+    /// What ends a transaction on this family's link (§7.2, #470).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Only a <see cref="LinkStyle.QueryResponse"/> family has one.</b> A broadcast family is
+    /// never written to after recognition, so nothing waits for a prompt on its link and the default
+    /// is harmless there.
+    /// </para>
+    /// <para>
+    /// The default is the SmartClock's, so a driver written before this member existed still says
+    /// what it meant. Override it only from a measurement: a grammar naming a prompt the receiver
+    /// does not send costs nothing, but one that <i>omits</i> the prompt it does send makes every
+    /// transaction run to its full timeout with the answer already read — which is exactly how #470
+    /// presented, and it reports as "no receiver answered" rather than as anything to do with a
+    /// prompt.
+    /// </para>
+    /// </remarks>
+    PromptGrammar Prompt => PromptGrammar.SmartClock;
 }
