@@ -26,6 +26,16 @@ namespace WinZ3805A.Device.Drivers.Uccm;
 /// <c>LineProtocol</c> is the first thing to check on real hardware.
 /// </para>
 /// <para>
+/// <b>That check has now happened once, and it cost a connect (#470).</b> A Trimble UCCM-P was on
+/// the bench on 10 Sep 2026, and three things came back. The module did <b>not</b> echo, in eight
+/// sittings — so the echo claim is unsupported rather than confirmed, and
+/// <c>LineProtocol</c>'s echo detection compares rather than assumes, which is why nothing depended
+/// on it. The time codes did not land mid-reply, but they do land <i>between the reply and the
+/// prompt</i>, which is enough to matter: see <see cref="Prompt"/>. And the prompt is not the
+/// SmartClock's, which is what made every transaction time out with the answer already read.
+/// Everything else below is still a hypothesis.
+/// </para>
+/// <para>
 /// <b>Vendor and variant are two dimensions and this driver keeps them apart (#418).</b> One driver
 /// with a vendor discriminator, not two drivers: the command set is shared and only the response
 /// shapes differ. The vendor is established from <c>DIAG:LOOP?</c>'s shape rather than from
@@ -85,6 +95,39 @@ public sealed class UccmDriver(TimeProvider timeProvider) : IReceiverDriver
     ];
 
     /// <summary>
+    /// <c>UCCM-P &gt;</c> — and this one is measured (#470).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The first fact in this driver that came from a receiver rather than from a source tree.</b>
+    /// A Trimble UCCM-P, <c>TRIMBLE,57964-80,40896646,V2.0.1.6-01</c>, at 57600-8-N-1 on 10 Sep 2026,
+    /// eight sittings with no variation. Until this member existed the prompt was the SmartClock's
+    /// <c>scpi</c> and nothing else, so every transaction with one of these modules ran to its full
+    /// timeout while holding the answer, and auto-detect reported that no receiver had answered.
+    /// </para>
+    /// <para>
+    /// <b>There is no trailing space</b>, whatever §7.2 says about the invariant. The byte after
+    /// <c>&gt;</c> is <c>C5</c>, the first byte of an unsolicited time code — which is also why
+    /// <c>LineProtocol</c> had to stop requiring the prompt to be the whole of the tail.
+    /// </para>
+    /// <para>
+    /// <b>Symmetricom's prompt is unmeasured and deliberately not guessed.</b> One word is claimed
+    /// here because one word was seen. A Symmetricom module will fail to connect in exactly the way
+    /// the Trimble did until somebody puts one on a bench and adds what it prints — and that failure
+    /// will again say "no receiver answered", so read this remark before believing it.
+    /// </para>
+    /// </remarks>
+    public PromptGrammar Prompt { get; } = new()
+    {
+        Words = ["UCCM-P"],
+
+        // Not observed on this module, and a grammar that accepts a prompt the receiver never sends
+        // would report an error status nobody can act on. The SmartClock's E-nnn form is measured;
+        // this family's error reporting is not.
+        AllowsErrorQueuePrompt = false,
+    };
+
+    /// <summary>
     /// The lock indicator first, then the readings; the status reply is the full tier.
     /// </summary>
     /// <remarks>
@@ -119,7 +162,30 @@ public sealed class UccmDriver(TimeProvider timeProvider) : IReceiverDriver
     /// </remarks>
     public bool Recognises(DeviceIdentity? identity) =>
         identity?.Model is string model &&
-        model.Contains("UCCM", StringComparison.OrdinalIgnoreCase);
+        (model.Contains("UCCM", StringComparison.OrdinalIgnoreCase) ||
+         MeasuredModels.Contains(model.Trim(), StringComparer.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Models measured to be UCCMs whose <c>*IDN?</c> does not say so (#470).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The substring rule was the whole of this, and the first real module failed it.</b> The
+    /// Trimble UCCM-P on the bench on 10 Sep 2026 answers
+    /// <c>TRIMBLE,57964-80,40896646,V2.0.1.6-01</c> — a part number, with the word UCCM nowhere in
+    /// it. Only the prompt says <c>UCCM-P</c>, and <c>Recognises</c> is not shown the prompt. So a
+    /// module whose transaction now completes would have been handed to the first registered driver
+    /// instead, and served as a SmartClock.
+    /// </para>
+    /// <para>
+    /// <b>An exact model, never the manufacturer.</b> Trimble also makes the Thunderbolt, which is a
+    /// different family this driver must keep its hands off — the selection tests use
+    /// <c>TRIMBLE,THUNDERBOLT,…</c> as the identity nothing may claim. One measured part number
+    /// claims one measured receiver and nothing else. Other UCCM-P part numbers exist and are not
+    /// here, because they have not been seen; each one costs a line and a sitting.
+    /// </para>
+    /// </remarks>
+    private static readonly string[] MeasuredModels = ["57964-80"];
 
     /// <inheritdoc />
     public ScpiCommand? Find(string? mnemonic) => UccmCommands.Find(mnemonic);
