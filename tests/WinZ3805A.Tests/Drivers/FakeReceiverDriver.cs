@@ -1,4 +1,4 @@
-﻿using WinZ3805A.Device.Commands;
+using WinZ3805A.Device.Commands;
 using WinZ3805A.Device.Drivers;
 using WinZ3805A.Device.Models;
 using WinZ3805A.Device.Parsing;
@@ -136,10 +136,18 @@ public sealed class FakeReceiverDriver : IReceiverDriver
     public TimeSpan TimeoutFor(string? mnemonic) => TimeSpan.FromSeconds(10);
 
     /// <inheritdoc />
-    public PollPlan Plan { get; } = new(
+    /// <remarks>
+    /// <c>init</c> rather than <c>get</c>-only so a test can hand this fake a plan whose fast tier
+    /// carries less than all six, which is what #475 turns on. The default is the SmartClocks
+    /// shape, because that is what the tests written before it assume.
+    /// </remarks>
+    public PollPlan Plan { get; init; } = new(
         FastTier: [":ACME:STAT?", ":ACME:LEVel?"],
         RefusableIndex: null,
-        FullStatus: ":ACME:DUMP?");
+        FullStatus: ":ACME:DUMP?")
+    {
+        FastTierCarries = FastFields.All,
+    };
 
     /// <inheritdoc />
     public ReceiverStatus Parse(string? response) => new()

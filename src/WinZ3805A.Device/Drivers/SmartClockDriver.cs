@@ -83,7 +83,12 @@ public sealed class SmartClockDriver(TimeProvider timeProvider) : IReceiverDrive
     public PollPlan Plan { get; } = new(
         FastTierOrder,
         Array.IndexOf(FastTierOrder, ":SYNC:TINT?"),
-        FullStatus: ":SYST:STAT?");
+        FullStatus: ":SYST:STAT?")
+    {
+        // §7.3's sweep asks all six, which is why the common currency has exactly these
+        // fields: this family is the shape the others are measured against (#475).
+        FastTierCarries = FastFields.All,
+    };
 
     /// <inheritdoc />
     public ReceiverStatus Parse(string? response) => _parser.Parse(response);

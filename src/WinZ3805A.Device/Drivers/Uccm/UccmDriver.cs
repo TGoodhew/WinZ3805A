@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 
 using WinZ3805A.Device.Commands;
 using WinZ3805A.Device.Models;
@@ -148,7 +148,14 @@ public sealed class UccmDriver(TimeProvider timeProvider) : IReceiverDriver
     public PollPlan Plan { get; } = new(
         [UccmCommands.LockLed, UccmCommands.TimeInterval, UccmCommands.EfcRelative],
         RefusableIndex: null,
-        FullStatus: UccmCommands.Status);
+        FullStatus: UccmCommands.Status)
+    {
+        // TFOM, FFOM and the tracked count are on the status screen and nowhere else — this
+        // family has no scalar query for any of them — so the sweep must not claim to answer
+        // them. Claiming it wiped all three off the primary window ten times between screens
+        // (#475).
+        FastTierCarries = FastFields.SyncState | FastFields.TimeInterval | FastFields.OscillatorControl,
+    };
 
     /// <summary>
     /// Claims a receiver whose identity names a UCCM module.

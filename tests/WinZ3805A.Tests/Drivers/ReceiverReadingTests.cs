@@ -165,7 +165,10 @@ public sealed class ReceiverReadingTests
 
         public IReadOnlyList<Device.Transport.SerialSettings> AutoDetectSequence { get; } = [];
 
-        public PollPlan Plan { get; } = new([], RefusableIndex: null, FullStatus: "STATUS");
+        public PollPlan Plan { get; } = new([], RefusableIndex: null, FullStatus: "STATUS")
+        {
+            FastTierCarries = FastFields.All,
+        };
 
         public bool Recognises(Device.Models.DeviceIdentity? identity) => false;
 
