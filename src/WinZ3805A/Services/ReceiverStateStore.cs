@@ -1,5 +1,6 @@
 ﻿using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using WinZ3805A.Device.Drivers;
 using WinZ3805A.Device.Models;
 
 namespace WinZ3805A.Services;
@@ -180,9 +181,21 @@ public sealed class ReceiverStateStore : INotifyPropertyChanged
 
     /// <summary>Records one completed fast-tier sweep.</summary>
     /// <remarks>
-    /// Every value is nullable and a null overwrites: a field the receiver stopped answering must
-    /// go to an em dash rather than keep showing the last number it gave, which would be a
-    /// fabrication. The timestamp is what tells the user the rest is old.
+    /// <para>
+    /// <b>A null overwrites, but only for a field the sweep actually asked about.</b> A field the
+    /// receiver stopped answering must go to an em dash rather than keep showing the last number
+    /// it gave, which would be a fabrication; the timestamp is what tells the user the rest is
+    /// old. That reasoning holds only where the question was put. For a reading this family
+    /// carries on the full screen instead, the sweep has no opinion, and writing its null over a
+    /// good value is not honesty but erasure — ten times between screens, which is how a locked
+    /// UCCM-P came to show `TFOM —`, `FFOM —` and no satellite count permanently (#475).
+    /// </para>
+    /// <para>
+    /// So <paramref name="carries"/> says which fields this driver's sweep answers, and the rest
+    /// are left for <see cref="UpdateFull"/>. It is not inferred from the values: an all-null
+    /// sweep from a receiver that has gone quiet must still blank the display, and a sweep that
+    /// happens to read zero satellites is a reading rather than a silence.
+    /// </para>
     /// </remarks>
     public void UpdateFast(
         string? syncState,
@@ -190,29 +203,69 @@ public sealed class ReceiverStateStore : INotifyPropertyChanged
         int? ffom,
         double? onePpsTiNanoseconds,
         double? oscillatorControl,
-        int? trackedCount)
+        int? trackedCount,
+        FastFields carries)
     {
-        SyncState = syncState;
-        Tfom = tfom;
-        Ffom = ffom;
-        OnePpsTiNanoseconds = onePpsTiNanoseconds;
-        OscillatorControl = oscillatorControl;
-        TrackedCount = trackedCount;
+        if (carries.HasFlag(FastFields.SyncState)) { SyncState = syncState; }
+        if (carries.HasFlag(FastFields.Tfom)) { Tfom = tfom; }
+        if (carries.HasFlag(FastFields.Ffom)) { Ffom = ffom; }
+        if (carries.HasFlag(FastFields.OscillatorControl)) { OscillatorControl = oscillatorControl; }
+        if (carries.HasFlag(FastFields.SatellitesTracked)) { TrackedCount = trackedCount; }
 
-        _timeInterval[_timeIntervalNext] = onePpsTiNanoseconds;
-        _timeIntervalNext = (_timeIntervalNext + 1) % TimeIntervalWindow;
-        _timeIntervalCount = Math.Min(_timeIntervalCount + 1, TimeIntervalWindow);
-        SnapshotTimeInterval();
-        OnPropertyChanged(nameof(RecentTimeInterval));
+        // The trend window is the time interval's own history, so a driver that does not measure
+        // one must not push a null into it every second: that would fill the §9.4.4 sparkline with
+        // gaps that say "no reading" where the truth is "never asked".
+        if (carries.HasFlag(FastFields.TimeInterval))
+        {
+            OnePpsTiNanoseconds = onePpsTiNanoseconds;
+
+            _timeInterval[_timeIntervalNext] = onePpsTiNanoseconds;
+            _timeIntervalNext = (_timeIntervalNext + 1) % TimeIntervalWindow;
+            _timeIntervalCount = Math.Min(_timeIntervalCount + 1, TimeIntervalWindow);
+            SnapshotTimeInterval();
+            OnPropertyChanged(nameof(RecentTimeInterval));
+        }
 
         LastFastPoll = _timeProvider.GetUtcNow();
     }
 
     /// <summary>Records one full status screen.</summary>
-    public void UpdateFull(ReceiverStatus status)
+    /// <remarks>
+    /// <para>
+    /// <b>The screen supplies the readings the fast tier does not.</b> Where a family has no
+    /// scalar query for TFOM, FFOM, the time interval or the satellite count, the status screen is
+    /// the only place they exist, and the scalar properties on this store are what the primary
+    /// window binds to — not <see cref="Status"/>. Filling them here is what makes those readings
+    /// reachable at all (#475).
+    /// </para>
+    /// <para>
+    /// <b>Only the fields the sweep does not carry.</b> Where the sweep does ask, it is both
+    /// fresher and authoritative, and a ten-second-old screen must not overwrite a one-second-old
+    /// answer — nor quietly restore a value the sweep has just blanked on purpose.
+    /// </para>
+    /// <para>
+    /// <b>One thing this does not fix.</b> A reading taken from here ages against
+    /// <see cref="LastFullPoll"/>, while the primary window shows a single page age taken from
+    /// <see cref="LastFastPoll"/>. For a driver whose readings are split across the tiers that age
+    /// understates the screen-borne ones by up to a full cadence. Per-reading staleness is a
+    /// §9.11 question and is deliberately not answered here.
+    /// </para>
+    /// </remarks>
+    public void UpdateFull(ReceiverStatus status, FastFields carries)
     {
         ArgumentNullException.ThrowIfNull(status);
         Status = status;
+
+        if (!carries.HasFlag(FastFields.Tfom)) { Tfom = status.Tfom; }
+        if (!carries.HasFlag(FastFields.Ffom)) { Ffom = status.Ffom; }
+        if (!carries.HasFlag(FastFields.TimeInterval)) { OnePpsTiNanoseconds = status.OnePpsTiNanoseconds; }
+
+        // Tracked.Count rather than a count field, because the model has none: the table is the
+        // count. A screen whose satellite table did not parse and a receiver tracking nothing both
+        // read 0 here, which is the one place this cannot tell absence from zero — §11.1's
+        // warnings on the status are where that shows up instead.
+        if (!carries.HasFlag(FastFields.SatellitesTracked)) { TrackedCount = status.Tracked.Count; }
+
         LastFullPoll = _timeProvider.GetUtcNow();
     }
 
