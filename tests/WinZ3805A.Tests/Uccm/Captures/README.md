@@ -2,7 +2,9 @@
 
 **No longer empty.** A Trimble UCCM-P answered on 10 Sep 2026 -
 `trimble-uccm-p-2026-09-10.txt`, with its provenance beside it - so #416's step one,
-**identification, not code**, is done for one module of one variant.
+**identification, not code**, is done for one module of one variant. **The same module sat again on
+11 Sep**, `trimble-uccm-p-2026-09-11.txt`, and that second sitting is the screen
+`UccmStatusParser` is written against and tested on.
 
 Until that day nothing was here, because the UCCM driver had never met a receiver: every command,
 timeout, field meaning and state code in `src/WinZ3805A.Device/Drivers/Uccm/` was read out of Lady
@@ -35,12 +37,12 @@ construction — the one outcome that would be worthless.
 **A count of zero for the second does not refute it.** An interleaved broadcast depends on timing, so
 zero means this sitting did not see one — a weaker statement, and the note records it as such.
 
-## What the 10 Sep 2026 sitting answered
+## What the two sittings answered
 
 | Hypothesis | Verdict |
 |---|---|
 | 1. The module echoes the command | **Refuted.** 0 of 9. Replies begin with the answer. |
-| 2. `C5` time codes interleave | **The codes are binary, and the script could not see them.** |
+| 2. `C5` time codes interleave | **The codes are binary.** 4 packets, 0 of them mid-reply. |
 | 3. `COMMAND COMPLETE` terminates | **Confirmed.** 6 of 9, spelled `Command complete`. |
 
 Hypothesis 2 is the one worth reading twice. The codes are **44-byte binary packets**, `0xC5` to
@@ -50,9 +52,14 @@ directly to the prompt. The script had been matching the *characters* `C5` again
 read 0 whatever the module did**, and the self-test passed because it fed the analysis a time code
 written as hex text — a shape no module produces. Both are fixed; the search now runs over bytes.
 
-**The count is still 0 of 9 interleaved, and that still refutes nothing** — one packet was seen, and
-it arrived *after* its reply, which is an ordinary broadcast. Whether one lands mid-reply depends on
-timing and wants a longer sitting.
+**The count is still 0 mid-reply, across both sittings, and that still refutes nothing** — four
+packets have now been seen and every one arrived *after* its reply, appended to the prompt, which
+is an ordinary broadcast. Whether one lands mid-reply depends on timing and wants a longer sitting.
+
+**The 11 Sep sitting was taken with the blind harness, and its figures were re-measured afterwards**
+from the `---- BYTES` sections it had recorded faithfully; its note shows the working. That is the
+argument for dumping the bytes whether or not anything can read them yet — the sitting could be
+re-read without putting the module back on the bench.
 
 ## Why the captures are `.txt` here but not in `Fixtures/`
 
@@ -61,8 +68,13 @@ timing and wants a longer sitting.
 every assertion vacuously — a corpus of junk passes and reports itself as covered. It has caught
 exactly that before (#221).
 
-This directory is not `Fixtures/` and is not copied to the build output, so nothing here is collected
-by that corpus. A UCCM transcript is not a status screen and must not be read as one.
+This directory is not `Fixtures/`, and the corpus globs only under `Fixtures` — so nothing here is
+collected by it. A UCCM transcript is not a status screen and must not be read as one.
+
+**These files are copied to the build output**, which they were not when this paragraph was first
+written: `UccmStatusScreenTests` reads the 11 Sep capture from `AppContext.BaseDirectory`, so the
+csproj copies both the `.txt` and the `.md`. Being out of the output is therefore not what keeps
+these clear of the corpus; being out of `Fixtures/` is.
 
 ## The provenance note is `.md`, deliberately
 
