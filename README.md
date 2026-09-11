@@ -1,4 +1,4 @@
-﻿# WinZ3805A
+# WinZ3805A
 
 A WinUI 3 desktop application for monitoring and controlling HP/Symmetricom
 SmartClock GPS-disciplined oscillators over RS-232.
@@ -213,11 +213,16 @@ attaches the zip as an artifact without publishing anything.
 ### Build
 
 This section owns the build, run and test commands; the copy in `CLAUDE.md` is
-for agents and follows this one. MSBuild is not on `PATH` by default. Resolve it
-with `vswhere`, or use the full path:
+for agents and follows this one. MSBuild is not on `PATH` by default, and where it
+lives depends on which Visual Studio edition is installed — Enterprise,
+Professional, Community and Build Tools each put it somewhere different, and
+Build Tools sits under `Program Files (x86)`. So ask `vswhere` rather than
+writing a path down:
 
 ```powershell
-$msb = 'C:\Program Files\Microsoft Visual Studio\18\Enterprise\MSBuild\Current\Bin\MSBuild.exe'
+$vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+$msb = & $vswhere -latest -products "*" -requires Microsoft.Component.MSBuild `
+                  -find "MSBuild\**\Bin\MSBuild.exe" | Select-Object -First 1
 
 & $msb WinZ3805A.sln -t:Restore -p:Configuration=Debug -p:Platform=x64
 & $msb WinZ3805A.sln -t:Build   -p:Configuration=Debug -p:Platform=x64

@@ -1,4 +1,4 @@
-﻿# WinZ3805A — agent conventions
+# WinZ3805A — agent conventions
 
 WinZ3805A is a WinUI 3 desktop application for monitoring and controlling
 HP/Symmetricom SmartClock GPS-disciplined oscillators — the Z3805A and its
@@ -159,10 +159,14 @@ in practice rather than theoretically.
 
 The commands below are copied from the README's *Building from source*, which owns
 them — change there first; what this file adds is the reasoning. MSBuild is not on
-`PATH`. Resolve it with `vswhere`, or use the full path:
+`PATH`, and its location depends on the Visual Studio edition installed — this
+machine's is Build Tools, under `Program Files (x86)`, not Enterprise. Ask
+`vswhere` rather than writing a path down:
 
 ```powershell
-$msb = 'C:\Program Files\Microsoft Visual Studio\18\Enterprise\MSBuild\Current\Bin\MSBuild.exe'
+$vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+$msb = & $vswhere -latest -products "*" -requires Microsoft.Component.MSBuild `
+                  -find "MSBuild\**\Bin\MSBuild.exe" | Select-Object -First 1
 
 & $msb WinZ3805A.sln -t:Restore -p:Configuration=Debug -p:Platform=x64
 & $msb WinZ3805A.sln -t:Build   -p:Configuration=Debug -p:Platform=x64
@@ -181,8 +185,9 @@ winapp run src\WinZ3805A\bin\x64\Debug\net10.0-windows10.0.26100.0\win-x64 --det
 ```
 
 `TreatWarningsAsErrors` and `EnforceCodeStyleInBuild` are both on, so **the build
-must be clean with zero warnings** — including code-style rules. File-scoped
-namespaces are a build error (`IDE0161`), not a suggestion.
+must be clean with zero warnings** — including code-style rules. Block-scoped
+namespaces are a build error (`IDE0161` is `Convert to file-scoped namespace`),
+not a suggestion — the tree is file-scoped throughout.
 
 Three things the tree does not make obvious. `tools/NmeaSimulator` is referenced by the
 test project, so changing the simulator changes the tests; its README says how to run it
