@@ -31,11 +31,19 @@ public sealed record SerialSettings
 
     /// <summary>The baud rates offered by the connection dialog (§7.1).</summary>
     /// <remarks>
+    /// <para>
     /// 4800 and 38400 joined the list with #310: NMEA 0183 specifies 4800 and its high-speed
     /// variant 38400, and a talker at the standard's own rate could not be connected to by hand
     /// while the dialog offered only the SmartClock family's four.
+    /// </para>
+    /// <para>
+    /// 57600 joined with #470, and for the same reason one step further on: the Trimble UCCM-P on
+    /// the bench runs at 57600-8-N-1, <c>UccmDriver</c> has walked that combination since #416, and
+    /// auto-detect was the only way to reach a receiver the dialog could not be pointed at by hand.
+    /// A rate that a shipped driver walks but the dialog cannot offer is a gap rather than a choice.
+    /// </para>
     /// </remarks>
-    public static IReadOnlyList<int> SupportedBaudRates { get; } = [1200, 2400, 4800, 9600, 19200, 38400];
+    public static IReadOnlyList<int> SupportedBaudRates { get; } = [1200, 2400, 4800, 9600, 19200, 38400, 57600];
 
     /// <summary>The data-bit counts offered by the connection dialog (§7.1).</summary>
     public static IReadOnlyList<int> SupportedDataBits { get; } = [7, 8];
