@@ -270,7 +270,7 @@ The device is plain RS-232 with no vendor driver SDK, no COM interop, and no P/I
 
 | Parameter | Default | Range |
 |---|---|---|
-| Baud | 9600 | 1200 / 2400 / 4800 / 9600 / 19200 / 38400 *(4800 and 38400 added 29 Aug 2026, #310: NMEA 0183's rate and its high-speed variant — the SmartClock family's four left the standard's own rate unofferable)* |
+| Baud | 9600 | 1200 / 2400 / 4800 / 9600 / 19200 / 38400 / 57600 *(4800 and 38400 added 29 Aug 2026, #310: NMEA 0183's rate and its high-speed variant — the SmartClock family's four left the standard's own rate unofferable; **57600 added 10 Sep 2026, #470**, measured on a Trimble UCCM-P, which `UccmDriver` had walked since #416 while the dialog could not be pointed at it by hand)* |
 | Data bits | 8 | 7 / 8 |
 | Parity | None | None / Even / Odd |
 | Stop bits | 1 | 1 / 2 |
@@ -279,7 +279,7 @@ The device is plain RS-232 with no vendor driver SDK, no COM interop, and no P/I
 
 *(added 29 Aug 2026 from the code, #316)* The DTR / RTS row is not a per-device parameter but the transport's unconditional policy: `Transport/SerialTransport.cs` asserts both lines on every open, before any driver has been selected, because the SmartClock's line driver will not transmit to a dead DTR on some cable assemblies. That is right for the SmartClock family and was found to be wrong for at least one other receiver — the BG7TBL unit went silent with DTR asserted (#309) — so #304 item 4 asks for the modem-line policy to become driver-supplied.
 
-Z3805A ships 9600-8-N-1. Sibling units differ — **the Z3801A leaves the factory at 19200-7-O-1** — so all parameters must be user-settable, and the connection dialog must offer an **Auto-detect** that walks the union of every registered driver's most likely combinations — ten today: the SmartClock family's eight, listed in order in §10.12, plus 4800-8-N-1 and 38400-8-N-1 for an NMEA talker (#310) — listening first at each, and sending `*IDN?` only when nothing claims what it hears, until a valid identity returns (corrected 29 Aug 2026, #316: this said *eight* and *sending `*IDN?`*, which described one family and no listen).
+Z3805A ships 9600-8-N-1. Sibling units differ — **the Z3801A leaves the factory at 19200-7-O-1** — so all parameters must be user-settable, and the connection dialog must offer an **Auto-detect** that walks the union of every registered driver's most likely combinations — eleven today: the SmartClock family's eight, listed in order in §10.12, plus 4800-8-N-1 and 38400-8-N-1 for an NMEA talker (#310) and 57600-8-N-1 for a UCCM (#416, measured #470) — listening first at each, and sending `*IDN?` only when nothing claims what it hears, until a valid identity returns (corrected 29 Aug 2026, #316: this said *eight* and *sending `*IDN?`*, which described one family and no listen).
 
 > **⚠ Corrected 28 Aug 2026 (#64).** This said the Z3801A is "commonly 19200-7-**E**-1", and so did §10.12's auto-detect order and Appendix B. The Z3801A user guide gives the factory default as **odd** parity, twice: *"Baud Rate: 19200 / Parity: Odd / Data Bits: 7/char / Stop Bits: 1"*, and again as *"19200 — 7 data bits, 1 start bit, 1 stop bit, odd parity"*. The even-parity spelling had no source.
 >
@@ -321,9 +321,26 @@ This is the fiddliest part of the implementation. Get it right before building a
   ```
 
   **The two forms space differently**: `scpi > ` has a space before the `>` and the error form does
-  not. The only reliable invariant is that a prompt ends with `>` followed by a space. Matching the
-  literal `scpi> ` that this section used to specify never terminates a transaction at all, so every
-  command runs to its full timeout.
+  not. Matching the literal `scpi> ` that this section used to specify never terminates a
+  transaction at all, so every command runs to its full timeout.
+
+  > **⚠ Corrected 10 Sep 2026 (#470).** This said *"the only reliable invariant is that a prompt
+  > ends with `>` followed by a space"*, and generalised one family to all of them. **The word is
+  > the driver's** (`Transport/PromptGrammar.cs`, `IReceiverDriver.Prompt`): a Trimble UCCM-P
+  > prompts `UCCM-P >` and the byte after the `>` is `C5`, the first byte of an unsolicited time
+  > code — no trailing space, and no line ending either. The grammar above remains exactly right for
+  > the SmartClock family, which is what this section is scoped to; it is the *only* prompt that was
+  > wrong.
+  >
+  > **It cost a connect.** With the word hard-coded, every transaction with a UCCM ran to its full
+  > timeout holding the answer it had already read, and auto-detect reported that no receiver had
+  > answered on the port. A prompt a receiver never sends costs nothing; a prompt it does send and
+  > the client does not know is indistinguishable from silence.
+  >
+  > A prompted family may also emit bytes nobody asked for, **immediately after the prompt and
+  > within a line**. A client must therefore look for the prompt at the *start* of what follows the
+  > last line ending rather than requiring it to be the whole of it, and must read an identity as
+  > the printable tail of its line rather than as the whole line.
 
   A command the receiver rejects answers with **the prompt and nothing else**. There is no error
   body on the wire; the reason must be fetched separately with `:SYST:ERR?`.
