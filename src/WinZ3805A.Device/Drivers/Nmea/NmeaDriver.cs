@@ -114,7 +114,14 @@ public sealed class NmeaDriver(TimeProvider timeProvider) : IReceiverDriver
     ];
 
     /// <summary>RMC first, because it is the cycle boundary; then the sentences the readings come from; the whole cycle for the parser.</summary>
-    public PollPlan Plan { get; } = new(FastTierOrder, RefusableIndex: null, FullStatus: PollPlan.WholeCycle);
+    public PollPlan Plan { get; } = new(FastTierOrder, RefusableIndex: null, FullStatus: PollPlan.WholeCycle)
+    {
+        // A talker has no figure of merit, no time interval against a reference and no
+        // oscillator to control. It carries a fix state and a satellite count, and nothing
+        // else the common currency names — which is #435 and #456 stated as a field rather
+        // than left for the display to discover.
+        FastTierCarries = FastFields.SyncState | FastFields.SatellitesTracked,
+    };
 
     /// <inheritdoc />
     public bool Recognises(DeviceIdentity? identity) =>

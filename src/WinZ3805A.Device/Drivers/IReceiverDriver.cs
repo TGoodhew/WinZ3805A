@@ -56,6 +56,69 @@ public sealed record PollPlan(
     /// picker see it as the read it is.
     /// </remarks>
     public const string WholeCycle = "*";
+
+    /// <summary>
+    /// Which of the common currency's fields <see cref="FastTier"/> actually answers (#475).
+    /// </summary>
+    /// <remarks>
+    /// <b>Required, because a default would be a guess about somebody else's receiver.</b> The
+    /// obvious default is <see cref="FastFields.All"/> — true of the SmartClock, whose sweep asks
+    /// all six — and it is exactly the assumption that cost the UCCM driver three readings. A new
+    /// driver must answer this for its own family; there is no answer that is safe to assume on
+    /// its behalf. Fields left out here are the full screen's to supply.
+    /// </remarks>
+    public required FastFields FastTierCarries { get; init; }
+}
+
+/// <summary>
+/// Which of the common currency's fields a driver's fast tier can answer (#475).
+/// </summary>
+/// <remarks>
+/// <para>
+/// <b>A null in <see cref="FastReadings"/> means "asked, and the receiver did not answer" — it
+/// cannot also mean "this family never asks here", and the difference decides whether the display
+/// blanks.</b> The store overwrites every fast-tier field on every sweep, so that a reading the
+/// receiver has stopped giving goes to an em dash rather than standing as a fabrication. That is
+/// right for a field the tier asks about. For a field carried only by the full screen it wipes a
+/// good value ten times between reads, and the reading becomes unreachable — present in the state
+/// and never on screen, which is what a locked UCCM-P did with its TFOM, FFOM and satellite count
+/// (#475).
+/// </para>
+/// <para>
+/// <b>Declared rather than inferred.</b> Nothing reads intent out of the mnemonics in
+/// <see cref="PollPlan.FastTier"/>: a query's spelling is the driver's business, and guessing
+/// what it answers from how it is spelled is how one family's shape became every family's. A
+/// driver says what its sweep carries, and is wrong in a way review can see.
+/// </para>
+/// </remarks>
+[Flags]
+public enum FastFields
+{
+    /// <summary>The sweep answers none of these — a driver whose readings all come from the screen.</summary>
+    None = 0,
+
+    /// <summary>The discriminator's state token.</summary>
+    SyncState = 1 << 0,
+
+    /// <summary>Time Figure of Merit.</summary>
+    Tfom = 1 << 1,
+
+    /// <summary>Frequency Figure of Merit.</summary>
+    Ffom = 1 << 2,
+
+    /// <summary>The 1 PPS offset against GPS.</summary>
+    TimeInterval = 1 << 3,
+
+    /// <summary>Oscillator control, as a percentage of full scale.</summary>
+    OscillatorControl = 1 << 4,
+
+    /// <summary>How many satellites are being tracked.</summary>
+    SatellitesTracked = 1 << 5,
+
+    /// <summary>
+    /// All six — the SmartClock's sweep, which is the shape the common currency was taken from.
+    /// </summary>
+    All = SyncState | Tfom | Ffom | TimeInterval | OscillatorControl | SatellitesTracked,
 }
 
 /// <summary>
