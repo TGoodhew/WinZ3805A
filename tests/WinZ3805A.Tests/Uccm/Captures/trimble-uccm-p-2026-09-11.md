@@ -1,4 +1,4 @@
-# trimble-uccm-p-first-sitting
+# trimble-uccm-p-2026-09-11
 
 Raw UCCM output, byte for byte. Written by `build/Capture-Uccm.ps1`; nothing has been decoded,
 re-terminated or trimmed. The echo and any interleaved time code are evidence, not noise.

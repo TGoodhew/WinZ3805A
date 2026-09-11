@@ -12,7 +12,7 @@ namespace WinZ3805A.Tests.Uccm;
 /// <para>
 /// <b>These are the first UCCM assertions with a receiver behind them.</b> Everything else in this
 /// folder is checked against Lady Heather's source; these are checked against
-/// <c>Uccm/Captures/trimble-uccm-p-first-sitting.txt</c>, taken from a Trimble UCCM-P at
+/// <c>Uccm/Captures/trimble-uccm-p-2026-09-11.txt</c>, taken from a Trimble UCCM-P at
 /// 57600-8-N-1 on 11 Sep 2026 while it was tracking and holding a surveyed position.
 /// </para>
 /// <para>
@@ -187,7 +187,7 @@ public sealed class UccmStatusScreenTests
     private static string Screen()
     {
         string path = Path.Combine(
-            AppContext.BaseDirectory, "Uccm", "Captures", "trimble-uccm-p-first-sitting.txt");
+            AppContext.BaseDirectory, "Uccm", "Captures", "trimble-uccm-p-2026-09-11.txt");
 
         Assert.True(File.Exists(path), $"The capture is missing from the test output: {path}");
 
