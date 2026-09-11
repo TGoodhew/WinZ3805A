@@ -557,7 +557,15 @@ public sealed class DeviceSessionService : IAsyncDisposable
             _transport = _transportFactory(PortName!, Settings);
             await _transport.OpenAsync(cancellationToken).ConfigureAwait(false);
 
-            _protocol = new LineProtocol(_transport, _timeProvider);
+            // The union of every registered driver's prompt, not the SmartClock's (#470). The probe
+            // below decides which driver is selected, so the prompt that ends it has to be
+            // recognised before there is a driver to ask — which means the walk carries every
+            // family's vocabulary and narrows to none. The words do not collide, and Union keeps
+            // registration order, so an added driver can only append.
+            _protocol = new LineProtocol(
+                _transport,
+                _timeProvider,
+                prompt: PromptGrammar.Union(_drivers.Select(driver => driver.Prompt)));
 
             // The receiver emits an identity banner on DTR assert and eats the first command with a
             // framing error, so the connect sequence spends one transaction absorbing both before
@@ -565,9 +573,15 @@ public sealed class DeviceSessionService : IAsyncDisposable
             //
             // The probe timeout rather than the 3 s default, here and for the identity below: this
             // path is also the auto-detect inner loop, and at a wrong baud rate every transaction in
-            // it times out — the listen, the *CLS it sends, and the identity probe. Two seconds each
-            // keeps a silent combination under ten seconds, and the walk is every registered
-            // driver's settings, ten in the shipped composition.
+            // it times out — the listen, the *CLS it sends, and the identity probe.
+            //
+            // MEASURED, 10 Sep 2026 (#470), because this said "two seconds each keeps a silent
+            // combination under ten seconds" and "ten in the shipped composition" and both were
+            // wrong. The composition is ELEVEN settings, the UCCM driver having added 57600-8-N-1,
+            // and a silent combination costs about 8.5 seconds rather than the four this arithmetic
+            // implies: the synchronise step's Elapsed is taken after ClearStatusAsync has run, and
+            // that spends its own resynchronise budget on the way out. The walk takes 93 seconds end
+            // to end, which is the number to check against if anyone shortens it.
             Transaction heard = await _protocol.SynchroniseAsync(TransactionTimeouts.AutoDetectProbe, cancellationToken).ConfigureAwait(false);
 
             // #310: a receiver that talks unprompted has already said who it is by the time the
@@ -589,12 +603,13 @@ public sealed class DeviceSessionService : IAsyncDisposable
 
                 Record(CommandOrigin.Session, identity);
 
-                if (!identity.Succeeded || !LooksLikeIdentity(identity.FirstLine))
+                string? announced = FindIdentity(identity.Lines);
+                if (!identity.Succeeded || announced is null)
                 {
                     return false;
                 }
 
-                Identity = identity.FirstLine!.Trim();
+                Identity = announced;
                 ParsedIdentity = DeviceIdentity.Parse(Identity);
             }
 
@@ -771,6 +786,56 @@ public sealed class DeviceSessionService : IAsyncDisposable
     /// </remarks>
     private static bool LooksLikeIdentity(string? line) =>
         !string.IsNullOrWhiteSpace(line) && line.Split(',').Length >= 4;
+
+    /// <summary>
+    /// The identity in what <c>*IDN?</c> answered, or null when none of it looks like one (#470).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>This used to be <c>FirstLine</c>, and a family that broadcasts breaks that.</b> A UCCM's
+    /// unsolicited time code carries no line ending, so one arriving mid-transaction runs straight
+    /// into the reply: the identity came back as <c>&lt;binary&gt;TRIMBLE,57964-80,…</c>, which
+    /// still has four comma-separated fields and so passed <see cref="LooksLikeIdentity"/> intact —
+    /// putting the binary in <c>Manufacturer</c>, where no driver's <c>Recognises</c> could match
+    /// it. Bytes of that frame that happen to be CR or LF also split it into junk lines of their
+    /// own, so the identity is not reliably the first line either.
+    /// </para>
+    /// <para>
+    /// <b>The identity is the printable tail of its line.</b> Unsolicited bytes can only precede the
+    /// reply within a line — the reply ends at CR LF, so nothing of theirs follows it — which makes
+    /// "everything after the last unprintable character" exactly the reply and nothing else. On a
+    /// SmartClock, whose identity line has no unprintable characters at all, the rule is an
+    /// expensive way of writing <c>Trim</c>.
+    /// </para>
+    /// </remarks>
+    private static string? FindIdentity(IReadOnlyList<string> lines)
+    {
+        foreach (string line in lines)
+        {
+            string candidate = PrintableTail(line).Trim();
+            if (LooksLikeIdentity(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Everything after the last character no receiver would have put in a reply (#470).</summary>
+    private static string PrintableTail(string line)
+    {
+        for (int index = line.Length - 1; index >= 0; index--)
+        {
+            char character = line[index];
+            if (character is < ' ' or > '~')
+            {
+                return line[(index + 1)..];
+            }
+        }
+
+        return line;
+    }
 
     /// <summary>
     /// The single consumer. Everything the application sends to the receiver passes through here,
