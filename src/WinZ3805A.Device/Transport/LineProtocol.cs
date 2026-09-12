@@ -100,6 +100,14 @@ public sealed class LineProtocol
     /// </para>
     /// </remarks>
     private bool _mayHaveStaleInput = true;
+
+    /// <summary>Which grammar word the last prompt matched, for <see cref="Transaction.PromptWord"/>.</summary>
+    /// <remarks>
+    /// Set where the prompt is matched and read where the transaction is built, because the value
+    /// would otherwise have to travel through five <c>out</c> parameters to reach the same place
+    /// (#513). Reset per transaction so a timed-out read cannot report the previous one's prompt.
+    /// </remarks>
+    private string? _promptWord;
     private readonly ILogger _logger;
     private readonly PromptGrammar _prompt;
 
@@ -258,6 +266,7 @@ public sealed class LineProtocol
             await _transport.WriteAsync(Encoding.ASCII.GetBytes($"{sent}\r\n"), linked.Token).ConfigureAwait(false);
             TransportLog.CommandSent(_logger, sent);
 
+            _promptWord = null;
             string? promptStatus = await ReadUntilPromptAsync(lines, frames, linked.Token).ConfigureAwait(false);
             echoDiscarded = TryDiscardEcho(sent, lines);
 
@@ -277,6 +286,7 @@ public sealed class LineProtocol
                 EchoDiscarded = echoDiscarded,
                 Elapsed = elapsed,
                 PromptStatus = promptStatus,
+                PromptWord = _promptWord,
             };
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -369,6 +379,7 @@ public sealed class LineProtocol
 
         try
         {
+            _promptWord = null;
             string? promptStatus = await ReadUntilPromptAsync(lines, [], linked.Token).ConfigureAwait(false);
             await ClearStatusAsync(cancellationToken).ConfigureAwait(false);
 
@@ -380,6 +391,7 @@ public sealed class LineProtocol
                 EchoDiscarded = false,
                 Elapsed = _timeProvider.GetElapsedTime(startedAt),
                 PromptStatus = promptStatus,
+                PromptWord = _promptWord,
             };
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -815,12 +827,17 @@ public sealed class LineProtocol
             ? unread.Slice(0, MaxPromptLength)
             : unread;
 
-        if (!_prompt.TryMatch(Decode(candidate), out int promptLength, out string? status))
+        if (!_prompt.TryMatch(Decode(candidate), out int promptLength, out string? status, out string? word))
         {
             return false;
         }
 
         promptStatus = status;
+
+        // Kept on the instance rather than threaded back through five `out` parameters. The read
+        // loop is strictly sequential per transaction, so the last prompt matched is this
+        // transaction's (#513).
+        _promptWord = word;
         consumed = unread.GetPosition(promptLength);
         examined = consumed;
         return true;

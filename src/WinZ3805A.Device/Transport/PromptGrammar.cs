@@ -124,10 +124,26 @@ public sealed record PromptGrammar
     /// an ordinary prompt.
     /// </param>
     /// <returns>True when <paramref name="tail"/> begins with a complete prompt.</returns>
-    public bool TryMatch(ReadOnlySpan<char> tail, out int promptLength, out string? status)
+    public bool TryMatch(ReadOnlySpan<char> tail, out int promptLength, out string? status) =>
+        TryMatch(tail, out promptLength, out status, out _);
+
+    /// <inheritdoc cref="TryMatch(ReadOnlySpan{char}, out int, out string?)"/>
+    /// <param name="tail">The remainder of the buffer after the last line ending.</param>
+    /// <param name="promptLength">How many characters the prompt occupies.</param>
+    /// <param name="status">The error token when the receiver is reporting one, or null.</param>
+    /// <param name="word">
+    /// Which of <see cref="Words"/> the prompt was, or null when it was an error prompt. A family
+    /// whose prompt names its model rather than its protocol reads its variant from this (#513).
+    /// </param>
+    public bool TryMatch(
+        ReadOnlySpan<char> tail,
+        out int promptLength,
+        out string? status,
+        out string? word)
     {
         promptLength = 0;
         status = null;
+        word = null;
 
         int index = 0;
         while (index < tail.Length && tail[index] == ' ')
@@ -138,14 +154,24 @@ public sealed record PromptGrammar
         int tokenStart = index;
         string? matched = null;
 
-        foreach (string word in Words)
+        // The LONGEST word that fits, not the first. `UCCM-P` and `UCCM` are both prompts of this
+        // family and one is a prefix of the other, so a first-match rule would consume `UCCM` out of
+        // `UCCM-P >` and then fail on the hyphen - reporting no prompt at all on a receiver that had
+        // just printed one. Heather has the same pair and handles it by testing `UCCM-P` first;
+        // relying on order works until Union interleaves two drivers' words, so the length is
+        // compared instead and no registration order can break it.
+        foreach (string candidate in Words)
         {
-            if (tail[index..].StartsWith(word, StringComparison.Ordinal))
+            if (tail[index..].StartsWith(candidate, StringComparison.Ordinal) &&
+                (matched is null || candidate.Length > matched.Length))
             {
-                matched = word;
-                index += word.Length;
-                break;
+                matched = candidate;
             }
+        }
+
+        if (matched is not null)
+        {
+            index += matched.Length;
         }
 
         if (matched is null)
@@ -189,6 +215,11 @@ public sealed record PromptGrammar
 
         promptLength = index;
         status = matched is null ? tail[tokenStart..tokenEnd].ToString() : null;
+
+        // Which word matched, so a family whose prompt names its own variant can say so (#513). A
+        // UCCM-P prints `UCCM-P >` and a plain UCCM prints `UCCM >`, and that is the only signal
+        // either module gives that a driver can read without asking it anything.
+        word = matched;
         return true;
     }
 }
