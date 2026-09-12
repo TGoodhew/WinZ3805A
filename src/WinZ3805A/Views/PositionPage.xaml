@@ -142,27 +142,37 @@
                                 sit under the coordinates rather than beside them because they
                                 qualify the fix rather than locate it.
                             -->
-                            <TextBlock Grid.Row="3" Grid.Column="0"
+                            <TextBlock x:Name="GeoidSeparationLabel" Grid.Row="3" Grid.Column="0"
                                        Style="{ThemeResource WzBodyTextStyle}"
                                        Foreground="{ThemeResource WzTextSecondaryBrush}"
                                        Text="Geoid separation" />
                             <TextBlock x:Name="GeoidSeparationText" Grid.Row="3" Grid.Column="1"
                                        Style="{ThemeResource WzMonoTextStyle}" IsTextSelectionEnabled="True" />
 
-                            <TextBlock Grid.Row="4" Grid.Column="0"
+                            <TextBlock x:Name="SatellitesUsedLabel" Grid.Row="4" Grid.Column="0"
                                        Style="{ThemeResource WzBodyTextStyle}"
                                        Foreground="{ThemeResource WzTextSecondaryBrush}"
                                        Text="Satellites used" />
                             <TextBlock x:Name="SatellitesUsedText" Grid.Row="4" Grid.Column="1"
                                        Style="{ThemeResource WzMonoTextStyle}" IsTextSelectionEnabled="True" />
 
-                            <TextBlock Grid.Row="5" Grid.Column="0"
+                            <TextBlock x:Name="DilutionLabel" Grid.Row="5" Grid.Column="0"
                                        Style="{ThemeResource WzBodyTextStyle}"
                                        Foreground="{ThemeResource WzTextSecondaryBrush}"
                                        Text="Dilution of precision" />
                             <TextBlock x:Name="DilutionText" Grid.Row="5" Grid.Column="1"
                                        Style="{ThemeResource WzMonoTextStyle}" IsTextSelectionEnabled="True" />
                         </Grid>
+
+                        <!--
+                            #435: a family that never carries these says so once, rather than
+                            leaving three em dashes that read as "not arrived yet".
+                        -->
+                        <TextBlock x:Name="FixQualityUnsupportedText"
+                                   Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   TextWrapping="Wrap"
+                                   Visibility="Collapsed" />
                     </StackPanel>
                 </Border>
 

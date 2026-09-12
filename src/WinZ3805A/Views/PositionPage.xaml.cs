@@ -246,6 +246,62 @@ public sealed partial class PositionPage : Page
         _canSetPosition = Capability.Offers(driver, ":GPS:POSition", ":GPS:POSition LAST");
     }
 
+    /// <summary>
+    /// Shows each fix-quality row only for a family that can ever fill it, and says why once (#435).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Three em dashes on a SmartClock would mean what an em dash always means — <i>not arrived
+    /// yet</i> — for readings that will never arrive, which is the confusion this whole issue is
+    /// about. So the rows go and one sentence takes their place.
+    /// </para>
+    /// <para>
+    /// <b>The label goes with the value.</b> Hiding only the value leaves a labelled blank, which
+    /// reads as a field that failed to load rather than one the receiver does not have.
+    /// </para>
+    /// <para>
+    /// One sentence for all three rather than one each: they arrive from the same sentences and a
+    /// family has them or does not, so three identical apologies would be noise. It names only what
+    /// is actually absent, so a family that reported two of the three would still read correctly.
+    /// </para>
+    /// </remarks>
+    private void ShowFixQuality()
+    {
+        IReceiverDriver? driver = _device?.Driver;
+
+        (ReceiverReading Reading, string What, FrameworkElement[] Row)[] rows =
+        [
+            (ReceiverReading.GeoidSeparation, "a geoid separation",
+                [GeoidSeparationLabel, GeoidSeparationText]),
+            (ReceiverReading.SatellitesUsed, "a count of the satellites used in the fix",
+                [SatellitesUsedLabel, SatellitesUsedText]),
+            (ReceiverReading.DilutionOfPrecision, "a dilution of precision",
+                [DilutionLabel, DilutionText]),
+        ];
+
+        List<string> absent = [];
+        foreach ((ReceiverReading reading, string what, FrameworkElement[] row) in rows)
+        {
+            bool reported = Capability.Reports(driver, reading);
+            if (!reported)
+            {
+                absent.Add(what);
+            }
+
+            foreach (FrameworkElement element in row)
+            {
+                element.Visibility = reported ? Visibility.Visible : Visibility.Collapsed;
+            }
+        }
+
+        FixQualityUnsupportedText.Text = absent.Count == 0
+            ? string.Empty
+            : Capability.NotReported(driver, string.Join(", ", absent));
+
+        FixQualityUnsupportedText.Visibility =
+            absent.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+    }
+
     private void Render()
     {
         if (_model is not PositionViewModel model)
@@ -264,6 +320,8 @@ public sealed partial class PositionPage : Page
         GeoidSeparationText.Text = model.GeoidSeparationText;
         SatellitesUsedText.Text = model.SatellitesUsedText;
         DilutionText.Text = model.DilutionText;
+
+        ShowFixQuality();
 
         CopyButton.IsEnabled = model.CopyText is not null;
 
