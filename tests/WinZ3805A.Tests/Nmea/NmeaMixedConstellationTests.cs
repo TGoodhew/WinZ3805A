@@ -379,10 +379,12 @@ public sealed class NmeaMixedConstellationTests
     /// second in every one of them.
     /// </para>
     /// <para>
-    /// <b>It is also the only capture in the corpus that collides at all.</b> The other seven have
-    /// zero such cycles between them - the VK-162 cannot collide, its GLONASS PRNs being 67-85 - so
-    /// deleting this file would take the whole of #424's evidence with it, and the assertion below
-    /// says so rather than passing vacuously.
+    /// <b>It was the only capture in the corpus that collided at all</b>, which is why the assertion
+    /// below insists on a four-figure count rather than passing vacuously: deleting this file would
+    /// once have taken the whole of #424's evidence with it. <c>form8n-fix-lost</c> has since joined
+    /// it at 433 of 721 cycles - the same module indoors, on an evening when BeiDou happened to be
+    /// tracking - so the corpus no longer rests on one sitting. The VK-162 still cannot collide at
+    /// all, its GLONASS PRNs being 67-85.
     /// </para>
     /// </remarks>
     [Fact]

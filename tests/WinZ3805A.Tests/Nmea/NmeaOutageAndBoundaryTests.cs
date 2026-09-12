@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Time.Testing;
+﻿using Microsoft.Extensions.Time.Testing;
 
 using WinZ3805A.Device.Drivers.Nmea;
 using WinZ3805A.Device.Models;
@@ -14,12 +14,19 @@ namespace WinZ3805A.Tests.Nmea;
 /// These are synthetic, and they stay that way: they are the cases a generator can anticipate, and
 /// #420 puts them first precisely because they are cheap.
 /// <para>
-/// <b>The hardware sitting on 7 Sep 2026 produced none of the three</b>, which is the argument for
+/// <b>The hardware sitting on 7 Sep 2026 produced none of the three</b>, which was the argument for
 /// this file rather than against it. No enclosure to hand would stop an 11-satellite fix, so the
-/// outage never happened; the receiver is GPS-only, so a second constellation was never possible;
-/// and all three captures fall between 00:08 and 01:07 UTC on one date, so the midnight crossing
-/// missed by eight minutes. A generator produces on demand what an afternoon with a receiver may
-/// simply decline to show.
+/// outage never happened; that receiver would not run two constellations at once; and all three
+/// captures fell between 00:08 and 01:07 UTC on one date, so the midnight crossing missed by eight
+/// minutes. A generator produces on demand what an afternoon with a receiver may simply decline to
+/// show.
+/// </para>
+/// <para>
+/// <b>All three have since been met on hardware</b>, and the synthetic tests stay anyway. A
+/// generator can be asked for the case you want at the moment you want it, and it can be asked for
+/// the 2D rung on the way back up — which <c>form8n-fix-lost.nmea</c> does not contain, because that
+/// module went straight from no fix to 3D. The captures are the evidence that these states occur as
+/// described; these tests are how the parser is held to them.
 /// </para>
 /// </remarks>
 public sealed class NmeaOutageAndBoundaryTests
@@ -73,6 +80,110 @@ public sealed class NmeaOutageAndBoundaryTests
 
         Assert.True(observed[3].Fix);
         Assert.Contains("3D", observed[3].Detail, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The same three transitions, against a receiver that really lost its fix (#420).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>This is the hardware counterpart the synthetic test above waited two months for.</b> #420's
+    /// last outstanding stage-2 item was "a fix lost while powered", and the captures README recorded
+    /// why it stayed open: an inverted metal cover managed about 5 dB and a microwave oven with its
+    /// door shut about 10 dB, and neither dented an 11-satellite fix.
+    /// </para>
+    /// <para>
+    /// Attenuating the signal was the wrong approach. A <b>cold start</b> throws the ephemeris away
+    /// instead, so the receiver has nothing to compute a fix from — and the link never goes down,
+    /// which an unplugged antenna or a powered-off module would not give you.
+    /// <c>form8n-fix-lost.nmea</c> is twelve minutes of a forM8N doing exactly that: 120 cycles of
+    /// 3D fix, a <c>UBX-CFG-RST</c> at byte 87164, <b>65 cycles with no fix at all</b>, then 536 more
+    /// with it back. Three runs, no flapping, so neither edge is ambiguous.
+    /// </para>
+    /// <para>
+    /// <b>It does not replace the synthetic test, and the difference is the point.</b> This module
+    /// went straight from no fix to 3D with no 2D rung; the generator can be asked for one. A capture
+    /// shows that a state occurs, and a generator shows the parser handles the shape of it.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void ARealReceiverLosesItsFixAndGetsItBack()
+    {
+        string path = Path.Combine(
+            AppContext.BaseDirectory, "Nmea", "Captures", "form8n-fix-lost.nmea");
+        Assert.True(File.Exists(path), $"{path} is missing; the capture is the evidence.");
+
+        string[] lines = File.ReadAllText(path).Split('\n');
+
+        List<bool> fixes = [];
+        List<bool> provisional = [];
+        List<string> current = [];
+
+        void Read()
+        {
+            if (current.Count == 0)
+            {
+                return;
+            }
+
+            ReceiverStatus status = NmeaStatusParser.Parse(string.Join('\n', current), Start);
+            fixes.Add(status.GpsOnePpsValid);
+            provisional.Add(status.DeviceTimeIsProvisional);
+        }
+
+        foreach (string raw in lines)
+        {
+            string line = raw.TrimEnd('\r');
+            if (line.Length < 9 || line[0] != '$')
+            {
+                continue;
+            }
+
+            if (line.AsSpan(3, 3) is "RMC")
+            {
+                Read();
+                current = [line];
+                continue;
+            }
+
+            current.Add(line);
+        }
+
+        Read();
+
+        // Three runs and no more: fix, none, fix. A capture that flapped would still prove the fix
+        // can be lost, but it would not pin the edges, and the edges are what was never tested.
+        List<(bool Fix, int Length)> runs = [];
+        foreach (bool hasFix in fixes)
+        {
+            if (runs.Count > 0 && runs[^1].Fix == hasFix)
+            {
+                runs[^1] = (hasFix, runs[^1].Length + 1);
+            }
+            else
+            {
+                runs.Add((hasFix, 1));
+            }
+        }
+
+        Assert.Equal(3, runs.Count);
+        Assert.True(runs[0].Fix, "the sitting did not start with a fix.");
+        Assert.False(runs[1].Fix, "the fix was never lost.");
+        Assert.True(runs[2].Fix, "the fix never came back.");
+
+        // Measured at 120 / 65 / 536. Asserted as bounds rather than exactly, because the capture
+        // is evidence of the behaviour and not of its arithmetic - but a run of one would mean a
+        // glitch rather than an outage, which is what this exists to distinguish.
+        Assert.True(runs[1].Length >= 30, $"the outage was only {runs[1].Length} cycle(s) long.");
+        Assert.True(runs[2].Length >= 100, $"only {runs[2].Length} cycle(s) followed the outage.");
+
+        // THE JUDGEMENT THE PARSER MAKES, against hardware: before a fix a module's clock is
+        // whatever it last had, so losing the fix must re-assert that rather than leave a stale
+        // certainty. The synthetic test above asserts the same thing on a generated outage.
+        int lost = runs[0].Length;
+        Assert.False(provisional[lost - 1], "the time was provisional while the receiver had a fix.");
+        Assert.True(provisional[lost], "the time stayed certain after the fix went away.");
+        Assert.False(provisional[^1], "the time was still provisional after the fix came back.");
     }
 
     [Fact]
