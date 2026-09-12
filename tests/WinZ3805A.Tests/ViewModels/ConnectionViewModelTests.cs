@@ -335,7 +335,7 @@ public sealed class ConnectionViewModelTests
     }
 
     [Fact]
-    public async Task TheProgressLineAndTheBusyFlagAreClearedWhenTheAttemptEnds()
+    public async Task TheBusyFlagIsClearedWhenTheAttemptEnds()
     {
         using Fixture fixture = new(ports: [Port("COM3")]);
         fixture.Transports.Enqueue(Receiver());
@@ -344,9 +344,27 @@ public sealed class ConnectionViewModelTests
         await fixture.Model.ConnectAsync().WaitAsync(TestTimeout);
 
         Assert.False(fixture.Model.IsBusy);
-        Assert.Null(fixture.Model.ProgressText);
         Assert.True(fixture.Model.CanConnect);
     }
+
+    // THE PROGRESS LINE IS NOT ASSERTED HERE ANY MORE, AND NOTHING REPLACES IT.
+    //
+    // This test used to add `Assert.Null(fixture.Model.ProgressText)`, and it failed about once in
+    // thirty full-suite runs while passing every time in isolation. The assertion was wrong rather
+    // than the code: `Progress<T>` delivery is not ordered against the task `ConnectAsync` awaits,
+    // so the last candidate's line routinely lands just after the walk returns, and
+    // `ConnectionViewModel._generation` is documented to LET it — declining it was #198's first fix
+    // and it meant the eighth of eight was never painted. Painting late is harmless, because the
+    // dialog collapses the whole area when `IsBusy` goes false.
+    //
+    // What actually has to hold is that no stale line survives into the next attempt, and
+    // `ConnectAsync` clears the line before raising `IsBusy` for exactly that. A test was written
+    // for it and then deleted, because the remark on that line in the view model turns out to be
+    // precisely right: it passes whether or not the clearing line is there — verified, eight runs
+    // out of eight with the line removed. Reaching the state it guards needs a callback that arrives
+    // after its own walk returned, and nothing in this fixture can force that.
+    //
+    // A test that cannot fail is worse than no test, so this is a comment instead.
 
     [Fact]
     public async Task ConnectingDoesNothingWithoutAPort()
