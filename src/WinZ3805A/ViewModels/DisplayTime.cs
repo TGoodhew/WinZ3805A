@@ -77,9 +77,27 @@ public static class DisplayTimeConverter
     /// What to print beside the time.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// UTC keeps its name because that is what a timing user expects to see, and because "GMT
     /// Standard Time" would be both wrong half the year and unrecognisable to the audience. Any
     /// other zone gets the Windows display name, which already accounts for daylight saving.
+    /// </para>
+    /// <para>
+    /// <b>A GPS-scale reading says so in every zone (#476.)</b> It used to say so only in a
+    /// UTC-equivalent one, so for every user not sitting at UTC the scale was dropped and a clock
+    /// running ~18 s fast read as an ordinary local time. Observed against a Trimble UCCM-P, which
+    /// labels its own time row <c>GPS</c>:
+    /// </para>
+    /// <code>
+    /// 12:09:51 AUS Eastern Standard Time · 11 Sep 2026     (wall clock: 12:09:33)
+    /// </code>
+    /// <para>
+    /// The conversion itself is unchanged and still deliberately does <b>not</b> apply the leap
+    /// difference — the receiver reports the offset separately, and relabelling is honest where
+    /// converting silently would not be. This makes the relabelling actually happen. The zone is
+    /// still named, because the offset shown really is that zone's; what is added is the scale the
+    /// reading is on.
+    /// </para>
     /// </remarks>
     private static string LabelFor(TimeZoneInfo zone, DateTimeOffset converted, TimeScale scale)
     {
@@ -88,6 +106,8 @@ public static class DisplayTimeConverter
             return scale == TimeScale.Gps ? "GPS" : "UTC";
         }
 
-        return zone.IsDaylightSavingTime(converted) ? zone.DaylightName : zone.StandardName;
+        string zoneName = zone.IsDaylightSavingTime(converted) ? zone.DaylightName : zone.StandardName;
+
+        return scale == TimeScale.Gps ? $"{zoneName} (GPS)" : zoneName;
     }
 }

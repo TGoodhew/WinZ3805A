@@ -71,7 +71,16 @@ caution, red hexagon for critical.
 ![The receiver's time, "15:54:43 Pacific Daylight Time · 29 Aug 2026", followed by a small circled-i badge and a globe button](images/how-to-use/main-clock-line.png)
 
 The time and date the receiver is reporting, shown in the time zone you have chosen (see the globe
-button below). Three things can sit after it:
+button below).
+
+**If the zone name is followed by `(GPS)`, the receiver is reporting GPS time rather than UTC**, and
+GPS time does not take leap seconds — so it currently runs about eighteen seconds ahead of the clock
+on your wall. The application does **not** quietly subtract that difference: it shows you what the
+receiver said and tells you which scale it is on, because silently correcting a timing receiver's own
+time would hide exactly the sort of thing you would want to see. Details → Time spells it out. Most
+receivers report UTC and show no such mark.
+
+Three things can sit after the time:
 
 - **The ⓘ badge** appears when the receiver's own calendar has wrapped. GPS counts weeks in a
   field that rolls over about every 19.6 years, and a receiver of this age reports a date roughly
