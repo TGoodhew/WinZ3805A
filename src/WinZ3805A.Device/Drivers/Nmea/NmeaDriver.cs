@@ -337,7 +337,23 @@ public sealed class NmeaDriver(TimeProvider timeProvider) : IReceiverDriver
         return found;
     }
 
-    /// <summary>Satellites with a signal across the GSV pages in an answer, each PRN counted once.</summary>
+    /// <summary>Satellites with a signal across the GSV pages in an answer, each counted once.</summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Keyed on the satellite's identity, not on its number (#424)</b>, for the same reason
+    /// <c>NmeaStatusParser.Satellites</c> is: a number is unique only within a constellation, and
+    /// this count is what the primary window shows — the surface §9.1 designs to be left on a second
+    /// monitor for weeks, where an under-reported satellite count reads as a failing antenna.
+    /// </para>
+    /// <para>
+    /// Unlike the parser's, this defect is <b>latent in the corpus</b>: it needs the colliding pair
+    /// to be <i>tracked</i> at the same instant, not merely in view, and
+    /// <c>form8n-gps-beidou-outdoors.nmea</c> has 0 such cycles of 1,800 against 1,217 in-view ones.
+    /// That is why the replay test's cross-check of this count against the parser's kept passing.
+    /// It is the same bug all the same, and one of the two code paths having no capture behind it is
+    /// an argument for fixing both, not for waiting.
+    /// </para>
+    /// </remarks>
     private static int TrackedIn(string? gsvPages)
     {
         if (string.IsNullOrWhiteSpace(gsvPages))
@@ -345,7 +361,7 @@ public sealed class NmeaDriver(TimeProvider timeProvider) : IReceiverDriver
             return 0;
         }
 
-        HashSet<int> tracked = [];
+        HashSet<SatelliteId> tracked = [];
         foreach (string line in gsvPages.Split('\n'))
         {
             NmeaSentence? page = NmeaSentence.TryParse(line);
@@ -360,7 +376,7 @@ public sealed class NmeaDriver(TimeProvider timeProvider) : IReceiverDriver
                     && int.TryParse(page.Field(index + 3), NumberStyles.Integer, CultureInfo.InvariantCulture, out int snr)
                     && snr > 0)
                 {
-                    tracked.Add(prn);
+                    tracked.Add(new SatelliteId(NmeaStatusParser.ConstellationFor(page.Talker, prn), prn));
                 }
             }
         }
