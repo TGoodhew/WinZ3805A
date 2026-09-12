@@ -1,3 +1,4 @@
+using System.Globalization;
 using WinZ3805A.Device.Drivers.Uccm;
 
 namespace WinZ3805A.Tests.Uccm;
@@ -156,5 +157,113 @@ public sealed class UccmTimeCodeTests
         Assert.NotNull(code);
         Assert.Equal(44, code.Values.Count);
         Assert.Equal(0xC5, code.Values[0]);
+    }
+
+    // ---- #481: the shape the hardware actually sends ---------------------------------------------
+
+    /// <summary>
+    /// A real frame, byte for byte, from the 12 Sep 2026 sitting.
+    /// </summary>
+    /// <remarks>
+    /// <b>The first captured fixture in this file.</b> Everything above it is synthesised from Lady
+    /// Heather's comments and can only check that this driver reads her claims correctly. This one
+    /// came off COM3 from <c>TRIMBLE,57964-80,40896646,V2.0.1.6-01</c> and is in the repository at
+    /// <c>tests/WinZ3805A.Tests/Uccm/Captures/bench-12sep2026.txt</c>, trailing the <c>*IDN?</c>
+    /// reply. The class remarks say a capture replaces the synthesised fixtures and that whatever
+    /// disagrees is a finding: nothing disagreed.
+    /// </remarks>
+    private static ReadOnlySpan<byte> CapturedFrame =>
+    [
+        0xC5, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x28, 0x1C, 0x52, 0x00,
+        0x00, 0x20, 0x60, 0xC1, 0x91, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x57, 0xCF, 0x27, 0xA4, 0x00, 0x12,
+        0x60, 0x04, 0x45, 0x80, 0x00, 0x00, 0x00, 0x00, 0x10, 0xAA, 0xCA,
+    ];
+
+    /// <summary>
+    /// The captured frame parses, and its clock is the one the receiver was keeping.
+    /// </summary>
+    /// <remarks>
+    /// <b>Heather's indices 27 to 30 are hereby confirmed against hardware.</b> The frame reads
+    /// <c>0x57CF27A4</c> — 1 473 193 892 seconds from the GPS epoch, which is 2026-09-11 20:31:32.
+    /// The capture was written within twenty seconds of that, out of 1.47 billion, and nothing but
+    /// a correct epoch and a correct byte order lands that close.
+    /// </remarks>
+    [Fact]
+    public void TheCapturedFrameCarriesTheReceiversOwnGpsClock()
+    {
+        UccmTimeCode? code = UccmTimeCode.TryParse(CapturedFrame);
+
+        Assert.NotNull(code);
+        Assert.Equal(0x57CF27A4, code.GpsSeconds);
+        Assert.Equal(
+            new DateTimeOffset(2026, 9, 11, 20, 31, 32, TimeSpan.Zero),
+            code.GpsTime);
+    }
+
+    /// <summary>
+    /// The leap-second field reads 18, which is what GPS − UTC actually was.
+    /// </summary>
+    /// <remarks>
+    /// <b>Heather's index 32 is confirmed too, and this one settles a question that had been open.</b>
+    /// GPS − UTC has stood at 18 s since 2017, and this receiver answers none of the
+    /// <c>:PTIM:LEAP</c> queries, so the offset had no other source on this family. The 12 Sep
+    /// session had measured the receiver's clock at +16 s against the host — but <c>W32Time</c> was
+    /// stopped on that machine, so the host was not a reference and the session recorded the offset
+    /// as unestablished. The receiver states it here itself, and 18 is the right answer.
+    /// </remarks>
+    [Fact]
+    public void TheCapturedFrameReportsTheAccumulatedLeapSeconds()
+    {
+        UccmTimeCode? code = UccmTimeCode.TryParse(CapturedFrame);
+
+        Assert.NotNull(code);
+        Assert.Equal(18, code.LeapSecondOffset);
+        Assert.Equal(code.GpsTime.AddSeconds(-18), code.UtcTime);
+    }
+
+    /// <summary>
+    /// The byte path and the hex-text path read a frame identically.
+    /// </summary>
+    /// <remarks>
+    /// Two entry points onto one field mapping, which is why they share <c>FromValues</c>. Heather
+    /// renders codes as hex text in her own logs and the hardware sends bytes; a reading that
+    /// depended on which door it came through would be a defect nobody would look for.
+    /// </remarks>
+    [Fact]
+    public void TheByteAndTextPathsAgreeOnTheSameFrame()
+    {
+        string asText = string.Join(' ', CapturedFrame.ToArray().Select(b => b.ToString("X2", CultureInfo.InvariantCulture)));
+
+        UccmTimeCode? fromBytes = UccmTimeCode.TryParse(CapturedFrame);
+        UccmTimeCode? fromText = UccmTimeCode.TryParse(asText);
+
+        Assert.NotNull(fromBytes);
+        Assert.NotNull(fromText);
+        Assert.Equal(fromText.GpsSeconds, fromBytes.GpsSeconds);
+        Assert.Equal(fromText.LeapSecondOffset, fromBytes.LeapSecondOffset);
+        Assert.Equal(fromText.Values, fromBytes.Values);
+    }
+
+    /// <summary>
+    /// Anything that is not a whole, bounded frame is no reading at all.
+    /// </summary>
+    /// <remarks>
+    /// §11.1: never a throw, and never half a reading. A time assembled from a partly-arrived
+    /// counter is wrong rather than absent, and wrong is the one thing a clock must not be.
+    /// </remarks>
+    [Fact]
+    public void AFrameOfTheWrongShapeIsNotAReading()
+    {
+        Assert.Null(UccmTimeCode.TryParse(CapturedFrame[..43]));
+        Assert.Null(UccmTimeCode.TryParse(ReadOnlySpan<byte>.Empty));
+
+        byte[] wrongTerminator = CapturedFrame.ToArray();
+        wrongTerminator[^1] = 0x00;
+        Assert.Null(UccmTimeCode.TryParse(wrongTerminator));
+
+        byte[] wrongMarker = CapturedFrame.ToArray();
+        wrongMarker[0] = 0x00;
+        Assert.Null(UccmTimeCode.TryParse(wrongMarker));
     }
 }

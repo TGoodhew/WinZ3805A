@@ -773,6 +773,11 @@ public sealed class DeviceSessionService : IAsyncDisposable
         }
 
         _driver = selected;
+
+        // Now that the family is known, the link can lift that family's unsolicited binary frames
+        // out of the byte stream (#481). Not before: detection runs the byte path unchanged, for
+        // the reasons UseBinaryFrames gives.
+        _protocol?.UseBinaryFrames(selected.BinaryFrames);
     }
 
     /// <summary>
@@ -939,6 +944,14 @@ public sealed class DeviceSessionService : IAsyncDisposable
 
             await FlashLampAsync(protocol, on: false, pending.Command.Mnemonic, linked.Token)
                 .ConfigureAwait(false);
+
+            // Anything the receiver said on its own schedule while that command was in flight (#481).
+            // Before the completion is set, so a caller reading the driver's state straight after its
+            // transaction sees what arrived during it.
+            if (transaction.BinaryFrames.Count > 0)
+            {
+                _driver.Observe(transaction.BinaryFrames);
+            }
 
             pending.Completion.TrySetResult(transaction);
             Record(pending.Origin, transaction);

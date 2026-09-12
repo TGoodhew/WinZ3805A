@@ -63,7 +63,18 @@ public static class UccmStatusParser
     /// <param name="response">The whole reply, echo and terminator included.</param>
     /// <param name="capturedAt">The parse stamp, from the driver's <see cref="TimeProvider"/>.</param>
     /// <param name="profile">What the vendor and variant are believed to be.</param>
-    public static ReceiverStatus Parse(string? response, DateTimeOffset capturedAt, UccmProfile profile)
+    /// <param name="broadcast">
+    /// The most recent unsolicited time code, or null (#481). Used only as a starting point: a code
+    /// found inside this reply is newer and replaces it. It is a parameter rather than something
+    /// this method goes looking for because the frames never reach the text at all - the transport
+    /// lifts them out of the byte stream before it is split into lines, which is the only place they
+    /// can be recovered whole.
+    /// </param>
+    public static ReceiverStatus Parse(
+        string? response,
+        DateTimeOffset capturedAt,
+        UccmProfile profile,
+        UccmTimeCode? broadcast = null)
     {
         List<string> warnings = [];
         List<TrackedSatellite> tracked = [];
@@ -74,7 +85,7 @@ public static class UccmStatusParser
         int? tfom = null;
         int? ffom = null;
         int? elevationMask = null;
-        UccmTimeCode? time = null;
+        UccmTimeCode? time = broadcast;
         bool inSatelliteTable = false;
         bool sawAnything = false;
 
