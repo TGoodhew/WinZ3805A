@@ -148,7 +148,31 @@ public enum FastFields
     SatellitesTracked = 1 << 5,
 
     /// <summary>
-    /// All six — the SmartClock's sweep, which is the shape the common currency was taken from.
+    /// The oscillator's fractional frequency offset, in parts per billion (#512).
+    /// </summary>
+    /// <remarks>
+    /// <b>Not the same quantity as <see cref="OscillatorControl"/>, and the difference matters.</b>
+    /// That one is the control voltage — what the loop is <i>doing</i> to the oscillator — while this
+    /// is how far off frequency the oscillator is <i>measured</i> to be. A family can report either,
+    /// both or neither.
+    /// </remarks>
+    OscillatorOffset = 1 << 6,
+
+    /// <summary>The oscillator's temperature correction (#512).</summary>
+    /// <remarks>
+    /// Reported by Symmetricom UCCMs and by nothing else met so far. §11.1's rule is what makes this
+    /// worth a flag of its own: a family that cannot report it must show nothing, not a zero.
+    /// </remarks>
+    OscillatorTemperature = 1 << 7,
+
+    /// <summary>Whether the oscillator is being disciplined (#512).</summary>
+    DiscipliningState = 1 << 8,
+
+    /// <summary>
+    /// The original six — the SmartClock's sweep, which is the shape the common currency was taken
+    /// from. <b>Deliberately not widened by #512</b>: a family that answered all six before does not
+    /// start answering three more because the enum grew, and this is what the existing drivers
+    /// declare.
     /// </summary>
     All = SyncState | Tfom | Ffom | TimeInterval | OscillatorControl | SatellitesTracked,
 }
@@ -175,7 +199,32 @@ public sealed record FastReadings(
     int? Ffom,
     double? TimeIntervalNanoseconds,
     double? EfcPercent,
-    int? SatellitesTracked);
+    int? SatellitesTracked)
+{
+    /// <summary>
+    /// The oscillator's fractional frequency offset in parts per billion, or null (#512).
+    /// </summary>
+    /// <remarks>
+    /// Added as an init-only property rather than a seventh positional parameter so that the six
+    /// that were the common currency stay the shape every driver already writes, and a family that
+    /// has nothing to say here says nothing by omission.
+    /// </remarks>
+    public double? OscillatorOffsetPpb { get; init; }
+
+    /// <summary>The oscillator's temperature correction, or null (#512).</summary>
+    public double? OscillatorTemperature { get; init; }
+
+    /// <summary>
+    /// Whether the oscillator is being disciplined, or null when it cannot be told (#512).
+    /// </summary>
+    /// <remarks>
+    /// <b>Three states, and the third is not a formality.</b> On the one UCCM measured this is null
+    /// far more often than it is true: the field it is inferred from reads zero on a locked,
+    /// disciplined module, so zero was measured to mean "cannot tell" rather than "no" (#418).
+    /// Whatever renders this must have somewhere to put "unknown" that is not "off".
+    /// </remarks>
+    public bool? Disciplining { get; init; }
+}
 
 /// <summary>
 /// What one fast sweep's answers turned out to be (#287).

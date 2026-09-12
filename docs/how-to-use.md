@@ -331,6 +331,23 @@ Everything from the main window, with the words behind the numbers:
   moment that moved. **Orange is above the zero line and teal below it**, and the further from
   zero, the bolder the mark; a mark that crosses zero is grey, because within that slice the
   interval was on both sides of it.
+- **Disciplining loop** — three readings the receiver takes from its own control loop, shown only
+  for receivers that have one. A plain NMEA talker has no disciplined oscillator, so the card is not
+  there at all rather than empty.
+
+  **Frequency offset** is how far off frequency the oscillator is *measured* to be, in parts per
+  billion. This is not the same thing as the oscillator control above it: that is the correction the
+  loop is *applying*, and a receiver can be pulling hard and still be exactly on frequency. A reading
+  the receiver reports as impossible is discarded rather than drawn, so a gap here means one arrived
+  and was rejected.
+
+  **Temperature correction** is reported by some modules and not others. A dash means this receiver
+  does not send one, not that the correction is zero.
+
+  **Disciplining** says whether the oscillator is being steered. It is written as *inferred* because
+  no receiver in this family states it — it is deduced from whether a frequency correction is being
+  applied — and **Not known** is a perfectly ordinary answer rather than a fault: on some modules the
+  field it is deduced from reads zero even while the oscillator is locked and being steered.
 - **Oscillator drift** — how the EFC is trending, which is the oscillator's ageing rate.
 - **Stability (Allan deviation)** — the standard measure of an oscillator's short-term stability,
   computed from the recorded 1 PPS readings for a range of averaging times τ. The **differences

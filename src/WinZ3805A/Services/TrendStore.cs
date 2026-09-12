@@ -15,7 +15,19 @@ public readonly record struct TrendRecord(
     double? Efc,
     double? TimeIntervalNanoseconds,
     string? SyncState,
-    int? TrackedCount);
+    int? TrackedCount)
+{
+    /// <summary>
+    /// The oscillator's measured frequency offset in parts per billion, or <see langword="null"/>
+    /// (#512).
+    /// </summary>
+    /// <remarks>
+    /// <b>A different quantity from <see cref="Efc"/></b>, which is the control voltage. Added as an
+    /// init-only property so every existing construction of this record still says what it said, and
+    /// a row written before the column existed reads back null rather than a fabricated zero.
+    /// </remarks>
+    public double? OscillatorOffsetPpb { get; init; }
+}
 
 /// <summary>
 /// The durable trend history behind P1-2 (#50), and the series #49 and #137 read.
@@ -96,6 +108,46 @@ public sealed class TrendStore : IDisposable
                 tracked INTEGER NULL
             );
             """);
+
+        AddColumnIfMissing("osc", "REAL NULL");
+    }
+
+    /// <summary>
+    /// Adds a column to <c>sample</c> when an older file does not have it yet (#512).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Because <c>CREATE TABLE IF NOT EXISTS</c> is not a migration.</b> An existing trend.db
+    /// keeps the shape it was created with, so a new column in the statement above reaches new
+    /// installations only — and the first insert naming it fails on every file that already holds
+    /// history. A user's weeks of trend are exactly what must not be lost to a schema change.
+    /// </para>
+    /// <para>
+    /// <c>ADD COLUMN</c> with a null default is O(1) in SQLite and rewrites nothing: old rows read
+    /// back null, which is the truth about them — that reading was not being taken when they were
+    /// written. Failure is swallowed like every other store failure here, because a trend that
+    /// cannot widen is still a trend, and the poll loop must not die of it.
+    /// </para>
+    /// </remarks>
+    private void AddColumnIfMissing(string column, string declaration)
+    {
+        try
+        {
+            using SqliteCommand existing = _connection.CreateCommand();
+            existing.CommandText = "SELECT COUNT(*) FROM pragma_table_info('sample') WHERE name = $name;";
+            existing.Parameters.AddWithValue("$name", column);
+
+            if (existing.ExecuteScalar() is long present && present > 0)
+            {
+                return;
+            }
+
+            Execute($"ALTER TABLE sample ADD COLUMN {column} {declaration};");
+        }
+        catch (SqliteException)
+        {
+            // An older file that cannot be widened keeps working without the new series.
+        }
     }
 
     /// <summary>Where the file lives by default, beside the other stores.</summary>
@@ -119,11 +171,12 @@ public sealed class TrendStore : IDisposable
             {
                 using SqliteCommand command = _connection.CreateCommand();
                 command.CommandText = """
-                    INSERT INTO sample (ticks, efc, tint, sync, tracked)
-                    VALUES ($ticks, $efc, $tint, $sync, $tracked)
+                    INSERT INTO sample (ticks, efc, tint, sync, tracked, osc)
+                    VALUES ($ticks, $efc, $tint, $sync, $tracked, $osc)
                     ON CONFLICT(ticks) DO UPDATE SET
                         efc = excluded.efc, tint = excluded.tint,
-                        sync = excluded.sync, tracked = excluded.tracked;
+                        sync = excluded.sync, tracked = excluded.tracked,
+                        osc = excluded.osc;
                     """;
 
                 command.Parameters.AddWithValue("$ticks", record.Ticks);
@@ -131,6 +184,7 @@ public sealed class TrendStore : IDisposable
                 command.Parameters.AddWithValue("$tint", (object?)record.TimeIntervalNanoseconds ?? DBNull.Value);
                 command.Parameters.AddWithValue("$sync", (object?)record.SyncState ?? DBNull.Value);
                 command.Parameters.AddWithValue("$tracked", (object?)record.TrackedCount ?? DBNull.Value);
+                command.Parameters.AddWithValue("$osc", (object?)record.OscillatorOffsetPpb ?? DBNull.Value);
 
                 command.ExecuteNonQuery();
                 return true;
@@ -157,7 +211,7 @@ public sealed class TrendStore : IDisposable
             {
                 using SqliteCommand command = _connection.CreateCommand();
                 command.CommandText = """
-                    SELECT ticks, efc, tint, sync, tracked FROM sample
+                    SELECT ticks, efc, tint, sync, tracked, osc FROM sample
                     WHERE ticks >= $from AND ticks <= $to
                     ORDER BY ticks;
                     """;
@@ -187,7 +241,12 @@ public sealed class TrendStore : IDisposable
                         reader.IsDBNull(1) ? null : reader.GetDouble(1),
                         reader.IsDBNull(2) ? null : reader.GetDouble(2),
                         reader.IsDBNull(3) ? null : reader.GetString(3),
-                        reader.IsDBNull(4) ? null : reader.GetInt32(4)));
+                        reader.IsDBNull(4) ? null : reader.GetInt32(4))
+                    {
+                        // Null on any row written before the column existed, which is what was true
+                        // then: this reading was not being taken.
+                        OscillatorOffsetPpb = reader.IsDBNull(5) ? null : reader.GetDouble(5),
+                    });
                 }
 
                 return records;

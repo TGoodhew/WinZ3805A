@@ -60,6 +60,9 @@ public sealed class ReceiverStateStore : INotifyPropertyChanged
     private int? _ffom;
     private double? _onePpsTiNanoseconds;
     private double? _oscillatorControl;
+    private double? _oscillatorOffsetPpb;
+    private double? _oscillatorTemperature;
+    private bool? _disciplining;
     private int? _trackedCount;
     private DateTimeOffset? _lastFastPoll;
     private DateTimeOffset? _lastFullPoll;
@@ -256,6 +259,42 @@ public sealed class ReceiverStateStore : INotifyPropertyChanged
         private set => Set(ref _trackedCount, value);
     }
 
+    /// <summary>
+    /// The oscillator's measured frequency offset, in parts per billion (#512).
+    /// </summary>
+    /// <remarks>
+    /// <b>Not <see cref="OscillatorControl"/>.</b> That is the voltage the loop is applying; this is
+    /// how far off frequency the oscillator is measured to be. A receiver can be pulling hard and
+    /// still be on frequency, which is precisely what makes them worth showing together.
+    /// </remarks>
+    public double? OscillatorOffsetPpb
+    {
+        get => _oscillatorOffsetPpb;
+        private set => Set(ref _oscillatorOffsetPpb, value);
+    }
+
+    /// <summary>The oscillator's temperature correction, where the receiver reports one (#512).</summary>
+    public double? OscillatorTemperature
+    {
+        get => _oscillatorTemperature;
+        private set => Set(ref _oscillatorTemperature, value);
+    }
+
+    /// <summary>
+    /// Whether the oscillator is being disciplined, or <see langword="null"/> when it cannot be
+    /// told (#512).
+    /// </summary>
+    /// <remarks>
+    /// <b>Null is the common answer, not the rare one.</b> On the measured UCCM the field this is
+    /// inferred from reads zero while locked and disciplining, so zero means "cannot tell" (#418).
+    /// Anything rendering this needs a third state that is not "no".
+    /// </remarks>
+    public bool? Disciplining
+    {
+        get => _disciplining;
+        private set => Set(ref _disciplining, value);
+    }
+
     /// <summary>When the fast tier last completed, or <see langword="null"/> if it never has.</summary>
     public DateTimeOffset? LastFastPoll
     {
@@ -385,7 +424,10 @@ public sealed class ReceiverStateStore : INotifyPropertyChanged
         double? onePpsTiNanoseconds,
         double? oscillatorControl,
         int? trackedCount,
-        FastFields carries)
+        FastFields carries,
+        double? oscillatorOffsetPpb = null,
+        double? oscillatorTemperature = null,
+        bool? disciplining = null)
     {
         _fastTierCarries = carries;
 
@@ -394,6 +436,12 @@ public sealed class ReceiverStateStore : INotifyPropertyChanged
         if (carries.HasFlag(FastFields.Ffom)) { Ffom = ffom; }
         if (carries.HasFlag(FastFields.OscillatorControl)) { OscillatorControl = oscillatorControl; }
         if (carries.HasFlag(FastFields.SatellitesTracked)) { TrackedCount = trackedCount; }
+
+        // #512's three, each gated on its own flag for the reason the others are: a sweep that does
+        // not carry a field must not overwrite what the full screen put there.
+        if (carries.HasFlag(FastFields.OscillatorOffset)) { OscillatorOffsetPpb = oscillatorOffsetPpb; }
+        if (carries.HasFlag(FastFields.OscillatorTemperature)) { OscillatorTemperature = oscillatorTemperature; }
+        if (carries.HasFlag(FastFields.DiscipliningState)) { Disciplining = disciplining; }
 
         // The trend window is the time interval's own history, so a driver that does not measure
         // one must not push a null into it every second: that would fill the §9.4.4 sparkline with

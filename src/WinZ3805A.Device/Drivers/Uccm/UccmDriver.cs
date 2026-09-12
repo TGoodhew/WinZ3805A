@@ -221,10 +221,10 @@ public sealed class UccmDriver(TimeProvider timeProvider) : IReceiverDriver
     /// nothing was feeding it.
     /// </para>
     /// <para>
-    /// It contributes no <see cref="FastFields"/>. The common currency has no slot for an
-    /// oscillator frequency offset — <see cref="FastReadings.EfcPercent"/> is the control voltage,
-    /// a different quantity — so the loop's readings settle the vendor and go no further for now.
-    /// Surfacing them is a separate change with a §9 design decision in it.
+    /// <b>Since #512 it also carries three readings of its own</b> — the oscillator's frequency
+    /// offset, its temperature correction and whether it is being disciplined. The offset is a
+    /// different quantity from <see cref="FastReadings.EfcPercent"/>: that is the control voltage,
+    /// what the loop is doing, and this is how far off frequency the oscillator is measured to be.
     /// </para>
     /// <para>
     /// <b>No refusable entry, which is a claim we cannot yet support.</b> §7.3.1's suppression
@@ -244,7 +244,25 @@ public sealed class UccmDriver(TimeProvider timeProvider) : IReceiverDriver
         // family has no scalar query for any of them — so the sweep must not claim to answer
         // them. Claiming it wiped all three off the primary window ten times between screens
         // (#475).
-        FastTierCarries = FastFields.SyncState | FastFields.TimeInterval | FastFields.OscillatorControl,
+        FastTierCarries = FastFields.SyncState
+            | FastFields.TimeInterval
+            | FastFields.OscillatorControl
+            | FastFields.OscillatorOffset
+            | FastFields.OscillatorTemperature
+            | FastFields.DiscipliningState,
+
+        // What this family can EVER report, which is the other question (#456). The default is the
+        // original six, so the three #512 added have to be claimed explicitly or the UI would treat
+        // them as readings a UCCM cannot produce and show nothing at all.
+        //
+        // The temperature is claimed even though a Trimble never sends one: the FAMILY reports it,
+        // Symmetricom modules do, and "supplied by this family" is not "present in this reply".
+        // A Trimble's is absent, which §11.1 renders as an em dash - the reading has not arrived -
+        // rather than as a field that does not exist.
+        Supplies = FastFields.All
+            | FastFields.OscillatorOffset
+            | FastFields.OscillatorTemperature
+            | FastFields.DiscipliningState,
     };
 
     /// <summary>
@@ -470,10 +488,9 @@ public sealed class UccmDriver(TimeProvider timeProvider) : IReceiverDriver
         // (#418). Done before the rejection test below: an error on the discriminator throws the
         // sweep's readings away, but anything the loop already told us about who made this module
         // is still true and is worth keeping.
-        if (loop is not null && !UccmReply.IsError(loop, UccmCommands.Loop))
-        {
-            ReadLoop(loop);
-        }
+        UccmLoopReading? loopReading = loop is not null && !UccmReply.IsError(loop, UccmCommands.Loop)
+            ? ReadLoop(loop)
+            : null;
 
         // An error where the discriminator should be is somebody else's reply or a refusal, not a
         // reading. §11.1's rule about not inventing values, applied to a whole sweep.
@@ -492,7 +509,15 @@ public sealed class UccmDriver(TimeProvider timeProvider) : IReceiverDriver
             Ffom: null,
             TimeIntervalNanoseconds: Seconds(tint, UccmCommands.TimeInterval) * 1.0E9,
             EfcPercent: Number(efc, UccmCommands.EfcRelative),
-            SatellitesTracked: null);
+            SatellitesTracked: null)
+        {
+            // Null rather than absent-as-zero throughout (§11.1). A reading the sanity band threw
+            // away is null here too: the band exists so that a value Heather measured as spurious
+            // on Trimble never reaches the trend store, and this is the last place it could.
+            OscillatorOffsetPpb = loopReading?.OscillatorOffsetPpb,
+            OscillatorTemperature = loopReading?.TemperatureCorrection,
+            Disciplining = loopReading?.Disciplining,
+        };
 
         return new SweepInterpretation(readings, Rejection: null);
     }
