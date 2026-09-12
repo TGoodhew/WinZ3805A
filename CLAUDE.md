@@ -205,6 +205,7 @@ plain scripts, so run them locally and get the answer in a second:
 
 ```powershell
 pwsh build/Test-NoHexLiterals.ps1        # P0-17 / §9.13 item 2
+pwsh build/Test-ResourceKeysResolve.ps1  # #520 — the tokens referenced, not the tokens defined
 pwsh build/Test-IconOnlyButtons.ps1      # A11Y-3 / §9.9
 pwsh build/Test-ThemeDictionaryParity.ps1  # §9.4 / A11Y-8
 pwsh build/Test-NoBlockedCommands.ps1    # P0-7 / §8.4
@@ -396,6 +397,24 @@ The theme-parity gate exists because Light and Dark are exercised every time any
 runs the app and HighContrast is not — testing it means switching the whole
 desktop over. A token defined in one theme and not another compiles, passes
 review, and then fails at run time for precisely the user who needs that theme.
+
+The resource-key gate was added 13 Sep 2026 for #520, and it is the parity gate's other
+half: that one checks the tokens that are **defined**, this one the tokens that are
+**referenced**. Nothing checked the second until #512 shipped `{ThemeResource WzSpaceS}` — the
+§9.6 scale is Xxs / Xs / Sm / Md / Lg / Xl / Xxl / 3Xl / 4Xl and there is no `S`. **A missing
+resource key is not a compile error and does not degrade gracefully**: it throws while the page's
+XAML is loading, so the page simply does not open. The navigation item highlighted, the frame
+stayed on the previous page, **nothing was logged**, and the app went on polling the receiver — it
+read exactly like a click that had missed, and it survived a real mouse click and two screenshots
+before anyone thought to look at the spelling. It compiled, and all fifteen other gates passed.
+
+Two scope decisions worth not relitigating. Only the **`Wz` prefix** is checked: stock Fluent keys
+like `AccentButtonStyle` are referenced here and defined in the SDK's dictionaries, which this
+repository does not contain, so checking them would mean maintaining an allowlist of somebody
+else's API surface. And **C# is scanned as well as XAML**, because `ThemePalette` reads
+`Colors.xaml` at run time and `AccentRamp` names brushes as string literals — a key can be reached
+without any XAML mentioning it, and a typo there fails the same way and just as quietly. Both
+halves were tested against deliberate violations, including the original `WzSpaceS`.
 
 The pointer-target gate was added 28 Aug 2026, and it exists because **A11Y-5 was signed
 off as passing while two breaches sat in the primary window**. Tony found the first by trying to use
