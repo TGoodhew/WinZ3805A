@@ -340,6 +340,18 @@ public sealed record ReceiverStatus
     /// </remarks>
     public int? SatellitesUsed { get; init; }
 
+    /// <summary>
+    /// What the receiver said about itself in its power-on banner, or <see langword="null"/> if this
+    /// cycle carried none (#515).
+    /// </summary>
+    /// <remarks>
+    /// <b>Null means "this cycle did not say", never "there is nothing".</b> The banner is emitted
+    /// once at power-up, so all but one cycle in a session carry none — a consumer that wants a
+    /// standing answer has to remember it, which is <c>ReceiverStateStore</c>'s job rather than this
+    /// record's. A per-cycle snapshot is exactly what this type is.
+    /// </remarks>
+    public TalkerBanner? Banner { get; init; }
+
     /// <summary>Seconds since the last differential correction, when a fix is differential (#435).</summary>
     public double? DifferentialAgeSeconds { get; init; }
 

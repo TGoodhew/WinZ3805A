@@ -123,9 +123,16 @@ public sealed class NmeaDriverTests
         Assert.Equal(key, Driver(new FakeTimeProvider(Start)).ClassifyLine(line));
     }
 
+    /// <remarks>
+    /// <b><c>$GPTXT</c> used to be on this list and has moved off it (#515.)</b> It was here as an
+    /// unknown kind, and the banner it carries — hardware, firmware, protocol version, antenna
+    /// status — turned out to be worth reading, so the driver now keeps it. What has <i>not</i>
+    /// changed is that a banner cannot claim a receiver: <c>ClassifyLine</c> keeps it while
+    /// <c>Overhear</c> still refuses it, which <c>NmeaBannerTests</c> pins from both sides.
+    /// <c>$PUBX</c> stays here, and stays foreign until #508 says otherwise.
+    /// </remarks>
     [Theory]
     [InlineData("$GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*48")]
-    [InlineData("$GPTXT,01,01,02,u-blox ag - www.u-blox.com*50")]
     [InlineData("$PUBX,00,081350.00,4717.113210,N,00833.915187,E,546.589,G3,2.1,2.0,0.007,77.52,0.007,,0.92,1.19,0.77,9,0,0*5F")]
     [InlineData("$HCHDM,238,M")]
     [InlineData("SYMMETRICOM,Z3805A,3625A02931,1.01.03-A")]

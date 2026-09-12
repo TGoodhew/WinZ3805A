@@ -60,6 +60,7 @@ public static class NmeaStatusParser
         NmeaSentence? gsa = null;
         NmeaSentence? zda = null;
         List<NmeaSentence> gsv = [];
+        List<NmeaSentence> txt = [];
 
         foreach (string line in response.Split('\n'))
         {
@@ -94,6 +95,9 @@ public static class NmeaStatusParser
                     break;
                 case "GSV":
                     gsv.Add(sentence);
+                    break;
+                case "TXT":
+                    txt.Add(sentence);
                     break;
                 default:
                     break;
@@ -146,6 +150,7 @@ public static class NmeaStatusParser
             SatellitesUsed = ParseInt(gga?.Field(6)),
             DifferentialAgeSeconds = ParseDouble(gga?.Field(12)),
             DifferentialStationId = Text(gga?.Field(13)),
+            Banner = Banner(txt),
             CapturedAt = capturedAt,
             ParseWarnings = warnings,
         };
@@ -185,6 +190,86 @@ public static class NmeaStatusParser
 
         return dop.IsEmpty ? null : dop;
     }
+
+    /// <summary>
+    /// What a cycle's <c>$GxTXT</c> sentences say about the receiver itself (#515).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>TXT</c> is four fields — total messages, this message's number, a type, and free text — and
+    /// it is the free text that carries everything. u-blox writes <c>KEY=value</c> for most of it and
+    /// a bare <c>HW UBX-M8130 00080000</c> for the hardware, so both shapes are read.
+    /// </para>
+    /// <para>
+    /// <b>Only the notice type is trusted.</b> Field 2 is <c>00</c> error, <c>01</c> warning,
+    /// <c>02</c> notice, <c>07</c> user. The banner is a notice; an error-class <c>TXT</c> is the
+    /// receiver complaining about something and filing it as though it were an identity would be
+    /// reading a fault as a fact. Anything that is not a notice is ignored here and left to whoever
+    /// wants to surface faults.
+    /// </para>
+    /// <para>
+    /// Returns <see langword="null"/> when nothing usable was said, so an ordinary cycle — which
+    /// carries no <c>TXT</c> at all — does not overwrite a banner already remembered.
+    /// </para>
+    /// </remarks>
+    private static TalkerBanner? Banner(List<NmeaSentence> txt)
+    {
+        const string Notice = "02";
+
+        TalkerBanner banner = TalkerBanner.None;
+        foreach (NmeaSentence sentence in txt)
+        {
+            if (sentence.Field(2) != Notice || Text(sentence.Field(3)) is not string said)
+            {
+                continue;
+            }
+
+            banner = banner.MergedWith(BannerLine(said));
+        }
+
+        return banner.IsEmpty ? null : banner;
+    }
+
+    /// <summary>One line of a talker's banner.</summary>
+    private static TalkerBanner? BannerLine(string said)
+    {
+        if (said.StartsWith("ANTSTATUS=", StringComparison.OrdinalIgnoreCase))
+        {
+            return new TalkerBanner { Antenna = Antenna(said["ANTSTATUS=".Length..]) };
+        }
+
+        if (said.StartsWith("FWVER=", StringComparison.OrdinalIgnoreCase))
+        {
+            return new TalkerBanner { Firmware = Text(said["FWVER=".Length..]) };
+        }
+
+        if (said.StartsWith("PROTVER=", StringComparison.OrdinalIgnoreCase))
+        {
+            return new TalkerBanner { ProtocolVersion = Text(said["PROTVER=".Length..]) };
+        }
+
+        // "HW UBX-M8130 00080000" — the part number, without the ROM checksum that follows it. The
+        // checksum identifies a build rather than a receiver and would make every comparison unique.
+        if (said.StartsWith("HW ", StringComparison.OrdinalIgnoreCase))
+        {
+            string rest = said[3..].Trim();
+            int space = rest.IndexOf(' ', StringComparison.Ordinal);
+            return new TalkerBanner { Hardware = Text(space < 0 ? rest : rest[..space]) };
+        }
+
+        return null;
+    }
+
+    /// <summary>u-blox's <c>ANTSTATUS</c> words.</summary>
+    private static AntennaState Antenna(string value) => value.Trim().ToUpperInvariant() switch
+    {
+        "OK" => AntennaState.Ok,
+        "INIT" => AntennaState.Initialising,
+        "SHORT" => AntennaState.ShortCircuit,
+        "OPEN" => AntennaState.OpenCircuit,
+        "DONTKNOW" => AntennaState.DoNotKnow,
+        _ => AntennaState.Unknown,
+    };
 
     /// <summary>An NMEA field as text, with an empty field read as absent.</summary>
     private static string? Text(string? field) =>

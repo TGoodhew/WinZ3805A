@@ -59,9 +59,35 @@ public sealed class NmeaDriver(TimeProvider timeProvider) : IReceiverDriver
     private static readonly IReadOnlySet<string> GnssTalkers =
         new HashSet<string>(StringComparer.Ordinal) { "GP", "GN", "GL", "GA", "GB", "BD", "QZ", "GI" };
 
-    /// <summary>The sentences the driver reads. Anything else a talker sends is heard and discarded.</summary>
+    /// <summary>
+    /// The sentences that identify a GNSS talker. Anything else it sends is heard and discarded.
+    /// </summary>
+    /// <remarks>
+    /// <b>This set is evidence of what the receiver IS</b>, which is why <c>TXT</c> is not in it —
+    /// see <see cref="Kept"/>.
+    /// </remarks>
     private static readonly IReadOnlySet<string> Sentences =
         new HashSet<string>(StringComparer.Ordinal) { "RMC", "GGA", "GNS", "GSA", "GSV", "ZDA", "GLL", "VTG" };
+
+    /// <summary>
+    /// The sentences worth keeping for the parser: <see cref="Sentences"/> plus the banner (#515).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Two sets rather than one, and the distinction is deliberate.</b> <c>Sentences</c> answers
+    /// "is this a GNSS talker", and <c>Overhear</c> claims a receiver on it. <c>TXT</c> is free text
+    /// with a talker prefix — a device could emit one saying anything at all — so claiming a receiver
+    /// on a banner alone would be claiming one on its say-so. It is worth <i>reading</i> once
+    /// something else has established what we are talking to, and worth nothing as evidence.
+    /// </para>
+    /// <para>
+    /// The practical difference: a power-on burst arrives before the first <c>RMC</c>, so a session
+    /// that connected during it would otherwise discard exactly the sentences that say what the
+    /// module is.
+    /// </para>
+    /// </remarks>
+    private static readonly IReadOnlySet<string> Kept =
+        new HashSet<string>(StringComparer.Ordinal) { "RMC", "GGA", "GNS", "GSA", "GSV", "ZDA", "GLL", "VTG", "TXT" };
 
     private static readonly string[] FastTierOrder =
     [
@@ -93,6 +119,7 @@ public sealed class NmeaDriver(TimeProvider timeProvider) : IReceiverDriver
         Read("ZDA", "Time and date", "UTC time and the full date, with the local zone offset."),
         Read("GLL", "Position", "Latitude and longitude with the time of the fix."),
         Read("VTG", "Track and speed", "Track made good and ground speed."),
+        Read("TXT", "Text and banner", "Free text the receiver prints about itself at power-up — its hardware, firmware, protocol version and antenna status — and again whenever the antenna status changes."),
         new(
             Mnemonic: PollPlan.WholeCycle,
             ShortForm: PollPlan.WholeCycle,
@@ -221,7 +248,8 @@ public sealed class NmeaDriver(TimeProvider timeProvider) : IReceiverDriver
     public string? ClassifyLine(string line)
     {
         NmeaSentence? sentence = NmeaSentence.TryParse(line);
-        return sentence is not null && sentence.ChecksumValid && GnssTalkers.Contains(sentence.Talker) && Sentences.Contains(sentence.Identifier)
+        // Kept, not Sentences: the banner is worth reading and is not evidence of anything (#515).
+        return sentence is not null && sentence.ChecksumValid && GnssTalkers.Contains(sentence.Talker) && Kept.Contains(sentence.Identifier)
             ? sentence.Key
             : null;
     }
