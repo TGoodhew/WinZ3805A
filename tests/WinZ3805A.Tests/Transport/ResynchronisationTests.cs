@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Time.Testing;
+﻿using Microsoft.Extensions.Time.Testing;
 
 using WinZ3805A.Device.Transport;
 
@@ -30,6 +30,53 @@ public class ResynchronisationTests
     private const string Prompt = "scpi > ";
     private static readonly TimeSpan Settle = TimeSpan.FromSeconds(10);
 
+    /// <summary>
+    /// The most virtual time <see cref="AdvanceUntilCompleteAsync"/> winds before giving up.
+    /// </summary>
+    /// <remarks>
+    /// Two minutes: comfortably past any deadline these tests wait for, and comfortably short of the
+    /// timeouts they leave pending while they wait. A loop bounded only in real time winds an amount
+    /// of virtual time that depends on how busy the machine is, which is the one thing a fake clock
+    /// exists to remove.
+    /// </remarks>
+    private static readonly TimeSpan DefaultWindingBudget = TimeSpan.FromMinutes(2);
+
+    /// <summary>
+    /// The winding is bounded in virtual time however long the machine takes (#496).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Deterministic where the flake was not.</b> The defect needed a contended runner, so it
+    /// could not be reproduced by running the test that suffered it - on an idle machine that test
+    /// passes every time, which is what let it survive. What can be pinned is the property: a task
+    /// that takes real time to finish must not cause more virtual time to be wound.
+    /// </para>
+    /// <para>
+    /// Four hundred milliseconds is about eighty turns of the loop. Unbounded, that wound thirteen
+    /// virtual MINUTES - past every deadline the tests leave pending while they wait.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task WindingIsBoundedInVirtualTimeHoweverSlowTheMachineIs()
+    {
+        FakeTimeProvider clock = new();
+        DateTimeOffset started = clock.GetUtcNow();
+
+        Task slow = Task.Delay(TimeSpan.FromMilliseconds(400));
+
+        await AdvanceUntilCompleteAsync(clock, slow, TimeSpan.FromSeconds(10), nameof(slow));
+
+        TimeSpan wound = clock.GetUtcNow() - started;
+
+        Assert.True(
+            wound <= DefaultWindingBudget,
+            $"wound {wound.TotalSeconds:N0} virtual seconds against a budget of "
+            + $"{DefaultWindingBudget.TotalSeconds:N0}.");
+
+        // And it still waited: bounding the winding must not bound the patience.
+        Assert.True(slow.IsCompleted, "the loop gave up before the task finished.");
+    }
+
     // WaitForReaderToConsume on every transport here, and it is load-bearing rather than tidy.
     // Whether a realignment is owed depends on whether any of the reply had arrived, so a test that
     // emits a line and then advances the clock without waiting for the protocol to read it is
@@ -59,29 +106,53 @@ public class ResynchronisationTests
     /// <param name="task">What is being waited for.</param>
     /// <param name="step">How much virtual time each turn of the loop adds.</param>
     /// <param name="what">Names the task in the failure message.</param>
+    /// <param name="budget">
+    /// The most virtual time this may wind in total, or null for <see cref="DefaultWindingBudget"/>.
+    /// </param>
     internal static async Task AdvanceUntilCompleteAsync(
         FakeTimeProvider clock,
         Task task,
         TimeSpan step,
-        string what)
+        string what,
+        TimeSpan? budget = null)
     {
-        // Real time, not iterations: a slow or contended runner is exactly where this fires, and an
-        // iteration count means something different on every machine.
+        // TWO BOUNDS, AND THEY ARE NOT THE SAME BOUND.
+        //
+        // The real-time one catches a hang: a slow or contended runner is exactly where this fires,
+        // and an iteration count means something different on every machine.
+        //
+        // The VIRTUAL one stops the loop winding the clock past deadlines the test still needs
+        // (#496). It had only the real bound, so a contended runner ran more iterations and wound
+        // MORE VIRTUAL TIME - the opposite of what anyone reading it expects. A pending transaction
+        // with a three-second timeout survived on a fast machine and expired on a loaded one, and
+        // when it expired the reader stopped, so the next emit was never consumed and the failure
+        // surfaced 30 seconds later in a different method as "an emit was never consumed". A budget
+        // is fully deterministic, because virtual time is the one thing here that is.
+        TimeSpan cap = budget ?? DefaultWindingBudget;
+
         using CancellationTokenSource giveUp = new(Settle);
         TimeSpan wound = TimeSpan.Zero;
 
+        // The loop keeps turning for the full real-time allowance; it just stops WINDING once the
+        // budget is spent. Stopping the loop instead would trade one flake for a worse one - the
+        // continuation this is waiting for needs real time to run, and the budget is reached in
+        // about sixty milliseconds of it.
         while (!task.IsCompleted && !giveUp.IsCancellationRequested)
         {
-            clock.Advance(step);
-            wound += step;
+            if (wound < cap)
+            {
+                clock.Advance(step);
+                wound += step;
+            }
+
             await Task.Delay(5, CancellationToken.None);
         }
 
         Assert.True(
             task.IsCompleted,
-            $"{what} never completed. Wound the clock {wound.TotalSeconds:N0} virtual seconds over "
-            + $"{Settle.TotalSeconds:N0} real ones, so its deadline was never registered rather than "
-            + "merely late.");
+            $"{what} never completed. Wound the clock {wound.TotalSeconds:N0} virtual seconds "
+            + $"(budget {cap.TotalSeconds:N0}) over {Settle.TotalSeconds:N0} real ones, so its "
+            + "deadline was never registered rather than merely late.");
     }
 
     /// <summary>Waits for something the protocol does on a continuation, without a fixed sleep.</summary>
@@ -234,8 +305,14 @@ public class ResynchronisationTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => abandoned);
 
         // No prompt ever arrives for the abandoned reply.
+        //
+        // The timeout outlives the winding budget ON PURPOSE (#496). This transaction is not what
+        // the test is measuring - it exists so there is something for the realignment to carry - and
+        // a three-second deadline made it a race against the clock the test winds itself: expire it
+        // and the reader stops, so the emit below is never consumed and the failure appears 30
+        // seconds later as somebody else's problem.
         Task<Transaction> next = protocol.ExecuteAsync(
-            ":SYNC:STAT?", TimeSpan.FromSeconds(3), CancellationToken.None);
+            ":SYNC:STAT?", TimeSpan.FromMinutes(10), CancellationToken.None);
 
         Task<string> reaches = transport.ReadCommandAsync().AsTask();
 
@@ -249,6 +326,16 @@ public class ResynchronisationTests
         // reported "the test running when the crash occurred", which is a guess rather than a
         // finding. A bound turns that into a named assertion in under a second.
         await AdvanceUntilCompleteAsync(clock, reaches, TimeSpan.FromSeconds(10), nameof(reaches));
+
+        // THE INVARIANT THE FLAKE BROKE (#496). Winding the clock to reach the realignment must not
+        // also expire the transaction the realignment is carrying. When it did, the reader stopped,
+        // the emit below was never consumed, and the test failed 30 seconds later inside
+        // FakeTransport with a message about nothing reading the transport - true, and three steps
+        // from the cause. Asserted here so the next occurrence names itself.
+        Assert.False(
+            next.IsCompleted,
+            "the pending transaction expired while the clock was being wound to reach the "
+            + "realignment, so nothing was left reading the transport.");
 
         Assert.Equal(":SYNC:STAT?", await reaches.WaitAsync(Settle));
         await transport.EmitAsync($"LOCK\r\n{Prompt}");
