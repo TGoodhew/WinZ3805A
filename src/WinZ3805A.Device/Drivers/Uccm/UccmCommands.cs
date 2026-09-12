@@ -53,6 +53,53 @@ public static class UccmCommands
     /// <summary>Position survey progress. UCCM-P only.</summary>
     public const string SurveyProgress = ":GPS:POS:SURV:PROG?";
 
+    // ---- Measured present on a Trimble UCCM-P, 13 Sep 2026 (#416) -------------------------------
+    //
+    // Every one of these is in Heather's poll cycle and was absent from this catalog because nobody
+    // had asked the module whether it had them. All eight answered with a value; the census that
+    // established it also asked a node known to exist and one known not to, and both behaved, so a
+    // blanket "this firmware answers anything" is ruled out.
+
+    /// <summary>Latitude, longitude and height as one composite reply.</summary>
+    public const string Position = "GPS:POS?";
+
+    /// <summary>Which satellites are being ignored, or <c>None</c>.</summary>
+    public const string IgnoredSatellites = "GPS:SAT:TRAC:IGN?";
+
+    /// <summary>The elevation mask, in degrees.</summary>
+    public const string ElevationMask = "GPS:SAT:TRAC:EMAN?";
+
+    /// <summary>The antenna cable delay the receiver is subtracting, in seconds.</summary>
+    public const string AntennaDelay = "GPS:REF:ADEL?";
+
+    /// <summary>Which pulse the timing output carries — <c>PP1S</c> or <c>PP2S</c>.</summary>
+    public const string PulseSelect = "OUTP:TP:SEL?";
+
+    /// <summary>Whether the outputs are active.</summary>
+    public const string OutputState = "OUTP:STAT?";
+
+    /// <summary>
+    /// Oscillator control as the raw DAC word, which this firmware answers in hexadecimal.
+    /// </summary>
+    /// <remarks>
+    /// <b>Not the same reading as <see cref="EfcRelative"/>, and not the same units.</b> That one
+    /// answers a percentage; this answered <c>0x99387</c> — a 20-bit word written as hex text, which
+    /// no other reply in this family does. Anything consuming it has to parse it as hex and know
+    /// the full scale, neither of which is established, so it is catalogued and not yet read.
+    /// </remarks>
+    public const string EfcData = "DIAG:ROSC:EFC:DATA?";
+
+    /// <summary>
+    /// The oscillator pull-in range.
+    /// </summary>
+    /// <remarks>
+    /// <b>The spelling is not a mistake.</b> Alone in this catalog it carries no subsystem and no
+    /// leading colon: the module answers <c>PULLINRANGE?</c> and its reply is the prose
+    /// <c>Pull-in Range:[30 ppb]</c> rather than a bare value. Reproduced exactly as it went on the
+    /// wire, for the reason the three UCCM-P queries keep their leading colons.
+    /// </remarks>
+    public const string PullInRange = "PULLINRANGE?";
+
     /// <summary>Every command, for a plain UCCM and a UCCM-P alike.</summary>
     /// <remarks>
     /// One catalog rather than one per variant. A UCCM-P answers three queries a plain UCCM does
@@ -72,6 +119,19 @@ public static class UccmCommands
         Query(SurveyState, "Survey state", "Whether a position survey is running. UCCM-P only.", ResponseFormat.Text),
         Query(SurveyProgress, "Survey progress", "How far a position survey has run, as a percentage. UCCM-P only.", ResponseFormat.Decimal),
         Query("*IDN?", "Identity", "Manufacturer, model, serial number and firmware revision.", ResponseFormat.Text),
+
+        // Measured present, 13 Sep 2026. Catalogued so the Advanced Console can offer them and so
+        // Capture-Uccm.ps1 — which reads this list since #482 — asks them on the next sitting.
+        // None is in a poll plan: what a receiver ANSWERS and what the application ASKS every
+        // second are different decisions, and the second one needs a reason beyond availability.
+        Query(Position, "Position", "Latitude, longitude and height, as one composite reply.", ResponseFormat.Text),
+        Query(IgnoredSatellites, "Ignored satellites", "Which satellites the receiver is excluding, or None.", ResponseFormat.Text),
+        Query(ElevationMask, "Elevation mask", "The elevation below which satellites are not used, in degrees.", ResponseFormat.Text),
+        Query(AntennaDelay, "Antenna delay", "The cable delay the receiver is subtracting, in seconds.", ResponseFormat.Decimal),
+        Query(PulseSelect, "Pulse select", "Whether the timing output carries one pulse per second or two.", ResponseFormat.Keyword),
+        Query(OutputState, "Output state", "Whether the receiver's outputs are active.", ResponseFormat.Keyword),
+        Query(EfcData, "Oscillator control word", "Oscillator control as the raw DAC word, which this family answers in hexadecimal.", ResponseFormat.Text),
+        Query(PullInRange, "Pull-in range", "How far the oscillator can be steered before the loop gives up.", ResponseFormat.Text),
     ];
 
     /// <summary>The three queries only a UCCM-P answers.</summary>
