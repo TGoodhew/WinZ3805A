@@ -5,6 +5,7 @@ using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
+using WinZ3805A.Controls;
 using WinZ3805A.ViewModels;
 
 namespace WinZ3805A.Views;
@@ -62,6 +63,25 @@ public sealed partial class ConnectionDialog : ContentDialog
 
     /// <summary>Whether the receiver answered, once the dialog has closed.</summary>
     public bool Connected { get; private set; }
+
+    /// <summary>
+    /// Lets the dialog use the window it has rather than WinUI's stock cap, so its controls are
+    /// shown rather than scrolled to (#506).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Call before <c>ShowAsync</c>.</b> The cap is read out of this dictionary when the template
+    /// is applied, which happens as the dialog is shown — setting it afterwards changes nothing, and
+    /// the failure is silent, which is exactly the kind that gets "fixed" twice.
+    /// </para>
+    /// <para>
+    /// The value is <see cref="DialogHeight.MaxFor"/>'s, which never goes below the stock figure, so
+    /// a window too small to help keeps WinUI's behaviour and #26's <c>ScrollViewer</c> unchanged.
+    /// </para>
+    /// </remarks>
+    /// <param name="availableHeight">The <c>XamlRoot</c>'s height, or 0 when it is not known.</param>
+    public void AllowHeightUpTo(double availableHeight) =>
+        Resources["ContentDialogMaxHeight"] = DialogHeight.MaxFor(availableHeight);
 
     private async Task RefreshAsync()
     {
