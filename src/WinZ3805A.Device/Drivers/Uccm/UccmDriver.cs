@@ -306,25 +306,52 @@ public sealed class UccmDriver(TimeProvider timeProvider) : IReceiverDriver
     public ScpiCommand? Find(string? mnemonic) => UccmCommands.Find(mnemonic);
 
     /// <summary>
-    /// The one reading this driver knows it cannot supply.
+    /// What this family does not report, each entry with a sitting behind it (#435, #483).
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>Not a general audit of what a UCCM reports.</b> The interface defaults every reading to
-    /// <c>true</c> and this driver has never met a receiver, so a full switch here would be twenty
-    /// hypotheses wearing the costume of a measurement — exactly what the class remarks forbid.
-    /// This is the narrow case where the answer is known without hardware: <c>:DIAG:IDEN:GPS?</c>
-    /// is a SmartClock node, it is not in <see cref="UccmCommands"/>, and a driver that cannot ask
-    /// the question may not let a card imply the value is merely unread (#304, #435).
+    /// <b>Every <c>false</c> here is a measurement, and the ones that are not are absent.</b> This
+    /// was a single entry until 13 Sep 2026, under remarks saying the driver had never met a
+    /// receiver — true when written, and the reason the rest was left alone. It has met one since:
+    /// <c>TRIMBLE,57964-80,40896646,V2.0.1.6-01</c>, across five sittings whose captures are in
+    /// <c>tests/WinZ3805A.Tests/Uccm/Captures/</c>. The four added below are the ones that never
+    /// answered in any of them.
     /// </para>
     /// <para>
-    /// If a UCCM turns out to answer some equivalent, this becomes a real entry with a capture
-    /// behind it. Until then <c>false</c> is the honest answer and the only one available.
+    /// <b>Why this matters more than a tidy switch.</b> The interface defaults every reading to
+    /// <c>true</c>, which means "asked and not yet answered" — §9.11's em dash, a reading in flight.
+    /// For something the receiver will never answer that promise never comes true, and the Status
+    /// Registers page went further and drew a <b>red error</b>, reporting a working receiver as
+    /// broken because it had not answered a question it has no way to answer.
+    /// </para>
+    /// <para>
+    /// <b><see cref="ReceiverReading.Holdover"/> is deliberately not here.</b> Every field of the
+    /// Holdover page reads as absent on this module, which looks like the same case and is not:
+    /// <c>:ROSC:HOLD:DUR?</c> answers <c>Command error</c> rather than <c>Undefined header</c>, so
+    /// the node exists and is refused for some other reason — state being the obvious candidate,
+    /// since the unit has been locked throughout every sitting. The test that separates "unsupported"
+    /// from "not valid now" is re-asking it <i>in holdover</i>, and until that is done, declaring it
+    /// <c>false</c> would be the hypothesis-in-costume this method exists to keep out.
     /// </para>
     /// </remarks>
     public bool Reports(ReceiverReading reading) => reading switch
     {
+        // A SmartClock node. :DIAG:IDEN:GPS? is not in UccmCommands, so this driver cannot ask the
+        // question and may not let a card imply the value is merely unread (#304, #435).
         ReceiverReading.GpsEngineIdentity => false,
+
+        // SCPI apparatus this family does not carry. Measured: no register field ever answered.
+        ReceiverReading.StatusRegisters => false,
+
+        // The leap offset is real on this family and arrives in the C5 time code (#481), but not
+        // from any query — it answers none of the :PTIM:LEAP nodes. This reading is about the
+        // queries, and those are the ones the Time page would otherwise wait on forever.
+        ReceiverReading.LeapSecond => false,
+        ReceiverReading.TimeCodeFormat => false,
+
+        // No health-monitor apparatus. The Overview card said "No health data" indefinitely.
+        ReceiverReading.HealthMonitor => false,
+
         _ => true,
     };
 

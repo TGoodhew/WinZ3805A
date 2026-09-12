@@ -265,7 +265,13 @@ public sealed class StatusRegistersViewModel : INotifyPropertyChanged
                 // error icon on the page and made a working receiver look broken.
                 _errorIsUnsupported = !_session.Driver.Reports(ReceiverReading.StatusRegisters);
                 _error = _errorIsUnsupported
-                    ? $"This receiver does not have status registers. They are SCPI apparatus, and the {_session.Driver.Family} protocol does not carry them."
+                    // "does not implement" rather than "does not carry". Since #483 a SCPI family
+                    // can reach this branch: a UCCM speaks SCPI and simply has no registers, so
+                    // telling its user the protocol does not carry them would contradict the
+                    // protocol they are looking at. The Details window normally gates the page
+                    // before this is read - the nav entry says "Not supported" and a placeholder
+                    // stands in - but a sentence has to be true wherever it is reached from.
+                    ? $"This receiver does not have status registers. They are SCPI apparatus that the {_session.Driver.Family} family does not implement."
                     : "The receiver did not answer any of this register's fields.";
             }
         }

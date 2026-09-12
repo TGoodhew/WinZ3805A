@@ -424,14 +424,27 @@ picking the wrong one destroys the evidence rather than merely failing:
 |---|---|---|
 | Query/response with a prompt (SmartClock) | `Capture-Fixtures.ps1` | **Strips** it, and the `scpi > ` prompt, to leave a status screen |
 | Broadcast talker (NMEA) | `Capture-Talker.ps1` | Nothing to strip: a talker is never asked |
-| Query/response with **no** prompt (UCCM) | `Capture-Uccm.ps1` | **Keeps** it — the echo is the evidence |
+| Query/response, **first sitting** (UCCM) | `Capture-Uccm.ps1` | **Keeps** everything — the echo and the prompt are the evidence |
 
-That last row is the one worth reading twice. A UCCM is believed to echo each
-command before answering, so `Capture-Fixtures.ps1` would remove exactly the
-thing a first sitting exists to confirm. **If your family is a fourth shape,
-write a fourth script rather than bending one of these** — and give it a
-`-SelfTest` that runs in CI, because a capture harness is used perhaps once a
-season and a bug in it is found the day the hardware has gone home.
+That last row is the one worth reading twice, and it has since proved its own
+point. A UCCM was *believed* to echo each command before answering, so
+`Capture-Fixtures.ps1` — which strips the echo and the prompt to leave a clean
+screen — would have removed exactly the thing the first sitting existed to
+confirm. **It does not echo**: nought of eight replies on 10 Sep 2026 and nought
+of nine on 12 Sep. That is a finding the script could only produce because it
+kept what the other one throws away.
+
+The same sitting corrected the other half. This row said "no prompt" until
+13 Sep 2026, and a UCCM-P prints `UCCM-P >` — which is not the SmartClock's
+`scpi > `, and is why every transaction with one timed out while holding the
+answer until #470 gave the driver its own grammar. The belief that it had no
+prompt and the belief that it echoed were both wrong, and both were written down
+as facts.
+
+**If your family is a fourth shape, write a fourth script rather than bending one
+of these** — and give it a `-SelfTest` that runs in CI, because a capture harness
+is used perhaps once a season and a bug in it is found the day the hardware has
+gone home.
 
 **Report your protocol beliefs as counts, never assume them.** `Capture-Uccm.ps1`
 is built around this: it states the echo, the interleaved time code and the

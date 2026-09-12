@@ -84,21 +84,37 @@ public sealed class ReceiverReadingTests
     /// driver that cannot ask must not let the card imply the value is merely unread.
     /// </para>
     /// <para>
-    /// The rest staying <c>true</c> is deliberate and is pinned here so nobody "completes" the
-    /// switch on the way past. This driver has never met a receiver; a full set of answers would be
-    /// twenty guesses presented as knowledge, which is the one thing #416 asks it not to do.
+    /// <b>The set grew on 13 Sep 2026 and the guard did not.</b> This pinned exactly one entry,
+    /// on the grounds that the driver had never met a receiver and a fuller switch would be twenty
+    /// guesses presented as knowledge. It has met one since — five sittings, captures in
+    /// <c>Uccm/Captures/</c> — so four more are now measured absences rather than guesses (#483).
+    /// The rest staying <c>true</c> is still pinned here, for the same reason as before: so nobody
+    /// completes the switch on the way past with entries no sitting supports.
     /// </para>
     /// </remarks>
     [Fact]
-    public void AUccmRefusesOnlyTheReadingItKnowsItCannotSupply()
+    public void AUccmRefusesOnlyTheReadingsMeasuredToBeAbsent()
     {
         IReceiverDriver driver = new UccmDriver(new FakeTimeProvider(Whenever));
 
-        Assert.False(driver.Reports(ReceiverReading.GpsEngineIdentity));
+        // :DIAG:IDEN:GPS? is a SmartClock node; the other four never answered in any sitting.
+        ReceiverReading[] absent =
+        [
+            ReceiverReading.GpsEngineIdentity,
+            ReceiverReading.StatusRegisters,
+            ReceiverReading.LeapSecond,
+            ReceiverReading.TimeCodeFormat,
+            ReceiverReading.HealthMonitor,
+        ];
+
+        foreach (ReceiverReading reading in absent)
+        {
+            Assert.False(driver.Reports(reading), $"{reading} is a measured absence.");
+        }
 
         foreach (ReceiverReading reading in Enum.GetValues<ReceiverReading>())
         {
-            if (reading != ReceiverReading.GpsEngineIdentity)
+            if (!absent.Contains(reading))
             {
                 Assert.True(driver.Reports(reading), $"{reading} should be left unclaimed either way.");
             }
