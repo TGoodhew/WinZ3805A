@@ -1,6 +1,7 @@
 ﻿using System.ComponentModel;
 using System.Globalization;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
@@ -55,6 +56,15 @@ public sealed partial class MainPage : Page
     /// null view model and the process exits before a window is ever shown — a failure that builds
     /// cleanly and passes every test.
     /// </remarks>
+    /// <summary>Where a failed connect or disconnect goes, so that it is not a process death (#503).</summary>
+    private readonly ILogger? _logger;
+
+    /// <summary>
+    /// Re-entrancy guard for <see cref="ToggleConnectionAsync"/>, covering both its branches and both
+    /// its entry points — see that method's remarks for why a control's <c>IsEnabled</c> cannot (#503).
+    /// </summary>
+    private bool _toggling;
+
     private readonly bool _ready;
 
     /// <summary>The visual state last requested, so an unchanged one is not requested again (#403).</summary>
@@ -96,6 +106,7 @@ public sealed partial class MainPage : Page
         _device = services.GetRequiredKeyedService<DeviceContext>(DeviceKeys.Primary);
         _ports = services.GetRequiredService<SerialPortEnumerator>();
         _preferences = services.GetRequiredService<IConnectionPreferenceStore>();
+        _logger = services.GetService<ILoggerFactory>()?.CreateLogger("Connection");
 
         _model = new MainViewModel(
             _device.Store, services.GetRequiredService<TimeProvider>(), _device.Driver);
@@ -385,29 +396,60 @@ public sealed partial class MainPage : Page
     /// keyboard-only user in compact mode with no route to connect or disconnect at all. Ctrl+D and
     /// Ctrl+Shift+M already survive compact for the same reason.
     /// <para>
-    /// The button is disabled around the dialog rather than the command being re-entrancy-guarded,
-    /// which is why the guard has to tolerate the button being collapsed: setting
-    /// <c>IsEnabled</c> on a collapsed element is harmless, and the dialog is modal, so a second
-    /// Ctrl+Shift+C cannot arrive while one is open.
+    /// <b>The command is re-entrancy-guarded, and this used to say it was not (#503).</b> The old
+    /// remark said the button being disabled around the dialog was guard enough, "and the dialog is
+    /// modal, so a second Ctrl+Shift+C cannot arrive while one is open". Both halves failed on the
+    /// same branch: <see cref="MainViewModel.CanConnect"/> is false while the session is
+    /// <see cref="ConnectionStatus.Connecting"/>, so a press mid-connect took the <i>disconnect</i>
+    /// branch — which opens no dialog, so there is no modality, and never reached the line that
+    /// disables the button. And <c>IsEnabled</c> never guarded the accelerator in the first place,
+    /// because that calls this method directly without consulting it.
+    /// </para>
+    /// <para>
+    /// So the guard is a field rather than a control's state: it is the only form that covers both
+    /// branches and both entry points, including compact mode, where §9.6.2 collapses the button
+    /// entirely and the accelerator is the only route left.
+    /// </para>
+    /// <para>
+    /// <b>Nothing here may throw to the caller.</b> One route in is an <c>async void</c> handler and
+    /// the other is a discarded task on the accelerator, so an escaping exception is an unhandled
+    /// one or an unobserved one — <c>STATUS_STOWED_EXCEPTION</c> either way, which is a process
+    /// death with no message. Logged and swallowed is the correct trade for a command whose whole
+    /// job is to open or close a link: the medallion goes on reporting whatever the session actually
+    /// did, which is more use to the user than a crash.
     /// </para>
     /// </remarks>
     public async Task ToggleConnectionAsync()
     {
-        if (!_model.CanConnect)
+        if (_toggling)
         {
-            await _device.Poller.StopAsync();
-            await _device.Session.DisconnectAsync();
             return;
         }
 
+        _toggling = true;
+
+        // Harmless when the footer is collapsed (§9.6.2) — and useless there too, which is why it is
+        // no longer the guard.
         ConnectButton.IsEnabled = false;
         try
         {
+            if (!_model.CanConnect)
+            {
+                await _device.Poller.StopAsync();
+                await _device.Session.DisconnectAsync();
+                return;
+            }
+
             await ShowConnectionDialogAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Connect/disconnect failed from the main window.");
         }
         finally
         {
             ConnectButton.IsEnabled = true;
+            _toggling = false;
         }
     }
 

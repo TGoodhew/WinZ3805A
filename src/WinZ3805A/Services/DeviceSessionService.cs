@@ -487,9 +487,45 @@ public sealed class DeviceSessionService : IAsyncDisposable
     private static readonly TimeSpan BeforeTearDownBudget = TimeSpan.FromSeconds(3);
 
     /// <summary>Closes the link deliberately, which is not a fault (§9.11).</summary>
+    /// <remarks>
+    /// <b>Returns rather than throwing once the session is disposed (#503), where its three siblings
+    /// throw.</b> <see cref="ConnectAsync"/>, <see cref="AutoDetectAsync"/> and
+    /// <see cref="DisposeAsync"/> all guard on <c>_disposed</c>, and the first two take a token as
+    /// well; this had neither, so a caller parked on <see cref="_lifecycle"/> — which is exactly what
+    /// pressing Disconnect during an in-flight connect produces — met
+    /// <see cref="ObjectDisposedException"/> from <see cref="SemaphoreSlim.Dispose()"/> at the end of
+    /// <see cref="DisposeAsync"/>.
+    /// <para>
+    /// Returning is right rather than merely convenient: "close the link" asks for a state a disposed
+    /// session is already in, so there is nothing to report and nothing to do. That is the same
+    /// bargain <see cref="DisposeAsync"/> itself makes on a second call, and it matches
+    /// <c>RunBeforeTearDownAsync</c>, which is written never to let a failure stop a disconnect.
+    /// </para>
+    /// <para>
+    /// <b>The flag alone would only narrow the window, so it is not doing the work.</b> Disposal can
+    /// land after the check and while this call is parked on the semaphore, which is precisely the
+    /// ordering that made it a defect; catching the wait is what actually closes it. The flag is kept
+    /// because it answers the common case without an exception at all. <c>Release</c> in the
+    /// <c>finally</c> needs no such care: holding the semaphore is what keeps
+    /// <see cref="DisposeAsync"/> parked, so it cannot have been disposed underneath a holder.
+    /// </para>
+    /// </remarks>
     public async Task DisconnectAsync()
     {
-        await _lifecycle.WaitAsync().ConfigureAwait(false);
+        if (_disposed)
+        {
+            return;
+        }
+
+        try
+        {
+            await _lifecycle.WaitAsync().ConfigureAwait(false);
+        }
+        catch (ObjectDisposedException)
+        {
+            return;
+        }
+
         try
         {
             await RunBeforeTearDownAsync().ConfigureAwait(false);
