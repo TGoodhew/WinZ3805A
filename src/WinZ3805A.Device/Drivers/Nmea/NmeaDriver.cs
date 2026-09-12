@@ -16,10 +16,11 @@ namespace WinZ3805A.Device.Drivers.Nmea;
 /// <c>docs/adding-a-receiver.md</c> with this file as the result. This folder is the whole
 /// driver: the sentence codec, the cycle parser and this class. Nothing in it depends on the
 /// simulator under <c>tools/</c>; the simulator depends on the codec. The family is proven against
-/// that simulator, <c>tools/NmeaSimulator</c>, and — since 7 Sep 2026 — against a real receiver:
-/// three VK-162 captures under <c>tests/WinZ3805A.Tests/Nmea/Captures/</c>, replayed cycle by cycle
-/// by <c>NmeaCaptureReplayTests</c> (#420). That receiver is GPS-only and never lost its fix, so a
-/// second constellation and an outage remain the simulator's alone.
+/// that simulator, <c>tools/NmeaSimulator</c>, and — since 7 Sep 2026 — against real receivers:
+/// eight captures under <c>tests/WinZ3805A.Tests/Nmea/Captures/</c>, replayed cycle by cycle by
+/// <c>NmeaCaptureReplayTests</c> (#420). A second constellation is no longer the simulator's alone —
+/// the VK-162's GLONASS was only ever switched off, and the forM8N tracks BeiDou outdoors — but
+/// <b>an outage still is</b>: no configuration makes a working receiver lose its fix on demand.
 /// </para>
 /// <para>
 /// <b>The family is the opposite shape to the SmartClock</b>, which is why it was chosen. A talker
@@ -60,7 +61,7 @@ public sealed class NmeaDriver(TimeProvider timeProvider) : IReceiverDriver
 
     /// <summary>The sentences the driver reads. Anything else a talker sends is heard and discarded.</summary>
     private static readonly IReadOnlySet<string> Sentences =
-        new HashSet<string>(StringComparer.Ordinal) { "RMC", "GGA", "GSA", "GSV", "ZDA", "GLL", "VTG" };
+        new HashSet<string>(StringComparer.Ordinal) { "RMC", "GGA", "GNS", "GSA", "GSV", "ZDA", "GLL", "VTG" };
 
     private static readonly string[] FastTierOrder =
     [
@@ -86,6 +87,7 @@ public sealed class NmeaDriver(TimeProvider timeProvider) : IReceiverDriver
     [
         Read("RMC", "Recommended minimum", "Time, date, status, position, speed and track — the one sentence every talker sends, and this driver's cycle boundary."),
         Read("GGA", "Fix data", "Time, position, fix quality, satellites used, dilution of precision and altitude."),
+        Read("GNS", "Fix data, multi-constellation", "The same fix data as GGA, with a mode character per constellation in place of the single quality digit — which is what a receiver configured for GNSS sends instead."),
         Read("GSA", "Active satellites", "Fix mode (none, 2D, 3D), the satellites used in the fix and the dilution of precision."),
         Read("GSV", "Satellites in view", "Every satellite in view with its elevation, azimuth and signal-to-noise ratio, across several pages."),
         Read("ZDA", "Time and date", "UTC time and the full date, with the local zone offset."),
