@@ -50,6 +50,32 @@ namespace WinZ3805A.Device.Drivers.Uccm;
 /// <c>*IDN?</c>, so there is a real "connected, vendor not yet known" state — and it renders as
 /// honest emptiness rather than as a guess.
 /// </para>
+/// <para>
+/// <b>Trimble is measured; Symmetricom is read from a description, and the two halves of this
+/// driver are not equally trustworthy.</b> Everything vendor-specific for Trimble has now been
+/// checked against <c>TRIMBLE,57964-80,40896646,V2.0.1.6-01</c>: the loop reply's shape and its
+/// leading <c>LINK0:</c> line, and the status bytes in the locked state — lock <c>0x45</c>, date
+/// <c>0x80</c>, PPS <c>0x60</c>, antenna <c>0x04</c>, cross-checked against <c>LED:GPSL?</c>. The
+/// GPS-to-UTC conversion is confirmed to about two seconds by comparing the receiver's own printed
+/// time against the time code in the same reply. <b>No Symmetricom module has ever been on the
+/// bench</b>, so its loop format, its lock codes, its temperature field and that field's unit are
+/// all Heather's description and nothing more. §418's acceptance asked for this to be said out loud
+/// rather than assumed, in the way the NMEA driver says it has never met a real talker.
+/// </para>
+/// <para>
+/// <b>What is measured is only the locked state.</b> Every sitting so far has been a module that
+/// was locked and settled throughout, so none of Heather's transition sequences — the power-up runs
+/// through <c>41</c> and <c>4F</c>, the antenna-disconnect moves — has been watched happening. The
+/// tables are right about one point on the path and untested along it.
+/// </para>
+/// <para>
+/// <b>The variant is never established, and that is a gap rather than a decision.</b>
+/// <see cref="NoteVariant"/> exists and nothing calls it, so <see cref="UccmVariant"/> stays
+/// <see cref="UccmVariant.Unknown"/> for the life of a session and the three UCCM-P-only queries in
+/// <see cref="UccmCommands.UccmPOnly"/> are never asked. Holdover duration and survey progress reach
+/// the UI from the status screen instead. §418 section 7 is therefore catalogued but not
+/// implemented.
+/// </para>
 /// </remarks>
 /// <param name="timeProvider">
 /// Supplies the parse stamp. Injected because fixture tests pin the clock, and because the Device
