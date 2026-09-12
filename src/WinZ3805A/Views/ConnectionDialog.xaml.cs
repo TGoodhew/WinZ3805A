@@ -1,6 +1,7 @@
 ﻿using System.IO.Ports;
 using System.ComponentModel;
 
+using Microsoft.Extensions.Logging;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -37,6 +38,12 @@ public sealed partial class ConnectionDialog : ContentDialog
 
     /// <summary>Collapses a burst of notifications into one render (#399).</summary>
     private readonly RenderCoalescer _renders;
+
+    /// <summary>The height cap this dialog was asked for, or 0 if it was never told (#506).</summary>
+    private double _cap;
+
+    /// <summary>Where the height cap reports what it managed to do (#506). Optional.</summary>
+    public ILogger? Log { get; set; }
 
     /// <summary>Creates the dialog over a view model.</summary>
     public ConnectionDialog(ConnectionViewModel model)
@@ -80,8 +87,64 @@ public sealed partial class ConnectionDialog : ContentDialog
     /// </para>
     /// </remarks>
     /// <param name="availableHeight">The <c>XamlRoot</c>'s height, or 0 when it is not known.</param>
-    public void AllowHeightUpTo(double availableHeight) =>
-        Resources["ContentDialogMaxHeight"] = DialogHeight.MaxFor(availableHeight);
+    public double AllowHeightUpTo(double availableHeight)
+    {
+        _cap = DialogHeight.MaxFor(availableHeight);
+
+        // Kept as well as the template part below, because where the template resolves this key from
+        // is the thing that is in doubt. If it does read the instance dictionary, this is the whole
+        // fix and the override is a no-op; if it does not, the override is.
+        Resources["ContentDialogMaxHeight"] = _cap;
+
+        return _cap;
+    }
+
+    /// <summary>
+    /// Puts the cap on the template's own element, and says out loud whether it managed to.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The first attempt at #506 changed nothing, and nothing said so.</b> Setting
+    /// <c>ContentDialogMaxHeight</c> in the instance <see cref="FrameworkElement.Resources"/> left
+    /// every measured pixel identical — scroll extent, viewport, caption position, all unchanged —
+    /// and there are two ways that can happen: the template resolves the key from the theme
+    /// dictionaries and never sees an instance value, or it saw it and the height passed in was too
+    /// small to raise anything. From outside the process those look the same.
+    /// </para>
+    /// <para>
+    /// So this stops guessing. <c>BackgroundElement</c> is the part that carries the cap in WinUI's
+    /// own template, and setting it here is unambiguous. The part name is a dependency on someone
+    /// else's template and could vanish in an SDK update — which is precisely why the miss is
+    /// logged rather than shrugged at. A layout fix that silently does nothing is the failure mode
+    /// this issue already produced once.
+    /// </para>
+    /// </remarks>
+    protected override void OnApplyTemplate()
+    {
+        base.OnApplyTemplate();
+
+        if (_cap <= 0)
+        {
+            return;
+        }
+
+        if (GetTemplateChild("BackgroundElement") is FrameworkElement background)
+        {
+            double previous = background.MaxHeight;
+            background.MaxHeight = _cap;
+
+            Log?.LogInformation(
+                "Connection dialog capped at {Cap}, was {Previous}.", _cap, previous);
+        }
+        else
+        {
+            // Not "#506" in this string: three hex digits after a hash is a colour literal to
+            // Test-NoHexLiterals, which scans this folder. The gate is right to be blunt about it.
+            Log?.LogWarning(
+                "Connection dialog could not cap its height: no BackgroundElement in the template. "
+                    + "The issue 506 fix is not in effect and the dialog will scroll instead.");
+        }
+    }
 
     private async Task RefreshAsync()
     {
