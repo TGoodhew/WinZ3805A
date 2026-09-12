@@ -135,4 +135,227 @@ public class UnsolicitedTrafficTests
 
         return both;
     }
+
+    // ---- #481: the frames are lifted out, not merely tolerated -----------------------------------
+
+    /// <summary>
+    /// A real frame, from the 10 Sep 2026 sitting, whose payload contains <c>0x0A</c>.
+    /// </summary>
+    /// <remarks>
+    /// <b>This is the frame that decides the design.</b> Byte 41 is <c>0x0A</c> — a line feed, in
+    /// what looks like a checksum. Split into lines first and the frame is cut in two with no way
+    /// back, because CRLF collapsing has by then discarded which byte the delimiter was. One frame
+    /// in the seven captured across three sittings is like this, and since a checksum takes
+    /// arbitrary values it is a rate, not a curiosity.
+    /// </remarks>
+    private static ReadOnlySpan<byte> TimeCodeContainingLineFeed =>
+    [
+        0xC5, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x28, 0x1C, 0x52, 0x00,
+        0x00, 0x20, 0x60, 0xC1, 0x91, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x57, 0xCC, 0xD4, 0x2C, 0x00, 0x12,
+        0x60, 0x04, 0x45, 0x80, 0x00, 0x00, 0x00, 0x00, 0x0A, 0x52, 0xCA,
+    ];
+
+    private static LineProtocol UccmProtocol(FakeTransport transport) =>
+        new(transport, new FakeTimeProvider(), prompt: Uccm, frames: BinaryFrameGrammar.UccmTimeCode);
+
+    /// <summary>A trailing frame is handed over whole and never appears among the lines.</summary>
+    [Fact]
+    public async Task ATrailingFrameIsSurfacedAndKeptOutOfTheLines()
+    {
+        await using FakeTransport transport = new();
+        await transport.OpenAsync();
+        LineProtocol protocol = UccmProtocol(transport);
+
+        Task<Transaction> pending = protocol.ExecuteAsync("*IDN?");
+
+        Assert.Equal("*IDN?", await transport.ReadCommandAsync().AsTask().WaitAsync(s_testTimeout));
+        await transport.EmitAsync(UccmIdentity + "\r\n");
+        await transport.EmitAsync(PromptFollowedByTimeCode());
+
+        Transaction transaction = await pending.WaitAsync(s_testTimeout);
+
+        Assert.Equal([UccmIdentity], transaction.Lines);
+        Assert.Equal(TimeCode.ToArray(), Assert.Single(transaction.BinaryFrames));
+    }
+
+    /// <summary>
+    /// A frame arriving <i>before</i> the reply does not get glued to the front of it.
+    /// </summary>
+    /// <remarks>
+    /// <b>This is the measured defect.</b> A frame trails reply <i>n</i>, so it is still in the
+    /// buffer when reply <i>n+1</i> is read. Driving <c>*IDN?</c> repeatedly through the Advanced
+    /// Console on 12 Sep 2026, about 3 sends in 34 came back with binary in front of the identity,
+    /// and one came back as a bare <c>0xC5</c> with the identity lost entirely. #481 predicted this
+    /// exact shape as a hypothesis — a scalar reply beginning with its value directly would get the
+    /// junk glued to the front of it — and said it should be looked for rather than assumed. It was
+    /// looked for, and it is real.
+    /// </remarks>
+    [Fact]
+    public async Task AFrameLeftOverFromTheLastReplyDoesNotCorruptTheNextOne()
+    {
+        await using FakeTransport transport = new();
+        await transport.OpenAsync();
+        LineProtocol protocol = UccmProtocol(transport);
+
+        Task<Transaction> pending = protocol.ExecuteAsync("*IDN?");
+
+        Assert.Equal("*IDN?", await transport.ReadCommandAsync().AsTask().WaitAsync(s_testTimeout));
+        await transport.EmitAsync(TimeCodeThenText(UccmIdentity + "\r\n"));
+        await transport.EmitAsync(Encoding.Latin1.GetBytes(UccmPrompt));
+
+        Transaction transaction = await pending.WaitAsync(s_testTimeout);
+
+        Assert.Equal([UccmIdentity], transaction.Lines);
+        Assert.Single(transaction.BinaryFrames);
+    }
+
+    /// <summary>
+    /// A frame carrying a line feed survives whole, and does not invent a line.
+    /// </summary>
+    /// <remarks>
+    /// The case a line-level fix cannot reach, and the reason framing happens on bytes. Without the
+    /// byte pass the <c>0x0A</c> at offset 41 ends a "line", so the reply gains a junk line, the
+    /// frame is destroyed, and its two halves are unrecoverable.
+    /// </remarks>
+    [Fact]
+    public async Task AFrameContainingALineFeedIsNotSplitAcrossLines()
+    {
+        await using FakeTransport transport = new();
+        await transport.OpenAsync();
+        LineProtocol protocol = UccmProtocol(transport);
+
+        Task<Transaction> pending = protocol.ExecuteAsync("*IDN?");
+
+        Assert.Equal("*IDN?", await transport.ReadCommandAsync().AsTask().WaitAsync(s_testTimeout));
+        await transport.EmitAsync(UccmIdentity + "\r\n");
+        await transport.EmitAsync(PromptThen(TimeCodeContainingLineFeed));
+
+        Transaction transaction = await pending.WaitAsync(s_testTimeout);
+
+        Assert.Equal([UccmIdentity], transaction.Lines);
+        Assert.Equal(TimeCodeContainingLineFeed.ToArray(), Assert.Single(transaction.BinaryFrames));
+    }
+
+    /// <summary>
+    /// A marker byte that does not open a well-formed frame stays in the text.
+    /// </summary>
+    /// <remarks>
+    /// The 44-byte length is one family's observation across seven frames, not a specification. A
+    /// stray <c>0xC5</c> is the evidence that it is wrong somewhere, so swallowing it would destroy
+    /// the one signal that would say so — the same rule <c>Capture-Uccm.ps1</c> applies when it
+    /// reports unframed markers rather than ignoring them.
+    ///
+    /// <para>
+    /// <b>The line is long on purpose.</b> A marker cannot be judged until the frame's whole length
+    /// has arrived, so one near the end of the buffer defers rather than resolving — see
+    /// <see cref="AFrameSplitAcrossTwoReadsIsStillRecognisedWhole"/>. Writing this test with a short
+    /// line made it hang instead of fail, which is worth knowing about the rule rather than about
+    /// the test.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AMarkerThatDoesNotOpenAFrameIsLeftInTheText()
+    {
+        await using FakeTransport transport = new();
+        await transport.OpenAsync();
+        LineProtocol protocol = UccmProtocol(transport);
+
+        string strayMarker = "AÅ" + new string('B', 60);
+
+        Task<Transaction> pending = protocol.ExecuteAsync("*IDN?");
+
+        Assert.Equal("*IDN?", await transport.ReadCommandAsync().AsTask().WaitAsync(s_testTimeout));
+        await transport.EmitAsync(strayMarker + "\r\n");
+        await transport.EmitAsync(Encoding.Latin1.GetBytes(UccmPrompt));
+
+        Transaction transaction = await pending.WaitAsync(s_testTimeout);
+
+        Assert.Equal([strayMarker], transaction.Lines);
+        Assert.Empty(transaction.BinaryFrames);
+    }
+
+    /// <summary>
+    /// A frame broken across two reads is reassembled, not half-read as text.
+    /// </summary>
+    /// <remarks>
+    /// <b>This is why an incomplete marker defers instead of resolving.</b> 44 bytes take about
+    /// 7.6 ms at 57600 baud, so a read boundary lands inside a frame regularly. Judging a marker
+    /// on the bytes that happen to have arrived would call a genuine frame "not a frame" and hand
+    /// its first few bytes to the line reader, which is the original defect wearing a different
+    /// hat.
+    /// </remarks>
+    [Fact]
+    public async Task AFrameSplitAcrossTwoReadsIsStillRecognisedWhole()
+    {
+        await using FakeTransport transport = new();
+        await transport.OpenAsync();
+        LineProtocol protocol = UccmProtocol(transport);
+
+        Task<Transaction> pending = protocol.ExecuteAsync("*IDN?");
+
+        Assert.Equal("*IDN?", await transport.ReadCommandAsync().AsTask().WaitAsync(s_testTimeout));
+        await transport.EmitAsync(UccmIdentity + "\r\n");
+        await transport.EmitAsync(TimeCode[..20].ToArray());
+        await transport.EmitAsync(TimeCode[20..].ToArray());
+        await transport.EmitAsync(Encoding.Latin1.GetBytes(UccmPrompt));
+
+        Transaction transaction = await pending.WaitAsync(s_testTimeout);
+
+        Assert.Equal([UccmIdentity], transaction.Lines);
+        Assert.Equal(TimeCode.ToArray(), Assert.Single(transaction.BinaryFrames));
+    }
+
+    /// <summary>
+    /// A family that declares no frames keeps the bytes it always had.
+    /// </summary>
+    /// <remarks>
+    /// The guard on the widening. <see cref="BinaryFrameGrammar.None"/> is what auto-detect runs
+    /// with, and at a wrong baud rate the stream is noise in which a marker followed 43 bytes later
+    /// by a terminator turns up by chance — swallowing 44 bytes of it would be a silent change to
+    /// the one path #470 proved.
+    /// </remarks>
+    [Fact]
+    public async Task AFamilyDeclaringNoFramesKeepsEveryByte()
+    {
+        await using FakeTransport transport = new();
+        await transport.OpenAsync();
+        LineProtocol protocol = new(transport, new FakeTimeProvider(), prompt: Uccm);
+
+        Task<Transaction> pending = protocol.ExecuteAsync("*IDN?");
+
+        Assert.Equal("*IDN?", await transport.ReadCommandAsync().AsTask().WaitAsync(s_testTimeout));
+        await transport.EmitAsync(TimeCodeThenText(UccmIdentity + "\r\n"));
+        await transport.EmitAsync(Encoding.Latin1.GetBytes(UccmPrompt));
+
+        Transaction transaction = await pending.WaitAsync(s_testTimeout);
+
+        // The frame is still glued to the identity, exactly as it was before #481 - which is the
+        // point: nothing changed for a family that did not ask for it.
+        Assert.Empty(transaction.BinaryFrames);
+        Assert.EndsWith(UccmIdentity, Assert.Single(transaction.Lines), StringComparison.Ordinal);
+        Assert.NotEqual(UccmIdentity, transaction.Lines[0]);
+    }
+
+    private static byte[] PromptThen(ReadOnlySpan<byte> frame)
+    {
+        byte[] prompt = Encoding.Latin1.GetBytes(UccmPrompt);
+        byte[] both = new byte[prompt.Length + frame.Length];
+
+        prompt.CopyTo(both, 0);
+        frame.CopyTo(both.AsSpan(prompt.Length));
+
+        return both;
+    }
+
+    private static byte[] TimeCodeThenText(string text)
+    {
+        byte[] tail = Encoding.Latin1.GetBytes(text);
+        byte[] both = new byte[TimeCode.Length + tail.Length];
+
+        TimeCode.CopyTo(both);
+        tail.CopyTo(both.AsSpan(TimeCode.Length));
+
+        return both;
+    }
 }

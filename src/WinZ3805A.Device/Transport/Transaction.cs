@@ -37,6 +37,23 @@ public sealed record Transaction
     public required IReadOnlyList<string> Lines { get; init; }
 
     /// <summary>
+    /// Unsolicited binary frames that arrived during this transaction, in order (#481).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Empty for every family that does not broadcast, which is why this is not <c>required</c>:
+    /// a transaction on a receiver that speaks only when spoken to means what it always did.
+    /// </para>
+    /// <para>
+    /// <b>These never appear in <see cref="Lines"/>.</b> They are lifted out of the byte stream
+    /// before it is split, because a frame carries no terminator and one containing <c>0x0D</c> or
+    /// <c>0x0A</c> would otherwise be cut in half — see <see cref="BinaryFrameGrammar"/>. What a
+    /// frame <i>means</i> is the driver's business; the transport only guarantees it is whole.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<byte[]> BinaryFrames { get; init; } = [];
+
+    /// <summary>
     /// True when the first line received was the receiver echoing the command back, as it does under
     /// <c>FDUPlex ON</c>. Detected per transaction, never assumed either way (§7.2).
     /// </summary>
