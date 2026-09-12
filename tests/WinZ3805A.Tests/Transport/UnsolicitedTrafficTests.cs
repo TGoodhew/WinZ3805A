@@ -337,6 +337,58 @@ public class UnsolicitedTrafficTests
         Assert.NotEqual(UccmIdentity, transaction.Lines[0]);
     }
 
+
+    /// <summary>
+    /// A frame split across two <i>transactions</i> does not corrupt the second one.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>This is the case that survived the first fix, and only hardware showed it.</b> A frame
+    /// trails the prompt, so a read routinely ends with the prompt matched and the frame's first
+    /// bytes behind it. The transaction completes — correctly — and those bytes wait for the next
+    /// read. But the next transaction opened with <c>DiscardStaleInput</c>, which threw the frame's
+    /// <i>head</i> away; the rest then arrived with no marker in front of it, nothing recognised it,
+    /// and it landed on the front of the next reply.
+    /// </para>
+    /// <para>
+    /// Measured on a Trimble UCCM-P on 12 Sep 2026 with the frame grammar confirmed active: the
+    /// poller's lock-state reading came back with binary in front of it about four times a minute.
+    /// Every unit test written before this one wrote a whole frame inside one transaction, so none
+    /// of them could see it.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AFrameSplitAcrossTwoTransactionsDoesNotCorruptTheSecond()
+    {
+        await using FakeTransport transport = new();
+        await transport.OpenAsync();
+        LineProtocol protocol = UccmProtocol(transport);
+
+        // First transaction: ends on the prompt, with the frame only part-way arrived.
+        Task<Transaction> first = protocol.ExecuteAsync("*IDN?");
+        Assert.Equal("*IDN?", await transport.ReadCommandAsync().AsTask().WaitAsync(s_testTimeout));
+        await transport.EmitAsync(UccmIdentity + "\r\n");
+        await transport.EmitAsync(PromptThen(TimeCode[..12]));
+
+        Transaction one = await first.WaitAsync(s_testTimeout);
+        Assert.Equal([UccmIdentity], one.Lines);
+
+        // Second transaction: the rest of the frame arrives first, then the reply.
+        Task<Transaction> second = protocol.ExecuteAsync("LED:GPSL?");
+        Assert.Equal("LED:GPSL?", await transport.ReadCommandAsync().AsTask().WaitAsync(s_testTimeout));
+        await transport.EmitAsync(TimeCode[12..].ToArray());
+        await transport.EmitAsync("1\r\n");
+        await transport.EmitAsync(Encoding.Latin1.GetBytes(UccmPrompt));
+
+        Transaction two = await second.WaitAsync(s_testTimeout);
+
+        // The reading is the reading, with no binary on the front of it.
+        Assert.Equal(["1"], two.Lines);
+
+        // And the frame, reassembled across the boundary, is reported once and whole.
+        Assert.Equal(TimeCode.ToArray(), Assert.Single(two.BinaryFrames));
+    }
+
     private static byte[] PromptThen(ReadOnlySpan<byte> frame)
     {
         byte[] prompt = Encoding.Latin1.GetBytes(UccmPrompt);
