@@ -75,6 +75,14 @@ jobs:
         shell: pwsh
         run: ./build/Test-IconOnlyButtons.ps1
 
+      # #487. Test-NoCachedDispatcherHandlers checks one route to unbounded
+      # ManagedObjectWrapperHolder growth - a delegate cached in a field. This checks the
+      # other: a control pushing its own automation name, which marshals the control on
+      # every call. #487 reached 65,536 slots in one array with that gate green.
+      - name: No control pushes its own automation name
+        shell: pwsh
+        run: ./build/Test-NoPushedAutomationNames.ps1
+
       # A11Y-5. The gate above owns Button-like controls; this one owns everything
       # else that carries a tooltip, which is what a pointer target is. Added
       # 28 Aug 2026 after a user found the §7.4 rollover badge unhittable: a bare

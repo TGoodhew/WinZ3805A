@@ -605,6 +605,16 @@ public sealed class SkyPlotControl : Control
     /// before the arrows have been pressed and cannot be reconstructed from here.
     /// </para>
     /// </remarks>
+    /// <remarks>
+    /// <b>This one keeps pushing, and that is the decision rather than an oversight (#487).</b>
+    /// <c>AutomationProperties.SetName</c> marshals the control and grows a list that never shrinks,
+    /// which is why <see cref="SeverityPill"/> and <see cref="SatelliteStrengthBar"/> now compute
+    /// their names through a peer instead. Two things make this different: it fires on a
+    /// <i>keystroke</i> rather than on a reading, so it is bounded by a person's fingers and not by
+    /// uptime; and the property-changed event that pushing raises is the entire point — the user has
+    /// just moved the cursor and has to hear where it landed. A pulled name is silent, which would
+    /// trade a leak that cannot happen here for an accessibility regression that would.
+    /// </remarks>
     private void RenderCursorName(SkyPlotSatellite? satellite)
     {
         if (satellite is not null)

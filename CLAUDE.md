@@ -207,6 +207,7 @@ plain scripts, so run them locally and get the answer in a second:
 pwsh build/Test-NoHexLiterals.ps1        # P0-17 / §9.13 item 2
 pwsh build/Test-ResourceKeysResolve.ps1  # #520 — the tokens referenced, not the tokens defined
 pwsh build/Test-IconOnlyButtons.ps1      # A11Y-3 / §9.9
+pwsh build/Test-NoPushedAutomationNames.ps1 # #487 — the other route to #403's growth
 pwsh build/Test-ThemeDictionaryParity.ps1  # §9.4 / A11Y-8
 pwsh build/Test-NoBlockedCommands.ps1    # P0-7 / §8.4
 pwsh build/Test-ContrastFloor.ps1        # A11Y-4 / §9.4.5
