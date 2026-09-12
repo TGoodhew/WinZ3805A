@@ -183,6 +183,57 @@ public sealed class NmeaSessionTests
         /// </remarks>
         private const int TickBudget = 300;
 
+        /// <summary>
+        /// How long an emit may block before it counts as nothing reading. <b>A deadlock detector,
+        /// not a performance assertion (#510).</b>
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// <b>Measured, at last.</b> The recurrence was caught on 13 Sep 2026 — once in 200
+        /// full-suite runs, with the output kept this time — and it says: <i>"A talker cycle was
+        /// never consumed, so the emit blocked for 15 s… the session is <b>Connected</b>."</i> The
+        /// <c>Bench</c>'s own prediction was that this shape meant the session had faulted and the
+        /// listener had stopped. It had not. Nothing was wrong with the session at all.
+        /// </para>
+        /// <para>
+        /// <b>What actually happens.</b> <c>BroadcastListener</c> starts its read loop with
+        /// <c>Task.Run</c>, so draining depends on a thread-pool thread being scheduled, and
+        /// <c>WaitForReaderToConsume</c> builds the pipe with a one-byte <c>pauseWriterThreshold</c>
+        /// so the writer blocks the instant the reader falls behind. Under xUnit's parallel
+        /// collections the pool is saturated, the read loop is not scheduled promptly, and the emit
+        /// waits — while being timed against the wall clock.
+        /// </para>
+        /// <para>
+        /// <b>So this is the same defect as the one already fixed above, in the one place that was
+        /// left.</b> The loops were changed from wall time to counting ticks because what they wait
+        /// for advances on the fake clock; this bound stayed real because "a hung emit is a
+        /// real-time event". True, and incomplete: a <i>starved</i> emit is a real-time event too,
+        /// and at fifteen seconds the two are indistinguishable.
+        /// </para>
+        /// <para>
+        /// <b>Why more time rather than a cleverer rule.</b> A real hang here is <i>infinite</i> —
+        /// nothing will ever drain a pipe whose reader has stopped — so any finite bound catches it
+        /// and the only question is how long a starved reader may reasonably take. Sixty seconds is
+        /// far beyond any scheduling delay seen and still reports a genuine deadlock inside a test
+        /// run rather than hanging the host, which is the failure #445 and #381 were about. The cost
+        /// is that a true hang takes a minute to report instead of fifteen seconds, which is a
+        /// trade worth making against a test that fails once in a few hundred runs for being slow.
+        /// </para>
+        /// </remarks>
+        private static readonly TimeSpan EmitBudget = TimeSpan.FromSeconds(60);
+
+        /// <summary>
+        /// Ticks until <paramref name="pending"/> completes, then hands back its result.
+        /// </summary>
+        /// <remarks>
+        /// <b>The final wait says which wait it was (#510).</b> It used to be a bare
+        /// <c>WaitAsync(TestTimeout)</c>, so this candidate failed with nothing but
+        /// <c>System.TimeoutException</c> and a stack frame. That matters because
+        /// <see cref="TickAsync"/>'s emit bound is the OTHER candidate for the same 15.75 s failure,
+        /// and it already names the session status — so one of the two possible failures explained
+        /// itself and the other did not. The last occurrence was lost for want of exactly this kind
+        /// of text, and #510 asks that the next one arrive able to settle the question on its own.
+        /// </remarks>
         public async Task<T> RunAsync<T>(Task<T> pending)
         {
             for (int tick = 0; tick < TickBudget && !pending.IsCompleted; tick++)
@@ -190,7 +241,20 @@ public sealed class NmeaSessionTests
                 await TickAsync();
             }
 
-            return await pending.WaitAsync(TestTimeout);
+            try
+            {
+                return await pending.WaitAsync(TestTimeout);
+            }
+            catch (TimeoutException)
+            {
+                Assert.Fail(
+                    $"The awaited operation had not completed after {TickBudget} simulated seconds "
+                    + $"and did not complete in a further {TestTimeout.TotalSeconds:N0} s of real time. "
+                    + $"This is RunAsync's own wait, not the emit bound in TickAsync — the session is "
+                    + $"{Session.Status}, the transport is {(Transport.IsOpen ? "open" : "closed")}, "
+                    + $"and the talker is {(Talking ? "talking" : "silent")}.");
+                throw;
+            }
         }
 
         public async Task UntilAsync(Func<bool> condition)
@@ -236,13 +300,13 @@ public sealed class NmeaSessionTests
             {
                 try
                 {
-                    await Transport.EmitAsync(Talker.NextCycleText()).AsTask().WaitAsync(TestTimeout);
+                    await Transport.EmitAsync(Talker.NextCycleText()).AsTask().WaitAsync(EmitBudget);
                 }
                 catch (TimeoutException)
                 {
                     Assert.Fail(
                         "A talker cycle was never consumed, so the emit blocked for "
-                        + $"{TestTimeout.TotalSeconds:N0} s. The pipe pauses its writer after one byte, "
+                        + $"{EmitBudget.TotalSeconds:N0} s. The pipe pauses its writer after one byte, "
                         + $"so nothing is reading the transport — the session is {Session.Status}.");
                 }
             }
