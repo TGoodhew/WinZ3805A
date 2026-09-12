@@ -1,4 +1,4 @@
-using WinZ3805A.ViewModels;
+﻿using WinZ3805A.ViewModels;
 
 namespace WinZ3805A.Tests.ViewModels;
 
@@ -188,11 +188,14 @@ public sealed class EfcDriftTests
     [Fact]
     public void AShortFlatWindowReportsNoScatterRatherThanItsOwnMagnitude()
     {
-        // Two minutes at one sample a second, dead flat at the value the bench receiver reads.
-        EfcSample[] samples = new EfcSample[120];
+        // Ninety minutes at one sample every ten seconds, dead flat at the value the bench receiver
+        // reads. SHORT RELATIVE TO THE 24-HOUR TERMS, which is what makes the columns nearly
+        // collinear and is the whole point of this test - but past #485's one-hour floor, so the fit
+        // is still attempted. It used to be two minutes, which #485 now refuses outright.
+        EfcSample[] samples = new EfcSample[540];
         for (int i = 0; i < samples.Length; i++)
         {
-            samples[i] = new EfcSample(Origin + (i * TimeSpan.TicksPerSecond), -16.83, false, true);
+            samples[i] = new EfcSample(Origin + (i * 10 * TimeSpan.TicksPerSecond), -16.83, false, true);
         }
 
         EfcDriftResult result = EfcDrift.Analyse(samples);
@@ -202,6 +205,76 @@ public sealed class EfcDriftTests
         Assert.True(result.ResidualPercent < 0.001, $"residual was {result.ResidualPercent}");
         Assert.Equal(0, result.SlopePercentPerDay, 6);
         Assert.Equal(DriftPattern.NothingRemarkable, result.Pattern);
+    }
+
+    /// <summary>
+    /// A per-day slope is not fitted to a window measured in minutes, however many samples it holds
+    /// (#485).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The defect, from the bench.</b> Ninety seconds after connecting to a UCCM-P, the card read
+    /// <c>Drift -108752.6 ppm/day</c> - some 400x outside what this class's own remarks call good -
+    /// from 107 settled readings spanning 105 seconds, directly under a badge saying <i>Nothing
+    /// remarkable</i> and a sentence saying the control was <i>steady</i>.
+    /// </para>
+    /// <para>
+    /// Nothing was wrong with the arithmetic: the slope really was that, over 105 seconds. The
+    /// sample-count guard could not catch it because #475 gave the UCCM a fast tier carrying the EFC
+    /// query at about 1 Hz, so thirty samples became thirty seconds. <b>A slope extrapolated 800x is
+    /// a different kind of claim from one extrapolated 4x</b>, and a count cannot tell them apart.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void AWindowOfMinutesIsNotFittedHoweverManySamplesItHolds()
+    {
+        // The sitting that produced the defect: about 1 Hz for 105 seconds, and a gentle ramp - the
+        // loop pulling in, which is the receiver working correctly.
+        EfcSample[] samples = new EfcSample[107];
+        for (int i = 0; i < samples.Length; i++)
+        {
+            samples[i] = new EfcSample(
+                Origin + (i * TimeSpan.TicksPerSecond),
+                19.70 - (i * 0.0003),
+                false,
+                true);
+        }
+
+        EfcDriftResult result = EfcDrift.Analyse(samples);
+
+        Assert.False(result.IsUsable);
+        Assert.Equal(DriftPattern.Insufficient, result.Pattern);
+
+        // The count is reported, so the card can still say how much it has - it is the SLOPE that
+        // must not be shown, not the evidence of how little there is to go on.
+        Assert.Equal(107, result.SampleCount);
+        Assert.True(result.WindowSpan < TimeSpan.FromMinutes(2), $"span was {result.WindowSpan}");
+        Assert.Equal(0, result.SlopePercentPerDay);
+    }
+
+    /// <summary>The floor is a window, so a slow poll with few samples clears it on time.</summary>
+    /// <remarks>
+    /// The mirror of the test above, and the reason the guard is both rather than either: a
+    /// SmartClock polling every ten seconds reaches an hour with 360 samples, and a receiver polled
+    /// every two minutes reaches it with 30. Neither should be refused for the other's reason.
+    /// </remarks>
+    [Fact]
+    public void AnHourOfSlowSamplesIsEnough()
+    {
+        EfcSample[] samples = new EfcSample[31];
+        for (int i = 0; i < samples.Length; i++)
+        {
+            samples[i] = new EfcSample(
+                Origin + (i * 2 * TimeSpan.TicksPerMinute),
+                -16.83 + (i * 0.001),
+                false,
+                true);
+        }
+
+        EfcDriftResult result = EfcDrift.Analyse(samples);
+
+        Assert.True(result.IsUsable, "an hour of slow samples was refused.");
+        Assert.True(result.WindowSpan >= EfcDrift.MinimumWindow);
     }
 
     /// <summary>

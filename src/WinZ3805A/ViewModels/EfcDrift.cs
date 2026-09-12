@@ -1,4 +1,4 @@
-namespace WinZ3805A.ViewModels;
+﻿namespace WinZ3805A.ViewModels;
 
 /// <summary>One EFC reading, with the context the fit needs to know whether to trust it.</summary>
 /// <param name="Ticks">UTC ticks.</param>
@@ -118,6 +118,34 @@ public static class EfcDrift
     public const int MinimumSamples = 30;
 
     /// <summary>
+    /// Below this much elapsed time, no fit is attempted either (#485).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>A sample count cannot tell a short window from a slow poll.</b> Thirty readings was a
+    /// reasonable guard while every driver polled slowly enough that thirty of them took a while;
+    /// #475 gave the UCCM a fast tier carrying <c>DIAG:ROSC:EFC:REL?</c> at about 1 Hz, and thirty
+    /// samples became thirty seconds. The card then fitted a <b>per-day</b> slope to 105 seconds of
+    /// data and printed <c>-108752.6 ppm/day</c> — some 400× outside the range its own class remarks
+    /// call good — directly under a badge reading <i>Nothing remarkable</i>.
+    /// </para>
+    /// <para>
+    /// Nothing was wrong with the arithmetic. The slope really was that, over 105 seconds. <b>A
+    /// slope extrapolated 800× is not a weaker measurement than one extrapolated 4×; it is a
+    /// different kind of claim</b>, and the sample count cannot distinguish them.
+    /// </para>
+    /// <para>
+    /// An hour was chosen over the alternatives: it is a 24× extrapolation to a per-day figure,
+    /// which is the same order as the existing rule that refuses a days-to-rail projection below a
+    /// day of data (see <see cref="EfcDriftResult.DiurnalSeparable"/>). It also keeps the card quiet
+    /// for exactly the window the bad figure appeared in — the first minutes after connecting, while
+    /// the loop is still pulling in and the EFC is being slewed rather than drifting — and returns
+    /// it well before anyone is judging an oscillator.
+    /// </para>
+    /// </remarks>
+    public static readonly TimeSpan MinimumWindow = TimeSpan.FromHours(1);
+
+    /// <summary>
     /// How much older than the drawn range the fit's own window reaches (#184).
     /// </summary>
     /// <remarks>
@@ -192,12 +220,20 @@ public static class EfcDrift
             usable.Add(sample);
         }
 
-        if (usable.Count < MinimumSamples)
+        // BOTH GUARDS, and the window is the one that matters on a fast poll (#485). Measured from
+        // the usable samples rather than from the requested range, so a window mostly excluded for
+        // settling is judged by what is left of it rather than by what was asked for.
+        TimeSpan span = usable.Count > 0
+            ? TimeSpan.FromTicks(usable[^1].Ticks - usable[0].Ticks)
+            : TimeSpan.Zero;
+
+        if (usable.Count < MinimumSamples || span < MinimumWindow)
         {
             return new EfcDriftResult
             {
                 SampleCount = usable.Count,
                 ExcludedForSettling = excluded,
+                WindowSpan = span,
                 Pattern = DriftPattern.Insufficient,
             };
         }
@@ -214,7 +250,7 @@ public static class EfcDrift
             SlopePercentPerDay = slopePerDay,
             DiurnalAmplitudePercent = diurnal,
             DiurnalSeparable = separable,
-            WindowSpan = TimeSpan.FromTicks(usable[^1].Ticks - usable[0].Ticks),
+            WindowSpan = span,
             ResidualPercent = residual,
             LatestPercent = latest,
             // No projection from a window shorter than a day. The slope is real arithmetic on
@@ -447,9 +483,24 @@ public static class EfcDrift
         DriftPattern.NothingRemarkable =>
             "Nothing in this window suggests a fault. The oscillator control is mid-range and "
             + "steady.",
+        // The window figure is interpolated rather than written out, so the sentence cannot drift
+        // from the constant that enforces it (#485).
+        //
+        // It used to say "over a window long enough for a daily cycle to be told apart from a
+        // trend", which is the DIURNAL threshold - a full day - and not what this guard is. Saying
+        // so made the card look broken for the twenty-three hours between the fit returning and a
+        // daily cycle becoming separable. Separability is reported on its own, beside the numbers.
         _ =>
             "Not enough settled data in this window to say anything. The fit needs readings from "
-            + "after the loop has settled, over a window long enough for a daily cycle to be told "
-            + "apart from a trend.",
+            + $"after the loop has settled, over at least {Hours(MinimumWindow)} — a per-day figure "
+            + "fitted to a few minutes is arithmetic rather than a measurement.",
+    };
+
+    /// <summary>The window in words, for the sentence above.</summary>
+    private static string Hours(TimeSpan span) => span.TotalHours switch
+    {
+        1 => "an hour",
+        < 1 => $"{span.TotalMinutes:0} minutes",
+        _ => $"{span.TotalHours:0.#} hours",
     };
 }
