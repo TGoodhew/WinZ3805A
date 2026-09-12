@@ -60,11 +60,9 @@ public sealed class ScalingWatch
     /// </remarks>
     public void Stop()
     {
-        if (_root is not null)
-        {
-            _root.Changed -= OnRootChanged;
-            _root = null;
-        }
+        // The same shape Watch uses to drop a previous root, so the two read alike.
+        _root?.Changed -= OnRootChanged;
+        _root = null;
     }
 
     /// <summary>
