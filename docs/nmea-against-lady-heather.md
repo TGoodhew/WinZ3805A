@@ -46,7 +46,7 @@ its tests.
 | `ZDA` | yes | yes | |
 | `GLL` | no | yes | |
 | `VTG` | no | yes | |
-| `GNS` | yes | **no** | see below |
+| `GNS` | yes | yes | read since #429 — see below |
 
 ## 1. Talker handling — our design is the more robust, measurably
 
@@ -124,9 +124,18 @@ int quality = ParseInt(gga?.Field(5)) ?? (rmc?.Field(1) == "A" ? 1 : 0);
 and RMC also carries the position. A cycle of RMC + GNS + GSV yields a valid fix, a position, and a
 non-provisional time. A test asserts it.
 
-What the gap actually costs is the **altitude** — GGA's, which GNS also carries and we do not read —
-and GNS's per-constellation mode-indicator string. That is an enhancement, not a correctness bug,
-and the issue is downgraded accordingly rather than left overstated.
+What the gap actually cost was the **altitude** — GGA's, which GNS also carries — and GNS's
+per-constellation mode-indicator string. That was an enhancement rather than a correctness bug, and
+the issue was downgraded accordingly rather than left overstated.
+
+**Both are now read (#429), and the second turned out to be worth more than this section expected.**
+The 720 GNS sentences in `vk162-gns-no-gga.nmea` every one read mode `DN` — GPS **differential**,
+GLONASS no fix — and with GNS unparsed the quality fell back to RMC's valid flag, which can only
+say that there is a fix. So the application called a differential fix a plain one, once a second,
+for the whole sitting. That is not the absent altitude this section described; it is a reading that
+was present on the wire and wrong on the screen. The fallback order is now GGA, then GNS, then RMC —
+GGA still decides where both are sent, because its single digit is the most specific thing on the
+wire and mixing two sentences' word for one fact is the mistake `Time` made at midnight.
 
 Note also that RMC is our **cycle boundary**, so a talker that omitted it would not merely lose the
 fix, it would never complete a cycle at all. Any receiver we work with sends RMC by construction.
@@ -166,7 +175,7 @@ real thing, and the transport rather than the parser is where that belongs.
 |---|---|
 | GSV page accounting conflated constellations | **Fixed**, with tests for both the false alarm and the real one |
 | Satellite numbering collisions across constellations | **Pinned by test, tracked separately** — needs hardware |
-| `GNS` causes no fix | **Premise corrected**; downgraded to an enhancement worth only the altitude |
+| `GNS` causes no fix | **Premise corrected**; the enhancement done in #429, and worth more than the altitude — 720 differential fixes were being reported as plain ones |
 | Talkers beyond `GP`/`GN` | **Verified working**, test added for `GL`, `GA`, `GB`, `GQ` |
 | Proprietary sentences | **Decision recorded**: read none, send none |
 | Malformed input | **Nothing to adopt**; our position is already the stronger one |
