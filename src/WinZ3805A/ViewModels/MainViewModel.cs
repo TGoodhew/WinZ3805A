@@ -183,7 +183,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         "Locked but tracking no satellites. The receiver is coasting on a 1 PPS it can no longer verify.";
 
     /// <summary>How old the fast readings are.</summary>
-    public TimeSpan? Age => _store.AgeOf(_store.LastFastPoll);
+    public TimeSpan? Age => _store.AgeOf(_store.LastDisplayedPoll);
 
     /// <summary>The footer's age in words (§10.3).</summary>
     public string AgeDescription => Staleness.Describe(Age);
