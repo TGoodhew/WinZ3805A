@@ -175,6 +175,13 @@ public sealed partial class DetailsWindow : Window
             // Details window ever opened stayed alive that way (#487).
             _scaling.Stop();
 
+            // AppWindow.Changed is NOT unsubscribed here, and that is a measurement rather than an
+            // oversight. It has the same shape — a WinRT object the App SDK owns, holding a method
+            // group over this window — so it was tried: four open-and-close cycles with it removed
+            // left the retained-window count at exactly four, unchanged. Adding it back would be a
+            // change that reads as careful and does nothing, which is #399's shape. Whatever still
+            // roots a closed Details window, this is not it (#487).
+
             _saveAfterIdle.Stop();
             SavePlacement();
             SavePreferences();
