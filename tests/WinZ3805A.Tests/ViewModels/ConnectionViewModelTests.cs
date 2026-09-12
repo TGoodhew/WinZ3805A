@@ -125,6 +125,43 @@ public sealed class ConnectionViewModelTests
         Assert.Equal(StopBits.One, saved.StopBits);
     }
 
+    /// <summary>
+    /// #502: the settings the last connection to this port settled on are tried before the plan, so
+    /// a receiver at the far end of the walk costs one probe instead of eleven.
+    /// </summary>
+    [Fact]
+    public async Task AutoDetectStartsFromWhatThisPortAnsweredOnLastTime()
+    {
+        using Fixture fixture = new(
+            ports: [Port("COM3")],
+            stored: new ConnectionPreferences { PortName = "COM3", AutoDetect = true, BaudRate = 57600 });
+        fixture.Transports.Enqueue(Receiver());
+
+        await fixture.Model.RefreshPortsAsync();
+
+        Assert.True(await fixture.Model.ConnectAsync().WaitAsync(TestTimeout));
+        Assert.Equal(57600, fixture.Requested[0].Settings.BaudRate);
+        Assert.Single(fixture.Requested);
+    }
+
+    /// <summary>
+    /// The stored settings describe one receiver on one port. Trying them on a different port buys
+    /// nothing but another failed probe, so the walk there is §10.12's order untouched.
+    /// </summary>
+    [Fact]
+    public async Task TheRememberedSettingsAreNotTriedOnADifferentPort()
+    {
+        using Fixture fixture = new(
+            ports: [Port("COM3")],
+            stored: new ConnectionPreferences { PortName = "COM5", AutoDetect = true, BaudRate = 57600 });
+        fixture.Transports.Enqueue(Receiver());
+
+        await fixture.Model.RefreshPortsAsync();
+
+        Assert.True(await fixture.Model.ConnectAsync().WaitAsync(TestTimeout));
+        Assert.Equal(SerialSettings.AutoDetectSequence[0], fixture.Requested[0].Settings);
+    }
+
     [Fact]
     public async Task ManualConnectUsesTheChosenLineSettings()
     {

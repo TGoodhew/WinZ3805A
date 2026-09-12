@@ -461,10 +461,22 @@ public sealed class ConnectionViewModel : INotifyPropertyChanged
         CancellationToken cancellationToken)
     {
         int attempt = 0;
-        // The session's plan, not the transport's static: with more than one driver registered the
-        // walk is their union, and a count read from one family's list would finish at "8 of 8"
-        // with probes still running (#287).
-        int total = _session.AutoDetectPlan.Count;
+
+        // What a previous connection to THIS port settled on, tried before the plan (#502). The port
+        // has to match: the stored settings describe one receiver, and trying COM5's baud rate on
+        // COM3 buys nothing but another eight seconds. A fresh install has no stored port, so the
+        // walk is §10.12's order exactly as it was.
+        ConnectionPreferences saved = _preferences.Load();
+        SerialSettings? preferred =
+            string.Equals(saved.PortName, portName, StringComparison.OrdinalIgnoreCase)
+                ? saved.ToSettings()
+                : null;
+
+        // The session's order, not the transport's static and not the plan either: with more than one
+        // driver registered the walk is their union, and a count read from one family's list would
+        // finish at "8 of 8" with probes still running (#287). The same reasoning now covers
+        // `preferred`, which can make the walk one longer than the plan.
+        int total = _session.AutoDetectOrder(preferred).Count;
 
         Progress<SerialSettings> progress = new(candidate =>
         {
@@ -478,7 +490,7 @@ public sealed class ConnectionViewModel : INotifyPropertyChanged
             }
         });
 
-        return await _session.AutoDetectAsync(portName, progress, cancellationToken).ConfigureAwait(false)
+        return await _session.AutoDetectAsync(portName, progress, preferred, cancellationToken).ConfigureAwait(false)
             is not null;
     }
 

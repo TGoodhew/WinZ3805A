@@ -181,6 +181,110 @@ public class DeviceSessionServiceTests
         Assert.Equal(SerialSettings.AutoDetectSequence.Count, reported.Count);
     }
 
+    // -------------------------------------------------------------------------------------
+    // Remembered settings go first (#502)
+    // -------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// The whole point of #502: a receiver at the far end of the plan costs one probe, not eleven.
+    /// </summary>
+    /// <remarks>
+    /// The last entry of §10.12's own sequence stands in for the UCCM-P here. The real case is worse
+    /// than this fixture can show — with every driver registered the UCCM's 57600-8-N-1 is eleventh,
+    /// and the walk to it measured 83 seconds against the receiver.
+    /// </remarks>
+    [Fact]
+    public async Task AutoDetectTriesTheRememberedSettingsBeforeThePlan()
+    {
+        SerialSettings remembered = SerialSettings.AutoDetectSequence[^1];
+        List<SerialSettings> tried = [];
+        await using DeviceSessionService session = new(
+            (_, settings) =>
+            {
+                tried.Add(settings);
+                return settings == remembered ? Receiver() : WrongSettings();
+            },
+            new FakeTimeProvider());
+
+        SerialSettings? found = await session
+            .AutoDetectAsync("COM3", preferred: remembered)
+            .WaitAsync(TestTimeout);
+
+        Assert.Equal(remembered, found);
+        Assert.Equal([remembered], tried);
+    }
+
+    /// <summary>
+    /// Moved to the front, not prepended — or the walk would probe the same settings twice and the
+    /// dialog would count one more than it runs.
+    /// </summary>
+    [Fact]
+    public async Task AutoDetectDoesNotProbeRememberedSettingsTwiceWhenThePlanAlreadyHasThem()
+    {
+        SerialSettings remembered = SerialSettings.AutoDetectSequence[^1];
+        List<SerialSettings> reported = [];
+        await using DeviceSessionService session = new((_, _) => WrongSettings(), new FakeTimeProvider());
+
+        SerialSettings? found = await session
+            .AutoDetectAsync("COM3", new Progress<SerialSettings>(reported.Add), remembered)
+            .WaitAsync(TestTimeout);
+
+        Assert.Null(found);
+        Assert.Equal(SerialSettings.AutoDetectSequence.Count, reported.Count);
+        Assert.Equal(remembered, reported[0]);
+        Assert.Single(reported, settings => settings == remembered);
+    }
+
+    /// <summary>
+    /// §7.1 permits combinations no driver nominates, and a manual connection can reach them. Such a
+    /// receiver genuinely lengthens the walk by one rather than displacing anything.
+    /// </summary>
+    [Fact]
+    public async Task AutoDetectAddsRememberedSettingsThePlanDoesNotList()
+    {
+        SerialSettings remembered = SerialSettings.Default with { BaudRate = 57600 };
+        List<SerialSettings> reported = [];
+        await using DeviceSessionService session = new((_, _) => WrongSettings(), new FakeTimeProvider());
+
+        Assert.DoesNotContain(remembered, SerialSettings.AutoDetectSequence);
+
+        await session
+            .AutoDetectAsync("COM3", new Progress<SerialSettings>(reported.Add), remembered)
+            .WaitAsync(TestTimeout);
+
+        Assert.Equal(SerialSettings.AutoDetectSequence.Count + 1, reported.Count);
+        Assert.Equal(remembered, reported[0]);
+    }
+
+    /// <summary>
+    /// A fresh install remembers nothing, and §10.12's order must be exactly what it always was.
+    /// </summary>
+    [Fact]
+    public async Task AutoDetectOrderIsThePlanUntouchedWhenNothingIsRemembered()
+    {
+        await using DeviceSessionService session = new((_, _) => WrongSettings(), new FakeTimeProvider());
+
+        Assert.Equal(session.AutoDetectPlan, session.AutoDetectOrder(null));
+    }
+
+    /// <summary>
+    /// The count the dialog shows has to be the walk that runs — the #287 defect, which `preferred`
+    /// reintroduces the opportunity for.
+    /// </summary>
+    [Fact]
+    public async Task AutoDetectOrderCountsTheWalkThatWillActuallyRun()
+    {
+        SerialSettings unlisted = SerialSettings.Default with { BaudRate = 57600 };
+        List<SerialSettings> reported = [];
+        await using DeviceSessionService session = new((_, _) => WrongSettings(), new FakeTimeProvider());
+
+        await session
+            .AutoDetectAsync("COM3", new Progress<SerialSettings>(reported.Add), unlisted)
+            .WaitAsync(TestTimeout);
+
+        Assert.Equal(session.AutoDetectOrder(unlisted).Count, reported.Count);
+    }
+
     /// <summary>§10.12 requires the walk to be cancellable, because eight attempts is a long wait.</summary>
     [Fact]
     public async Task AutoDetectCanBeCancelled()
