@@ -76,6 +76,16 @@ public sealed partial class AdvancedConsolePage : Page, ICsvExportSource
             device.Session.StatusChanged -= OnStatusChanged;
         }
 
+        // The other half, missing until 13 Sep 2026 (#487). CommandTranscript is
+        // DeviceContext.Transcript { get; } = new() — it lives as long as the device context, which
+        // outlives every page, so one visit to this page pinned it for the life of the process
+        // through OnTranscriptChanged. The summary above claimed this method undid everything
+        // OnNavigatedTo subscribed to, and it undid one of two.
+        if (_transcript is CommandTranscript transcript)
+        {
+            transcript.Changed -= OnTranscriptChanged;
+            _transcript = null;
+        }
     }
 
     /// <inheritdoc />
