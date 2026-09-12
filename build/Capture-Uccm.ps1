@@ -76,7 +76,8 @@
 
 .PARAMETER SelfTest
     Checks the reply-anatomy analysis against replies whose shape is known,
-    including deliberately malformed ones. Needs no port.
+    including deliberately malformed ones, and the catalog read against the real
+    `UccmCommands.cs` and against sources broken on purpose. Needs no port.
 
 .NOTES
     THE PROVENANCE NOTE IS `.md` ON PURPOSE, for the reason #221 established:
@@ -392,6 +393,71 @@ function Get-UccmLineEndings {
     }
 }
 
+<#
+.SYNOPSIS
+    The UCCM query catalog, read out of `UccmCommands.cs` rather than restated (#482).
+.DESCRIPTION
+    THIS SCRIPT USED TO HAND-COPY THE LIST, AND THE COPY DRIFTED. Three of the nine entries
+    disagreed with the driver - `SYNC:HOLD:DUR?` for the catalog's `:ROSC:HOLD:DUR?`, a different
+    subsystem entirely, and two survey queries missing their leading colon - and those three were
+    exactly the three that errored on 11 Sep 2026. The sitting then could not say whether the
+    firmware refused the query or whether this script had asked for something the driver never
+    asks. A capture that walks a list nobody reconciled cannot report on the driver's catalog,
+    however carefully its counts are computed.
+
+    The precedent is `build/Test-NoBlockedCommands.ps1`, which reads its tokens out of
+    `BlockedCommands.cs` so that file stays the single place those names occur. Same argument:
+    `UccmCommands.All` is the only place the catalog exists.
+
+    PURE, taking source text rather than a path, so the self-test can drive it - including with
+    deliberately broken sources - without a file on disk.
+
+    A PARSE THAT FINDS NOTHING IS AN ERROR, NOT AN EMPTY LIST. A silent empty catalog would turn
+    a capture run into a no-op that reports nine successes out of nothing, which is the failure
+    direction nobody would question.
+#>
+function Get-UccmCatalogMnemonics {
+    [CmdletBinding()]
+    param([string] $Source)
+
+    if ([string]::IsNullOrWhiteSpace($Source)) {
+        throw 'UccmCommands.cs is empty or unreadable. Fix the read rather than falling back to a literal list.'
+    }
+
+    # `public const string Status = "SYST:STAT?";`
+    $consts = @{}
+    foreach ($m in [regex]::Matches($Source, 'const\s+string\s+(?<name>\w+)\s*=\s*"(?<value>[^"]+)"\s*;')) {
+        $consts[$m.Groups['name'].Value] = $m.Groups['value'].Value
+    }
+
+    # The `All` collection initialiser, and nothing else: the file also names the three UCCM-P
+    # queries in `UccmPOnly`, and a looser match would count them twice.
+    $all = [regex]::Match($Source, 'All\s*\{\s*get;\s*\}\s*=\s*\[(?<body>.*?)\]\s*;', 'Singleline')
+    if (-not $all.Success) {
+        throw 'Could not find the UccmCommands.All initialiser. If the catalog moved or changed shape, fix this parse - do not restate the list here.'
+    }
+
+    $mnemonics = @()
+    foreach ($q in [regex]::Matches($all.Groups['body'].Value, 'Query\(\s*(?<arg>"[^"]+"|\w+)\s*,')) {
+        $arg = $q.Groups['arg'].Value
+        if ($arg.StartsWith('"')) {
+            $mnemonics += $arg.Trim('"')
+        } elseif ($consts.ContainsKey($arg)) {
+            $mnemonics += $consts[$arg]
+        } else {
+            throw "UccmCommands.All names '$arg', which is not a string constant in the same file. Fix this parse rather than guessing the mnemonic."
+        }
+    }
+
+    if ($mnemonics.Count -eq 0) {
+        throw 'Parsed the UccmCommands.All initialiser and found no queries in it. Fix the parse rather than removing the check.'
+    }
+
+    # Identity first, catalog order after it. `*IDN?` establishes the unit before anything else is
+    # believed about it (#416 step one); the catalog lists it last because it is not a UCCM query.
+    @($mnemonics | Where-Object { $_ -eq '*IDN?' }) + @($mnemonics | Where-Object { $_ -ne '*IDN?' })
+}
+
 # ---------------------------------------------------------------------------------------------
 # Self-test
 # ---------------------------------------------------------------------------------------------
@@ -563,14 +629,106 @@ if ($SelfTest) {
     # A value must NOT be mistaken for a prompt.
     if ((Get-UccmLineKind -Line '-1.234E-008' -Sent 'X?') -ne 'Payload') { $failures += 'a value was misread as a prompt' }
 
+    # --- The catalog is READ, not restated (#482) -------------------------------------------
+    #
+    # The drift this replaced was invisible precisely because both lists looked plausible. So the
+    # parse is checked against the REAL file - a synthetic source would only prove the regex
+    # matches itself - and then against deliberately broken ones, because a parser that silently
+    # returns nothing turns a capture into a no-op reporting successes out of an empty list.
+    $catalogFile = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\src\WinZ3805A.Device\Drivers\Uccm\UccmCommands.cs'))
+    if (-not (Test-Path $catalogFile)) {
+        $failures += "the UCCM catalog is not where this script expects it: $catalogFile"
+    } else {
+        $real = Get-UccmCatalogMnemonics -Source (Get-Content -LiteralPath $catalogFile -Raw)
+
+        if ($real.Count -lt 2) { $failures += "the catalog parsed to $($real.Count) quer(y/ies), which cannot be right" }
+        if ($real[0] -ne '*IDN?') { $failures += "identity is not asked first: got '$($real[0])'" }
+        if (@($real | Where-Object { $_ -eq '*IDN?' }).Count -ne 1) { $failures += 'identity appeared more than once' }
+
+        # The three that drifted, spelled as the DRIVER spells them. Named individually rather
+        # than counted, because the whole defect was a list that was the right length and wrong.
+        foreach ($expected in ':ROSC:HOLD:DUR?', ':GPS:POS:SURV:STAT?', ':GPS:POS:SURV:PROG?') {
+            if ($real -notcontains $expected) {
+                $failures += "the catalog no longer names '$expected' - if the driver changed, this assertion should change with it"
+            }
+        }
+
+        # Nothing may reach the wire that the catalog does not name. This is the assertion that
+        # makes the drift impossible rather than merely fixed.
+        $catalogText = Get-Content -LiteralPath $catalogFile -Raw
+        foreach ($m in $real) {
+            if ($catalogText -notmatch [regex]::Escape($m)) {
+                $failures += "'$m' would be sent but does not appear in UccmCommands.cs"
+            }
+        }
+    }
+
+    # A source naming a constant it never defines must throw, not guess.
+    $danglingSource = @'
+public static class UccmCommands {
+    public const string Status = "SYST:STAT?";
+    public static IReadOnlyList<ScpiCommand> All { get; } =
+    [
+        Query(Status, "Status", "x", ResponseFormat.MultiLine),
+        Query(NeverDefined, "Ghost", "x", ResponseFormat.Text),
+    ];
+}
+'@
+    try {
+        Get-UccmCatalogMnemonics -Source $danglingSource | Out-Null
+        $failures += 'a query naming an undefined constant was accepted instead of throwing'
+    } catch {
+        if ("$_" -notmatch 'NeverDefined') { $failures += "the undefined-constant error did not name the constant: $_" }
+    }
+
+    # An initialiser that parses but holds nothing must throw rather than return an empty list.
+    $emptySource = @'
+public static class UccmCommands {
+    public static IReadOnlyList<ScpiCommand> All { get; } =
+    [
+    ];
+}
+'@
+    try {
+        Get-UccmCatalogMnemonics -Source $emptySource | Out-Null
+        $failures += 'an empty catalog was accepted instead of throwing'
+    } catch {
+        if ("$_" -notmatch 'no queries') { $failures += "the empty-catalog error was about something else: $_" }
+    }
+
+    # A file with no All initialiser at all - the shape a rename would produce.
+    try {
+        Get-UccmCatalogMnemonics -Source 'public static class UccmCommands { }' | Out-Null
+        $failures += 'a source with no All initialiser was accepted instead of throwing'
+    } catch {
+        if ("$_" -notmatch 'All initialiser') { $failures += "the missing-initialiser error was about something else: $_" }
+    }
+
+    # `UccmPOnly` names three of the same mnemonics. A looser match would count them twice.
+    $withUccmPOnly = @'
+public static class UccmCommands {
+    public const string Status = "SYST:STAT?";
+    public const string HoldoverDuration = ":ROSC:HOLD:DUR?";
+    public static IReadOnlyList<ScpiCommand> All { get; } =
+    [
+        Query(Status, "Status", "x", ResponseFormat.MultiLine),
+        Query(HoldoverDuration, "Holdover duration", "x", ResponseFormat.Decimal),
+    ];
+    public static IReadOnlyList<string> UccmPOnly { get; } =
+        [HoldoverDuration];
+}
+'@
+    $twice = Get-UccmCatalogMnemonics -Source $withUccmPOnly
+    if ($twice.Count -ne 2) { $failures += "UccmPOnly leaked into the catalog: got $($twice.Count) entries, expected 2" }
+
     if ($failures.Count -gt 0) {
         Write-Host 'FAIL' -ForegroundColor Red
         $failures | ForEach-Object { Write-Host "  $_" }
         exit 1
     }
 
-    Write-Host 'PASS - the reply anatomy, the echo rule, the time-code distinction and the'
-    Write-Host '  line-ending report are checked.'
+    Write-Host 'PASS - the reply anatomy, the echo rule, the time-code distinction, the'
+    Write-Host '  line-ending report and the catalog read are checked.'
     Write-Host ''
     Write-Host '  The serial half is not checked here and cannot be. It has however been SMOKE-RUN'
     Write-Host '  against the bench Z3805A on 8 Sep 2026 - not a UCCM, but a real port and real'
@@ -616,19 +774,14 @@ if (-not (Test-Path $OutputDirectory)) { New-Item -ItemType Directory -Path $Out
 # The driver's own sequence, so this script and the application walk the same rates.
 $rates = if ($BaudRate) { @($BaudRate) } else { @(9600, 19200, 57600) }
 
-# Every catalogued query, identity first. UccmCommands.All, kept in this order deliberately:
-# *IDN? establishes the unit before anything else is believed about it (#416 step one).
-$commands = @(
-    '*IDN?',
-    'SYST:STAT?',
-    'SYNC:TINT?',
-    'DIAG:ROSC:EFC:REL?',
-    'DIAG:LOOP?',
-    'LED:GPSL?',
-    'SYNC:HOLD:DUR?',
-    'GPS:POS:SURV:STAT?',
-    'GPS:POS:SURV:PROG?'
-)
+# Every catalogued query, identity first - READ FROM THE DRIVER, never restated here (#482).
+$catalogRelative = 'src\WinZ3805A.Device\Drivers\Uccm\UccmCommands.cs'
+$catalogPath = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot (Join-Path '..' $catalogRelative)))
+if (-not (Test-Path $catalogPath)) {
+    Write-Error "Cannot find the UCCM catalog at '$catalogRelative'. If it moved, update this path - do not paste the list back in."
+}
+$commands = Get-UccmCatalogMnemonics -Source (Get-Content -LiteralPath $catalogPath -Raw)
+Write-Host "Asking $($commands.Count) catalogued quer$(if ($commands.Count -eq 1) { 'y' } else { 'ies' }), read from $catalogRelative."
 
 function Invoke-UccmCommand {
     param([System.IO.Ports.SerialPort] $Serial, [string] $Command, [int] $WaitMs = 3000)
