@@ -76,11 +76,26 @@ public sealed record UccmLoopReading
     /// Whether the oscillator appears to be being disciplined, where that can be told at all.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// <b>An inference, not a report, and it must be labelled as one wherever a user sees it.</b>
     /// Trimble has no disciplining field; Heather deduces the state from
     /// <see cref="FrequencyCorrection"/> being non-zero. Symmetricom's format carries no equivalent,
     /// so this is <see langword="null"/> there rather than false — §11.1's rule that an absent
     /// field is absent and never a fabricated value.
+    /// </para>
+    /// <para>
+    /// <b>A zero correction means "cannot tell", not "not disciplining", and that was measured.</b>
+    /// The bench Trimble reports <c>FREQ_CORR</c> as <c>+0.00E+00</c> in every sitting taken —
+    /// 10, 11 and 12 Sep 2026 and again on the 13th — while locked, with <c>LED:GPSL?</c> answering
+    /// <c>1</c> and the status byte reading <c>0x45</c>. Reading zero as false therefore reported a
+    /// disciplined receiver as undisciplined on the only hardware this driver has ever met.
+    /// </para>
+    /// <para>
+    /// Heather hedges the same field in its own declaration — <c>float freq_corr; // always 0.0?</c>
+    /// — and never derives a boolean from it: it nudges a mode variable, guarded, and only ever
+    /// 0 → 3 or non-zero → 0. Turning that into an absolute claim was our addition, not the
+    /// reference's. A non-zero value still implies disciplining; zero now says nothing.
+    /// </para>
     /// </remarks>
     public bool? Disciplining { get; private init; }
 
@@ -88,9 +103,19 @@ public sealed record UccmLoopReading
     /// Oscillator temperature correction, Symmetricom only.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// <b>Trimble modules do not report this at all</b>, so it stays <see langword="null"/> there
     /// and must render as an em dash rather than as zero. Heather makes the same distinction by
     /// enabling its temperature plot only for the Symmetricom variant.
+    /// </para>
+    /// <para>
+    /// <b>The value here is as the receiver wrote it, and Heather's is not.</b> Its reader does
+    /// <c>temperature = atof(s+1) * 1.0E12F</c> — and the line that would publish the result,
+    /// <c>have_temperature = 1</c>, is commented out, so the reference neither surfaces the figure
+    /// nor demonstrates what that scale factor is for. Applying a factor we cannot explain, to a
+    /// vendor no one here has measured, would be the guess #418 exists to prevent. Whoever first
+    /// puts a Symmetricom on the bench should settle the unit before this is displayed anywhere.
+    /// </para>
     /// </remarks>
     public double? TemperatureCorrection { get; private init; }
 
@@ -119,6 +144,16 @@ public sealed record UccmLoopReading
                 continue;
             }
 
+            // This is a status screen, not a loop reply. Heather makes the same check and abandons
+            // its loop parse on it. Refusing the whole response is §11.1's answer rather than
+            // keeping whatever was read before the mix-up: a reply that turned out to be somebody
+            // else's is no reading, and #481 has already shown this family delivering replies with
+            // foreign bytes in front of them.
+            if (line.Contains("SERIAL NUMBER", StringComparison.OrdinalIgnoreCase))
+            {
+                return new UccmLoopReading();
+            }
+
             // The header decides the format, and it must be seen before any value is taken.
             // Symmetricom is tested first: its rule is a run of dashes, which is unambiguous,
             // whereas "DAC" could in principle appear in a label.
@@ -136,11 +171,15 @@ public sealed record UccmLoopReading
 
             if (vendor == UccmVendor.Symmetricom)
             {
-                if (line.StartsWith("FREQ COR", StringComparison.OrdinalIgnoreCase))
+                // Substring rather than a prefix, which is Heather's rule (strstr) and the tolerant
+                // one. Symmetricom has never been measured here, so a label carrying anything before
+                // it — an index, a bullet, a device name — would be missed by a prefix test, and
+                // missing the payload line is silent.
+                if (line.Contains("FREQ COR", StringComparison.OrdinalIgnoreCase))
                 {
                     (difference, rejected) = Sanitise(AfterEquals(line));
                 }
-                else if (line.StartsWith("TEMP COR", StringComparison.OrdinalIgnoreCase))
+                else if (line.Contains("TEMP COR", StringComparison.OrdinalIgnoreCase))
                 {
                     temperature = AfterEquals(line);
                 }
@@ -164,8 +203,10 @@ public sealed record UccmLoopReading
             FrequencyDifferenceRejected = rejected,
             FrequencyCorrection = correction,
             TemperatureCorrection = temperature,
-            Disciplining = vendor == UccmVendor.Trimble && correction is double value
-                ? value != 0.0
+            // Non-zero implies disciplining; zero is measured to mean nothing on this firmware, so
+            // it is absent rather than false. See the remarks on Disciplining.
+            Disciplining = vendor == UccmVendor.Trimble && correction is double value && value != 0.0
+                ? true
                 : null,
         };
     }
