@@ -594,6 +594,63 @@ first run could not exclude it. Five samples with the node untouched, all identi
 
 ---
 
+## 17. GPS − UTC from a broadcast, not a query (#481)
+
+**Why.** Every other reading on the Time page is something the application *asked* for. This one, on
+a UCCM, is not: that family answers none of §10.14's `:PTIM:LEAP` queries and states the accumulated
+offset in the binary time code it broadcasts about every two seconds. So the reading depends on a
+whole chain — the transport recognising a 44-byte frame in the byte stream, keeping it out of the
+line reader, keeping it out of the *drain*, handing it to the driver, and the page preferring the
+query where there is one — and **no part of that chain can be exercised by a receiver that does not
+broadcast.** A simulator can stand in for the shapes; only hardware produces the timing.
+
+**The timing is the whole difficulty, and it is why this is a procedure.** A broadcast lands while
+the link is idle, because a transaction lasts tens of milliseconds and the broadcasts are seconds
+apart. On 12 Sep 2026, 115 transactions in 40 seconds carried **not one** frame while the readings
+looked fine — the frames were being discarded with the stale input, which stopped the corruption
+they had been causing and so looked exactly like the fix working. **A pass here is the value
+appearing, never the absence of a symptom.**
+
+### Procedure
+
+1. Connect to a UCCM. Details → **Time**.
+2. **On the first visit**, `GPS − UTC` must show a number, not `—`. The first visit is the test: the
+   page reads the queries once on navigation, and the first full-tier status can arrive after that,
+   so a value that only appears on a second visit is a failure of this check even though the number
+   is right.
+3. The number must be the true offset — **+18 s** at the time of writing, and it changes only when
+   IERS announces a leap second. A plausible-looking wrong number is the failure worth looking for:
+   a misread byte gives an integer, not an error.
+4. **No error line beneath it.** "The receiver did not answer the leap-second queries" is true of
+   this family and must not be printed beside a figure the receiver broadcast unasked.
+5. Leave it for a minute. The value must not flicker to `—` and back: a full-tier status that
+   arrives before any frame has been seen would do that, and it is the shape of a regression in
+   which frames are gathered only sometimes.
+
+### Verify against a receiver that does *not* broadcast
+
+Connect a **SmartClock** and open the same page. `GPS − UTC` must still come from
+`:PTIM:LEAP:ACC?` — the query is the authority wherever it answers, and the broadcast only fills in.
+Nothing about this family's behaviour may have changed, and a regression here looks like a correct
+number arriving from the wrong place, which no reading of the screen can distinguish.
+
+### What this cannot check, and still has not been
+
+- **A leap second actually announced.** The pending flag comes from the time code's own bit and has
+  only ever been seen clear. It cannot be forced, and the receiver decides when to set it; until one
+  is announced the pill's caution state is unexercised on this family.
+- **The offset across a power cycle**, and in **holdover** — both need §11.1's states, which are
+  section 5's business and #416's.
+- **Whether the offset is right**, independently. The host clock is not a reference unless its time
+  service is running; on the bench machine it is stopped, so a comparison there can bound the answer
+  and not settle it. The receiver's own statement is the better source, which is the point of
+  reading it at all.
+
+**Last run:** 12 Sep 2026 against `TRIMBLE,57964-80,40896646,V2.0.1.6-01` on COM3 at 57600-8-N-1 —
+`+18 s` on the first visit, no error line, pill reading *None announced*, stable over a minute.
+18 of 115 transactions carried a frame, spaced two seconds apart, which is every one the receiver
+sent.
+
 ## Before a release
 
 Sections 1–4, 8, 9, 11 and 13 in full, then **12 on the published artifact** — which means the release
@@ -604,7 +661,10 @@ antenna; **section 16 the first time anyone is in front of the receiver**, since
 v1.0.14 verified only through a register read and the two minutes it costs are the only way anyone
 will ever know it drives the right light; section 6 if survey behaviour has been touched; **section 14 if anything on the polling,
 rendering or shell-badge path has changed** — it costs an hour of waiting and perhaps five minutes of
-attention, and both leaks that have shipped would have been caught by it. Section 15 is not a release
+attention, and both leaks that have shipped would have been caught by it; **section 17 whenever a
+broadcasting receiver is to hand and anything on the transport's byte path has changed** — it costs
+one glance at one readout, and the failure it catches is a value quietly not arriving, which no
+other check in this list would notice. Section 15 is not a release
 gate at all: run it when a talker is to hand, because the captures it produces are permanent and the
 opportunity is not.
 
