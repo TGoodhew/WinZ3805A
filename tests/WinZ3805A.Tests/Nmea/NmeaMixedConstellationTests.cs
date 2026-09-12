@@ -123,8 +123,8 @@ public sealed class NmeaMixedConstellationTests
         // #417 feared that a multi-constellation receiver emitting GNS in place of GGA would show
         // "no fix at all while the receiver is perfectly happy". IT DOES NOT, and the premise is
         // worth correcting rather than carrying: the fix quality falls back to RMC's status field,
-        // and RMC also carries the position. GNS is unparsed, so what is actually lost is the
-        // ALTITUDE and the per-constellation mode detail - an enhancement, not a correctness bug.
+        // and RMC also carries the position. What GNS being unparsed COST was the altitude and the
+        // per-constellation mode detail - an enhancement rather than a correctness bug, and #429.
         string gnsCycle = string.Join('\n',
         [
             Sentence("GNRMC,200000.00,A,3726.2550,N,12210.5017,W,0.02,0.00,060926,,,A"),
@@ -139,8 +139,13 @@ public sealed class NmeaMixedConstellationTests
         Assert.Equal(37.4375833, status.Position.LatitudeDegrees!.Value, 5);
         Assert.False(status.DeviceTimeIsProvisional);
 
-        // What the gap actually costs.
-        Assert.Null(status.Position.HeightMetres);
+        // The altitude the gap used to cost. Field 8 of GNS, as of GGA.
+        Assert.Equal(25.4, status.Position.HeightMetres!.Value, 3);
+        Assert.Equal(HeightDatum.Msl, status.HeightDatum);
+
+        // And the mode detail. Two of the three constellations are contributing - "AAN" - so
+        // calling this a GPS fix would be wrong, and the word that is right is also shorter.
+        Assert.Equal("GNSS fix", status.ModeDetail);
     }
 
     /// <summary>
@@ -185,9 +190,71 @@ public sealed class NmeaMixedConstellationTests
         Assert.InRange(status.Position.LatitudeDegrees!.Value, 47.0, 48.0);
         Assert.InRange(status.Position.LongitudeDegrees!.Value, -123.0, -122.0);
 
-        // And the cost, also against hardware. Every one of the 720 GNS sentences carries an
-        // altitude in field 10; none of it reaches the model, because GNS is unparsed.
-        Assert.Null(status.Position.HeightMetres);
+        // The altitude, also against hardware. Every one of the 720 GNS sentences carries one, and
+        // it used to reach nothing (#429). The capture was taken at a house near sea level; 36 m is
+        // the orthometric height the receiver reported, with a -18.8 m geoid separation beside it.
+        Assert.InRange(status.Position.HeightMetres!.Value, 20.0, 60.0);
+        Assert.Equal(HeightDatum.Msl, status.HeightDatum);
+
+        // AND THE FIX QUALITY THE RECEIVER WAS ACTUALLY REPORTING. All 720 read mode "DN" - GPS
+        // DIFFERENTIAL, GLONASS no fix - and with GNS unparsed the quality fell back to RMC's
+        // valid flag, which can only say "there is a fix". The window said "GPS fix" for a receiver
+        // that was telling it, once a second, that the fix was differential.
+        Assert.Contains("differential", status.ModeDetail!, StringComparison.Ordinal);
+
+        // One constellation is contributing, so it stays "GPS" rather than becoming "GNSS".
+        Assert.Contains("GPS", status.ModeDetail, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// GNS's mode string read as a fix quality, letter by letter (#429).
+    /// </summary>
+    /// <remarks>
+    /// Only <c>DN</c> and <c>ANNN</c> have been observed — the VK-162's and the forM8N's. The rest
+    /// of the alphabet is the standard's, and the precedence is this parser's: trustworthiness, not
+    /// the numeric GGA quality each letter maps to. Taking the maximum instead reads well until a
+    /// receiver reports estimated dead reckoning (6) beside a differential fix (2) and is told the
+    /// fix is the dead-reckoned one.
+    /// </remarks>
+    [Theory]
+    [InlineData("DN", 2, 1)]        // the VK-162, 720 times over
+    [InlineData("ANNN", 1, 1)]      // the forM8N, 130 times over
+    [InlineData("AAN", 1, 2)]
+    [InlineData("DA", 2, 2)]
+    [InlineData("NNNN", 0, 0)]
+    [InlineData("RA", 4, 2)]        // RTK fixed beats autonomous
+    [InlineData("DE", 2, 2)]        // differential beats dead reckoning, though 2 < 6
+    [InlineData("", null, 0)]
+    [InlineData(null, null, 0)]
+    public void AGnsModeStringIsAFixQualityAndACountOfConstellations(string? mode, int? quality, int systems)
+    {
+        Assert.Equal(quality, NmeaStatusParser.GnsQuality(mode));
+        Assert.Equal(systems, NmeaStatusParser.ContributingSystems(mode));
+    }
+
+    /// <summary>
+    /// A GGA in the cycle still decides the quality, and GNS does not second-guess it (#429).
+    /// </summary>
+    /// <remarks>
+    /// Most receivers send both. GGA's single digit is the most specific statement on the wire, and
+    /// a parser that preferred GNS would be taking two sentences' word for one fact — the shape of
+    /// mistake <c>Time</c> made at midnight, and the reason it no longer mixes sources.
+    /// </remarks>
+    [Fact]
+    public void WhereBothArePresentGgaDecidesTheQuality()
+    {
+        string both = string.Join('\n',
+        [
+            Sentence("GNRMC,200000.00,A,3726.2550,N,12210.5017,W,0.02,0.00,060926,,,A"),
+            Sentence("GNGGA,200000.00,3726.2550,N,12210.5017,W,1,11,0.9,25.4,M,-32.0,M,,"),
+            Sentence("GNGNS,200000.00,3726.2550,N,12210.5017,W,DD,11,0.9,25.4,-32.0,,"),
+        ]);
+
+        ReceiverStatus status = NmeaStatusParser.Parse(both, Now);
+
+        // GGA says 1, GNS says differential on two constellations. GGA wins, and the wording stays
+        // the one the GGA path has always produced.
+        Assert.Equal("GPS fix", status.ModeDetail);
     }
 
     [Fact]

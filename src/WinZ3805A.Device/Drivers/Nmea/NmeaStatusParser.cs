@@ -56,6 +56,7 @@ public static class NmeaStatusParser
 
         NmeaSentence? rmc = null;
         NmeaSentence? gga = null;
+        NmeaSentence? gns = null;
         NmeaSentence? gsa = null;
         NmeaSentence? zda = null;
         List<NmeaSentence> gsv = [];
@@ -82,6 +83,9 @@ public static class NmeaStatusParser
                 case "GGA":
                     gga = sentence;
                     break;
+                case "GNS":
+                    gns = sentence;
+                    break;
                 case "GSA":
                     gsa = sentence;
                     break;
@@ -96,22 +100,33 @@ public static class NmeaStatusParser
             }
         }
 
-        if (rmc is null && gga is null)
+        if (rmc is null && gga is null && gns is null)
         {
-            warnings.Add("the cycle carried neither an RMC nor a GGA sentence, so there is no fix data");
+            warnings.Add("the cycle carried no RMC, GGA or GNS sentence, so there is no fix data");
         }
 
-        int quality = ParseInt(gga?.Field(5)) ?? (rmc?.Field(1) == "A" ? 1 : 0);
+        // GGA first, because its single digit is the most specific thing on the wire; then GNS,
+        // whose mode string says as much and per constellation; then RMC's valid/void flag, which
+        // can only say whether there is a fix at all (#429).
+        string? gnsMode = gns?.Field(5);
+        int quality = ParseInt(gga?.Field(5))
+            ?? GnsQuality(gnsMode)
+            ?? (rmc?.Field(1) == "A" ? 1 : 0);
+
         bool hasFix = quality > 0;
         string? gsaMode = gsa?.Field(1);
 
         (IReadOnlyList<TrackedSatellite> tracked, IReadOnlyList<PredictedSatellite> notTracked) = Satellites(gsv, warnings);
         DateTimeOffset? time = Time(rmc, gga, zda, warnings);
-        GeoPosition? position = Position(gga, rmc, hasFix, warnings);
+        GeoPosition? position = Position(gga, gns, rmc, hasFix, warnings);
 
         return new ReceiverStatus
         {
-            ModeDetail = ModeDetail(quality, gsaMode),
+            // The constellation count comes from GNS alone. A GGA quality digit cannot say how many
+            // systems are contributing, and GSA's system id could be made to, but that is a second
+            // source for one fact and this parser has already been bitten by taking two sentences'
+            // word for one thing - see Time, and the 24-hour error it used to build at midnight.
+            ModeDetail = ModeDetail(quality, gsaMode, gga is null ? ContributingSystems(gnsMode) : 1),
             GpsOnePpsValid = hasFix,
             Tracked = tracked,
             NotTracked = notTracked,
@@ -129,13 +144,28 @@ public static class NmeaStatusParser
     }
 
     /// <summary>The words for the fix, as the GGA quality indicator and the GSA mode give them.</summary>
-    public static string ModeDetail(int quality, string? gsaMode)
+    /// <param name="quality">The GGA quality indicator, or its equivalent from <see cref="GnsQuality"/>.</param>
+    /// <param name="gsaMode">GSA's fix mode — <c>2</c> for 2D, <c>3</c> for 3D.</param>
+    /// <param name="systems">
+    /// How many constellations are contributing, where that is known. One — the default — keeps the
+    /// wording the GGA path has always produced.
+    /// </param>
+    /// <remarks>
+    /// <b>"GPS fix" becomes "GNSS fix" when more than one constellation is contributing (#429).</b>
+    /// Only GNS says so, and calling a GPS + BeiDou fix a GPS fix is simply wrong. The phrase gets
+    /// shorter rather than longer, which matters: this is the medallion's sub-line, on the window
+    /// §9.1 designs to be glanceable. <b>Which</b> constellations are contributing is not put here —
+    /// the Satellites page names each satellite's constellation since #424, and that is the page for
+    /// the question.
+    /// </remarks>
+    public static string ModeDetail(int quality, string? gsaMode, int systems = 1)
     {
+        string system = systems > 1 ? "GNSS" : "GPS";
         string fix = quality switch
         {
             0 => "no fix",
-            1 => "GPS fix",
-            2 => "differential GPS fix",
+            1 => $"{system} fix",
+            2 => $"differential {system} fix",
             _ => $"fix (quality {quality})",
         };
 
@@ -145,6 +175,75 @@ public static class NmeaStatusParser
             "3" when quality > 0 => fix + " (3D)",
             _ => fix,
         };
+    }
+
+    /// <summary>
+    /// GNS's per-constellation mode string read as a GGA quality indicator, or
+    /// <see langword="null"/> when there is no mode string to read (#429).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// GNS field 5 carries one character per constellation, in the standard's order — GPS, GLONASS,
+    /// Galileo, BeiDou, QZSS. The VK-162 sends <c>DN</c> and the forM8N <c>ANNN</c>, which is the
+    /// whole of what this project has observed; the rest of the alphabet is the standard's.
+    /// </para>
+    /// <para>
+    /// <b>The best contributing constellation wins, by the precedence below rather than by the
+    /// numeric quality.</b> Mapping each letter to its GGA equivalent and taking the maximum reads
+    /// well until a receiver reports estimated dead reckoning (6) beside a differential fix (2), and
+    /// answers that the fix is the dead-reckoned one. The order here is trustworthiness, which is
+    /// what the answer is asked for.
+    /// </para>
+    /// <para>
+    /// This is why 720 GNS sentences from the VK-162 change what the window says: every one of them
+    /// reads <c>DN</c> — GPS differential, GLONASS no fix — and with GNS unparsed the fix quality
+    /// fell back to RMC's valid flag, which can only say 1. The receiver was reporting a
+    /// differential fix and the application was calling it a plain one.
+    /// </para>
+    /// </remarks>
+    /// <param name="mode">GNS's mode string, or <see langword="null"/>.</param>
+    public static int? GnsQuality(string? mode)
+    {
+        if (string.IsNullOrWhiteSpace(mode))
+        {
+            return null;
+        }
+
+        // Trustworthiness first, and the GGA quality each letter corresponds to second.
+        foreach ((char letter, int quality) in (ReadOnlySpan<(char, int)>)
+            [('R', 4), ('F', 5), ('P', 3), ('D', 2), ('A', 1), ('E', 6), ('M', 7), ('S', 8)])
+        {
+            if (mode.IndexOf(letter, StringComparison.Ordinal) >= 0)
+            {
+                return quality;
+            }
+        }
+
+        // Every constellation said N, or said something this revision of the standard does not
+        // define. Either way no constellation is contributing, which is a fix of quality 0 and not
+        // an absent answer - so it is returned rather than deferred to RMC.
+        return 0;
+    }
+
+    /// <summary>How many constellations GNS says are contributing — a mode character that is not <c>N</c>.</summary>
+    /// <param name="mode">GNS's mode string, or <see langword="null"/>.</param>
+    public static int ContributingSystems(string? mode)
+    {
+        if (string.IsNullOrWhiteSpace(mode))
+        {
+            return 0;
+        }
+
+        int systems = 0;
+        foreach (char letter in mode)
+        {
+            if (letter is not ('N' or 'n') && !char.IsWhiteSpace(letter))
+            {
+                systems++;
+            }
+        }
+
+        return systems;
     }
 
     /// <summary>
@@ -330,15 +429,18 @@ public static class NmeaStatusParser
         }
     }
 
-    private static GeoPosition? Position(NmeaSentence? gga, NmeaSentence? rmc, bool hasFix, List<string> warnings)
+    private static GeoPosition? Position(NmeaSentence? gga, NmeaSentence? gns, NmeaSentence? rmc, bool hasFix, List<string> warnings)
     {
         if (!hasFix)
         {
             return null;
         }
 
-        NmeaSentence? source = gga ?? rmc;
-        int first = gga is not null ? 1 : 2;
+        // GNS lays its position out exactly as GGA does - time, then latitude, hemisphere,
+        // longitude, hemisphere - so it slots in beside it rather than needing its own reader. RMC
+        // starts one field later, which is what `first` is for.
+        NmeaSentence? source = gga ?? gns ?? rmc;
+        int first = gga is not null || gns is not null ? 1 : 2;
         if (source is null)
         {
             return null;
@@ -346,7 +448,12 @@ public static class NmeaStatusParser
 
         double? latitude = Angle(source.Field(first), source.Field(first + 1), degreeDigits: 2);
         double? longitude = Angle(source.Field(first + 2), source.Field(first + 3), degreeDigits: 3);
-        double? height = gga is not null ? ParseDouble(gga.Field(8)) : null;
+
+        // ALTITUDE IS FIELD 8 OF BOTH (#429). GGA reads time, lat, N/S, lon, E/W, quality, satellites
+        // in use, HDOP, altitude; GNS reads time, lat, N/S, lon, E/W, mode, satellites in use, HDOP,
+        // altitude. Both are orthometric height in metres, so HeightDatum stays Msl either way, and
+        // a receiver sending GNS and no GGA is no longer a position with no height.
+        double? height = ParseDouble(gga?.Field(8)) ?? ParseDouble(gns?.Field(8));
 
         if (latitude is null && longitude is null)
         {
