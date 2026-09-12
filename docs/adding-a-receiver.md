@@ -148,6 +148,25 @@ Notes that do not fit in a table:
   the full cadence, while the primary window shows a single page age taken from
   the fast one, so its staleness is understated. Per-reading staleness is a
   §9.11 question and is not answered today.
+- **Set `Constellation` on a satellite only if your receiver says which, and
+  leave it `Unknown` if it does not.** A satellite number is unique only
+  *within* a constellation, so the identity the application keys on is
+  `SatelliteId` — the pair. Leave it `Unknown` and the satellite renders
+  exactly as it always has, a bare number spoken as "PRN 17", which is right
+  for any single-constellation family: a SmartClock's acquisition table and a
+  UCCM's status screen both print a number and mean GPS by it. Fill it in and
+  the tables show the RINEX designation instead — `G04`, `C04` — and the
+  spoken sentence names the constellation.
+
+  **Do not infer it from the number.** The NMEA driver reads it from the GSV
+  page's talker and answers `Unknown` for `GN`, which means "combined": a
+  receiver that numbers per constellation makes any range-based guess wrong,
+  and those are the only receivers where it matters. The one number-based rule
+  there is the standard's own reservation of 33–64 for augmentation inside the
+  GPS talker, and it earns its place by being observed — four VK-162 captures
+  in the corpus carry `$GPGSV` satellites 46 and 48, which are WAAS. If your
+  family has nothing as definite as a talker, `Unknown` is the honest answer
+  and costs nothing (#424).
 - **`InterpretSweep` returns readings *and* a verdict, and the readings come
   back even when rejected.** The poller's state-change log records what was
   seen whether or not it stores it, and a rejection carries a sentence naming
