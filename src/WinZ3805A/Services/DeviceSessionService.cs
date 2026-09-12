@@ -184,6 +184,32 @@ public sealed class DeviceSessionService : IAsyncDisposable
     public IReadOnlyList<SerialSettings> AutoDetectPlan { get; }
 
     /// <summary>
+    /// <see cref="AutoDetectPlan"/> with <paramref name="preferred"/> moved to the front (#502).
+    /// </summary>
+    /// <param name="preferred">
+    /// Settings already known to work on this port — normally the ones a previous connection stored
+    /// — or <see langword="null"/> to walk the plan as it stands.
+    /// </param>
+    /// <remarks>
+    /// <para>
+    /// <b>Moved rather than prepended</b>, so a receiver whose settings are already in the plan is
+    /// tried once and not twice. A receiver configured to something the plan does not list — which
+    /// a manual connection can reach, §7.1 permitting more combinations than any driver nominates —
+    /// genuinely adds an entry, and the walk is one probe longer for it.
+    /// </para>
+    /// <para>
+    /// Exposed for the same reason as <see cref="AutoDetectPlan"/>: the dialog's "n of m" must count
+    /// the walk that will actually run. Deriving the order here rather than in the caller is what
+    /// keeps the two from disagreeing — a count that finishes while probes are still running is
+    /// exactly the defect #287 left behind.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<SerialSettings> AutoDetectOrder(SerialSettings? preferred) =>
+        preferred is null
+            ? AutoDetectPlan
+            : [preferred, .. AutoDetectPlan.Where(candidate => candidate != preferred)];
+
+    /// <summary>
     /// The identity string the receiver answered <c>*IDN?</c> with — or, for a family overheard
     /// before it was asked (#310), the identity its driver claimed, in the same four-field shape —
     /// once connected.
@@ -351,24 +377,41 @@ public sealed class DeviceSessionService : IAsyncDisposable
     }
 
     /// <summary>
-    /// Walks <see cref="AutoDetectPlan"/> — §10.12's sequence and every other registered driver's,
-    /// in registration order — until the port answers with a plausible identity or is overheard
-    /// saying one (#310).
+    /// Walks <see cref="AutoDetectOrder"/> — <paramref name="preferred"/>, then §10.12's sequence and
+    /// every other registered driver's in registration order — until the port answers with a
+    /// plausible identity or is overheard saying one (#310).
     /// </summary>
     /// <param name="portName">The port to probe.</param>
     /// <param name="progress">Reports each combination as it is tried, for the dialog's progress line.</param>
+    /// <param name="preferred">
+    /// Settings to try before the plan — what a previous connection to this port settled on (#502).
+    /// </param>
     /// <param name="cancellationToken">Cancels the walk; §10.12 requires it to be cancellable.</param>
     /// <returns>The settings that worked, or <see langword="null"/> if none did.</returns>
     /// <remarks>
-    /// Most-likely-first, so a Z3805A answers on the first attempt and a Z3801A on the second, and
-    /// the worst case — every registered driver's settings, ten in the shipped composition — is
-    /// only reached by a receiver configured unusually or a port with nothing on it. Each probe
-    /// opens the port afresh: a wrong baud rate leaves framing errors behind, and reusing the
+    /// <para>
+    /// Most-likely-first, so a Z3805A answers on the first attempt and a Z3801A on the second. Each
+    /// probe opens the port afresh: a wrong baud rate leaves framing errors behind, and reusing the
     /// handle carries them into the next attempt.
+    /// </para>
+    /// <para>
+    /// <b>"Most likely" stopped meaning the front of the list once a second family was registered.</b>
+    /// The remark here used to say the worst case was reached only by a receiver configured unusually
+    /// or a port with nothing on it, and that was true while the SmartClock family was the only
+    /// driver. It is not: the plan is the drivers' union in registration order, so the UCCM's
+    /// 57600-8-N-1 is last of eleven, and an ordinary, correctly configured UCCM-P hit the worst case
+    /// on <i>every</i> connect — 83 seconds, measured, including on launch (#502).
+    /// </para>
+    /// <para>
+    /// <paramref name="preferred"/> is the fix, and it deliberately does not reorder the plan itself:
+    /// §10.12 fixes that order for a user who has never connected, and appending a driver must stay
+    /// unable to disturb it. What it adds is the one receiver this installation has actually seen.
+    /// </para>
     /// </remarks>
     public async Task<SerialSettings?> AutoDetectAsync(
         string portName,
         IProgress<SerialSettings>? progress = null,
+        SerialSettings? preferred = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(portName);
@@ -382,7 +425,7 @@ public sealed class DeviceSessionService : IAsyncDisposable
             PortName = portName;
             SetStatus(ConnectionStatus.Connecting, $"Detecting settings on {portName}.");
 
-            foreach (SerialSettings candidate in AutoDetectPlan)
+            foreach (SerialSettings candidate in AutoDetectOrder(preferred))
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 progress?.Report(candidate);
