@@ -42,6 +42,17 @@ public sealed class ReceiverStateStore : INotifyPropertyChanged
     /// <summary>Which receiver everything held here came from, or null before the first (#492).</summary>
     private string? _deviceKey;
 
+    /// <summary>
+    /// What the connected driver's sweep answers, as the last update said (#479).
+    /// </summary>
+    /// <remarks>
+    /// <see cref="FastFields.All"/> until a driver says otherwise, which is the SmartClock's shape
+    /// and the one every surface assumed before a split plan existed. An optimistic default is the
+    /// right one here: it reproduces the old behaviour exactly for a driver that carries everything,
+    /// so nothing moves for the family this was measured on.
+    /// </remarks>
+    private FastFields _fastTierCarries = FastFields.All;
+
     private ReceiverStatus? _status;
     private string? _syncState;
     private int? _tfom;
@@ -176,6 +187,11 @@ public sealed class ReceiverStateStore : INotifyPropertyChanged
         TrackedCount = null;
         LastFastPoll = null;
         LastFullPoll = null;
+        OnPropertyChanged(nameof(LastDisplayedPoll));
+
+        // Back to the optimistic default: the next driver's shape arrives with its first update,
+        // and until then there is nothing held to mis-age (#479, #492).
+        _fastTierCarries = FastFields.All;
 
         Array.Clear(_timeInterval);
         _timeIntervalNext = 0;
@@ -254,6 +270,48 @@ public sealed class ReceiverStateStore : INotifyPropertyChanged
     }
 
     /// <summary>
+    /// The poll a page of mixed readings should be aged against: the older of the tiers that
+    /// actually contribute to it (#479).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>It understates otherwise, which is the unsafe direction.</b> A Trimble UCCM-P sweeps
+    /// every second and prints its screen every ten, and TFOM, FFOM and the satellite count are on
+    /// the screen — so a TFOM that is nine seconds old was reported as one second old, and §9.11's
+    /// whole staleness treatment ran off the wrong number for exactly the readings it matters most
+    /// for.
+    /// </para>
+    /// <para>
+    /// <b>Slightly pessimistic for the fast readings sharing the page, and that is the choice.</b>
+    /// A one-second-old sync state shown as ten seconds old looks worse than it is; a
+    /// nine-second-old TFOM shown as one second old looks better than it is. §9.11 exists to stop a
+    /// user acting on something stale, so of the two ways to be wrong only one is safe.
+    /// </para>
+    /// <para>
+    /// A driver whose sweep carries everything is unaffected: the answer is
+    /// <see cref="LastFastPoll"/>, exactly as before. So is one whose screen has not arrived yet —
+    /// there is nothing screen-borne on the page to age.
+    /// </para>
+    /// </remarks>
+    public DateTimeOffset? LastDisplayedPoll
+    {
+        get
+        {
+            if (_fastTierCarries == FastFields.All || _lastFullPoll is null)
+            {
+                return _lastFastPoll;
+            }
+
+            if (_lastFastPoll is null)
+            {
+                return _lastFullPoll;
+            }
+
+            return _lastFullPoll < _lastFastPoll ? _lastFullPoll : _lastFastPoll;
+        }
+    }
+
+    /// <summary>
     /// The last <see cref="TimeIntervalWindow"/> time-interval samples, oldest first.
     /// </summary>
     /// <remarks>
@@ -328,6 +386,8 @@ public sealed class ReceiverStateStore : INotifyPropertyChanged
         int? trackedCount,
         FastFields carries)
     {
+        _fastTierCarries = carries;
+
         if (carries.HasFlag(FastFields.SyncState)) { SyncState = syncState; }
         if (carries.HasFlag(FastFields.Tfom)) { Tfom = tfom; }
         if (carries.HasFlag(FastFields.Ffom)) { Ffom = ffom; }
@@ -349,6 +409,7 @@ public sealed class ReceiverStateStore : INotifyPropertyChanged
         }
 
         LastFastPoll = _timeProvider.GetUtcNow();
+        OnPropertyChanged(nameof(LastDisplayedPoll));
     }
 
     /// <summary>Records one full status screen.</summary>
@@ -376,6 +437,11 @@ public sealed class ReceiverStateStore : INotifyPropertyChanged
     public void UpdateFull(ReceiverStatus status, FastFields carries)
     {
         ArgumentNullException.ThrowIfNull(status);
+
+        // Set here as well as in UpdateFast, because on a fresh connection the full screen can
+        // arrive first and LastDisplayedPoll must not judge the page by a stale shape (#479).
+        _fastTierCarries = carries;
+
         Status = status;
 
         if (!carries.HasFlag(FastFields.Tfom)) { Tfom = status.Tfom; }
@@ -389,6 +455,7 @@ public sealed class ReceiverStateStore : INotifyPropertyChanged
         if (!carries.HasFlag(FastFields.SatellitesTracked)) { TrackedCount = status.Tracked.Count; }
 
         LastFullPoll = _timeProvider.GetUtcNow();
+        OnPropertyChanged(nameof(LastDisplayedPoll));
     }
 
     private void Set<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)

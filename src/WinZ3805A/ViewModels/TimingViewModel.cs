@@ -329,7 +329,7 @@ public sealed class TimingViewModel : INotifyPropertyChanged, IDisposable
         : "Not enough samples yet.";
 
     /// <summary>How old the fast-tier readings are.</summary>
-    public TimeSpan? Age => _store.AgeOf(_store.LastFastPoll);
+    public TimeSpan? Age => _store.AgeOf(_store.LastDisplayedPoll);
 
     /// <summary>That age in words (§9.11).</summary>
     public string AgeDescription => Staleness.Describe(Age);
