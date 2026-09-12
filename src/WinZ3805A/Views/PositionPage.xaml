@@ -98,7 +98,19 @@
                                 <ColumnDefinition Width="Auto" MinWidth="120" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
+                            <!--
+                                SIX ROWS FOR SIX ROWS OF CONTENT. There were three when #435 added
+                                the last three TextBlocks, and a Grid silently puts content beyond
+                                its last definition INTO that last row rather than failing: height,
+                                geoid separation and satellites used all drew on top of each other
+                                over the Height row. Nothing caught it — no gate reads row coverage
+                                and the readouts are tested through the view model, which cannot see
+                                a layout.
+                            -->
                             <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
