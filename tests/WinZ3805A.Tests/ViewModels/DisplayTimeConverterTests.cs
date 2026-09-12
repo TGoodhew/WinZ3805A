@@ -1,4 +1,4 @@
-using WinZ3805A.Device.Models;
+﻿using WinZ3805A.Device.Models;
 using WinZ3805A.ViewModels;
 
 namespace WinZ3805A.Tests.ViewModels;
@@ -107,6 +107,58 @@ public class DisplayTimeConverterTests
 
         Assert.NotNull(shown);
         Assert.Equal("GPS", shown.Value.ZoneLabel);
+    }
+
+    /// <summary>
+    /// A GPS-scale reading says so in a zone that is not UTC, too (#476).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The defect, from the bench.</b> Against a Trimble UCCM-P — the first receiver this
+    /// application has met that reports its time on the GPS scale rather than UTC — the primary
+    /// window read:
+    /// </para>
+    /// <code>
+    /// 12:09:51 AUS Eastern Standard Time · 11 Sep 2026     (wall clock: 12:09:33)
+    /// </code>
+    /// <para>
+    /// The scale was relabelled only in a UTC-equivalent zone, so <b>for every user not sitting at
+    /// UTC it was dropped</b>, and a clock running some eighteen seconds fast read as an ordinary
+    /// local time. The conversion is unchanged and still does not apply the leap difference; this is
+    /// the relabelling that was supposed to make that honest actually happening.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void GpsTimeSaysSoInAZoneThatIsNotUtc()
+    {
+        DateTimeOffset reported = new(2026, 9, 11, 2, 9, 51, TimeSpan.Zero);
+
+        DisplayTime? shown = DisplayTimeConverter.Convert(reported, TimeScale.Gps, PlusTwo);
+
+        Assert.NotNull(shown);
+        Assert.Contains("GPS", shown.Value.ZoneLabel, StringComparison.Ordinal);
+
+        // The zone is still named: the offset shown really is that zone's, and a reader who cannot
+        // see which zone they are being shown is no better off than one who cannot see the scale.
+        Assert.NotEqual("GPS", shown.Value.ZoneLabel);
+        Assert.True(shown.Value.WasConverted);
+    }
+
+    /// <summary>A UTC-scale reading is untouched, in the same zone.</summary>
+    /// <remarks>
+    /// The control. Every SmartClock reports UTC, so this is what almost every user sees, and the
+    /// scale suffix must not appear for them — "(GPS)" beside a UTC reading would be a worse error
+    /// than the one being fixed.
+    /// </remarks>
+    [Fact]
+    public void AUtcReadingGainsNoScaleSuffix()
+    {
+        DateTimeOffset reported = new(2026, 9, 11, 2, 9, 51, TimeSpan.Zero);
+
+        DisplayTime? shown = DisplayTimeConverter.Convert(reported, TimeScale.Utc, PlusTwo);
+
+        Assert.NotNull(shown);
+        Assert.DoesNotContain("GPS", shown.Value.ZoneLabel, StringComparison.Ordinal);
     }
 
     [Fact]
