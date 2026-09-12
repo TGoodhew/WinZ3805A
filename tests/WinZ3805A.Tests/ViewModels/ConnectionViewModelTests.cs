@@ -184,51 +184,67 @@ public sealed class ConnectionViewModelTests
         Assert.Equal(StopBits.Two, used.StopBits);
     }
 
-    /// <remarks>
+    /// <summary>
     /// §10.12 requires progress for the eight-combination walk, and the count is the part that makes
     /// it progress rather than decoration — "trying 9600-8-N-1" alone never says how much is left.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Delivery is forced rather than waited for (#510).</b> This used to poll until eight lines
+    /// had arrived, inside a timeout, and that is a race wearing a disguise: it failed about once in
+    /// fifty full-suite runs, when contention made the budget expire before the last callback landed.
+    /// A wait makes a race rarer without making it certain, and the failure then blames a timeout
+    /// rather than the thing that was actually late.
+    /// </para>
+    /// <para>
+    /// <see cref="HoldingContext"/> is the tool the test below already used for the same problem:
+    /// hold every post, run the walk to completion, then release and count. No budget, no polling,
+    /// and the assertion is exact. The two tests stay separate because they pin different things —
+    /// that one is about a late line still being <i>its own attempt</i>, this one about the walk's
+    /// order and wording.
+    /// </para>
     /// </remarks>
     [Fact]
     public async Task AutoDetectReportsEachCombinationAsItIsTried()
     {
-        using Fixture fixture = new(ports: [Port("COM3")]);
-        for (int probe = 0; probe < SerialSettings.AutoDetectSequence.Count; probe++)
-        {
-            fixture.Transports.Enqueue(WrongSettings());
-        }
+        SynchronizationContext? original = SynchronizationContext.Current;
+        HoldingContext held = new();
+        SynchronizationContext.SetSynchronizationContext(held);
 
-        List<string> progress = [];
-        fixture.Model.PropertyChanged += (_, e) =>
+        try
         {
-            if (e.PropertyName == nameof(ConnectionViewModel.ProgressText)
-                && fixture.Model.ProgressText is string line)
+            using Fixture fixture = new(ports: [Port("COM3")]);
+            for (int probe = 0; probe < SerialSettings.AutoDetectSequence.Count; probe++)
             {
-                progress.Add(line);
+                fixture.Transports.Enqueue(WrongSettings());
             }
-        };
 
-        await fixture.Model.RefreshPortsAsync();
-        Assert.False(await fixture.Model.ConnectAsync().WaitAsync(TestTimeout));
-
-        // Waited for, not assumed (#213). Progress<T> posts its callbacks and does not order them
-        // against the task ConnectAsync awaits, so the last candidate's line routinely arrives just
-        // after the walk finishes. Reading the list the instant the walk returns is asking whether
-        // the eighth line happened to have been delivered *yet* — which it had, about 24 times in
-        // 25. This waits for the mechanism instead of racing it, and still asserts all eight.
-        using (CancellationTokenSource settle = new(TestTimeout))
-        {
-            while (progress.Count < 8 && !settle.IsCancellationRequested)
+            List<string> progress = [];
+            fixture.Model.PropertyChanged += (_, e) =>
             {
-                await Task.Delay(5, CancellationToken.None);
-            }
-        }
+                if (e.PropertyName == nameof(ConnectionViewModel.ProgressText)
+                    && fixture.Model.ProgressText is string line)
+                {
+                    progress.Add(line);
+                }
+            };
 
-        // Second is the Z3801A's DOCUMENTED factory default, odd parity - it was even here, and
-        // eighth, until 28 Aug 2026. Reading the guide moved it (#64).
-        Assert.Equal(8, progress.Count);
-        Assert.Equal("Trying 9600-8-N-1 — 1 of 8", progress[0]);
-        Assert.Equal("Trying 19200-7-O-1 — 2 of 8", progress[1]);
-        Assert.Equal("Trying 9600-7-O-1 — 8 of 8", progress[7]);
+            await fixture.Model.RefreshPortsAsync();
+            Assert.False(await fixture.Model.ConnectAsync().WaitAsync(TestTimeout));
+
+            held.Release();
+
+            // Second is the Z3801A's DOCUMENTED factory default, odd parity - it was even here, and
+            // eighth, until 28 Aug 2026. Reading the guide moved it (#64).
+            Assert.Equal(8, progress.Count);
+            Assert.Equal("Trying 9600-8-N-1 — 1 of 8", progress[0]);
+            Assert.Equal("Trying 19200-7-O-1 — 2 of 8", progress[1]);
+            Assert.Equal("Trying 9600-7-O-1 — 8 of 8", progress[7]);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(original);
+        }
     }
 
     /// <summary>

@@ -154,10 +154,38 @@ public sealed class NmeaSessionTests
 
         public bool Talking { get; set; } = true;
 
+        /// <summary>
+        /// How many simulated seconds a wait is given. <b>Ticks, not wall time (#510).</b>
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// <b>Both loops below used to give up on a real-time budget, and that is what made
+        /// <c>ThePollerReadsTheTalkerThroughTheListener</c> fail about once in fifty full-suite
+        /// runs.</b> The thing being waited for advances on the <i>fake</i> clock — one simulated
+        /// second per tick — while the budget ran on the real one. Each tick costs at least two
+        /// 5 ms delays, and xUnit runs collections in parallel, so under contention those delays
+        /// stretch and fewer simulated seconds fit into the same fifteen. The test then failed for
+        /// having been slow rather than for being wrong, and it took 15.75 s to say so.
+        /// </para>
+        /// <para>
+        /// Counting ticks removes the machine from the question entirely: the same number of
+        /// simulated seconds elapses on a loaded runner as on an idle one. The bound is still a
+        /// bound — a condition that never holds still fails rather than spinning — which is the
+        /// distinction #445 turned on.
+        /// </para>
+        /// <para>
+        /// <b>This is not the guard against a hung tick, and must not be mistaken for one.</b> An
+        /// emit that never drains blocks inside <see cref="TickAsync"/> and is never re-checked by
+        /// any loop; that case is bounded on the await itself, where it has to be. Five minutes of
+        /// simulated time is far more than any test here needs, so reaching this budget means the
+        /// condition is wrong rather than slow.
+        /// </para>
+        /// </remarks>
+        private const int TickBudget = 300;
+
         public async Task<T> RunAsync<T>(Task<T> pending)
         {
-            using CancellationTokenSource giveUp = new(TestTimeout);
-            while (!pending.IsCompleted && !giveUp.IsCancellationRequested)
+            for (int tick = 0; tick < TickBudget && !pending.IsCompleted; tick++)
             {
                 await TickAsync();
             }
@@ -167,13 +195,14 @@ public sealed class NmeaSessionTests
 
         public async Task UntilAsync(Func<bool> condition)
         {
-            using CancellationTokenSource giveUp = new(TestTimeout);
-            while (!condition() && !giveUp.IsCancellationRequested)
+            for (int tick = 0; tick < TickBudget && !condition(); tick++)
             {
                 await TickAsync();
             }
 
-            Assert.True(condition(), $"The condition never held; the session is {Session.Status}.");
+            Assert.True(
+                condition(),
+                $"The condition never held in {TickBudget} simulated seconds; the session is {Session.Status}.");
         }
 
         /// <summary>
@@ -189,11 +218,16 @@ public sealed class NmeaSessionTests
         /// </para>
         /// <para>
         /// <b>The loops above cannot save it.</b> <see cref="UntilAsync"/> and
-        /// <see cref="RunAsync"/> both carry a <see cref="TestTimeout"/> budget, but they check it
-        /// between ticks; a tick that never returns is never re-checked. So the bound has to be on
-        /// the await, not on the loop around it. Without it the test does not fail — the host dies
-        /// five minutes later with nothing marked failed, which is #445 in a second place and #381
-        /// in a third.
+        /// <see cref="RunAsync"/> both carry a budget, but they check it between ticks; a tick that
+        /// never returns is never re-checked. So the bound has to be on the await, not on the loop
+        /// around it. Without it the test does not fail — the host dies five minutes later with
+        /// nothing marked failed, which is #445 in a second place and #381 in a third.
+        /// </para>
+        /// <para>
+        /// <b>It is also why those loops count ticks rather than seconds (#510).</b> This budget is
+        /// real time because a hung emit is a real-time event; theirs is simulated time because what
+        /// they wait for advances on the fake clock. Giving both the same kind of budget is what
+        /// made one of them fail for being slow.
         /// </para>
         /// </remarks>
         private async Task TickAsync()
