@@ -54,7 +54,12 @@ public static class DeviceRegistration
                 transportFactory,
                 time,
                 loggers?.CreateLogger<DeviceSessionService>(),
-                drivers.Count > 0 ? drivers : null);
+                drivers.Count > 0 ? drivers : null,
+
+                // The transport's own category, so the wire can be turned up without turning up
+                // everything else (#524). Its per-transaction pair is Trace, so this costs nothing
+                // at the default level and is there when someone needs it.
+                loggers?.CreateLogger<LineProtocol>());
 
             ReceiverStateStore store = new(time);
 
