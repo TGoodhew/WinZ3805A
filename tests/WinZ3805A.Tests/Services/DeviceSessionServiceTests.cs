@@ -45,6 +45,33 @@ public class DeviceSessionServiceTests
     private static ControllableTransport WrongSettings() => new(_ => "ÿþ garbage");
 
     /// <summary>
+    /// Records progress reports <b>synchronously</b>, so a test can count them the instant the walk
+    /// returns.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b><see cref="Progress{T}"/> cannot be counted that way, and using it here was a flake.</b> It
+    /// captures the creating thread's <see cref="SynchronizationContext"/> and <i>posts</i> each
+    /// callback; with no context — which is what xUnit gives — that means the thread pool. So the
+    /// last report routinely lands just after <c>AutoDetectAsync</c>'s task completes, and asserting
+    /// on the count is asking whether it happened to have been delivered yet. It almost always had:
+    /// the tests this replaced passed in isolation and failed once under the full suite, which is
+    /// the worst way for this to show up.
+    /// </para>
+    /// <para>
+    /// <see cref="IProgress{T}"/> makes no threading promise — the posting is <c>Progress&lt;T&gt;</c>'s
+    /// behaviour, not the interface's — so reporting inline is legitimate and makes the count exact
+    /// rather than probable. The walk is single-threaded and the read happens after an await, so no
+    /// locking is needed. <b>Waiting for the expected count would also have worked and is worse</b>:
+    /// it turns a race into a timeout, which is the same family of flake wearing a disguise.
+    /// </para>
+    /// </remarks>
+    private sealed class SynchronousProgress(Action<SerialSettings> report) : IProgress<SerialSettings>
+    {
+        public void Report(SerialSettings value) => report(value);
+    }
+
+    /// <summary>
     /// Runs a task that is waiting on a <c>LineProtocol</c> timeout, winding the pinned clock
     /// forward until it completes.
     /// </summary>
@@ -173,7 +200,7 @@ public class DeviceSessionServiceTests
         await using DeviceSessionService session = new((_, _) => WrongSettings(), new FakeTimeProvider());
 
         SerialSettings? found = await session
-            .AutoDetectAsync("COM3", new Progress<SerialSettings>(reported.Add))
+            .AutoDetectAsync("COM3", new SynchronousProgress(reported.Add))
             .WaitAsync(TestTimeout);
 
         Assert.Null(found);
@@ -226,7 +253,7 @@ public class DeviceSessionServiceTests
         await using DeviceSessionService session = new((_, _) => WrongSettings(), new FakeTimeProvider());
 
         SerialSettings? found = await session
-            .AutoDetectAsync("COM3", new Progress<SerialSettings>(reported.Add), remembered)
+            .AutoDetectAsync("COM3", new SynchronousProgress(reported.Add), remembered)
             .WaitAsync(TestTimeout);
 
         Assert.Null(found);
@@ -249,7 +276,7 @@ public class DeviceSessionServiceTests
         Assert.DoesNotContain(remembered, SerialSettings.AutoDetectSequence);
 
         await session
-            .AutoDetectAsync("COM3", new Progress<SerialSettings>(reported.Add), remembered)
+            .AutoDetectAsync("COM3", new SynchronousProgress(reported.Add), remembered)
             .WaitAsync(TestTimeout);
 
         Assert.Equal(SerialSettings.AutoDetectSequence.Count + 1, reported.Count);
@@ -279,7 +306,7 @@ public class DeviceSessionServiceTests
         await using DeviceSessionService session = new((_, _) => WrongSettings(), new FakeTimeProvider());
 
         await session
-            .AutoDetectAsync("COM3", new Progress<SerialSettings>(reported.Add), unlisted)
+            .AutoDetectAsync("COM3", new SynchronousProgress(reported.Add), unlisted)
             .WaitAsync(TestTimeout);
 
         Assert.Equal(session.AutoDetectOrder(unlisted).Count, reported.Count);
