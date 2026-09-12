@@ -497,6 +497,35 @@
                                        VerticalAlignment="Center"
                                        Style="{ThemeResource WzBodyTextStyle}"
                                        Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                       Text="Enabled lamp" />
+                            <ToggleSwitch x:Name="EnabledLampSwitch"
+                                          Grid.Column="1"
+                                          MinHeight="32"
+                                          MinWidth="32"
+                                          OnContent="On"
+                                          OffContent="Off"
+                                          AutomationProperties.Name="Enabled lamp"
+                                          ToolTipService.ToolTip="Turns the receiver's front-panel Enabled lamp on or off. Takes about a second to answer."
+                                          Toggled="OnEnabledLampToggled" />
+                        </Grid>
+
+                        <TextBlock x:Name="EnabledLampCaption"
+                                   Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextTertiaryBrush}"
+                                   TextWrapping="Wrap"
+                                   HorizontalAlignment="Left"
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}" />
+
+                        <Grid ColumnSpacing="{ThemeResource WzSpaceMd}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" MinWidth="140" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Grid.Column="0"
+                                       VerticalAlignment="Center"
+                                       Style="{ThemeResource WzBodyTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}"
                                        Text="Active lamp" />
                             <ToggleSwitch x:Name="ActiveLampSwitch"
                                           Grid.Column="1"
@@ -505,7 +534,7 @@
                                           OnContent="On"
                                           OffContent="Off"
                                           AutomationProperties.Name="Active lamp"
-                                          ToolTipService.ToolTip="Turns the receiver's front-panel Active lamp on or off. Takes about a second to answer."
+                                          ToolTipService.ToolTip="Turns the receiver's front-panel Active lamp on or off, taking it over from the lock state. Takes about a second to answer."
                                           Toggled="OnActiveLampToggled" />
                         </Grid>
 

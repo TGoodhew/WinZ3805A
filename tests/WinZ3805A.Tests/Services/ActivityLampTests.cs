@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Time.Testing;
+﻿using Microsoft.Extensions.Time.Testing;
 
 using WinZ3805A.Device.Commands;
 using WinZ3805A.Device.Transport;
@@ -38,12 +38,12 @@ public sealed class ActivityLampTests
                 return Identity;
             }
 
-            if (command.StartsWith(":LED:ACT?", StringComparison.OrdinalIgnoreCase))
+            if (command.StartsWith(":LED:ENAB?", StringComparison.OrdinalIgnoreCase))
             {
                 return State ? "+1" : "+0";
             }
 
-            if (command.StartsWith(":LED:ACT", StringComparison.OrdinalIgnoreCase))
+            if (command.StartsWith(":LED:ENAB", StringComparison.OrdinalIgnoreCase))
             {
                 State = command.Contains("ON", StringComparison.OrdinalIgnoreCase);
                 return string.Empty;
@@ -145,7 +145,7 @@ public sealed class ActivityLampTests
         receiver.Sent.Clear();
         await lamp.RestoreAsync();
 
-        Assert.DoesNotContain(receiver.Sent, c => c.StartsWith(":LED:ACT ", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(receiver.Sent, c => c.StartsWith(":LED:ENAB ", StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
@@ -182,7 +182,7 @@ public sealed class ActivityLampTests
         DeviceSessionService session = new(
             (_, _) => new ControllableTransport(c =>
                 c.StartsWith("*IDN", StringComparison.OrdinalIgnoreCase) ? Identity
-                : c.StartsWith(":LED:ACT?", StringComparison.OrdinalIgnoreCase) ? reply
+                : c.StartsWith(":LED:ENAB?", StringComparison.OrdinalIgnoreCase) ? reply
                 : string.Empty) { Banner = Identity },
             new FakeTimeProvider(Whenever));
         await using DeviceSessionService _ = session;
@@ -199,7 +199,7 @@ public sealed class ActivityLampTests
         DeviceSessionService session = new(
             (_, _) => new ControllableTransport(c =>
                 c.StartsWith("*IDN", StringComparison.OrdinalIgnoreCase) ? Identity
-                : c.StartsWith(":LED:ACT?", StringComparison.OrdinalIgnoreCase) ? "nonsense"
+                : c.StartsWith(":LED:ENAB?", StringComparison.OrdinalIgnoreCase) ? "nonsense"
                 : string.Empty) { Banner = Identity },
             new FakeTimeProvider(Whenever));
         await using DeviceSessionService _ = session;
@@ -219,8 +219,8 @@ public sealed class ActivityLampTests
     [Fact]
     public void TheLampCommandsAreTierSAndUnconfirmed()
     {
-        ScpiCommand? write = CommandCatalog.Find(":LED:ACTive");
-        ScpiCommand? read = CommandCatalog.Find(":LED:ACT?");
+        ScpiCommand? write = CommandCatalog.Find(":LED:ENABled");
+        ScpiCommand? read = CommandCatalog.Find(":LED:ENAB?");
 
         Assert.NotNull(write);
         Assert.NotNull(read);

@@ -199,13 +199,26 @@ public static class CommandCatalog
             Query(":LED:GPSL?", "GPS lock lamp", "Reads the state of the GPS lock indicator.", ResponseFormat.Keyword),
             Query(":LED:HOLD?", "Holdover lamp", "Reads the state of the holdover indicator.", ResponseFormat.Keyword),
             Query(":LED:ACT?", "Active lamp", "Reads the state of the front-panel Active indicator.", ResponseFormat.Keyword),
+            Query(":LED:ENAB?", "Enabled lamp", "Reads the state of the front-panel Enabled indicator.", ResponseFormat.Keyword),
 
-            // The one lamp that is under software control, and the third Safe non-query in the
-            // catalog (#440). It is documented — z3801.pdf Table 4-2, "Sets or queries Active LED" —
-            // so §8.4's permanent block on undocumented set forms does not reach it, and it is Safe
-            // because a front-panel indicator changes no receiver behaviour: no timing, no
-            // discipline, nothing that survives as a setting anyone else depends on.
+            // THE PANEL HAS SIX INDICATORS AND EXACTLY TWO OF THEM BELONG TO THE HOST SOFTWARE.
+            // z3801.pdf, Front Panel at a Glance, item 2: "User-definable indicators labeled Enabled
+            // and Active. These can be turned on through the RS-422 port." Table 4-2 gives
+            // :LED:ENABled the same wording it gives :LED:ACTive. The other four are the receiver's
+            // own - Power is hardwired, and Alarm, GPS Lock and Holdover are query-only.
+            //
+            // This comment used to say "the one lamp that is under software control", which was
+            // wrong and was corrected in the specification by #463 after the second lamp was driven
+            // on the bench. Both are documented, so §8.4's permanent block on undocumented set forms
+            // does not reach either, and both are Safe because a front-panel indicator changes no
+            // receiver behaviour: no timing, no discipline, nothing that survives as a setting
+            // anyone else depends on.
+            //
+            // What each one MEANS is #462: Enabled says the application holds this link, Active
+            // follows the receiver's lock state.
             Setting(":LED:ACTive", "Set active lamp", "Turns the front-panel Active indicator on or off.",
+                new ParameterSpec("State", ParameterKind.Keyword, Choices: ["ON", "OFF"])),
+            Setting(":LED:ENABled", "Set enabled lamp", "Turns the front-panel Enabled indicator on or off.",
                 new ParameterSpec("State", ParameterKind.Keyword, Choices: ["ON", "OFF"])),
 
             // ---- Diagnostics -----------------------------------------------------------------

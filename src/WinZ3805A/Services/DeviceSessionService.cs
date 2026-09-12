@@ -1,4 +1,4 @@
-using System.Threading.Channels;
+﻿using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using WinZ3805A.Device.Commands;
@@ -1021,7 +1021,12 @@ public sealed class DeviceSessionService : IAsyncDisposable
     public bool FlashLampPerCommand { get; set; }
 
     /// <summary>The lamp setter driven around each command, when asked (#462).</summary>
-    private const string LampWrite = ":LED:ACTive";
+    /// <remarks>
+    /// Enabled, not Active, since #462: the per-command flash is the application saying it is
+    /// talking, and that belongs on the application's lamp. Active now follows the receiver's lock
+    /// state, and flashing it would make one indicator say two things at once.
+    /// </remarks>
+    private const string LampWrite = ":LED:ENABled";
 
     /// <summary>Prefix of the lamp subsystem, whose own commands are never flashed around.</summary>
     private const string LampNode = ":LED:";

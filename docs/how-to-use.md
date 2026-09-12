@@ -430,12 +430,14 @@ changes**. This page is for finding out why a summary bit is set; most people ne
   different.
 - **Lifetime** — **power-on hours**, how long the receiver has run in total. An oven-controlled
   oscillator ages with running time, so this is the figure behind the drift the Timing page reports.
-- **Front panel** — a switch for the **Active lamp**, one of the two front-panel indicators the
-  receiver puts under software control (the other is *Enabled*). Use it to identify which unit in a
-  rack you are connected to, or to put the lamp back if the application was closed while it was lit.
-  It takes about a second to answer: the receiver looks at this lamp once a second and no faster, so
-  the switch waits for the receiver rather than the other way round. Nothing else on the receiver
-  changes.
+- **Front panel** — a switch for each of the receiver's two software-controlled indicators, the
+  **Enabled lamp** and the **Active lamp**. They mean different things: *Enabled* is the
+  application's — lit while it holds this link, so you can see which unit in a rack it is talking to
+  — and *Active* is the receiver's, following its **lock state**. Setting Active here takes it over,
+  and it stops following until you reconnect. Use either to put a lamp back if the application was
+  closed while it was lit. Each takes about a second to answer: the receiver looks at a lamp once a
+  second and no faster, so the switch waits for the receiver rather than the other way round.
+  Nothing else on the receiver changes.
 - **GPS receiver** — what the GPS receiver *inside* the instrument calls itself. A Z3805A is a
   disciplining chassis built around a separate GPS module with its own firmware, so the revision
   here and the one in the window footer are two different things and need not agree. The bench
@@ -451,7 +453,7 @@ changes**. This page is for finding out why a summary bit is set; most people ne
 
 #### Settings
 
-![The top of the Settings page: an Advanced section with the Advanced Console, Undocumented read-only queries and Front-panel Active lamp switches, each with a paragraph explaining it, and an Appearance section with the Windows accent colour switch](images/how-to-use/page-settings.png)
+![The top of the Settings page: an Advanced section with the Advanced Console, Undocumented read-only queries and Front-panel lamps switches, each with a paragraph explaining it, and an Appearance section with the Windows accent colour switch](images/how-to-use/page-settings.png)
 
 Every setting has its explanation next to it on the page; this is the short version.
 
@@ -459,7 +461,7 @@ Every setting has its explanation next to it on the page; this is the short vers
 |---|---|---|
 | ![Advanced Console switch, Shown](images/how-to-use/settings-consoleswitch.png) **Advanced Console** | The console page is not shown. | Adds the **Advanced Console** page below Settings — see below. It changes what is *reachable*, never what is *permitted*. |
 | ![Undocumented read-only queries switch, Hidden](images/how-to-use/settings-experimentalswitch.png) **Undocumented read-only queries** | The Diagnostics page shows no undocumented queries. | The six read-only queries appear on the Diagnostics page. Nothing can be typed, and no setting can be changed through them. |
-| ![Front-panel Active lamp switch, Left alone](images/how-to-use/settings-activitylampswitch.png) **Front-panel Active lamp** | The receiver's Active lamp is left alone. | The Active lamp is lit while the application is connected, so you can see which unit in a rack it is talking to without looking at a screen. The lamp is read first and put back exactly as it was found when you disconnect. This is the only setting that makes the application change anything on the receiver by itself, and it changes no timing. If the application closes unexpectedly the lamp is left on — the Diagnostics page can set it back. |
+| ![Front-panel lamps switch, Left alone](images/how-to-use/settings-activitylampswitch.png) **Front-panel lamps** | Both lamps are left alone. | The receiver's two user-definable lamps are used. **Enabled** is the application's: lit while you are connected — so you can see which unit in a rack it is talking to without looking at a screen — and flashing around every command. **Active** is the receiver's: lit while it is locked to GPS, written only when that changes. Both are read first and put back exactly as they were found when you disconnect. This is the only setting that makes the application change anything on the receiver by itself, and it changes no timing. The flashing is slow — the receiver looks at a lamp once a second, so each command carries about two seconds of lamp and readings arrive far less often while it is on; following the lock state costs nothing like that, being one write per change. If the application closes unexpectedly a lamp is left as it was — the Diagnostics page can set either back. |
 | ![Use the Windows accent colour switch, This app's own](images/how-to-use/settings-systemaccentswitch.png) **Use the Windows accent colour** | Selected items, buttons and links use the application's own teal. | They follow the accent you chose in Windows. The colours that mean caution and critical never change, so if your Windows accent is close to one of them you will be told. |
 | ![Tell me when the receiver loses GPS lock switch, On](images/how-to-use/settings-locknotificationsswitch.png) **Tell me when the receiver loses GPS lock** | No notifications. | A Windows notification when the receiver stops disciplining to GPS, and another when it starts again. A loss has to last a minute before it is reported, so a brief drop-out is never mentioned. |
 | ![Keep running when I close the window switch, On](images/how-to-use/settings-keeprunningswitch.png) **Keep running when I close the window** | Closing the window exits, and monitoring stops with it. | Closing the window hides it and the receiver keeps being polled — see *When the window has gone*. This is the default. |

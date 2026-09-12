@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 using WinZ3805A.Device.Commands;
@@ -7,7 +7,7 @@ using WinZ3805A.Device.Transport;
 namespace WinZ3805A.Services;
 
 /// <summary>
-/// Lights the receiver's front-panel Active lamp while the application holds the link (#440).
+/// Lights the receiver's front-panel Enabled lamp while the application holds the link (#440, #462).
 /// </summary>
 /// <remarks>
 /// <para>
@@ -28,6 +28,19 @@ namespace WinZ3805A.Services;
 /// front of a rack of four, is the question actually being asked.
 /// </para>
 /// <para>
+/// <b>It drives Enabled rather than Active since #462, and the split is the point.</b> The panel has
+/// two user-definable indicators, and giving them one meaning between them wasted the second. So
+/// <b>Enabled is the application's lamp</b> — steady while this application holds the link, and
+/// flickering per command when that is opted in (#465) — and <b>Active is the receiver's</b>,
+/// following its lock state through <see cref="LockLamp"/>. A reader in front of a rack can then
+/// tell "software is attached to this one" from "this one is locked", which one lamp cannot say.
+/// </para>
+/// <para>
+/// The per-command flash lives here rather than on Active for the same reason: the application's own
+/// activity belongs on the application's lamp. Flashing a lamp that now reports the receiver's lock
+/// state would make it say two things at once, and the louder one would win.
+/// </para>
+/// <para>
 /// <b>The receiver owns the lamp; this class borrows it.</b> The baseline is read before the lamp
 /// is lit and put back verbatim afterwards, so a user who left it on gets it back on. Nothing is
 /// cached between sessions, persisted, or carried across a reconnect — a remembered value is wrong
@@ -45,10 +58,10 @@ namespace WinZ3805A.Services;
 public sealed class ActivityLamp
 {
     /// <summary>Reads the lamp. Present on the SmartClock family and no other (#440).</summary>
-    private const string Read = ":LED:ACT?";
+    private const string Read = ":LED:ENAB?";
 
     /// <summary>Sets the lamp. Tier S: a front-panel indicator changes no receiver behaviour.</summary>
-    private const string Write = ":LED:ACTive";
+    private const string Write = ":LED:ENABled";
 
     private readonly DeviceSessionService _session;
     private readonly ILogger<ActivityLamp> _logger;

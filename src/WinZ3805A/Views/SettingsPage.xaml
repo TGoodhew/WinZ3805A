@@ -166,23 +166,23 @@
                         1 Hz tick, so flashing once a sweep would cost 194 % of the poll budget.
                     -->
                     <tk:SettingsCard Style="{ThemeResource WzSettingsCardStyle}"
-                                     Header="Front-panel Active lamp">
+                                     Header="Front-panel lamps">
                         <tk:SettingsCard.Description>
                             <StackPanel Spacing="{ThemeResource WzSpaceXxs}">
                                 <TextBlock MaxWidth="{ThemeResource WzProseMaxWidth}"
                                            HorizontalAlignment="Left"
                                            TextWrapping="Wrap"
-                                           Text="Flash the receiver's front-panel Active lamp around every command: on before it is sent, off once the reply is in. The lamp is read first and put back as it was found when you disconnect. This makes the receiver visibly show which unit is being talked to, and it is slow — the receiver looks at this lamp once a second, so each command carries about two seconds of lamp and readings arrive far less often while it is on." />
+                                           Text="Use the receiver's two user-definable front-panel lamps. &#x0a;&#x0a;Enabled is this application's: lit while you are connected, and flashing around every command — on before it is sent, off once the reply is in. Active follows the receiver: lit while it is locked to GPS, out when it is not, written only when that changes. &#x0a;&#x0a;Both lamps are read first and put back as they were found when you disconnect. The flashing is slow: the receiver looks at a lamp once a second, so each command carries about two seconds of lamp and readings arrive far less often while it is on. Following the lock state is not — it costs one write when the receiver changes state, which is rare." />
                                 <TextBlock MaxWidth="{ThemeResource WzProseMaxWidth}"
                                            HorizontalAlignment="Left"
                                            TextWrapping="Wrap"
-                                           Text="This is the only setting that makes the application change something on the receiver by itself. It changes no timing and nothing that outlives the lamp. If the application closes unexpectedly the lamp is left on; the Diagnostics page can set it back." />
+                                           Text="This is the only setting that makes the application change something on the receiver by itself. It changes no timing and nothing that outlives the lamps. If the application closes unexpectedly a lamp is left as it was; the Diagnostics page can set either one back." />
                             </StackPanel>
                         </tk:SettingsCard.Description>
                         <ToggleSwitch x:Name="ActivityLampSwitch"
-                                      OnContent="Lit"
+                                      OnContent="Used"
                                       OffContent="Left alone"
-                                      AutomationProperties.Name="Light the front-panel Active lamp while connected"
+                                      AutomationProperties.Name="Use the front-panel lamps"
                                       Toggled="OnActivityLampToggled" />
                     </tk:SettingsCard>
                 </StackPanel>

@@ -220,6 +220,7 @@
          registry and the user's profile and stays in App. -->
     <Compile Include="..\..\src\WinZ3805A\Services\DeviceContext.cs" Link="Services\DeviceContext.cs" />
     <Compile Include="..\..\src\WinZ3805A\Services\ActivityLamp.cs" Link="Services\ActivityLamp.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Services\LockLamp.cs" Link="Services\LockLamp.cs" />
     <Compile Include="..\..\src\WinZ3805A\Services\DeviceRegistration.cs" Link="Services\DeviceRegistration.cs" />
 
     <!-- §15 step 8's Details shell. The window is what talks to NavigationView; what is linked is
