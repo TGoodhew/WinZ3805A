@@ -38,15 +38,35 @@ public sealed class ReceiverReadingTests
     public void ADriverThatSaysNothingIsAssumedToReportEverything(ReceiverReading reading) =>
         Assert.True(((IReceiverDriver)new SilentDriver()).Reports(reading));
 
-    /// <summary>The SmartClock is a disciplined oscillator and answers to all of it.</summary>
+    /// <summary>The SmartClock answers to everything its status screen carries.</summary>
     /// <remarks>
-    /// It implements none of this: the assertion is that the interface default is right for the
-    /// family the application was written for, which is what makes the default safe to have.
+    /// <para>
+    /// <b>This used to say "every reading", and the enum outgrew it (#435).</b> The claim was that
+    /// the interface default is right for the family the application was written for, and it was —
+    /// while every member of <see cref="ReceiverReading"/> was a SmartClock concept. The three
+    /// fix-quality readings added since are not: they are what a GNSS receiver computes per fix and
+    /// broadcasts over NMEA, and the captured status screens carry no dilution figure and no geoid
+    /// separation anywhere.
+    /// </para>
+    /// <para>
+    /// So the narrower claim is the true one, and it is still worth pinning: everything the screen
+    /// prints is reported, and the exclusions are exactly three. A driver that began declining a
+    /// fourth would fail here, which is the direction the interface warns about.
+    /// </para>
     /// </remarks>
     [Theory]
     [MemberData(nameof(EveryReading))]
-    public void TheSmartClockReportsEveryReading(ReceiverReading reading) =>
-        Assert.True(((IReceiverDriver)new SmartClockDriver(new FakeTimeProvider(Whenever))).Reports(reading));
+    public void TheSmartClockReportsEveryReadingItsStatusScreenCarries(ReceiverReading reading)
+    {
+        bool onTheScreen = reading is not (
+            ReceiverReading.DilutionOfPrecision or
+            ReceiverReading.GeoidSeparation or
+            ReceiverReading.SatellitesUsed);
+
+        Assert.Equal(
+            onTheScreen,
+            ((IReceiverDriver)new SmartClockDriver(new FakeTimeProvider(Whenever))).Reports(reading));
+    }
 
     /// <summary>
     /// Every disciplined-oscillator reading is refused by a talker, because a talker has no

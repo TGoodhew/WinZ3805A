@@ -45,6 +45,37 @@ public sealed class SmartClockDriver(TimeProvider timeProvider) : IReceiverDrive
     public IReadOnlyList<SerialSettings> AutoDetectSequence => SerialSettings.AutoDetectSequence;
 
     /// <summary>
+    /// The three fix-quality readings this family does not print (#435).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>This is the first thing this driver has ever declined, and the interface warns that a
+    /// wrong <see langword="false"/> is worse than a blank</b> — it tells a user their receiver can
+    /// never report something, which stops them looking. So each of these is read off the captured
+    /// status screens rather than assumed: the screen prints <c>Tracking:</c> and
+    /// <c>Not Tracking:</c> counts, and <c>HGT +38.00 m (MSL)</c>, and nothing anywhere resembling a
+    /// dilution figure or a geoid separation.
+    /// </para>
+    /// <para>
+    /// <c>Tracking:</c> is deliberately not read as satellites <i>used</i>. It is what the receiver
+    /// can hear; the fix keeps a subset, and a family that does not state the subset cannot report
+    /// it however the two numbers are juggled.
+    /// </para>
+    /// <para>
+    /// Everything else stays at the interface's default of <see langword="true"/>. Declining only
+    /// what has been checked is the point: silence means "not thought about", which still shows an
+    /// em dash, and that is the safe answer.
+    /// </para>
+    /// </remarks>
+    public bool Reports(ReceiverReading reading) => reading switch
+    {
+        ReceiverReading.DilutionOfPrecision => false,
+        ReceiverReading.GeoidSeparation => false,
+        ReceiverReading.SatellitesUsed => false,
+        _ => true,
+    };
+
+    /// <summary>
     /// Recognises any model whose identity this family covers.
     /// </summary>
     /// <remarks>

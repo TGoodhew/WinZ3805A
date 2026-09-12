@@ -119,4 +119,35 @@ public enum ReceiverReading
 
     /// <summary>Whether the position is surveyed, held or unknown, and any survey in progress (§10.6).</summary>
     PositionHold,
+
+    // ---- The fix-quality readings NMEA carries and a status screen does not (#435) ---------------
+
+    /// <summary>
+    /// Dilution of precision — how favourably the satellites were placed (§10.6).
+    /// </summary>
+    /// <remarks>
+    /// Geometry alone. A GNSS receiver computes it for every fix and NMEA's <c>GSA</c> broadcasts
+    /// it; a SmartClock status screen has no such field, which is a reading of the captured screens
+    /// rather than an assumption.
+    /// </remarks>
+    DilutionOfPrecision,
+
+    /// <summary>
+    /// The geoid's height above the WGS-84 ellipsoid, which makes an MSL height convertible (§10.6).
+    /// </summary>
+    /// <remarks>
+    /// A SmartClock prints <c>HGT … (MSL)</c> and stops there, so the other datum is unreachable on
+    /// that family however long you wait.
+    /// </remarks>
+    GeoidSeparation,
+
+    /// <summary>
+    /// How many satellites went into the fix, as distinct from how many are tracked (§10.6).
+    /// </summary>
+    /// <remarks>
+    /// <b>Not the count on the main window.</b> A status screen's <c>Tracking:</c> and
+    /// <c>Not Tracking:</c> are what the receiver can hear; this is what the solution kept, and only
+    /// a family that states it separately can report it.
+    /// </remarks>
+    SatellitesUsed,
 }
