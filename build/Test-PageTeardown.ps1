@@ -200,6 +200,51 @@ foreach ($file in Get-ChildItem $viewsPath -Filter '*.xaml.cs' | Sort-Object Nam
                     'anything, which is the shape of a hook somebody added and left empty (#388).')
         }
     }
+
+    # Rule 5 (#487). EVERY subscription, not merely one of them.
+    #
+    # The rule above asks whether teardown undoes SOMETHING, and a page that subscribes to two
+    # things and undoes one passes it. AdvancedConsolePage was exactly that: OnNavigatedTo took
+    # `_transcript.Changed += OnTranscriptChanged` and `device.Session.StatusChanged +=
+    # OnStatusChanged`, and Detach undid the second only - under a summary claiming it "undoes
+    # everything OnNavigatedTo subscribed to". The transcript belongs to the DeviceContext, which
+    # outlives every page, so one visit pinned that page for the life of the process.
+    #
+    # This is the third gate found asking one side of a two-sided question - #403's checked cached
+    # dispatcher handlers and not pushed automation names, #520's checked defined resource keys and
+    # not referenced ones - which is why the rule is written as a pairing rather than a presence.
+    #
+    # Matched on the EVENT and HANDLER names rather than the whole expression, because the receiver
+    # is routinely written differently on the two sides: `_transcript.Changed +=` is undone as
+    # `transcript.Changed -=` when teardown has its own local. Lambdas are out of scope here and
+    # covered by rule 2, which bans the one that matters.
+    $navigatedTo = [regex]::Match(
+        $text,
+        'protected override (?:async )?void OnNavigatedTo\([^)]*\)\s*\{(?<body>(?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*)\}')
+
+    if ($navigatedTo.Success) {
+        $teardown = TeardownRegions -Text $text
+
+        foreach ($match in [regex]::Matches(
+                $navigatedTo.Groups['body'].Value,
+                '\.(?<event>\w+)\s*\+=\s*(?<handler>\w+)\s*;')) {
+            $event = $match.Groups['event'].Value
+            $handler = $match.Groups['handler'].Value
+
+            if ($teardown -match "\.$([regex]::Escape($event))\s*-=\s*$([regex]::Escape($handler))") {
+                continue
+            }
+
+            $failures += [pscustomobject]@{
+                File = $file.Name
+                Rule = 'partial teardown'
+                Why  = ("subscribes to .$event += $handler in OnNavigatedTo and never undoes it. " +
+                        'Teardown that unsubscribes from something else still passes the rule ' +
+                        'above, which is how this survived: the page is pinned by whichever ' +
+                        'subscription was forgotten (#487).')
+            }
+        }
+    }
 }
 
 Write-Host "Checked $checked subscription site(s) across $((Get-ChildItem $viewsPath -Filter '*.xaml.cs').Count) page(s)."
