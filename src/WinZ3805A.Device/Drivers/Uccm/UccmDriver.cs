@@ -171,6 +171,22 @@ public sealed class UccmDriver(TimeProvider timeProvider) : IReceiverDriver
     /// small closed set rather than an arbitrary number.
     /// </para>
     /// <para>
+    /// <b><see cref="UccmCommands.Loop"/> is here to settle the vendor, not for its numbers (#418).</b>
+    /// Its reply <i>shape</i> is the only structural signal of who made the module — seven
+    /// positional floats from Trimble, labelled lines from Symmetricom — and the lock byte means
+    /// different things to each, so a driver that never asks it is left reading state bytes by a
+    /// hypothesis drawn from five of Heather's observations. It was absent from this plan until
+    /// 13 Sep 2026, which made every vendor-specific path in this driver unreachable in the
+    /// running application: <see cref="InterpretSweep"/> is the hook that feeds it back, and
+    /// nothing was feeding it.
+    /// </para>
+    /// <para>
+    /// It contributes no <see cref="FastFields"/>. The common currency has no slot for an
+    /// oscillator frequency offset — <see cref="FastReadings.EfcPercent"/> is the control voltage,
+    /// a different quantity — so the loop's readings settle the vendor and go no further for now.
+    /// Surfacing them is a separate change with a §9 design decision in it.
+    /// </para>
+    /// <para>
     /// <b>No refusable entry, which is a claim we cannot yet support.</b> §7.3.1's suppression
     /// exists because a query the receiver refuses in some states, re-asked every second, buries
     /// real faults in the error queue. It is entirely likely that <c>SYNC:TINT?</c> behaves that way
@@ -180,7 +196,7 @@ public sealed class UccmDriver(TimeProvider timeProvider) : IReceiverDriver
     /// </para>
     /// </remarks>
     public PollPlan Plan { get; } = new(
-        [UccmCommands.LockLed, UccmCommands.TimeInterval, UccmCommands.EfcRelative],
+        [UccmCommands.LockLed, UccmCommands.TimeInterval, UccmCommands.EfcRelative, UccmCommands.Loop],
         RefusableIndex: null,
         FullStatus: UccmCommands.Status)
     {
@@ -370,6 +386,16 @@ public sealed class UccmDriver(TimeProvider timeProvider) : IReceiverDriver
         string? led = At(answers, 0);
         string? tint = At(answers, 1);
         string? efc = At(answers, 2);
+        string? loop = At(answers, 3);
+
+        // The vendor is settled from the loop reply's shape, which is why it is in the plan at all
+        // (#418). Done before the rejection test below: an error on the discriminator throws the
+        // sweep's readings away, but anything the loop already told us about who made this module
+        // is still true and is worth keeping.
+        if (loop is not null && !UccmReply.IsError(loop, UccmCommands.Loop))
+        {
+            ReadLoop(loop);
+        }
 
         // An error where the discriminator should be is somebody else's reply or a refusal, not a
         // reading. §11.1's rule about not inventing values, applied to a whole sweep.
