@@ -138,10 +138,57 @@ public static class NmeaStatusParser
             CorrectedDateTime = time,
             Position = position,
             HeightDatum = position?.HeightMetres is null ? HeightDatum.Unknown : HeightDatum.Msl,
+            Dop = Dop(gsa),
+
+            // GGA only. GNS has no satellites-used field, and inventing one from the GSA slots would
+            // be counting a different thing — those are the satellites offered to the solution, not
+            // the ones it kept.
+            SatellitesUsed = ParseInt(gga?.Field(6)),
+            DifferentialAgeSeconds = ParseDouble(gga?.Field(12)),
+            DifferentialStationId = Text(gga?.Field(13)),
             CapturedAt = capturedAt,
             ParseWarnings = warnings,
         };
     }
+
+    /// <summary>
+    /// The three dilution figures from a <c>GSA</c> sentence, or <see langword="null"/> if none
+    /// parsed (#435).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Fields 15, 16 and 17 in the standard's one-based numbering, which is 14, 15 and 16 here — the
+    /// twelve satellite slots occupy 2 through 13 whether or not they are filled, so the offsets are
+    /// fixed and an empty slot does not shift them. A receiver that truncates the empty slots would
+    /// break this, and none of the three on the bench does; a warning is not raised for it because a
+    /// short <c>GSA</c> would fail its checksum first.
+    /// </para>
+    /// <para>
+    /// Returns <see langword="null"/> rather than an empty record when nothing parsed, so "the
+    /// receiver did not say" and "the receiver said nothing useful" do not have to be told apart
+    /// downstream.
+    /// </para>
+    /// </remarks>
+    private static DilutionOfPrecision? Dop(NmeaSentence? gsa)
+    {
+        if (gsa is null)
+        {
+            return null;
+        }
+
+        DilutionOfPrecision dop = new()
+        {
+            Position = ParseDouble(gsa.Field(14)),
+            Horizontal = ParseDouble(gsa.Field(15)),
+            Vertical = ParseDouble(gsa.Field(16)),
+        };
+
+        return dop.IsEmpty ? null : dop;
+    }
+
+    /// <summary>An NMEA field as text, with an empty field read as absent.</summary>
+    private static string? Text(string? field) =>
+        string.IsNullOrWhiteSpace(field) ? null : field.Trim();
 
     /// <summary>The words for the fix, as the GGA quality indicator and the GSA mode give them.</summary>
     /// <param name="quality">The GGA quality indicator, or its equivalent from <see cref="GnsQuality"/>.</param>
@@ -466,6 +513,11 @@ public static class NmeaStatusParser
             LatitudeDegrees = latitude,
             LongitudeDegrees = longitude,
             HeightMetres = height,
+
+            // GGA only, and field 10 rather than 8's altitude (#435). GNS lays its position out like
+            // GGA's up to the height, but the standard does not give it a separation field, so
+            // reading one from the same offset would be inventing a number from whatever follows.
+            GeoidSeparationMetres = ParseDouble(gga?.Field(10)),
         };
     }
 
