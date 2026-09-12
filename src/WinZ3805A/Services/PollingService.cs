@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -310,6 +310,10 @@ public sealed class PollingService : IAsyncDisposable
         IReceiverDriver driver = Driver;
         ForgetTheOldDriversState(driver);
 
+        // Before anything is written: if this is a different receiver, what the store holds belongs
+        // to the last one and must not be shown as this one's (#492).
+        AnnounceDeviceToStore();
+
         PollPlan plan = driver.Plan;
         if (plan.FastTier.Count == 0)
         {
@@ -457,6 +461,45 @@ public sealed class PollingService : IAsyncDisposable
     /// observed. Reference identity is the right test: the session hands out one instance per
     /// registered driver.
     /// </remarks>
+    /// <summary>
+    /// Tells the store which receiver is answering, and says so in the log if it blanked what it
+    /// held for a different one (#492).
+    /// </summary>
+    /// <remarks>
+    /// Called on every sweep rather than only on connect. It is a string comparison, and doing it
+    /// per sweep means the store recovers from a device change however the session got there —
+    /// including a reconnect that finds different hardware on the same port, which is the case the
+    /// driver re-selection comment above is also about. <see cref="ReceiverStateStore.KeyFor"/>
+    /// owns what counts as the same receiver.
+    /// </remarks>
+    private void AnnounceDeviceToStore()
+    {
+        string key = ReceiverStateStore.KeyFor(_session.PortName, _session.ParsedIdentity);
+        string? previous = _store.DeviceKey;
+
+        if (string.Equals(previous, key, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        // Both branches log, at Information, because #492 is a class of report — "the reading was
+        // wrong after I switched receivers" — that cannot be diagnosed without knowing which
+        // receiver the application thought it was talking to and when it changed its mind. One line
+        // per connection, not per sweep, so it costs nothing to leave on.
+        if (_store.BeginDevice(key))
+        {
+            _logger.LogInformation(
+                "Readings blanked: the session moved from {PreviousDevice} to {CurrentDevice}. "
+                + "Everything shown before this line belonged to the previous receiver.",
+                previous ?? "(nothing)",
+                key);
+        }
+        else
+        {
+            _logger.LogInformation("Readings now come from {CurrentDevice}.", key);
+        }
+    }
+
     private void ForgetTheOldDriversState(IReceiverDriver driver)
     {
         if (ReferenceEquals(_observedDriver, driver))
@@ -541,6 +584,7 @@ public sealed class PollingService : IAsyncDisposable
         // Read once, so the ask and the parse cannot straddle a driver swap: whatever answered the
         // plan's query is what interprets the answer.
         IReceiverDriver driver = Driver;
+        AnnounceDeviceToStore();
 
         string? screen = await AskAsync(driver, driver.Plan.FullStatus, cancellationToken).ConfigureAwait(false);
         if (screen is null)

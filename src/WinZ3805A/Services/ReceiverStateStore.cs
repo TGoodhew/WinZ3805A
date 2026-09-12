@@ -39,6 +39,9 @@ public sealed class ReceiverStateStore : INotifyPropertyChanged
     /// <summary>The ordered ring as last built, handed to every reader until the next sample (#403).</summary>
     private IReadOnlyList<double?> _recentTimeInterval = [];
 
+    /// <summary>Which receiver everything held here came from, or null before the first (#492).</summary>
+    private string? _deviceKey;
+
     private ReceiverStatus? _status;
     private string? _syncState;
     private int? _tfom;
@@ -63,6 +66,125 @@ public sealed class ReceiverStateStore : INotifyPropertyChanged
 
     /// <inheritdoc />
     public event PropertyChangedEventHandler? PropertyChanged;
+
+    /// <summary>
+    /// Which receiver the readings currently held came from, or <see langword="null"/> before any
+    /// (#492). Diagnostic — the poller sets it through <see cref="BeginDevice"/>.
+    /// </summary>
+    public string? DeviceKey => _deviceKey;
+
+    /// <summary>
+    /// The key that decides whether two connections are the same receiver (#492).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The port is in it because the identity is not enough.</b> Every NMEA talker answers to the
+    /// same <see cref="DeviceIdentity"/> — the family name, with nothing in it to tell two pucks
+    /// apart — so a key built from the identity alone calls a VK-162 and a forM8N the same receiver
+    /// and carries one's readings into the other's display. That is the reported bug, exactly.
+    /// </para>
+    /// <para>
+    /// <b>The identity is in it because the port is not enough either.</b> A different receiver on
+    /// the same port is a different receiver, and where the hardware says so — a SmartClock's serial
+    /// number — the key notices.
+    /// </para>
+    /// <para>
+    /// Two receivers of the same family swapped on one port remain indistinguishable, because
+    /// nothing on the wire distinguishes them. The readings are kept rather than guessed at.
+    /// </para>
+    /// </remarks>
+    /// <param name="portName">The port the session is on, or null before it has one.</param>
+    /// <param name="identity">What the receiver said it is, or null when it has not said.</param>
+    public static string KeyFor(string? portName, DeviceIdentity? identity)
+    {
+        string port = string.IsNullOrWhiteSpace(portName) ? "(no port)" : portName;
+        string who = identity is null
+            ? "(unidentified)"
+            : $"{identity.Manufacturer}/{identity.Model}/{identity.SerialNumber}";
+
+        return $"{port}|{who}";
+    }
+
+    /// <summary>
+    /// Says which receiver the readings that follow come from, blanking everything if it is a
+    /// different one (#492).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>§9.11's "stale data is kept, not blanked" is about one receiver going quiet</b>, and it is
+    /// right about that: an old reading with an honest timestamp beats an empty field, because the
+    /// user can see the age and judge it. It is not right about a <i>different</i> receiver. Nothing
+    /// distinguishes "this one has not answered yet" from "this number belongs to the instrument you
+    /// were looking at a minute ago", and the footer's age is the new connection's, so the borrowed
+    /// reading looks fresh.
+    /// </para>
+    /// <para>
+    /// The bug that produced this: a VK-162 on one port and a forM8N on another, switched by
+    /// disconnecting and reconnecting rather than restarting, showed the same satellite count for
+    /// both. Their true counts differed by four.
+    /// </para>
+    /// <para>
+    /// <b>The key must carry the port, not just the identity.</b> Every NMEA talker answers to the
+    /// same <c>DeviceIdentity</c> — the family name, with no serial number to tell two pucks apart —
+    /// so an identity-only key would have called those two receivers the same one and changed
+    /// nothing. It is the pair that distinguishes them.
+    /// </para>
+    /// <para>
+    /// What this deliberately does <i>not</i> catch: a different receiver of the same family
+    /// substituted on the same port. There is nothing on the wire to tell those apart, so it keeps
+    /// the readings rather than guessing, and the case is named here rather than left to be
+    /// rediscovered.
+    /// </para>
+    /// </remarks>
+    /// <param name="key">
+    /// Identifies the receiver — see <c>PollingService</c> for what it is built from. A null key
+    /// means "no receiver", and is itself a change if readings are held.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> if this was a different receiver and the readings were blanked, so
+    /// the caller can say so in the log.
+    /// </returns>
+    public bool BeginDevice(string? key)
+    {
+        if (string.Equals(_deviceKey, key, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        bool hadReadings = _lastFastPoll is not null || _lastFullPoll is not null;
+        _deviceKey = key;
+        ClearReadings();
+
+        // A first connection is not a change worth reporting: there was nothing to carry over.
+        return hadReadings;
+    }
+
+    /// <summary>Blanks every reading, as though nothing had ever been polled.</summary>
+    /// <remarks>
+    /// The timestamps go too. A reading without one cannot be aged, and §9.11's whole treatment of
+    /// staleness is built on the age — leaving <see cref="LastFastPoll"/> behind would date the new
+    /// receiver's empty display to the old one's last answer.
+    /// </remarks>
+    private void ClearReadings()
+    {
+        Status = null;
+        SyncState = null;
+        Tfom = null;
+        Ffom = null;
+        OnePpsTiNanoseconds = null;
+        OscillatorControl = null;
+        TrackedCount = null;
+        LastFastPoll = null;
+        LastFullPoll = null;
+
+        Array.Clear(_timeInterval);
+        _timeIntervalNext = 0;
+        _timeIntervalCount = 0;
+
+        // One rebuild, not sixty: the snapshot is replaced rather than mutated, for #403's reason.
+        SnapshotTimeInterval();
+        OnPropertyChanged(nameof(RecentTimeInterval));
+    }
 
     /// <summary>The most recent full status screen, or <see langword="null"/> before the first one.</summary>
     /// <remarks>
