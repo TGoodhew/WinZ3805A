@@ -33,7 +33,7 @@ the cycle parser, and the driver. Copy it to start your own.
 The guide's list, plus the standard itself. NMEA 0183 is a paid document, but the summary that
 circulates — *The NMEA 0183 Protocol*, Klaus Betke's compilation — is enough for a GNSS talker
 and is attached to #310 (a copy lives in the manual library as `NMEA0183.pdf`). Its section 3,
-*General Sentence Format*, is the codec; its GGA, GSA, GSV, RMC and ZDA entries are the parser.
+*General Sentence Format*, is the codec; its GGA, GNS, GSA, GSV, RMC and ZDA entries are the parser.
 
 The one thing to take from §7 of the specification is that it describes the SmartClock's line
 protocol and *nothing else*: §7.2's prompt, echo and connect sequence are that receiver's. A
