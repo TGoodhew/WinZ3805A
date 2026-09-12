@@ -261,6 +261,9 @@ public sealed partial class PositionPage : Page
         LatitudeText.Text = model.LatitudeText;
         LongitudeText.Text = model.LongitudeText;
         HeightText.Text = model.HeightText;
+        GeoidSeparationText.Text = model.GeoidSeparationText;
+        SatellitesUsedText.Text = model.SatellitesUsedText;
+        DilutionText.Text = model.DilutionText;
 
         CopyButton.IsEnabled = model.CopyText is not null;
 

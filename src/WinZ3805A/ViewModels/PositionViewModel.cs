@@ -111,6 +111,79 @@ public sealed class PositionViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
+    /// <summary>
+    /// The geoid's height above the WGS-84 ellipsoid, and what it makes the height convertible to
+    /// (#435).
+    /// </summary>
+    /// <remarks>
+    /// <b>The conversion is the reason to show it at all.</b> On its own the separation is a number
+    /// about the Earth rather than about this receiver; what a user wants is the other datum, so the
+    /// ellipsoidal height is given alongside whenever both halves are present. An MSL height and a
+    /// separation add — the geoid sits below the ellipsoid over most of the world, which is why the
+    /// figure is usually negative and the ellipsoidal height usually the smaller of the two.
+    /// </remarks>
+    public string GeoidSeparationText
+    {
+        get
+        {
+            if (Status?.Position?.GeoidSeparationMetres is not double separation)
+            {
+                return ReadoutFormatter.NoValue;
+            }
+
+            string value = $"{ReadoutFormatter.Format(separation, decimalPlaces: 1)}{ReadoutFormatter.HairSpace}m";
+
+            return Status.Position.HeightMetres is double metres && Status.HeightDatum is HeightDatum.Msl
+                ? $"{value} (ellipsoid {ReadoutFormatter.Format(metres + separation, decimalPlaces: 2)}{ReadoutFormatter.HairSpace}m)"
+                : value;
+        }
+    }
+
+    /// <summary>
+    /// How many satellites went into the fix — not how many are tracked (#435).
+    /// </summary>
+    /// <remarks>
+    /// The medallion counts what the receiver can hear. This counts what the solution kept, which is
+    /// routinely fewer: a satellite can be tracked and still excluded for sitting below the elevation
+    /// mask, being flagged unhealthy, or failing the fit. The smaller number is the one that
+    /// describes the fix, so the two are shown in different places rather than reconciled.
+    /// </remarks>
+    public string SatellitesUsedText => Status?.SatellitesUsed is int used
+        ? ReadoutFormatter.Format(used, decimalPlaces: 0)
+        : ReadoutFormatter.NoValue;
+
+    /// <summary>
+    /// Position, horizontal and vertical dilution of precision, in that order (#435).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Geometry alone, dimensionless, and smaller is better. It says nothing about how good the
+    /// ranging was — only how favourably the satellites were placed to combine it — so it is a
+    /// companion to the coordinates rather than an error bar on them.
+    /// </para>
+    /// <para>
+    /// All three on one line, labelled, because they are read against each other: a vertical figure
+    /// much worse than the horizontal one is the normal signature of satellites being above you and
+    /// never below, and that comparison is lost if they are split across rows.
+    /// </para>
+    /// </remarks>
+    public string DilutionText
+    {
+        get
+        {
+            if (Status?.Dop is not { } dop)
+            {
+                return ReadoutFormatter.NoValue;
+            }
+
+            string Figure(double? value) => value is double number
+                ? ReadoutFormatter.Format(number, decimalPlaces: 2)
+                : ReadoutFormatter.NoValue;
+
+            return $"P {Figure(dop.Position)}   H {Figure(dop.Horizontal)}   V {Figure(dop.Vertical)}";
+        }
+    }
+
     /// <summary>Whether there is a position to show at all.</summary>
     public bool HasPosition => Status?.Position is
         { LatitudeDegrees: not null, LongitudeDegrees: not null };
