@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Globalization;
 using System.Runtime.CompilerServices;
 using WinZ3805A.Controls;
@@ -157,6 +157,33 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
     /// <summary>The 1 PPS time interval in nanoseconds.</summary>
     public double? TimeIntervalNanoseconds => _store.OnePpsTiNanoseconds;
+
+    /// <summary>
+    /// Whether this receiver's family can ever report a 1 PPS time interval (#456).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Not "has it arrived".</b> §9.11's em dash means a reading is in flight; for an NMEA talker
+    /// there is no disciplined oscillator, so <c>1 PPS TI</c>, <c>TFOM</c> and <c>FFOM</c> are not
+    /// late — they do not exist, and the dash never fills. On a window §9.1 designs to be left on a
+    /// second monitor for weeks, a dash that will never fill is worse than an absence.
+    /// </para>
+    /// <para>
+    /// <b>Read from the driver this model already holds</b>, which the page keeps current and whose
+    /// setter raises every binding. One source of truth: relaying it through the store as well would
+    /// give the window two answers that could disagree while a connection changes.
+    /// </para>
+    /// </remarks>
+    public bool ShowsTimeInterval => _driver.Plan.Supplies.HasFlag(FastFields.TimeInterval);
+
+    /// <summary>Whether this receiver's family can ever report a time figure of merit (#456).</summary>
+    public bool ShowsTfom => _driver.Plan.Supplies.HasFlag(FastFields.Tfom);
+
+    /// <summary>Whether this receiver's family can ever report a frequency figure of merit (#456).</summary>
+    public bool ShowsFfom => _driver.Plan.Supplies.HasFlag(FastFields.Ffom);
+
+    /// <summary>Whether either figure of merit is worth a row at all (#456).</summary>
+    public bool ShowsAnyMerit => ShowsTfom || ShowsFfom;
 
     /// <summary>The medallion's sample window.</summary>
     public IReadOnlyList<double?> TimeIntervalSamples => _store.RecentTimeInterval;

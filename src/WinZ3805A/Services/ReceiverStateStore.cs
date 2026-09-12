@@ -53,6 +53,7 @@ public sealed class ReceiverStateStore : INotifyPropertyChanged
     /// </remarks>
     private FastFields _fastTierCarries = FastFields.All;
 
+
     private ReceiverStatus? _status;
     private string? _syncState;
     private int? _tfom;

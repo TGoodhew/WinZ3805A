@@ -123,6 +123,12 @@ public sealed class NmeaDriver(TimeProvider timeProvider) : IReceiverDriver
         // else the common currency names — which is #435 and #456 stated as a field rather
         // than left for the display to discover.
         FastTierCarries = FastFields.SyncState | FastFields.SatellitesTracked,
+
+        // AND IT CANNOT REPORT THE OTHERS AT ALL (#456). FastTierCarries says which tier answers a
+        // field; this says whether the receiver has the thing. For a talker they are the same two
+        // fields, which is a coincidence of this family rather than a rule - a UCCM carries TFOM on
+        // its screen and not its sweep, so its two differ.
+        Supplies = FastFields.SyncState | FastFields.SatellitesTracked,
     };
 
     /// <inheritdoc />

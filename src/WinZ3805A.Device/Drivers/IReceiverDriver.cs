@@ -68,6 +68,38 @@ public sealed record PollPlan(
     /// its behalf. Fields left out here are the full screen's to supply.
     /// </remarks>
     public required FastFields FastTierCarries { get; init; }
+
+    /// <summary>
+    /// Which of the common currency's fields this family can <b>ever</b> report, from any tier (#456).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Not the same question as <see cref="FastTierCarries"/>, and the difference is the whole
+    /// point.</b> That one says which tier answers a field; this says whether the receiver has the
+    /// thing at all. A UCCM-P reports TFOM on its screen rather than its sweep — carried, just not
+    /// there. An NMEA talker has no disciplined oscillator, so TFOM, FFOM and the 1 PPS interval are
+    /// not late, not missing and not on another tier: they do not exist.
+    /// </para>
+    /// <para>
+    /// <b>What it is for.</b> §9.11's em dash means "this has not arrived yet" — a statement about a
+    /// reading in flight. For a field the family cannot produce that is never true and never becomes
+    /// true, so the primary window showed a talker three dashes that would never fill, on a surface
+    /// §9.1 designs to be left up for weeks (#456). This is the read-side counterpart of the command
+    /// catalog: the catalog answers "what may I send", and nothing answered "what may I ever know"
+    /// (#435).
+    /// </para>
+    /// <para>
+    /// <b>Declared, never inferred from nulls.</b> Inferring would mean a temporarily silent
+    /// SmartClock losing its readouts, which is #475's lesson in a new place: a null cannot
+    /// distinguish "not answered yet" from "never will be".
+    /// </para>
+    /// <para>
+    /// Defaults to <see cref="FastFields.All"/>, so a driver that says nothing claims everything and
+    /// behaves exactly as it did before. That is the safe default here — the failure mode is a dash
+    /// that could have been hidden, not a reading that vanishes.
+    /// </para>
+    /// </remarks>
+    public FastFields Supplies { get; init; } = FastFields.All;
 }
 
 /// <summary>

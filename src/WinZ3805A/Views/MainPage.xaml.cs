@@ -541,6 +541,19 @@ public sealed partial class MainPage : Page
 
         TimeInterval.Value = _model.TimeIntervalNanoseconds;
 
+        // A READING THE FAMILY CANNOT PRODUCE IS ABSENT, NOT BLANK (#456). §9.11's em dash means
+        // "not arrived yet"; for a talker there is no disciplined oscillator, so these three never
+        // arrive and the dash never fills. §10.3's wireframe is written around this window's fixed
+        // shape, and departing from it for such a receiver is deliberate - a dash that will never
+        // fill is worse over the weeks §9.1 designs for than a shorter window.
+        //
+        // The rows are Auto-height, so a collapsed child costs no space rather than leaving a gap
+        // where the readout was.
+        TimeInterval.Visibility = _model.ShowsTimeInterval ? Visibility.Visible : Visibility.Collapsed;
+        TfomPill.Visibility = _model.ShowsTfom ? Visibility.Visible : Visibility.Collapsed;
+        FfomPill.Visibility = _model.ShowsFfom ? Visibility.Visible : Visibility.Collapsed;
+        MeritRow.Visibility = _model.ShowsAnyMerit ? Visibility.Visible : Visibility.Collapsed;
+
         RenderMerit(TfomPill, "TFOM", _model.Tfom, ref _tfomShown);
         RenderMerit(FfomPill, "FFOM", _model.Ffom, ref _ffomShown);
 
