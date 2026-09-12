@@ -1,4 +1,4 @@
-﻿using System.Buffers;
+using System.Buffers;
 using System.IO.Pipelines;
 using System.Text;
 using Microsoft.Extensions.Logging;
@@ -103,6 +103,15 @@ public sealed class LineProtocol
     private readonly ILogger _logger;
     private readonly PromptGrammar _prompt;
 
+    /// <summary>
+    /// The unsolicited binary frames this family broadcasts, lifted out before any line splitting.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="BinaryFrameGrammar.None"/> for every family that speaks only when spoken to, and
+    /// the byte path is then exactly what it was before #481.
+    /// </remarks>
+    private BinaryFrameGrammar _frames;
+
     /// <param name="transport">The open link. Not owned, and not disposed by this type.</param>
     /// <param name="timeProvider">The clock every timeout here is measured against.</param>
     /// <param name="logger">Where transaction faults are recorded.</param>
@@ -112,11 +121,17 @@ public sealed class LineProtocol
     /// meant. During auto-detect the caller passes the union of every registered driver's grammar,
     /// because the prompt has to be recognised before the answer that selects a driver can be read.
     /// </param>
+    /// <param name="frames">
+    /// Unsolicited binary frames to lift out of the stream before it is split into lines (#481).
+    /// Defaults to <see cref="BinaryFrameGrammar.None"/>, which is also what auto-detect wants —
+    /// see <see cref="UseBinaryFrames"/>, which is how a session narrows it once a driver is known.
+    /// </param>
     public LineProtocol(
         ITransport transport,
         TimeProvider timeProvider,
         ILogger<LineProtocol>? logger = null,
-        PromptGrammar? prompt = null)
+        PromptGrammar? prompt = null,
+        BinaryFrameGrammar? frames = null)
     {
         ArgumentNullException.ThrowIfNull(transport);
         ArgumentNullException.ThrowIfNull(timeProvider);
@@ -125,6 +140,33 @@ public sealed class LineProtocol
         _timeProvider = timeProvider;
         _logger = logger ?? NullLogger<LineProtocol>.Instance;
         _prompt = prompt ?? PromptGrammar.SmartClock;
+        _frames = frames ?? BinaryFrameGrammar.None;
+    }
+
+    /// <summary>
+    /// Narrows the link to one family's binary frames, once a driver has been selected (#481).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Deliberately not the union of every driver's grammar, and deliberately not set at
+    /// construction.</b> The prompt has to be the union, because the prompt is what ends the very
+    /// transaction that decides which driver to use (#470). Frames are the opposite case: nothing
+    /// during auto-detect needs to read one, and a grammar applied to a family that does not
+    /// broadcast is not free — at a wrong baud rate the stream is noise, and noise contains a
+    /// marker byte followed 43 bytes later by a terminator about once in every few hundred, which
+    /// would silently swallow 44 bytes of it.
+    /// </para>
+    /// <para>
+    /// So detection runs on the byte path exactly as it did before this existed, and the grammar
+    /// arrives with the answer. Called from the session's single consumer between transactions, the
+    /// same place and the same guarantee as every other piece of per-driver setup.
+    /// </para>
+    /// </remarks>
+    public void UseBinaryFrames(BinaryFrameGrammar frames)
+    {
+        ArgumentNullException.ThrowIfNull(frames);
+
+        _frames = frames;
     }
 
     /// <summary>Runs one transaction with the timeout class §7.2 assigns to the command.</summary>
@@ -152,6 +194,7 @@ public sealed class LineProtocol
 
         long startedAt = _timeProvider.GetTimestamp();
         List<string> lines = [];
+        List<byte[]> frames = [];
         bool echoDiscarded;
 
         // The timeout is driven by the injected TimeProvider, so a fixture test pins it instead of
@@ -167,7 +210,7 @@ public sealed class LineProtocol
             await _transport.WriteAsync(Encoding.ASCII.GetBytes($"{sent}\r\n"), linked.Token).ConfigureAwait(false);
             TransportLog.CommandSent(_logger, sent);
 
-            string? promptStatus = await ReadUntilPromptAsync(lines, linked.Token).ConfigureAwait(false);
+            string? promptStatus = await ReadUntilPromptAsync(lines, frames, linked.Token).ConfigureAwait(false);
             echoDiscarded = TryDiscardEcho(sent, lines);
 
             TimeSpan elapsed = _timeProvider.GetElapsedTime(startedAt);
@@ -181,6 +224,7 @@ public sealed class LineProtocol
             {
                 Command = sent,
                 Outcome = TransactionOutcome.Completed,
+                BinaryFrames = frames,
                 Lines = lines,
                 EchoDiscarded = echoDiscarded,
                 Elapsed = elapsed,
@@ -201,6 +245,7 @@ public sealed class LineProtocol
             {
                 Command = sent,
                 Outcome = TransactionOutcome.TimedOut,
+                BinaryFrames = frames,
                 Lines = lines,
                 EchoDiscarded = echoDiscarded,
                 Elapsed = _timeProvider.GetElapsedTime(startedAt),
@@ -228,6 +273,7 @@ public sealed class LineProtocol
             {
                 Command = sent,
                 Outcome = TransactionOutcome.Faulted,
+                BinaryFrames = frames,
                 Lines = lines,
                 EchoDiscarded = TryDiscardEcho(sent, lines),
                 Elapsed = _timeProvider.GetElapsedTime(startedAt),
@@ -275,7 +321,7 @@ public sealed class LineProtocol
 
         try
         {
-            string? promptStatus = await ReadUntilPromptAsync(lines, linked.Token).ConfigureAwait(false);
+            string? promptStatus = await ReadUntilPromptAsync(lines, [], linked.Token).ConfigureAwait(false);
             await ClearStatusAsync(cancellationToken).ConfigureAwait(false);
 
             return new Transaction
@@ -418,7 +464,7 @@ public sealed class LineProtocol
 
         try
         {
-            await ReadUntilPromptAsync(discarded, deadline.Token).ConfigureAwait(false);
+            await ReadUntilPromptAsync(discarded, [], deadline.Token).ConfigureAwait(false);
             TransportLog.Resynchronised(_logger, discarded.Count);
         }
         catch (OperationCanceledException)
@@ -481,7 +527,10 @@ public sealed class LineProtocol
     /// Reads until the prompt, appending each complete line to <paramref name="lines"/> and
     /// returning the prompt's error token, or null when the prompt was the ordinary one.
     /// </summary>
-    private async Task<string?> ReadUntilPromptAsync(List<string> lines, CancellationToken cancellationToken)
+    private async Task<string?> ReadUntilPromptAsync(
+        List<string> lines,
+        List<byte[]> frames,
+        CancellationToken cancellationToken)
     {
         PipeReader reader = _transport.Input;
 
@@ -512,7 +561,7 @@ public sealed class LineProtocol
                 if (!result.IsCanceled)
                 {
                     promptFound = TryReadTransaction(
-                        buffer, lines, ref pendingLineFeed, out consumed, out examined, out promptStatus);
+                        buffer, lines, frames, ref pendingLineFeed, out consumed, out examined, out promptStatus);
                 }
             }
             finally
@@ -558,7 +607,53 @@ public sealed class LineProtocol
     /// read waits for genuinely new bytes rather than spinning on the same partial sentinel.
     /// </param>
     /// <param name="promptStatus">The prompt's error token when it carried one, otherwise null.</param>
+    /// <param name="frames">Accumulates any unsolicited binary frames lifted out of the stream.</param>
     private bool TryReadTransaction(
+        in ReadOnlySequence<byte> buffer,
+        List<string> lines,
+        List<byte[]> frames,
+        ref bool pendingLineFeed,
+        out SequencePosition consumed,
+        out SequencePosition examined,
+        out string? promptStatus)
+    {
+        if (_frames.IsNone)
+        {
+            return TryReadLines(buffer, lines, ref pendingLineFeed, out consumed, out examined, out promptStatus);
+        }
+
+        // FRAMES COME OUT BEFORE ANY LINE SPLITTING, which is the whole point of #481. A frame has
+        // no terminator, so the line reader would glue it onto its neighbour — and a frame carrying
+        // 0x0D or 0x0A in its payload would be cut in half, unrecoverably, because CRLF collapsing
+        // discards which byte the delimiter was.
+        BinaryFrameStripper.Result stripped = BinaryFrameStripper.Strip(buffer, _frames);
+        ReadOnlySequence<byte> clean = new(stripped.Clean);
+
+        bool found = TryReadLines(
+            clean, lines, ref pendingLineFeed, out SequencePosition cleanConsumed, out _, out promptStatus);
+
+        int cleanOffset = (int)clean.GetOffset(cleanConsumed);
+
+        // Only frames the caller has actually consumed are reported. One further along stays in the
+        // buffer and will be found again on the next read; handing it over now would double-count it.
+        int reportable = BinaryFrameStripper.FramesUpTo(stripped, cleanOffset);
+        for (int frame = 0; frame < reportable; frame++)
+        {
+            frames.Add(stripped.Frames[frame]);
+            TransportLog.BinaryFrameRead(_logger, stripped.Frames[frame].Length);
+        }
+
+        int originalOffset = Math.Min(
+            BinaryFrameStripper.ToOriginalOffset(stripped, cleanOffset, _frames.Length),
+            stripped.OriginalLength);
+
+        consumed = buffer.GetPosition(originalOffset);
+        examined = found ? consumed : buffer.End;
+        return found;
+    }
+
+    /// <summary>The line-and-prompt reader, over a buffer with any binary frames already removed.</summary>
+    private bool TryReadLines(
         in ReadOnlySequence<byte> buffer,
         List<string> lines,
         ref bool pendingLineFeed,

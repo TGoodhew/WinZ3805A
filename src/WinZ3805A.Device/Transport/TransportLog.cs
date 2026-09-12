@@ -53,4 +53,12 @@ internal static partial class TransportLog
         Message = "The abandoned reply never ended within {Budget} ms; {LineCount} line(s) discarded "
             + "and the link may still be misaligned.")]
     internal static partial void ResynchroniseTimedOut(ILogger logger, double budget, int lineCount);
+
+    // Debug, not Information: a broadcasting family sends one of these every couple of seconds, so
+    // at Information it would be most of app.log. It is here at all because #481's defect was
+    // invisible for the opposite reason - nothing logged, nothing failed, and a blind text search
+    // reported "no time code", which is indistinguishable from a quiet receiver.
+    [LoggerMessage(EventId = 1017, Level = LogLevel.Debug,
+        Message = "Lifted a {ByteCount}-byte unsolicited binary frame out of the stream.")]
+    internal static partial void BinaryFrameRead(ILogger logger, int byteCount);
 }
