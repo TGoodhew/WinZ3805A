@@ -47,11 +47,27 @@ public sealed class DeviceContext : IAsyncDisposable
         PowerUp = new PowerUpGuard(timeProvider);
         _advanced = advanced;
         Lamp = new ActivityLamp(session);
+        LockLamp = new LockLamp(session, store);
 
-        // Restoring the lamp has to happen while there is still a wire (#440), and the disconnect
+        // Restoring a lamp has to happen while there is still a wire (#440), and the disconnect
         // path is the only place that knows it is about to go. A status subscriber is too late: by
         // the time Disconnected is raised the port is closed.
-        Session.BeforeTearDown = Lamp.RestoreAsync;
+        //
+        // BOTH lamps, and neither may stop the other being returned (#462): a failure putting one
+        // back is logged inside that lamp, so an exception here would be a bug rather than a refusal
+        // - but the receiver owns both, and a half-done restore is the one outcome worth guarding
+        // against by construction.
+        Session.BeforeTearDown = async token =>
+        {
+            try
+            {
+                await LockLamp.RestoreAsync(token).ConfigureAwait(false);
+            }
+            finally
+            {
+                await Lamp.RestoreAsync(token).ConfigureAwait(false);
+            }
+        };
 
         // The guard is fed here rather than by the page that reads it, because §10.8's figure is
         // accumulated over the whole session and a page that only started watching when the user
@@ -102,8 +118,11 @@ public sealed class DeviceContext : IAsyncDisposable
     /// <summary>§10.11's record of everything this device has been sent, always recording.</summary>
     public CommandTranscript Transcript { get; } = new();
 
-    /// <summary>The front-panel Active lamp, lit while this application holds the link (#440).</summary>
+    /// <summary>The front-panel Enabled lamp, lit while this application holds the link (#440, #462).</summary>
     public ActivityLamp Lamp { get; }
+
+    /// <summary>The front-panel Active lamp, following the receiver's lock state (#462).</summary>
+    public LockLamp LockLamp { get; }
 
     /// <summary>Where the opt-in switches live, or null in a test that has none.</summary>
     private readonly IAdvancedPreferenceStore? _advanced;
@@ -113,6 +132,7 @@ public sealed class DeviceContext : IAsyncDisposable
     {
         Store.PropertyChanged -= OnStoreChanged;
         Session.StatusChanged -= OnStatusChanged;
+        LockLamp.Dispose();
         Session.TransactionCompleted -= OnTransactionCompleted;
 
         await Poller.DisposeAsync().ConfigureAwait(false);
@@ -174,6 +194,13 @@ public sealed class DeviceContext : IAsyncDisposable
             try
             {
                 await Lamp.ArmAsync().ConfigureAwait(false);
+
+                // UNDER THE SAME OPT-IN, deliberately. §10.9's settings card promises that this is
+                // "the only setting that makes the application change something on the receiver by
+                // itself", and arming the second lamp unconditionally would quietly make that
+                // sentence false. It is a promise about the application's behaviour, not about one
+                // lamp, so both are driven only when a person has asked (#462).
+                await LockLamp.ArmAsync().ConfigureAwait(false);
             }
             catch (Exception exception) when (exception is not OutOfMemoryException and not StackOverflowException)
             {

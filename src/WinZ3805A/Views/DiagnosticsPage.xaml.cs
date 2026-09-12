@@ -153,44 +153,76 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
     /// this, every render that reflected the receiver's state would send the state straight back to
     /// the receiver — a write a second on a node that costs a second to answer (#440).
     /// </remarks>
-    private bool _writingLampSwitch;
+    /// <summary>True while the code is writing a switch, so its own write is not read as a click.</summary>
+    private bool _writingEnabledSwitch;
+    private bool _writingActiveSwitch;
+
+    /// <summary>Whether each switch has been caught up with the receiver this connection.</summary>
+    private bool _enabledLampSeeded;
+    private bool _activeLampSeeded;
 
     /// <summary>
-    /// Whether the switch has been seeded from the receiver for the current connection (#464).
+    /// Puts both front-panel lamps' real state on their switches, without sending anything.
     /// </summary>
     /// <remarks>
-    /// Cleared whenever the link is down, so the next connect seeds again. It is a
-    /// once-per-connection latch rather than a cached lamp state: the value on the switch is
-    /// whatever the receiver last said, and this only records that we have asked.
+    /// <b>Two lamps since #462, and they mean different things.</b> Enabled is the application's —
+    /// lit while it holds the link. Active is the receiver's — lit while it is locked to GPS. Both
+    /// are here for the same reason #440 gave: a lamp left lit by a crash needs a person to be able
+    /// to put it out, and that escape hatch has to exist for each one that can be left.
     /// </remarks>
-    private bool _lampSeeded;
-
-    /// <summary>Puts the receiver's own lamp state on the switch, without sending anything.</summary>
-    private void RenderActiveLamp()
+    private void RenderLamps()
     {
-        bool supported = _device?.Lamp.IsSupported == true;
         bool connected = _device?.Session.Status == ConnectionStatus.Connected;
 
-        ActiveLampSwitch.IsEnabled = supported && connected;
-        ActiveLampCaption.Text = supported
-            ? "One of the two front-panel indicators under software control. Use this to put the lamp back if the application was closed while it was lit. It takes about a second to answer, the receiver servicing the lamp on its own once-a-second tick."
+        RenderLamp(
+            EnabledLampSwitch,
+            EnabledLampCaption,
+            _device?.Lamp.IsSupported == true,
+            connected,
+            "The application's own front-panel lamp: lit while it holds this link. Use this to put it back if the application was closed while it was lit. It takes about a second to answer, the receiver servicing the lamp on its own once-a-second tick.",
+            ref _enabledLampSeeded,
+            SeedEnabledLampAsync);
+
+        RenderLamp(
+            ActiveLampSwitch,
+            ActiveLampCaption,
+            _device?.LockLamp.IsSupported == true,
+            connected,
+            "The receiver's front-panel lamp, followed to its lock state while the front-panel setting is on: lit when it is locked to GPS. Setting it here takes it over, and it stops following until you reconnect.",
+            ref _activeLampSeeded,
+            SeedActiveLampAsync);
+    }
+
+    /// <summary>One lamp's switch and caption, so the two cannot drift apart.</summary>
+    private void RenderLamp(
+        ToggleSwitch toggle,
+        TextBlock caption,
+        bool supported,
+        bool connected,
+        string description,
+        ref bool seeded,
+        Func<Task> seed)
+    {
+        toggle.IsEnabled = supported && connected;
+        caption.Text = supported
+            ? description
             : Capability.NotOffered(_device?.Driver, "the front-panel lamp");
 
         if (!connected || !supported)
         {
-            _lampSeeded = false;
+            seeded = false;
             return;
         }
 
-        if (!_lampSeeded)
+        if (!seeded)
         {
-            _lampSeeded = true;
-            _ = SeedActiveLampAsync();
+            seeded = true;
+            _ = seed();
         }
     }
 
     /// <summary>
-    /// Asks the receiver what the lamp is doing and puts that on the switch (#464).
+    /// Asks the receiver what a lamp is doing and puts that on its switch (#464).
     /// </summary>
     /// <remarks>
     /// <para>
@@ -203,83 +235,129 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
     /// </para>
     /// <para>
     /// <b>Once per connection, not once per render.</b> Rendering happens on every reading, and a
-    /// query on that path would put <c>:LED:ACT?</c> on the poll loop. The read itself is cheap —
-    /// ~30 ms against the ~900 ms a <c>:LED:</c> <i>write</i> costs on the receiver's 1 Hz tick —
-    /// but cheap once a second is still once a second.
+    /// query on that path would put the read on the poll loop. The read itself is cheap — ~30 ms
+    /// against the ~900 ms a <c>:LED:</c> <i>write</i> costs on the receiver's 1 Hz tick — but cheap
+    /// once a second is still once a second.
     /// </para>
     /// <para>
     /// Writing <c>IsOn</c> raises <c>Toggled</c>, which cannot be told from a click, so the write is
-    /// made under <see cref="_writingLampSwitch"/>. Without it, seeding the switch from the receiver
-    /// would send the value straight back to it.
+    /// made under a guard. Without it, seeding the switch from the receiver would send the value
+    /// straight back to it.
     /// </para>
     /// </remarks>
-    private async Task SeedActiveLampAsync()
-    {
-        if (_device is not DeviceContext device)
-        {
-            return;
-        }
+    private Task SeedEnabledLampAsync() =>
+        SeedLampAsync(
+            EnabledLampSwitch,
+            () => _device?.Lamp.ReadAsync() ?? Task.FromResult<bool?>(null),
+            v => _writingEnabledSwitch = v,
+            v => _enabledLampSeeded = v);
 
+    /// <inheritdoc cref="SeedEnabledLampAsync"/>
+    private Task SeedActiveLampAsync() =>
+        SeedLampAsync(
+            ActiveLampSwitch,
+            () => _device?.LockLamp.ReadAsync() ?? Task.FromResult<bool?>(null),
+            v => _writingActiveSwitch = v,
+            v => _activeLampSeeded = v);
+
+    private static async Task SeedLampAsync(
+        ToggleSwitch toggle,
+        Func<Task<bool?>> read,
+        Action<bool> setWriting,
+        Action<bool> setSeeded)
+    {
         try
         {
-            if (await device.Lamp.ReadAsync() is not bool lit)
+            if (await read() is not bool lit)
             {
                 // Unreadable, so the switch is left as it is rather than guessing — §11.1's rule
                 // applied to a control: never show a value we do not have.
-                _lampSeeded = false;
+                setSeeded(false);
                 return;
             }
 
-            if (ActiveLampSwitch.IsOn != lit)
+            if (toggle.IsOn != lit)
             {
-                _writingLampSwitch = true;
-                ActiveLampSwitch.IsOn = lit;
-                _writingLampSwitch = false;
+                setWriting(true);
+                toggle.IsOn = lit;
+                setWriting(false);
             }
         }
         catch (Exception exception) when (exception is not OutOfMemoryException and not StackOverflowException)
         {
             // A lamp that would not answer is not a page that failed to render.
-            _lampSeeded = false;
+            setSeeded(false);
         }
     }
 
     /// <summary>
-    /// Sets the receiver's Active lamp from the switch (#440).
+    /// Sets the receiver's Enabled lamp from the switch (#440, #462).
     /// </summary>
     /// <remarks>
-    /// No confirmation and no success bar: <c>:LED:ACTive</c> is tier S, and §9.11 gives a safe
-    /// setter no UI at all — the switch's own position is the feedback. A write that fails puts the
-    /// switch back where it was, which is the only honest thing a control over hardware can do.
+    /// No confirmation and no success bar: the write is tier S, and §9.11 gives a safe setter no UI
+    /// at all — the switch's own position is the feedback. A write that fails puts the switch back
+    /// where it was, which is the only honest thing a control over hardware can do.
     /// </remarks>
-    private async void OnActiveLampToggled(object sender, RoutedEventArgs e)
+    private async void OnEnabledLampToggled(object sender, RoutedEventArgs e)
     {
-        if (_writingLampSwitch || !_ready || _device is not DeviceContext device)
+        if (_writingEnabledSwitch || !_ready || _device is not DeviceContext device)
         {
             return;
         }
 
-        bool wanted = ActiveLampSwitch.IsOn;
-        ActiveLampSwitch.IsEnabled = false;
+        await ToggleLampAsync(
+            EnabledLampSwitch,
+            on => device.Lamp.SetManuallyAsync(on),
+            v => _writingEnabledSwitch = v);
+    }
+
+    /// <summary>
+    /// Sets the receiver's Active lamp from the switch, taking it over from the lock state (#462).
+    /// </summary>
+    /// <remarks>
+    /// Taking it over is the point rather than a side effect: once a person has set this lamp
+    /// themselves, theirs is the value, and a lock transition a minute later must not undo what they
+    /// just asked for — which would read as the control not working.
+    /// </remarks>
+    private async void OnActiveLampToggled(object sender, RoutedEventArgs e)
+    {
+        if (_writingActiveSwitch || !_ready || _device is not DeviceContext device)
+        {
+            return;
+        }
+
+        await ToggleLampAsync(
+            ActiveLampSwitch,
+            on => device.LockLamp.SetManuallyAsync(on),
+            v => _writingActiveSwitch = v);
+    }
+
+    private async Task ToggleLampAsync(
+        ToggleSwitch toggle,
+        Func<bool, Task<bool>> set,
+        Action<bool> setWriting)
+    {
+        bool wanted = toggle.IsOn;
+        toggle.IsEnabled = false;
 
         try
         {
-            if (!await device.Lamp.SetManuallyAsync(wanted))
+            if (!await set(wanted))
             {
-                _writingLampSwitch = true;
-                ActiveLampSwitch.IsOn = !wanted;
-                _writingLampSwitch = false;
+                setWriting(true);
+                toggle.IsOn = !wanted;
+                setWriting(false);
             }
         }
         catch (Exception exception) when (exception is not OutOfMemoryException and not StackOverflowException)
         {
-            _writingLampSwitch = true;
-            ActiveLampSwitch.IsOn = !wanted;
-            _writingLampSwitch = false;
+            setWriting(true);
+            toggle.IsOn = !wanted;
+            setWriting(false);
         }
         finally
         {
-            RenderActiveLamp();
+            RenderLamps();
         }
     }
 
@@ -588,7 +666,7 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
         GpsEngineEmptyText.Text = model.GpsEngineText;
         GpsEngineCaption.Text = model.GpsEngineCaption;
 
-        RenderActiveLamp();
+        RenderLamps();
 
         if (_selfTest is SelfTestViewModel selfTest)
         {
