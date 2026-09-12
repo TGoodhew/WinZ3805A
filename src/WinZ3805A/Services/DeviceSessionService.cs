@@ -1032,6 +1032,11 @@ public sealed class DeviceSessionService : IAsyncDisposable
                 _driver.Observe(transaction.BinaryFrames);
             }
 
+            // Which prompt the receiver printed (#513). A family whose prompt names its model rather
+            // than its protocol learns its variant here, on every transaction and without asking
+            // anything; every other family ignores it.
+            _driver.NotePrompt(transaction.PromptWord);
+
             pending.Completion.TrySetResult(transaction);
             Record(pending.Origin, transaction);
             await NoteOutcomeAsync(transaction).ConfigureAwait(false);

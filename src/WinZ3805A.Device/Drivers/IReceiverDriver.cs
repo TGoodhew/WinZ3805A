@@ -370,6 +370,35 @@ public interface IReceiverDriver
     DeviceIdentity? Overhear(IReadOnlyList<string> lines) => null;
 
     /// <summary>
+    /// The receiver just printed its prompt, and it was this word (#513).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For a family whose prompt names the model rather than the protocol.</b> The SmartClock
+    /// says <c>scpi</c> whatever it is, and learns nothing from this. A UCCM says <c>UCCM-P</c> or
+    /// <c>UCCM</c>, which is the difference between two variants that answer different sets of
+    /// queries — so for that family the prompt is a free measurement on every transaction, and it
+    /// arrives before any question has been asked.
+    /// </para>
+    /// <para>
+    /// <b>Worth preferring to a probe, because the probe does not work.</b> The three queries Lady
+    /// Heather describes as UCCM-P-only were put to a real UCCM-P on 12 and 13 Sep 2026 and it
+    /// answered none of them — two with <c>Undefined header</c>, the same reply a deliberately
+    /// nonsensical header gets — so a driver that identified the variant by asking would have
+    /// called that UCCM-P a plain UCCM.
+    /// </para>
+    /// <para>
+    /// <see langword="null"/> for an error prompt, where the token is in
+    /// <c>Transaction.PromptStatus</c> instead. Default is to ignore it. <b>Never throw.</b>
+    /// </para>
+    /// </remarks>
+    /// <param name="word">The grammar word the prompt matched, or <see langword="null"/>.</param>
+    void NotePrompt(string? word)
+    {
+        // Most families learn nothing from their own prompt.
+    }
+
+    /// <summary>
     /// For a <see cref="LinkStyle.Broadcast"/> family: the plan key a heard line belongs to, or
     /// <see langword="null"/> for a line that is not one of yours (#310).
     /// </summary>

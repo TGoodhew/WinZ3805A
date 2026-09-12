@@ -83,6 +83,20 @@ public sealed record Transaction
     public string? PromptStatus { get; init; }
 
     /// <summary>
+    /// Which of the grammar's words the prompt was, or <see langword="null"/> for an error prompt.
+    /// </summary>
+    /// <remarks>
+    /// <b>A receiver naming itself, which is worth more than anything it can be asked (#513).</b>
+    /// A Trimble UCCM-P prints <c>UCCM-P &gt;</c> and a plain UCCM prints <c>UCCM &gt;</c>, so the
+    /// prompt distinguishes the two variants on every single transaction, at no cost and with no
+    /// query. That matters here because the obvious alternative does not work: the three queries
+    /// Heather describes as UCCM-P-only were put to a real UCCM-P on 12 and 13 Sep 2026 and it
+    /// answered none of them — two with <c>Undefined header</c>, the same reply a deliberately
+    /// nonsensical header gets — so asking them would classify a UCCM-P as a plain UCCM.
+    /// </remarks>
+    public string? PromptWord { get; init; }
+
+    /// <summary>
     /// True when the receiver's error queue was not empty as of the end of this transaction.
     /// </summary>
     /// <remarks>

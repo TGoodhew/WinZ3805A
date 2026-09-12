@@ -69,12 +69,19 @@ namespace WinZ3805A.Device.Drivers.Uccm;
 /// tables are right about one point on the path and untested along it.
 /// </para>
 /// <para>
-/// <b>The variant is never established, and that is a gap rather than a decision.</b>
-/// <see cref="NoteVariant"/> exists and nothing calls it, so <see cref="UccmVariant"/> stays
-/// <see cref="UccmVariant.Unknown"/> for the life of a session and the three UCCM-P-only queries in
-/// <see cref="UccmCommands.UccmPOnly"/> are never asked. Holdover duration and survey progress reach
-/// the UI from the status screen instead. §418 section 7 is therefore catalogued but not
-/// implemented.
+/// <b>The variant comes from the prompt, because asking does not work (#513).</b> A UCCM-P prints
+/// <c>UCCM-P &gt;</c> and a plain UCCM prints <c>UCCM &gt;</c>, so <see cref="NotePrompt"/> settles
+/// it on every transaction without asking anything. §418 section 7 proposed probing the three
+/// queries Heather calls UCCM-P-only instead; put to a real UCCM-P on 12 and 13 Sep 2026 it answered
+/// <b>none</b> of them, two with <c>Undefined header</c> — the same reply a deliberately nonsensical
+/// header gets — so a probe would have called that module a plain UCCM.
+/// </para>
+/// <para>
+/// <b>The three UCCM-P-only queries are still never asked, and now there is a measurement saying
+/// they should not be.</b> This firmware does not have them: <see cref="UccmCommands.UccmPOnly"/>
+/// stays in the catalog because a different UCCM-P may, and because §8.1's allowlist governs what
+/// <i>may</i> be sent rather than what is. Holdover duration and survey progress reach the UI from
+/// the status screen, which is where this module actually reports them.
 /// </para>
 /// </remarks>
 /// <param name="timeProvider">
@@ -153,7 +160,14 @@ public sealed class UccmDriver(TimeProvider timeProvider) : IReceiverDriver
     /// </remarks>
     public PromptGrammar Prompt { get; } = new()
     {
-        Words = ["UCCM-P"],
+        // Both variants, because until 13 Sep 2026 only the first was here and a plain UCCM could
+        // therefore not connect at all: its prompt would not have matched, every transaction would
+        // have run to its timeout holding the answer, and auto-detect would have reported that no
+        // receiver answered - exactly the failure #470 found for the UCCM-P itself.
+        //
+        // One is a prefix of the other, so PromptGrammar matches the LONGEST word rather than the
+        // first; see its remarks. Heather has the same pair and relies on testing order instead.
+        Words = ["UCCM-P", "UCCM"],
 
         // Not observed on this module, and a grammar that accepts a prompt the receiver never sends
         // would report an error status nobody can act on. The SmartClock's E-nnn form is measured;
@@ -386,6 +400,44 @@ public sealed class UccmDriver(TimeProvider timeProvider) : IReceiverDriver
         }
 
         return reading;
+    }
+
+    /// <summary>
+    /// Settles the variant from the prompt the receiver just printed (#513).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The receiver naming itself, which beats anything it can be asked.</b> A UCCM-P prints
+    /// <c>UCCM-P &gt;</c> and a plain UCCM prints <c>UCCM &gt;</c>, on every transaction, before any
+    /// question. Heather reads the same signal, testing <c>UCCM-P</c> before <c>UCCM</c>.
+    /// </para>
+    /// <para>
+    /// <b>The obvious alternative was measured and does not work.</b> §418 section 7 proposed
+    /// settling the variant by asking the three queries Heather calls UCCM-P-only and reading
+    /// whether they were answered. Put to a real UCCM-P on 12 and 13 Sep 2026, it answered
+    /// <b>none</b> of them: <c>:GPS:POS:SURV:STAT?</c> and <c>:GPS:POS:SURV:PROG?</c> both returned
+    /// <c>Undefined header</c> — the same reply a deliberately nonsensical header gets, which is the
+    /// control that makes it conclusive — and <c>:ROSC:HOLD:DUR?</c> returned <c>Command error</c>,
+    /// a node that exists and is refused for some other reason. A probe would have called that
+    /// module a plain UCCM.
+    /// </para>
+    /// <para>
+    /// <b>Only the UCCM-P half is measured.</b> No plain UCCM has been on a bench here, so that its
+    /// prompt reads <c>UCCM</c> is Heather's claim and not ours. It is the safe direction to be
+    /// wrong in: a module whose prompt says neither leaves the variant
+    /// <see cref="UccmVariant.Unknown"/>, which is what it was before this existed.
+    /// </para>
+    /// </remarks>
+    public void NotePrompt(string? word)
+    {
+        UccmVariant variant = word switch
+        {
+            "UCCM-P" => UccmVariant.UccmP,
+            "UCCM" => UccmVariant.Uccm,
+            _ => UccmVariant.Unknown,
+        };
+
+        NoteVariant(variant);
     }
 
     /// <summary>
