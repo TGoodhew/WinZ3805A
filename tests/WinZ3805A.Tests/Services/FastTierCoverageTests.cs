@@ -139,7 +139,18 @@ public sealed class FastTierCoverageTests
         Assert.False(plan.FastTierCarries.HasFlag(FastFields.Tfom));
         Assert.False(plan.FastTierCarries.HasFlag(FastFields.Ffom));
         Assert.False(plan.FastTierCarries.HasFlag(FastFields.SatellitesTracked));
-        Assert.Equal(UccmShape, plan.FastTierCarries);
+
+        // What it DOES carry, stated rather than asserted as an exact set. This was
+        // `Assert.Equal(UccmShape, ...)` until #512, which meant that teaching the sweep to answer
+        // something new failed a test whose own name is about what it must not claim.
+        Assert.True(plan.FastTierCarries.HasFlag(FastFields.SyncState));
+        Assert.True(plan.FastTierCarries.HasFlag(FastFields.TimeInterval));
+        Assert.True(plan.FastTierCarries.HasFlag(FastFields.OscillatorControl));
+
+        // The disciplining loop's three, added by #512 and read from the same DIAG:LOOP? reply.
+        Assert.True(plan.FastTierCarries.HasFlag(FastFields.OscillatorOffset));
+        Assert.True(plan.FastTierCarries.HasFlag(FastFields.OscillatorTemperature));
+        Assert.True(plan.FastTierCarries.HasFlag(FastFields.DiscipliningState));
     }
 
     [Fact]

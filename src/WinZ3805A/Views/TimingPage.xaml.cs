@@ -286,7 +286,7 @@ public sealed partial class TimingPage : Page, ICsvExportSource
         }
         _ = ReadEfcHardwareBitsAsync();
         _invoker = new CommandInvoker(device.Session);
-        _model = new TimingViewModel(device.Store) { Connection = device.Session.Status };
+        _model = new TimingViewModel(device.Store, device.Driver) { Connection = device.Session.Status };
         _model.PropertyChanged += OnModelChanged;
         device.Session.StatusChanged += OnStatusChanged;
 
@@ -466,6 +466,16 @@ public sealed partial class TimingPage : Page, ICsvExportSource
         }
 
         CurrentDelayText.Text = model.CurrentDelayText;
+
+        // #512. Hidden outright for a family with no disciplining loop, rather than shown holding
+        // three dashes that will never fill (#456).
+        LoopPanel.Visibility = model.ReportsLoop ? Visibility.Visible : Visibility.Collapsed;
+        if (model.ReportsLoop)
+        {
+            OscillatorOffsetText.Text = model.OscillatorOffsetText;
+            OscillatorTemperatureText.Text = model.OscillatorTemperatureText;
+            DiscipliningText.Text = model.DiscipliningText;
+        }
 
         ComputedDelay.Value = model.ComputedDelayNanoseconds;
         CableSourceText.Text = model.CableSourceText;
@@ -658,7 +668,11 @@ public sealed partial class TimingPage : Page, ICsvExportSource
         // sweep, not from anything the receiver printed, so §7.4's rollover cannot reach them. The
         // diagnostic log is the opposite case: its dates are the receiver's own, and that export
         // carries both columns.
-        CsvDocument document = new("Timestamp", "TimeIntervalNs", "EfcPercent", "SyncState", "TrackedSatellites");
+        // OscillatorOffsetPpb is last so a reader that splits on a fixed column count still finds
+        // the four that were there before (#512). It is empty for every row written before the
+        // column existed, and for every family that does not report one.
+        CsvDocument document = new(
+            "Timestamp", "TimeIntervalNs", "EfcPercent", "SyncState", "TrackedSatellites", "OscillatorOffsetPpb");
 
         foreach (TrendRecord record in _exportable)
         {
@@ -667,7 +681,8 @@ public sealed partial class TimingPage : Page, ICsvExportSource
                 CsvDocument.Number(record.TimeIntervalNanoseconds, 1),
                 CsvDocument.Number(record.Efc, 2),
                 record.SyncState,
-                record.TrackedCount?.ToString(CultureInfo.InvariantCulture));
+                record.TrackedCount?.ToString(CultureInfo.InvariantCulture),
+                CsvDocument.Number(record.OscillatorOffsetPpb, 3));
         }
 
         return document;

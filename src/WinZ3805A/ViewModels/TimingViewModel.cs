@@ -1,6 +1,7 @@
 using System.ComponentModel;
 
 using WinZ3805A.Controls;
+using WinZ3805A.Device.Drivers;
 using WinZ3805A.Device.Models;
 using WinZ3805A.Services;
 
@@ -30,6 +31,16 @@ public sealed class TimingViewModel : INotifyPropertyChanged, IDisposable
 
     private readonly ReceiverStateStore _store;
 
+    /// <summary>
+    /// The driver, asked only what its family can ever report (#456, #512).
+    /// </summary>
+    /// <remarks>
+    /// Optional because the page is the only caller that has one and the readouts all work without
+    /// it. Null means "assume nothing is reportable", which hides the loop card rather than filling
+    /// it with em dashes that would never resolve.
+    /// </remarks>
+    private readonly IReceiverDriver? _driver;
+
     private ConnectionStatus _connection = ConnectionStatus.Disconnected;
     private AntennaCable _cable = AntennaCable.Lmr400;
     private double _lengthMetres = 20;
@@ -39,11 +50,17 @@ public sealed class TimingViewModel : INotifyPropertyChanged, IDisposable
     private double _directDelayNanoseconds;
 
     /// <summary>Creates a view model over the shared store.</summary>
-    public TimingViewModel(ReceiverStateStore store)
+    /// <param name="store">The shared readings.</param>
+    /// <param name="driver">
+    /// The connected driver, asked which readings its family can ever produce (#456). Null is
+    /// allowed and means the loop card stays hidden.
+    /// </param>
+    public TimingViewModel(ReceiverStateStore store, IReceiverDriver? driver = null)
     {
         ArgumentNullException.ThrowIfNull(store);
 
         _store = store;
+        _driver = driver;
         _store.PropertyChanged += OnStoreChanged;
     }
 
@@ -258,6 +275,64 @@ public sealed class TimingViewModel : INotifyPropertyChanged, IDisposable
 
     /// <summary>The severity of that difference.</summary>
     public Severity DifferenceSeverity => IsDifferenceSignificant ? Severity.Caution : Severity.Success;
+
+    // ---- The disciplining loop (#512) ----------------------------------------------------------
+
+    /// <summary>
+    /// Whether this receiver's family reports anything from a disciplining loop at all (#456).
+    /// </summary>
+    /// <remarks>
+    /// An NMEA talker has no disciplined oscillator, so these are not late and not missing — they do
+    /// not exist, and §9.11's em dash would be a promise that never comes true. The whole card is
+    /// hidden rather than filled with dashes.
+    /// </remarks>
+    public bool ReportsLoop => _driver?.Plan.Supplies.HasFlag(FastFields.OscillatorOffset) ?? false;
+
+    /// <summary>The oscillator's measured frequency offset, in parts per billion.</summary>
+    public double? OscillatorOffsetPpb =>
+        Connection == ConnectionStatus.Connected ? _store.OscillatorOffsetPpb : null;
+
+    /// <summary>That offset as it is shown.</summary>
+    /// <remarks>
+    /// Three decimals because the measured values are hundredths of a part per billion — the bench
+    /// module reads -0.006 ppb locked — and one or two would render every one of them as zero.
+    /// </remarks>
+    public string OscillatorOffsetText => OscillatorOffsetPpb is double offset
+        ? $"{ReadoutFormatter.Format(offset, decimalPlaces: 3)}{ReadoutFormatter.HairSpace}ppb"
+        : ReadoutFormatter.NoValue;
+
+    /// <summary>The oscillator's temperature correction, where one is reported.</summary>
+    public double? OscillatorTemperature =>
+        Connection == ConnectionStatus.Connected ? _store.OscillatorTemperature : null;
+
+    /// <summary>That correction as it is shown.</summary>
+    /// <remarks>
+    /// <b>A Trimble never sends one, and this is where that has to stay an em dash.</b> §11.1: a
+    /// field the receiver did not report is absent, never a zero — a fabricated 0 here would read as
+    /// a real "no correction applied" on a module that has no such reading to give.
+    /// </remarks>
+    public string OscillatorTemperatureText => OscillatorTemperature is double temperature
+        ? ReadoutFormatter.Format(temperature, decimalPlaces: 3)
+        : ReadoutFormatter.NoValue;
+
+    /// <summary>
+    /// Whether the oscillator is being disciplined, as three states.
+    /// </summary>
+    /// <remarks>
+    /// <b>"Not known" is the usual answer and is labelled as an inference, not a report.</b> No UCCM
+    /// states this; it is deduced from the frequency correction being non-zero, and on the measured
+    /// Trimble that field reads zero while locked and disciplining — so zero was measured to mean
+    /// "cannot tell" rather than "no" (#418). Rendering that as "No" would be a confident wrong
+    /// answer on the only hardware this has met.
+    /// </remarks>
+    public string DiscipliningText => Connection == ConnectionStatus.Connected
+        ? _store.Disciplining switch
+        {
+            true => "Yes (inferred)",
+            false => "No (inferred)",
+            null => "Not known",
+        }
+        : ReadoutFormatter.NoValue;
 
     // ---- 1 PPS time interval ---------------------------------------------------------------
 

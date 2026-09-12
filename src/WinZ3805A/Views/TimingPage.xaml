@@ -342,6 +342,69 @@
                             page as the cable delay and the 1 PPS trend and nothing else - which is why
                             it was raised as #142 rather than settled here. §10.7.1 settles it.
                         -->
+                        <!--
+                            #512. What DIAG:LOOP? reports, which is measurement rather than the
+                            drift analysis below it: the offset is how far off frequency the
+                            oscillator IS, where the EFC chart above is what the loop is DOING about
+                            it. Three rows because they arrive in one reply and are read together.
+
+                            Collapsed entirely for a family that has no disciplining loop (#456). An
+                            NMEA talker's oscillator is not late reporting these - it has none, and
+                            three em dashes that never fill is what §9.11's dash must not be used
+                            for.
+                        -->
+                        <StackPanel x:Name="LoopPanel" Spacing="{ThemeResource WzSpaceXs}">
+                            <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}"
+                                       Text="Disciplining loop" />
+
+                            <Grid ColumnSpacing="{ThemeResource WzSpaceSm}"
+                                  RowSpacing="{ThemeResource WzSpaceXs}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Grid.Row="0" Grid.Column="0"
+                                           Style="{ThemeResource WzBodyTextStyle}"
+                                           Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                           Text="Frequency offset" />
+                                <TextBlock x:Name="OscillatorOffsetText"
+                                           Grid.Row="0" Grid.Column="1"
+                                           controls:CopyMenu.IsCopyable="True"
+                                           Style="{ThemeResource WzMonoTextStyle}" />
+
+                                <TextBlock Grid.Row="1" Grid.Column="0"
+                                           Style="{ThemeResource WzBodyTextStyle}"
+                                           Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                           Text="Temperature correction" />
+                                <TextBlock x:Name="OscillatorTemperatureText"
+                                           Grid.Row="1" Grid.Column="1"
+                                           controls:CopyMenu.IsCopyable="True"
+                                           Style="{ThemeResource WzMonoTextStyle}" />
+
+                                <TextBlock Grid.Row="2" Grid.Column="0"
+                                           Style="{ThemeResource WzBodyTextStyle}"
+                                           Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                           Text="Disciplining" />
+                                <TextBlock x:Name="DiscipliningText"
+                                           Grid.Row="2" Grid.Column="1"
+                                           controls:CopyMenu.IsCopyable="True"
+                                           Style="{ThemeResource WzMonoTextStyle}" />
+                            </Grid>
+
+                            <TextBlock Style="{ThemeResource WzCaptionTextStyle}"
+                                       Foreground="{ThemeResource WzTextTertiaryBrush}"
+                                       TextWrapping="Wrap"
+                                       HorizontalAlignment="Left"
+                                       MaxWidth="{ThemeResource WzProseMaxWidth}"
+                                       Text="Disciplining is inferred from the frequency correction, not reported. A temperature correction is only sent by some modules." />
+                        </StackPanel>
+
                         <StackPanel Spacing="{ThemeResource WzSpaceXs}">
                             <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}"
                                        Text="Oscillator drift" />

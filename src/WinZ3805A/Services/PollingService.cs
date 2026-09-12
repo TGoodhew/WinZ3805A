@@ -405,7 +405,13 @@ public sealed class PollingService : IAsyncDisposable
             readings.EfcPercent,
             readings.TimeIntervalNanoseconds,
             readings.SyncState,
-            readings.SatellitesTracked));
+            readings.SatellitesTracked)
+        {
+            // Already through the driver's sanity band by the time it arrives here (#418): a
+            // frequency difference outside ±2.00E-7 is null, not a number, so the excursion
+            // §9.10.2's chart would have drawn for an event that never happened cannot be stored.
+            OscillatorOffsetPpb = readings.OscillatorOffsetPpb,
+        });
 
         MaybeCompact();
 
@@ -416,7 +422,10 @@ public sealed class PollingService : IAsyncDisposable
             readings.TimeIntervalNanoseconds,
             readings.EfcPercent,
             readings.SatellitesTracked,
-            plan.FastTierCarries);
+            plan.FastTierCarries,
+            readings.OscillatorOffsetPpb,
+            readings.OscillatorTemperature,
+            readings.Disciplining);
 
         FastSweeps++;
     }
