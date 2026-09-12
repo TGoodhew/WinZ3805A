@@ -136,6 +136,57 @@ public sealed class NmeaDriverTests
     // The fast sweep
     // -------------------------------------------------------------------------------------
 
+    /// <summary>
+    /// The sweep's satellite count keys on identity too, not on the number (#424).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>This is the half of #424 with no capture behind it, and the half a user sees first.</b>
+    /// The parser's defect needed the colliding pair only to be <i>in view</i>, which
+    /// <c>form8n-gps-beidou-outdoors.nmea</c> shows in 1,217 of 1,800 cycles; this one needs both to
+    /// be <i>tracked</i> at the same instant, which that capture never does — 0 of 1,800 — so it
+    /// went on passing the replay test's cross-check against the parser's count.
+    /// </para>
+    /// <para>
+    /// It matters more rather than less for being rarer. <c>SatellitesTracked</c> is the number on
+    /// the primary window, which §9.1 designs to be left on a second monitor for weeks, and a count
+    /// that reads one low is exactly the symptom that sends someone onto the roof.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void TheSweepCountsTwoConstellationsClaimingOneNumberAsTwoSatellites()
+    {
+        (_, NmeaDriver driver, _) = Bench();
+
+        // Four tracked satellites across two talkers, two of them numbered 4. Keyed on the number
+        // alone this counts three.
+        string[] cycle =
+        [
+            Checksummed("GNRMC,200000.00,A,3726.2550,N,12210.5017,W,0.02,0.00,060926,,,A"),
+            Checksummed("GNGGA,200000.00,3726.2550,N,12210.5017,W,1,04,0.9,25.4,M,-32.0,M,,"),
+            Checksummed("GNGSA,A,3,04,09,,,,,,,,,,,1.8,0.9,1.5"),
+            Checksummed("GPGSV,1,1,02,04,40,083,42,09,17,308,38"),
+            Checksummed("GBGSV,1,1,02,04,55,200,44,11,15,050,31"),
+        ];
+
+        SweepInterpretation sweep = driver.InterpretSweep(Sweep(driver, cycle));
+
+        Assert.Null(sweep.Rejection);
+        Assert.Equal(4, sweep.Readings.SatellitesTracked);
+    }
+
+    /// <summary>The NMEA checksum, so these read as a real talker's output.</summary>
+    private static string Checksummed(string body)
+    {
+        byte checksum = 0;
+        foreach (char c in body)
+        {
+            checksum ^= (byte)c;
+        }
+
+        return $"${body}*{checksum:X2}";
+    }
+
     [Fact]
     public void ColdIsPowerUpWithTheStrongSatellitesTracked()
     {
