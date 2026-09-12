@@ -563,6 +563,18 @@ local repository matching the remote: delete the branch on both sides
 (`gh pr merge --rebase --delete-branch` does both), fast-forward local `main`
 (`git fetch origin main:main` from another branch), and `git remote prune origin`.
 
+**Never write a closing keyword next to an issue number unless you mean it — GitHub does not read
+the negation.** `closes #487`, `fixes #487` and `resolves #487` close the issue on merge wherever
+they appear in a PR body, including inside a sentence that denies it and under a heading that
+denies it. #487 was closed on 13 Sep 2026 by a PR whose *purpose* was to say it had not been
+fixed: under the heading **What this does not claim** stood the line *"That it closes #487."* A
+second PR was loaded with the same trap — *"It does not close #487."* — and would have fired had
+it merged first. Both sentences were written to prevent exactly what they caused.
+
+Say it without the keyword: *"this issue stays open"*, *"towards #487"*, *"one mechanism behind
+#487"*. And note the trap is worst for the careful: a PR that closes an issue outright never writes
+the disclaiming sentence at all.
+
 ---
 
 ## Repository layout
