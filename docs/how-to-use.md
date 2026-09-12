@@ -238,6 +238,14 @@ Everything from the main window, with the words behind the numbers:
 
   ![The Tracked table: one row per satellite with its PRN, elevation, azimuth and a bar showing carrier-to-noise ratio](images/how-to-use/satellites-tracked-table.png)
 
+  **Where a receiver sees more than one constellation, the satellite number carries a letter** —
+  `G04` for GPS 4, `C04` for BeiDou 4, `R07` for GLONASS 7, and `E`, `J`, `I` and `S` for Galileo,
+  QZSS, NavIC and the augmentation satellites. These are the same letters u-center and RINEX files
+  use. The letter is not decoration: a satellite number is only unique *within* a constellation, and
+  some receivers number each one from 1, so GPS 4 and BeiDou 4 are two different satellites that
+  are both in view more often than not. A receiver that sees only GPS — which is every GPSDO this
+  application talks to — shows the bare number, because there is nothing to tell apart.
+
 ![The lower half of the Satellites page: the Not tracked table, an Elevation mask card with a New mask (degrees) box, a slider across the 0-90 range beneath it and Apply mask, and a Which satellites card with a Manage… button](images/how-to-use/page-satellites-2.png)
 
 - **Elevation mask** — satellites below this elevation are ignored. The box **opens on the mask the
