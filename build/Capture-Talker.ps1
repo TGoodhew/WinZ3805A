@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Logs a broadcast talker's raw bytes to a file, verbatim, while it runs (#420).
 
@@ -60,6 +60,21 @@
     Stops after this long. Default 30, which is #420's suggested run covering cold start,
     acquisition and steady state. Ctrl+C stops it early and still writes the provenance.
 
+.PARAMETER ColdStartAfterMinutes
+    Sends a u-blox UBX-CFG-RST cold start this many minutes into the capture, then keeps reading.
+    Zero, the default, sends nothing and leaves the receiver alone.
+
+    This exists because #420's last outstanding case was "a fix lost while powered", and the obvious
+    way to get one does not work: an inverted metal cover managed about 5 dB and a microwave oven
+    with its door shut about 10 dB, and neither dented an 11-satellite fix. A cold start does not
+    attenuate the signal, it throws the ephemeris away - so the receiver drops to no fix and
+    reacquires with the link never going down. Measured on a VK-162 at 87 consecutive void cycles,
+    then reacquisition through 2D to 3D to differential.
+
+    resetMode is 0x02, a controlled software reset of the GNSS subsystem ONLY. That is the part that
+    matters for a USB puck: a full reset re-enumerates the device and takes the port with it, which
+    would end the capture rather than continue it.
+
 .PARAMETER SelfTest
     Exercises everything that does not need a serial port - the summariser, the sentence and talker
     accounting, and the provenance writer - against synthetic input, and says plainly which half was
@@ -75,6 +90,10 @@
 
 .EXAMPLE
     pwsh build/Capture-Talker.ps1 -SelfTest
+
+.EXAMPLE
+    pwsh build/Capture-Talker.ps1 -Port COM7 -Label form8n-fix-lost -DurationMinutes 10 -ColdStartAfterMinutes 2
+    # two minutes of fix, then the fix is taken away and the reacquisition is captured
 #>
 [CmdletBinding()]
 param(
@@ -83,6 +102,10 @@ param(
     [string] $OutputDirectory,
     [string] $Label,
     [int] $DurationMinutes = 30,
+
+    # See the .PARAMETER block above: 0 sends nothing.
+    [int] $ColdStartAfterMinutes = 0,
+
     [switch] $SelfTest
 )
 
@@ -202,6 +225,48 @@ function Add-TalkerSummary {
 .SYNOPSIS
     The provenance sidecar. A capture nobody can date or attribute is a file, not evidence.
 #>
+<#
+.SYNOPSIS
+    Wraps a UBX payload in its frame: sync bytes, class, id, little-endian length, 8-bit Fletcher.
+.DESCRIPTION
+    Kept as a function so the checksum is reachable from -SelfTest. A wrong checksum is silently
+    ignored by the receiver, which is the worst failure mode available here: the capture would run
+    its full length, the cold start would never happen, and the file would look like an ordinary
+    sitting with nothing to say it had failed.
+#>
+function New-UbxFrame {
+    param(
+        [Parameter(Mandatory)] [byte] $Class,
+        [Parameter(Mandatory)] [byte] $Id,
+        [Parameter(Mandatory)] [AllowEmptyCollection()] [byte[]] $Payload
+    )
+
+    $length = $Payload.Length
+    $body = @($Class, $Id, [byte]($length -band 0xFF), [byte](($length -shr 8) -band 0xFF)) + $Payload
+
+    $a = 0
+    $b = 0
+    foreach ($byte in $body) {
+        $a = ($a + $byte) -band 0xFF
+        $b = ($b + $a) -band 0xFF
+    }
+
+    return [byte[]](@(0xB5, 0x62) + $body + @([byte]$a, [byte]$b))
+}
+
+<#
+.SYNOPSIS
+    UBX-CFG-RST, cold start, GNSS subsystem only.
+.DESCRIPTION
+    navBbrMask 0xFFFF clears everything in battery-backed RAM - ephemeris, almanac, position, clock
+    - which is what makes the fix go away rather than merely degrade. resetMode 0x02 is a controlled
+    software reset of the GNSS subsystem and leaves the host interface alone, so a USB puck keeps
+    its port. 0x00, a full hardware reset, would re-enumerate and end the capture.
+#>
+function New-ColdStartFrame {
+    return New-UbxFrame -Class 0x06 -Id 0x04 -Payload @(0xFF, 0xFF, 0x02, 0x00)
+}
+
 function Write-Provenance {
     [CmdletBinding()]
     param(
@@ -213,7 +278,9 @@ function Write-Provenance {
         [datetime] $StartedAt,
         [datetime] $EndedAt,
         [object] $Summary,
-        [int] $PartialBytes = 0)
+        [int] $PartialBytes = 0,
+        [object] $ColdStartAt = $null,
+        [object] $ColdStartOffset = $null)
 
     $lines = @(
         "# $LogName",
@@ -237,6 +304,12 @@ function Write-Provenance {
         # survive (§11.1). It is reported as its own row instead of being counted as a rejected
         # sentence, because a reader who sees "rejected" reaches for the baud rate.
         "| Ends mid-sentence | $(if ($PartialBytes -gt 0) { "yes, $PartialBytes byte(s)" } else { 'no' }) |",
+        # Recorded as a byte offset, not only a time, because the offset is the one thing a reader
+        # can act on: everything before it is the receiver as it was, everything after it is the
+        # receiver recovering, and a test that wants one or the other can split the file there.
+        $(if ($null -ne $ColdStartAt) {
+                "| **Cold start sent** | $(([datetime]$ColdStartAt).ToString('yyyy-MM-dd HH:mm:ss zzz')), at byte $ColdStartOffset |"
+            }),
         '',
         '## What was happening',
         '',
@@ -328,6 +401,35 @@ if ($SelfTest) {
         $failures += "the half sentence left behind was $($cut.Length) byte(s), not the 11 it holds"
     }
 
+    # THE COLD-START FRAME. Checked because its failure mode is silence: a receiver ignores a frame
+    # whose checksum is wrong without complaining, so a broken frame would produce a capture that
+    # ran its full length, never lost its fix, and looked exactly like an ordinary sitting. Nothing
+    # in the file would say the experiment had not happened.
+    $frame = New-ColdStartFrame
+    $hex = ($frame | ForEach-Object { '{0:X2}' -f $_ }) -join ' '
+
+    # The bytes, stated rather than recomputed - recomputing them here with the same arithmetic
+    # would agree with itself however wrong it was. B5 62 sync, 06 04 CFG-RST, 04 00 length,
+    # FF FF cold start, 02 controlled GNSS-only reset, 00 reserved, then the two checksum bytes.
+    if ($hex -ne 'B5 62 06 04 04 00 FF FF 02 00 0E 61') {
+        $failures += "the cold-start frame is $hex, not the expected B5 62 06 04 04 00 FF FF 02 00 0E 61"
+    }
+
+    # And the checksum is over class, id, length and payload - NOT over the sync bytes. Including
+    # them is the classic UBX mistake and produces a frame that is ignored.
+    $noSync = New-UbxFrame -Class 0x06 -Id 0x04 -Payload @(0xFF, 0xFF, 0x02, 0x00)
+    if ($noSync[0] -ne 0xB5 -or $noSync[1] -ne 0x62) {
+        $failures += 'the frame does not start with the UBX sync bytes'
+    }
+    if ($noSync[4] -ne 0x04 -or $noSync[5] -ne 0x00) {
+        $failures += 'the payload length is not little-endian in the frame'
+    }
+
+    # An empty payload still frames and still checksums, so the helper is usable for the poll
+    # frames a later sitting may want.
+    $empty = New-UbxFrame -Class 0x06 -Id 0x04 -Payload @()
+    if ($empty.Length -ne 8) { $failures += "an empty payload framed to $($empty.Length) bytes, not 8" }
+
     # The provenance writer round-trips.
     $tmp = Join-Path ([System.IO.Path]::GetTempPath()) "talker-selftest-$([guid]::NewGuid()).md"
     try {
@@ -349,7 +451,8 @@ if ($SelfTest) {
     }
 
     Write-Host 'Capture-Talker self-test passed.'
-    Write-Host '  The summariser, the checksum accounting and the provenance note are checked.'
+    Write-Host '  The summariser, the checksum accounting, the cold-start frame and the provenance'
+    Write-Host '  note are checked.'
     Write-Host '  Opening a port, reading a real talker and writing its bytes are NOT, and cannot'
     Write-Host '  be here. That half is exercised the day a receiver is on the bench.'
     exit 0
@@ -395,6 +498,9 @@ catch {
 
 Write-Host "Capturing $Port at $BaudRate-8-N-1 into $logPath"
 Write-Host "Stopping after $DurationMinutes min; Ctrl+C stops early and still writes the note."
+if ($ColdStartAfterMinutes -gt 0) {
+    Write-Host "Sending a UBX-CFG-RST COLD START after $ColdStartAfterMinutes min - the fix will go away." -ForegroundColor Yellow
+}
 Write-Host ''
 
 $startedAt = Get-Date
@@ -405,6 +511,8 @@ $total = 0L
 $tail = [System.Text.StringBuilder]::new()
 $lastReport = $startedAt
 $cumulative = $null
+$coldStartSentAt = $null
+$coldStartOffset = $null
 
 try {
     while ((Get-Date) -lt $deadline) {
@@ -424,6 +532,18 @@ try {
         }
         else {
             Start-Sleep -Milliseconds 100
+        }
+
+        # The cold start goes out between reads, so the byte offset it is recorded at is exactly
+        # where the receiver's old behaviour stops and its new behaviour starts. Sent once.
+        if ($ColdStartAfterMinutes -gt 0 -and $null -eq $coldStartSentAt -and
+            ((Get-Date) - $startedAt).TotalMinutes -ge $ColdStartAfterMinutes) {
+            $frame = New-ColdStartFrame
+            $serial.Write($frame, 0, $frame.Length)
+            $coldStartSentAt = Get-Date
+            $coldStartOffset = $total
+            Write-Host ("  COLD START sent at byte {0}: {1}" -f $total,
+                (($frame | ForEach-Object { '{0:X2}' -f $_ }) -join ' ')) -ForegroundColor Yellow
         }
 
         if (((Get-Date) - $lastReport).TotalSeconds -ge 5) {
@@ -459,7 +579,7 @@ finally {
 
     Write-Provenance -Path $notePath -LogName (Split-Path $logPath -Leaf) -Port $Port `
         -BaudRate $BaudRate -Bytes $total -StartedAt $startedAt -EndedAt $endedAt -Summary $cumulative `
-        -PartialBytes $partialBytes
+        -PartialBytes $partialBytes -ColdStartAt $coldStartSentAt -ColdStartOffset $coldStartOffset
 
     Write-Host ''
     Write-Host "Wrote $total bytes to $logPath"
