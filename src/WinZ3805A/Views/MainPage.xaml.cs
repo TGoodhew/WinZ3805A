@@ -285,10 +285,21 @@ public sealed partial class MainPage : Page
 
     public async Task ShowConnectionDialogAsync()
     {
-        ConnectionDialog dialog = new(NewConnectionViewModel()) { XamlRoot = XamlRoot };
+        ConnectionDialog dialog = new(NewConnectionViewModel()) { XamlRoot = XamlRoot, Log = _logger };
 
-        // Before ShowAsync, which is when the template reads the cap (#506).
-        dialog.AllowHeightUpTo(XamlRoot?.Size.Height ?? 0);
+        // Before ShowAsync, which is when the template is applied and the cap taken (#506).
+        //
+        // The available height is logged beside the cap because the two together are what say which
+        // of them is wrong when the dialog still scrolls. Without it, "nothing changed" is all the
+        // evidence there is — which is how the first attempt at this passed review.
+        double available = XamlRoot?.Size.Height ?? 0;
+        double cap = dialog.AllowHeightUpTo(available);
+
+        _logger?.LogInformation(
+            "Connection dialog: XamlRoot height {Available}, cap {Cap}{Note}.",
+            available,
+            cap,
+            cap <= DialogHeight.Stock ? " (the stock cap — the window is too short to raise it)" : string.Empty);
 
         await dialog.ShowAsync();
     }
