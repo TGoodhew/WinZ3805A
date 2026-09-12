@@ -1,5 +1,5 @@
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Automation;
+using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 
 namespace WinZ3805A.Controls;
@@ -120,7 +120,9 @@ public sealed class SeverityPill : Control
     {
         base.OnApplyTemplate();
         UpdateVisualState(useTransitions: false);
-        UpdateAutomationName();
+
+        // NO SetName HERE (#403, #487). See OnCreateAutomationPeer: the name is computed when a
+        // screen reader asks for it rather than pushed on every change.
     }
 
     private static void OnSeverityChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -137,7 +139,6 @@ public sealed class SeverityPill : Control
     {
         var pill = (SeverityPill)d;
         pill._textShown = (string?)e.NewValue ?? string.Empty;
-        pill.UpdateAutomationName();
     }
 
     /// <remarks>
@@ -148,12 +149,43 @@ public sealed class SeverityPill : Control
     private void UpdateVisualState(bool useTransitions) =>
         VisualStateManager.GoToState(this, Severity.ToString(), useTransitions);
 
+    /// <summary>What this pill reads as: exactly its label.</summary>
     /// <remarks>
     /// The label already carries the meaning, so the pill announces exactly it rather than
     /// inventing a longer sentence that would then disagree with what is on screen. The shape is
     /// marked <c>Raw</c> in the template because it duplicates the text for anyone reading it
     /// visually and would otherwise be announced as an unnamed graphic.
     /// </remarks>
-    private void UpdateAutomationName() =>
-        AutomationProperties.SetName(this, Text ?? string.Empty);
+    internal string SpokenText => Text ?? string.Empty;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// <b>The name is pulled, not pushed (#403, #487).</b> <c>AutomationProperties.SetName</c> takes
+    /// the control, so every call hands this pill across to WinRT and mints a COM callable wrapper
+    /// that the runtime records in a per-object list it never shrinks. This was pushed on every
+    /// <see cref="Text"/> change, and fifteen of these exist — four of them on the main window,
+    /// which is open for the life of the process and is exactly where §9.1 expects an instrument to
+    /// be left for weeks.
+    /// </para>
+    /// <para>
+    /// #403 found this mechanism and fixed it for <see cref="ReadoutTile"/> alone; the gate it left
+    /// behind checks cached dispatcher handlers, which is a different route to the same growth and
+    /// has nothing to say about this one. See #487, where the arrays kept growing with that gate
+    /// green.
+    /// </para>
+    /// <para>
+    /// <b>The trade, and it is the same one <see cref="ReadoutTile"/> makes:</b> setting the name
+    /// raises an automation property-changed event and this does not. Deliberate —
+    /// <c>LiveRegion</c> and <c>StateAnnouncer</c> are how this application tells somebody that
+    /// something changed (A11Y-9), and a pill quietly following a reading is not that.
+    /// </para>
+    /// </remarks>
+    protected override AutomationPeer OnCreateAutomationPeer() => new SeverityPillPeer(this);
+
+    /// <summary>Answers with the pill's label as it stands when asked (#487).</summary>
+    private sealed class SeverityPillPeer(SeverityPill owner) : FrameworkElementAutomationPeer(owner)
+    {
+        protected override string GetNameCore() => ((SeverityPill)Owner).SpokenText;
+    }
 }

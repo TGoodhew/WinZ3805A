@@ -109,6 +109,13 @@ public sealed class ConnectionStatusPill : Button
             ? $"{state}. Opens the connection dialog."
             : $"{state} on {PortName}. Opens the connection dialog.";
 
+        // Both of these marshal the control and grow a list that never shrinks (#403, #487), and
+        // both stay. This runs when the CONNECTION STATE changes - connected, disconnected, a new
+        // port - not on a reading, so it is bounded by what the link does rather than by uptime: a
+        // handful of entries an hour against the hundreds of thousands #487 measured. The tooltip
+        // is visible UI a pointer user needs, and the name change is what tells a screen-reader user
+        // the link has moved. Converting them would trade a leak that is not happening for two real
+        // regressions.
         AutomationProperties.SetName(this, description);
         ToolTipService.SetToolTip(this, description);
 

@@ -1,5 +1,5 @@
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Automation;
+using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 
 using WinZ3805A.Device.Models;
@@ -99,6 +99,26 @@ public sealed class SatelliteStrengthBar : Control
                 : Visibility.Collapsed;
         }
 
-        AutomationProperties.SetName(this, scale.Describe(Strength));
+        // NO SetName HERE (#403, #487). See OnCreateAutomationPeer.
+    }
+
+    /// <summary>What this bar reads as, built from its current strength.</summary>
+    internal string SpokenText => SignalStrengthScale.For(Kind).Describe(Strength);
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <b>The name is pulled, not pushed (#403, #487).</b> <c>AutomationProperties.SetName</c> takes
+    /// the control, so every call hands this bar across to WinRT and mints a COM callable wrapper
+    /// the runtime records in a per-object list it never shrinks. A bar exists per satellite and its
+    /// strength is rewritten on every full status, so pushing cost one entry per bar per screen for
+    /// the life of the process.
+    /// </remarks>
+    protected override AutomationPeer OnCreateAutomationPeer() => new SatelliteStrengthBarPeer(this);
+
+    /// <summary>Answers with the bar's phrase as it stands when asked (#487).</summary>
+    private sealed class SatelliteStrengthBarPeer(SatelliteStrengthBar owner)
+        : FrameworkElementAutomationPeer(owner)
+    {
+        protected override string GetNameCore() => ((SatelliteStrengthBar)Owner).SpokenText;
     }
 }
