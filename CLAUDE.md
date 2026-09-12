@@ -221,6 +221,7 @@ pwsh build/Test-DocumentReferences.ps1   # #321 — the documents, not the sourc
 pwsh build/Test-GuideCoverage.ps1        # #358 — the guide, which is also the F1 help
 pwsh build/Test-PageTeardown.ps1         # #388 — page lifetimes, not tokens
 pwsh build/Test-NoCachedDispatcherHandlers.ps1 # #403 — delegate lifetimes, not tokens
+pwsh build/Test-NoClosingKeywords.ps1 -SelfTest # the pull request, not the source
 ```
 
 The guide-coverage gate was added 30 Aug 2026 for #358, and it is the second that checks a
@@ -288,6 +289,18 @@ List` and **reading it one hop short blames the page**, which cost four rounds o
 were never the problem. And the verdict metric is the **largest single holder array**, not the total:
 totals move with the gen0 window and can fall while a leak runs, but a dominant array is the leak
 itself.
+
+The closing-keyword gate was added 13 Sep 2026, and it is the only one that checks **the pull
+request** rather than the source, the documents or a tool. Its reasoning is in *Branches and
+merges* below, with the two closures that prompted it; what belongs here is the shape. It reads
+the PR title, the PR body and **every commit message in the branch** — the commit half is not
+decoration, it is what fired the second closure past a body its author had just read — so its CI
+job needs `fetch-depth: 0` and the event's title and body in the environment. The rule is
+structural rather than linguistic: a closing keyword and an issue number may stand together only
+as an entire line of their own, which is the form a PR that means it writes anyway. **It was
+verified against the real pull requests rather than only against its own fixtures**, and fails all
+three of the ones that carried the trap while passing the four commits that name the same issue
+without closing it. Run `-SelfTest` for the rule alone; it needs no repository.
 
 The document-references gate was added 30 Aug 2026 for #321, and it is the only one that checks
 the **documents** rather than the source. The #316 audit read sixteen of them by hand and found some 360
@@ -436,7 +449,7 @@ the icon gate gives: a floor that holds only while a stock style happens to supp
 coincidence, not a floor.
 
 The focus-visual coverage gate was added 27 Aug 2026 alongside the A11Y-2 pass that
-closed #22. **The surface behind a focus ring is not knowable from source**: the accent-filled
+closed issue #22. **The surface behind a focus ring is not knowable from source**: the accent-filled
 button uses stock `AccentButtonStyle` and this application does not remap `AccentFillColorDefault`,
 so the fill is the **end user's Windows accent colour** — every measured ratio (3.06:1 on 24 Aug,
 3.10:1 on 27 Aug) is specific to the machine it was taken on and says nothing about a user who has
@@ -564,16 +577,47 @@ local repository matching the remote: delete the branch on both sides
 (`git fetch origin main:main` from another branch), and `git remote prune origin`.
 
 **Never write a closing keyword next to an issue number unless you mean it — GitHub does not read
-the negation.** `closes #487`, `fixes #487` and `resolves #487` close the issue on merge wherever
-they appear in a PR body, including inside a sentence that denies it and under a heading that
-denies it. #487 was closed on 13 Sep 2026 by a PR whose *purpose* was to say it had not been
-fixed: under the heading **What this does not claim** stood the line *"That it closes #487."* A
-second PR was loaded with the same trap — *"It does not close #487."* — and would have fired had
-it merged first. Both sentences were written to prevent exactly what they caused.
+the negation, and it reads more than the PR body.** A closing keyword beside an issue number closes
+that issue on merge wherever it appears in a **PR body, a PR title, a PR comment, or any commit
+message that lands on `main`** — including inside a sentence that denies it, and under a heading
+that denies it.
 
-Say it without the keyword: *"this issue stays open"*, *"towards #487"*, *"one mechanism behind
-#487"*. And note the trap is worst for the careful: a PR that closes an issue outright never writes
-the disclaiming sentence at all.
+Issue #487 was closed twice by this on 13 Sep 2026, and the second time is the instructive one. The
+first was a PR whose *purpose* was to say the issue had not been fixed: under a heading disclaiming
+what the change proved stood a one-line sentence naming the issue directly after a closing keyword.
+A concurrent PR carried the same trap in a differently-worded denial and would have fired had it
+merged first. The second closure was **the very change that added this note**. Its PR body opened
+with the careful *towards* phrasing — and then **quoted both denials verbatim further down**, and
+its **commit message quoted one of them too**. So the note documenting the trap sprang it, twice
+over, through a channel it had not thought to mention. The issue was reopened both times.
+
+Worth recording as its own point: writing that second PR, the author checked the body, read the
+opening line, saw *towards*, and called it clean. The quotations four lines below were invisible
+because the *intent* of the paragraph was to warn. `build/Test-NoClosingKeywords.ps1` reads the
+text instead, and fails all three of those pull requests.
+
+Three rules follow, and the third is the one that cost the second closure:
+
+1. Say it without the keyword: *"this issue stays open"*, *"towards #NNN"*, *"one mechanism behind
+   #NNN"*.
+2. **The commit message counts.** A clean PR body does not protect a commit whose message carries
+   the keyword, because a rebase merge puts that message on `main` verbatim. Check both before
+   opening a PR, and check every commit in it, not only the last.
+3. **Never quote the offending line — describe it.** A quotation of a closing keyword *is* a
+   closing keyword. This paragraph therefore writes `#NNN` where it means a number and paraphrases
+   both denials rather than reproducing them, so that editing this file can never close anything.
+
+All three are enforced by `build/Test-NoClosingKeywords.ps1`, which runs on every pull request and
+reads the title, the body, and **every commit message in the branch**. The rule it applies is
+structural, because intent cannot be read out of English: a keyword and its number may appear only
+as an **entire line of their own** — which is what a PR that really does close an issue writes —
+and never at all in a title. Every observed defect was mid-sentence. What it cannot check is
+whether a bare closing line is *true*; that is a claim about the work.
+
+The trap is worst for the careful, which is the whole reason it is written down: a PR that closes an
+issue outright never writes the disclaiming sentence at all. Only a PR being scrupulous about what it
+has *not* proved reaches for that phrasing — and those are precisely the PRs making partial progress
+on a long-running investigation that must stay open.
 
 ---
 
