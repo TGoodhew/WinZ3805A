@@ -128,6 +128,32 @@ public sealed class UccmDriver(TimeProvider timeProvider) : IReceiverDriver
     };
 
     /// <summary>
+    /// The <c>C5</c> time code this family broadcasts, taken out of the stream before line splitting.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>This one is measured, unlike most of this driver.</b> Seven frames across three sittings
+    /// against a Trimble UCCM-P — 10, 11 and 12 Sep 2026, captures under
+    /// <c>tests/WinZ3805A.Tests/Uccm/Captures/</c> — every one 44 bytes, every one opening
+    /// <c>0xC5</c> and closing <c>0xCA</c>, broadcast about every two seconds.
+    /// </para>
+    /// <para>
+    /// <b>They trail a reply; they have never been seen inside one.</b> All seven arrived after the
+    /// <c>UCCM-P &gt;</c> prompt, appended with no terminator. Heather's <c>uccm_time_line()</c>
+    /// exists because the codes are said to arrive "in the middle of another message's response",
+    /// and that has not been observed here — but the grammar is applied to the whole stream anyway,
+    /// because the difference costs nothing and the hypothesis is not refuted by seven frames.
+    /// </para>
+    /// <para>
+    /// <b>A trailing frame is what corrupts the *next* reply.</b> It sits in the buffer until the
+    /// following read, which is why <c>*IDN?</c> came back with binary in front of the identity in
+    /// roughly 3 sends out of 34 through the Advanced Console on 12 Sep 2026, once losing the
+    /// identity altogether. Lifting it out here is what stops that.
+    /// </para>
+    /// </remarks>
+    public BinaryFrameGrammar BinaryFrames { get; } = BinaryFrameGrammar.UccmTimeCode;
+
+    /// <summary>
     /// The lock indicator first, then the readings; the status reply is the full tier.
     /// </summary>
     /// <remarks>
@@ -248,6 +274,36 @@ public sealed class UccmDriver(TimeProvider timeProvider) : IReceiverDriver
             ? TimeSpan.FromSeconds(5)
             : TimeSpan.FromSeconds(2);
 
+    /// <summary>The most recent time code the module broadcast, or null if none has arrived.</summary>
+    /// <remarks>
+    /// <b>Last one wins.</b> The codes arrive about every two seconds carrying a counter, so the
+    /// later one is simply the truer one — the same rule <see cref="UccmStatusParser"/> applies when
+    /// a single reply contains two.
+    /// </remarks>
+    private UccmTimeCode? _lastTimeCode;
+
+    /// <inheritdoc />
+    public void Observe(IReadOnlyList<byte[]> frames)
+    {
+        ArgumentNullException.ThrowIfNull(frames);
+
+        foreach (byte[] frame in frames)
+        {
+            // Null for anything that is not a whole, well-formed code. §11.1: a broadcast nobody can
+            // read is no reading, never an error, and never a partial one - a time assembled from
+            // half a counter is wrong rather than absent, and wrong is what a clock must not be.
+            if (UccmTimeCode.TryParse(frame) is UccmTimeCode code)
+            {
+                _lastTimeCode = code;
+
+                if (!_profile.VendorKnown && code.SuggestedVendor is var suggested and not UccmVendor.Unknown)
+                {
+                    _profile = _profile with { Vendor = suggested };
+                }
+            }
+        }
+    }
+
     /// <inheritdoc />
     public ReceiverStatus Parse(string? response)
     {
@@ -260,7 +316,7 @@ public sealed class UccmDriver(TimeProvider timeProvider) : IReceiverDriver
             _profile = _profile with { Vendor = suggested };
         }
 
-        return UccmStatusParser.Parse(response, timeProvider.GetUtcNow(), _profile);
+        return UccmStatusParser.Parse(response, timeProvider.GetUtcNow(), _profile, _lastTimeCode);
     }
 
     /// <summary>

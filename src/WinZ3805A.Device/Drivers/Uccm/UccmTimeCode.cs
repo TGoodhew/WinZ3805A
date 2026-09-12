@@ -162,7 +162,47 @@ public sealed record UccmTimeCode
     }
 
     /// <summary>Whether a line looks like a time code, without parsing it.</summary>
+    /// <remarks>
+    /// <b>This is the hex-text form, which no module sends.</b> Heather renders time codes as hex
+    /// text in her own logs and a transcript pasted from there should still classify, so this is
+    /// kept — but the hardware broadcasts <see cref="TryParse(ReadOnlySpan{byte})"/>'s shape, and a
+    /// text search for <c>C5</c> against those bytes can only ever answer "no time code", which is
+    /// indistinguishable from a quiet receiver (#481). Do not use this to decide whether a receiver
+    /// is sending them.
+    /// </remarks>
     public static bool IsTimeCodeLine(string? line) => MarkerIndex(line) >= 0;
+
+    /// <summary>
+    /// Reads a time code from the raw bytes the receiver actually broadcasts (#481).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The frame is 44 bytes, <c>0xC5</c> through <c>0xCA</c>, and each byte <i>is</i> a value —
+    /// there is no hex text and no separator, so the indices here are the same ones
+    /// <see cref="TryParse(string?)"/> reaches three characters at a time. The transport hands these
+    /// over whole through <c>Transaction.BinaryFrames</c>; nothing here has to find them in a line,
+    /// which is the entire difference.
+    /// </para>
+    /// <para>
+    /// Never throws (§11.1). A frame of the wrong length, or one not bounded by the two marker
+    /// bytes, comes back <see langword="null"/> — "no reading", never an error.
+    /// </para>
+    /// </remarks>
+    public static UccmTimeCode? TryParse(ReadOnlySpan<byte> frame)
+    {
+        if (frame.Length != ValueCount || frame[0] != 0xC5 || frame[ValueCount - 1] != 0xCA)
+        {
+            return null;
+        }
+
+        int[] values = new int[ValueCount];
+        for (int value = 0; value < ValueCount; value++)
+        {
+            values[value] = frame[value];
+        }
+
+        return FromValues(values);
+    }
 
     /// <summary>
     /// Reads a time-code line, or returns <see langword="null"/> when it is not one or is truncated.
@@ -199,6 +239,22 @@ public sealed record UccmTimeCode
             }
         }
 
+        return FromValues(values);
+    }
+
+    /// <summary>
+    /// The field meanings, in one place, so the byte and hex-text paths cannot drift apart.
+    /// </summary>
+    /// <remarks>
+    /// Heather's indices, and they are the same whether each value arrived as a byte or as two hex
+    /// characters. <b>Offsets 27 to 30 are confirmed against hardware</b>: on the 12 Sep 2026
+    /// capture they read <c>0x57CF27A4</c>, which is 2026-09-11 20:31:32 counted from the GPS epoch
+    /// — within twenty seconds of when the capture was taken, out of 1.47 billion. The state bytes
+    /// below are <b>not</b> confirmed: the receiver was locked and settled throughout, so none of
+    /// them moved.
+    /// </remarks>
+    private static UccmTimeCode FromValues(int[] values)
+    {
         int leap = values[32];
 
         return new UccmTimeCode(values)

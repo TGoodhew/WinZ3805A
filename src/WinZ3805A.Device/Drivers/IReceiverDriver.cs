@@ -403,4 +403,54 @@ public interface IReceiverDriver
     /// </para>
     /// </remarks>
     PromptGrammar Prompt => PromptGrammar.SmartClock;
+
+    /// <summary>
+    /// The unsolicited binary frames this family broadcasts between replies (#481).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Declared, never inferred.</b> A frame is removed from the byte stream before it is split
+    /// into lines, because it carries no line terminator and the reader would otherwise glue it onto
+    /// its neighbour — and, when its payload happens to hold <c>0x0D</c> or <c>0x0A</c>, cut it in
+    /// half beyond any hope of reassembly. That has to happen before decoding, which is why it is
+    /// the transport's job and why the driver has to say so in advance.
+    /// </para>
+    /// <para>
+    /// The default is <see cref="BinaryFrameGrammar.None"/>, and for a family that speaks only when
+    /// spoken to it is not merely a safe default but the correct one: the byte path is then bit for
+    /// bit what it was, and nothing is scanned for a marker that cannot arrive.
+    /// </para>
+    /// <para>
+    /// <b>Override it only from a capture.</b> A grammar whose length is wrong is worse than none:
+    /// it would swallow the wrong 44 bytes out of the middle of a genuine reply, and the reply would
+    /// come back subtly short rather than obviously broken.
+    /// </para>
+    /// </remarks>
+    BinaryFrameGrammar BinaryFrames => BinaryFrameGrammar.None;
+
+    /// <summary>
+    /// Hands the driver the unsolicited frames that arrived during a transaction (#481).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Separate from <see cref="Parse"/> because a broadcast is not an answer.</b> A frame is not
+    /// the reply to the command that happened to be in flight when it arrived — it is the receiver
+    /// talking on its own schedule, and folding it into that command's response would make a reading
+    /// look like something it was asked for.
+    /// </para>
+    /// <para>
+    /// Called between transactions on the session's single consumer, so an implementation may store
+    /// what it learns without locking. It must not throw: §11.1 applies to a broadcast exactly as it
+    /// does to a reply, and a malformed frame is "no reading".
+    /// </para>
+    /// <para>
+    /// The default ignores them, which is right for every family that broadcasts nothing and, with
+    /// <see cref="BinaryFrames"/> left at its own default, is never called at all.
+    /// </para>
+    /// </remarks>
+    /// <param name="frames">Whole frames, in arrival order. Never null; often empty.</param>
+    void Observe(IReadOnlyList<byte[]> frames)
+    {
+        // Nothing to learn from a family that does not broadcast.
+    }
 }
