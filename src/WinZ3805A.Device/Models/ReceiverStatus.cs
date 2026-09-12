@@ -326,6 +326,32 @@ public sealed record ReceiverStatus
     /// <summary>Which datum <see cref="GeoPosition.HeightMetres"/> is measured against.</summary>
     public HeightDatum HeightDatum { get; init; }
 
+    /// <summary>How favourably the satellites were placed, or <see langword="null"/> if unreported (#435).</summary>
+    public DilutionOfPrecision? Dop { get; init; }
+
+    /// <summary>
+    /// How many satellites went into the fix, which is not how many are tracked (#435).
+    /// </summary>
+    /// <remarks>
+    /// <b>The distinction is the point.</b> <see cref="Tracked"/> counts what the receiver can hear;
+    /// this counts what it used. A satellite can be tracked and excluded — below the elevation mask,
+    /// unhealthy, or failing the navigation solution — so the two numbers differ routinely and the
+    /// smaller one is the one that describes the fix.
+    /// </remarks>
+    public int? SatellitesUsed { get; init; }
+
+    /// <summary>Seconds since the last differential correction, when a fix is differential (#435).</summary>
+    public double? DifferentialAgeSeconds { get; init; }
+
+    /// <summary>
+    /// The differential reference station's id, as text (#435).
+    /// </summary>
+    /// <remarks>
+    /// Text rather than a number because it is an identifier and never arithmetic, and because
+    /// leading zeros are meaningful to anyone matching it against a station list.
+    /// </remarks>
+    public string? DifferentialStationId { get; init; }
+
     // ---- HEALTH -------------------------------------------------------------------------------
 
     /// <summary>Whether the health monitor banner read <c>OK</c>.</summary>

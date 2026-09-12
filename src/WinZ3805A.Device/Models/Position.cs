@@ -93,4 +93,51 @@ public sealed record GeoPosition
 
     /// <summary>Height in metres, measured against <see cref="ReceiverStatus.HeightDatum"/>.</summary>
     public double? HeightMetres { get; init; }
+
+    /// <summary>
+    /// Geoid separation in metres: the height of the geoid above the WGS-84 ellipsoid (#435).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>This is what makes an MSL height convertible.</b> NMEA's <c>GGA</c> reports height above
+    /// mean sea level and gives this alongside it, so ellipsoidal height is
+    /// <see cref="HeightMetres"/> plus this figure. Without it an MSL height cannot be compared with
+    /// anything a GNSS receiver computes natively, which is ellipsoidal.
+    /// </para>
+    /// <para>
+    /// Negative over most of the world, and about −18.8 m on the bench — the sign is the geoid
+    /// sitting <i>below</i> the ellipsoid, not an error.
+    /// </para>
+    /// </remarks>
+    public double? GeoidSeparationMetres { get; init; }
+}
+
+/// <summary>
+/// Dilution of precision: how much the satellite geometry multiplies ranging error (#435).
+/// </summary>
+/// <remarks>
+/// <para>
+/// A pure geometry figure, dimensionless, and smaller is better — roughly, 1 is ideal, under 2 is
+/// excellent, over 20 is unusable. It says nothing about how good the ranging was, only how
+/// favourably the satellites were placed to combine it, which is why it belongs beside a fix rather
+/// than inside <see cref="GeoPosition"/>.
+/// </para>
+/// <para>
+/// <b>Every constellation's <c>GSA</c> in a cycle carries the same values</b>, because the figure is
+/// computed over the whole fix rather than per system. Reading one is reading all of them.
+/// </para>
+/// </remarks>
+public sealed record DilutionOfPrecision
+{
+    /// <summary>Position (3D) dilution of precision.</summary>
+    public double? Position { get; init; }
+
+    /// <summary>Horizontal dilution of precision.</summary>
+    public double? Horizontal { get; init; }
+
+    /// <summary>Vertical dilution of precision.</summary>
+    public double? Vertical { get; init; }
+
+    /// <summary>True when nothing was parsed, so a consumer can treat it as absent.</summary>
+    public bool IsEmpty => Position is null && Horizontal is null && Vertical is null;
 }
