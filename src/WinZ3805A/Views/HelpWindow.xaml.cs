@@ -82,6 +82,11 @@ public sealed partial class HelpWindow : Window
             root.Loaded += (_, _) => _scaling.Watch(root.XamlRoot);
         }
 
+        // This window had no teardown at all, and it opens and closes as often as the user presses
+        // F1. The watch subscribes to a XamlRoot the framework owns and outlives us, so leaving it
+        // holds this window through its own callback (#487).
+        Closed += (_, _) => _scaling.Stop();
+
         AppWindow.Changed += (_, args) =>
         {
             if (args.DidPositionChange)

@@ -36,6 +36,38 @@ public sealed class ScalingWatch
     }
 
     /// <summary>
+    /// Stops watching, and lets the window that owns this be collected (#487).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Without this, closing a window did not release it.</b> The subscription runs
+    /// <c>XamlRoot → its event source → the handler → this watch → <see cref="_onChanged"/> → the
+    /// window</c>, and <see cref="_onChanged"/> is a method group over the window that created it.
+    /// The <c>XamlRoot</c> is the framework's, not ours, so nothing on our side ever dropped the
+    /// chain and every window ever opened stayed alive.
+    /// </para>
+    /// <para>
+    /// <b>Measured rather than argued.</b> Two gcdumps of two different builds each show exactly one
+    /// live <c>XamlRoot</c>, one event source and one <c>ScalingWatch</c> per window <i>ever
+    /// opened</i> — five of each against four closed Details windows plus the main one, and two of
+    /// each against one. The counts move together, which is what a chain looks like.
+    /// </para>
+    /// <para>
+    /// It matters for the Details and Help windows, which open and close repeatedly. The main window
+    /// lives as long as the process, so calling this there changes nothing and is done anyway: a
+    /// teardown that only some callers perform is one nobody can reason about.
+    /// </para>
+    /// </remarks>
+    public void Stop()
+    {
+        if (_root is not null)
+        {
+            _root.Changed -= OnRootChanged;
+            _root = null;
+        }
+    }
+
+    /// <summary>
     /// Begins watching <paramref name="root"/>, and reports its scaling immediately.
     /// </summary>
     /// <remarks>

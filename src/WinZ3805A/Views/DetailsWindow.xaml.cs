@@ -169,6 +169,12 @@ public sealed partial class DetailsWindow : Window
             SettingsPage.AdvancedChanged -= OnAdvancedChanged;
 
             _device.Session.StatusChanged -= OnSessionStatusChanged;
+
+            // The XamlRoot is the framework's and outlives this window, so a watch left subscribed
+            // holds the window through its own callback — which is a method group over this. Every
+            // Details window ever opened stayed alive that way (#487).
+            _scaling.Stop();
+
             _saveAfterIdle.Stop();
             SavePlacement();
             SavePreferences();

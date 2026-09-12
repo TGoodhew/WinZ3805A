@@ -164,6 +164,12 @@ public sealed partial class MainWindow : Window
             // open over a disposed one would be a window showing a receiver that no longer exists.
             _details?.Close();
             _help?.Close();
+
+            // Nothing is gained here — this window dies with the process — and it is done so that
+            // the teardown is the same in all three places. A rule only some callers follow is one
+            // nobody can reason about, which is how #487 survived (#487).
+            _scaling.Stop();
+
             _saveAfterIdle.Stop();
             SavePlacement();
         };
