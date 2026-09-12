@@ -21,7 +21,8 @@ It is what made #424 answerable, though not on the first attempt: see the table'
 | `vk162-gns-no-gga` | 12 min | 353 KB | **720 `GNS` and not one `GGA`** — #429's configuration, made with `UBX-CFG-MSG`. Proves the fix survives `GGA`'s absence, and that the altitude and the per-constellation mode string are what its absence costs. |
 | `form8n-gps-beidou-first-light` | 6.7 min | 202 KB | The forM8N as it arrived, on a GPS **timing** antenna. BeiDou is enabled, reports every cycle and **tracks nothing** — `$GBGSV,1,1,00` and a `GSA` row with only its system id. A talker advertising a constellation it cannot see. |
 | `form8n-gns-without-gga` | 2.2 min | 77 KB | The same module's `GNS` configuration, where the mode indicator is **four** characters (`ANNN`) against the VK-162's two — the field is one character per constellation, not a fixed code. |
-| `form8n-gps-beidou-outdoors` | 30 min | 1.1 MB | The same module on its **own patch antenna, outdoors**, where BeiDou does track. The corpus's **only** capture in which two talkers report the same satellite number — 1,217 of 1,800 cycles — and its **only** crossing of UTC midnight. |
+| `form8n-gps-beidou-outdoors` | 30 min | 1.1 MB | The same module on its **own patch antenna, outdoors**, where BeiDou does track. 1,217 of its 1,800 cycles have two talkers reporting the same satellite number, and it is the corpus's **only** crossing of UTC midnight. |
+| `form8n-fix-lost` | 12 min | 413 KB | **The only capture in which a fix is taken away and comes back** — 120 cycles of 3D, a `UBX-CFG-RST` cold start at byte 87164, **65 cycles with no fix**, then 536 with it back. Also the only one holding the "time but no date" state, and a second colliding sitting at 433 of 721 cycles. |
 
 Each has a `.md` beside it saying what was happening; read those rather than this table.
 
@@ -33,11 +34,20 @@ Each has a `.md` beside it saying what was happening; read those rather than thi
 Being explicit about this matters more than the table above, because a gap nobody wrote down is a
 gap somebody later assumes is covered.
 
-- **A fix lost while powered.** Every attempt on 7 September failed: an inverted metal cover
+- ~~**A fix lost while powered.** Every attempt on 7 September failed: an inverted metal cover
   managed about 5 dB of attenuation and a microwave oven with the door shut about 10 dB, and
-  neither stopped an 11-satellite fix. It needs a real enclosure. This is the one item of #420's
-  stage 2 still outstanding, and the reason nothing here exercises a receiver going *from* a fix
-  *to* none.
+  neither stopped an 11-satellite fix. It needs a real enclosure.~~ **Answered 11 September 2026,
+  and it did not need one.** Attenuating the signal was the wrong approach: a **cold start** throws
+  the ephemeris away, so the receiver has nothing to compute a fix from and must reacquire from
+  cold, with the link never going down. `form8n-fix-lost` is twelve minutes of the result — 120
+  cycles of fix, 65 with none, 536 with it back.
+
+  Two details are what make it work. `resetMode` is **`0x02`**, a controlled reset of the GNSS
+  subsystem only; `0x00` re-enumerates the USB device and takes the port with it, ending the capture
+  rather than continuing it. And the frame's checksum failure mode is **silence** — a receiver
+  ignores a bad one without complaining, so the sitting would run its full length, keep its fix, and
+  look like an ordinary capture. `build/Capture-Talker.ps1 -ColdStartAfterMinutes` sends it and its
+  self-test pins the bytes.
 - **Two constellations *at once*.** Corrected 8 Sep 2026: this receiver is **not** GPS-only, and the
   earlier claim here was a label believed rather than a receiver asked. Its ROM advertises
   `GPS;SBAS;GLO;QZSS` and `UBX-CFG-GNSS` carries a GLONASS block, which is why
