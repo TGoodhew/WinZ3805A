@@ -15,6 +15,7 @@ using Microsoft.UI.Xaml.Navigation;
 using WinZ3805A.Controls;
 using WinZ3805A.Device.Commands;
 using WinZ3805A.Device.Drivers;
+using WinZ3805A.Device.Models;
 using WinZ3805A.Device.Transport;
 using WinZ3805A.Services;
 using WinZ3805A.ViewModels;
@@ -498,7 +499,7 @@ public sealed partial class SatellitesPage : Page
     /// a user clicking a hollow marker is usually asking "why is that one not being used", and the
     /// row it lands on is where that is answered.
     /// </remarks>
-    private void OnSkyPlotSatelliteInvoked(object? sender, int prn)
+    private void OnSkyPlotSatelliteInvoked(object? sender, SatelliteId id)
     {
         if (_model is not SatellitesViewModel model)
         {
@@ -508,8 +509,8 @@ public sealed partial class SatellitesPage : Page
         _syncing = true;
         try
         {
-            SelectInTables(prn);
-            SelectInSkyList(prn);
+            SelectInTables(id);
+            SelectInSkyList(id);
         }
         finally
         {
@@ -532,8 +533,8 @@ public sealed partial class SatellitesPage : Page
             if (TrackedRows.SelectedItem is TrackedSatelliteRow row)
             {
                 NotTrackedRows.SelectedItem = null;
-                SkyPlot.SelectedPrn = row.Prn;
-                SelectInSkyList(row.Prn);
+                SkyPlot.SelectedSatellite = row.Id;
+                SelectInSkyList(row.Id);
             }
         }
         finally
@@ -556,8 +557,8 @@ public sealed partial class SatellitesPage : Page
             if (NotTrackedRows.SelectedItem is PredictedSatelliteRow row)
             {
                 TrackedRows.SelectedItem = null;
-                SkyPlot.SelectedPrn = row.Prn;
-                SelectInSkyList(row.Prn);
+                SkyPlot.SelectedSatellite = row.Id;
+                SelectInSkyList(row.Id);
             }
         }
         finally
@@ -713,8 +714,8 @@ public sealed partial class SatellitesPage : Page
         _syncing = true;
         try
         {
-            SkyPlot.SelectedPrn = satellite.Prn;
-            SelectInTables(satellite.Prn);
+            SkyPlot.SelectedSatellite = satellite.Id;
+            SelectInTables(satellite.Id);
         }
         finally
         {
@@ -731,14 +732,14 @@ public sealed partial class SatellitesPage : Page
     /// handlers each setting three others is twelve assignments to keep in agreement; this is one
     /// place where "selected" means the same thing everywhere.
     /// </remarks>
-    private void SelectInTables(int prn)
+    private void SelectInTables(SatelliteId id)
     {
         if (_model is not SatellitesViewModel model)
         {
             return;
         }
 
-        if (model.Tracked.FirstOrDefault(row => row.Prn == prn) is TrackedSatelliteRow tracked)
+        if (model.Tracked.FirstOrDefault(row => row.Id == id) is TrackedSatelliteRow tracked)
         {
             NotTrackedRows.SelectedItem = null;
             TrackedRows.SelectedItem = tracked;
@@ -746,7 +747,7 @@ public sealed partial class SatellitesPage : Page
             return;
         }
 
-        if (model.NotTracked.FirstOrDefault(row => row.Prn == prn) is PredictedSatelliteRow predicted)
+        if (model.NotTracked.FirstOrDefault(row => row.Id == id) is PredictedSatelliteRow predicted)
         {
             TrackedRows.SelectedItem = null;
             NotTrackedRows.SelectedItem = predicted;
@@ -755,9 +756,9 @@ public sealed partial class SatellitesPage : Page
     }
 
     /// <summary>And points the list alternate at it.</summary>
-    private void SelectInSkyList(int prn)
+    private void SelectInSkyList(SatelliteId id)
     {
-        if (_model?.SkyPlotSatellites.FirstOrDefault(candidate => candidate.Prn == prn)
+        if (_model?.SkyPlotSatellites.FirstOrDefault(candidate => candidate.Id == id)
             is SkyPlotSatellite satellite)
         {
             SkyRows.SelectedItem = satellite;
@@ -775,12 +776,12 @@ public sealed partial class SatellitesPage : Page
     /// </remarks>
     private string DescribeSelection()
     {
-        if (_model is not SatellitesViewModel model || SkyPlot.SelectedPrn is not int prn)
+        if (_model is not SatellitesViewModel model || SkyPlot.SelectedSatellite is not SatelliteId id)
         {
             return "Select a satellite on the plot or in a table to see it in both.";
         }
 
-        SkyPlotSatellite? satellite = model.SkyPlotSatellites.FirstOrDefault(candidate => candidate.Prn == prn);
+        SkyPlotSatellite? satellite = model.SkyPlotSatellites.FirstOrDefault(candidate => candidate.Id == id);
         return satellite?.Description ?? string.Empty;
     }
 

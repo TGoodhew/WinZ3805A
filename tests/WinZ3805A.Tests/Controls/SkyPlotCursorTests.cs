@@ -153,8 +153,8 @@ public class SkyPlotCursorTests
     [InlineData(-1)]
     public void AnEmptyPlotLeavesTheCursorNowhere(int delta)
     {
-        Assert.Null(SkyPlotCursor.Step([], 20, delta));
-        Assert.Null(SkyPlotCursor.Step([], null, delta));
+        Assert.Null(SkyPlotCursor.Step<int>([], 20, delta));
+        Assert.Null(SkyPlotCursor.Step<int>([], null, delta));
     }
 
     /// <summary>One satellite is a ring of one: every arrow press stays on it.</summary>
@@ -191,6 +191,6 @@ public class SkyPlotCursorTests
     public void TheOrderIsRequiredAndSaysSo() =>
         Assert.Throws<ArgumentNullException>(() =>
         {
-            _ = SkyPlotCursor.Step(null!, 20, 1);
+            _ = SkyPlotCursor.Step<int>(null!, 20, 1);
         });
 }

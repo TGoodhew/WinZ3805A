@@ -64,7 +64,11 @@ public enum SkyPlotMarkerKind
 /// knows nothing about tables, selection models or the status screen, which is what lets its
 /// geometry be tested against hand-computed positions rather than against a parsed fixture.
 /// </remarks>
-/// <param name="Prn">The satellite's PRN, which is also its identity and its keyboard order.</param>
+/// <param name="Prn">The satellite's number within its constellation.</param>
+/// <param name="Constellation">
+/// Which constellation that number belongs to, or <see cref="SatelliteConstellation.Unknown"/> for a
+/// receiver with no way to say — which is every family but NMEA (#424).
+/// </param>
 /// <param name="ElevationDegrees">Degrees above the horizon, or null if the receiver did not say.</param>
 /// <param name="AzimuthDegrees">Degrees clockwise from north, or null.</param>
 /// <param name="SignalStrength">The reading, on <paramref name="Kind"/>'s scale, or null.</param>
@@ -79,6 +83,7 @@ public enum SkyPlotMarkerKind
 /// </param>
 public sealed record SkyPlotSatellite(
     int Prn,
+    SatelliteConstellation Constellation,
     int? ElevationDegrees,
     int? AzimuthDegrees,
     int? SignalStrength,
@@ -92,8 +97,14 @@ public sealed record SkyPlotSatellite(
     /// </summary>
     public bool CanPlot => ElevationDegrees is not null && AzimuthDegrees is not null;
 
-    /// <summary>The PRN as it is shown.</summary>
-    public string PrnText => Prn.ToString(System.Globalization.CultureInfo.CurrentCulture);
+    /// <summary>The satellite's identity — the plot's key, and the keyboard's order (#424).</summary>
+    public SatelliteId Id => new(Constellation, Prn);
+
+    /// <summary>
+    /// The satellite as it is shown — <c>G04</c>, <c>C04</c>, or a bare number from a receiver with
+    /// one constellation.
+    /// </summary>
+    public string PrnText => Id.Designation;
 
     /// <summary>Elevation as it is shown, with the degree sign.</summary>
     public string ElevationText => ReadoutFormatter.Degrees(ElevationDegrees);
