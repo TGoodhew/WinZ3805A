@@ -281,6 +281,21 @@ Everything from the main window, with the words behind the numbers:
 
 - **Latitude, longitude, height** — the antenna position the receiver is using for its timing
   solution. **Copy** puts it on the clipboard.
+- **Geoid separation** — how far the geoid sits above the WGS-84 ellipsoid here. It is usually a
+  negative number, because the geoid is below the ellipsoid over most of the world. Its use is
+  converting between the two height datums, so when the receiver reports height above mean sea
+  level the ellipsoidal height is shown beside it.
+- **Satellites used** — how many satellites went into the fix. This is **not** the number on the
+  main window, which counts satellites being tracked. A satellite can be tracked and still left out
+  of the solution — below the elevation mask, flagged unhealthy, or not fitting — so this number is
+  usually the smaller of the two, and it is the one that describes the fix.
+- **Dilution of precision** — how favourably the satellites were placed, as position, horizontal
+  and vertical figures. Smaller is better: around 1 is ideal and under 2 is excellent. It measures
+  geometry only and says nothing about how good the ranging was. The vertical figure is normally
+  worse than the horizontal one, because satellites are above the antenna and never below it.
+
+  A receiver that does not report these shows an em dash, the same as any other reading it cannot
+  supply.
 - **Survey** — a timing receiver needs to know exactly where its antenna is, and it can work that
   out by averaging fixes for about two hours. **Start survey** begins that; **Adopt computed
   position** stops early and takes the average so far; **Cancel survey** goes back to the last held
