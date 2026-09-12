@@ -191,22 +191,15 @@ public sealed class NmeaMixedConstellationTests
     }
 
     [Fact]
-    public void TwoConstellationsNumberingTheirSatellitesTheSameWayLoseOne()
+    public void TwoConstellationsNumberingTheirSatellitesTheSameWayBothSurvive()
     {
-        // NOT A FIX - A RECORD OF WHAT HAPPENS TODAY, so the behaviour is visible rather than
-        // discovered by a user (#424).
+        // THE FIX FOR #424, where this test used to be the record of the defect.
         //
         // NMEA 4.10 gives each constellation its own satellite-number range - GPS 1-32, SBAS 33-64,
-        // GLONASS 65-96 - and a conforming receiver never collides. Receivers exist that number
-        // per constellation instead and rely on the talker to disambiguate, and against one of
-        // those the parser's dedupe is a plain `HashSet<int>` of PRNs, so the second constellation's
-        // satellite 1 is silently dropped: the sky plot shows fewer satellites than are being
-        // tracked, which reads as poor reception rather than as a parsing choice.
-        //
-        // Changing it means either duplicate PRNs in the model or a wider satellite identity, and
-        // both are model changes that want a real receiver in front of them - a fix aimed at a
-        // receiver nobody has seen is a guess with tests attached. Pinned here so the day one turns
-        // up, this test names the cause.
+        // GLONASS 65-96 - and a conforming receiver never collides. Receivers exist that number per
+        // constellation instead and rely on the talker to disambiguate, and against one of those the
+        // parser's dedupe - a plain `HashSet<int>` of PRNs - silently dropped the second claimant.
+        // The identity is now (constellation, number), so both survive and each says which it is.
         string colliding = string.Join('\n',
         [
             Sentence("GNRMC,200000.00,A,3726.2550,N,12210.5017,W,0.02,0.00,060926,,,A"),
@@ -216,9 +209,67 @@ public sealed class NmeaMixedConstellationTests
 
         ReceiverStatus status = NmeaStatusParser.Parse(colliding, Now);
 
-        // Four satellites were reported; three survive, because both talkers claimed number 1.
-        Assert.Equal(3, status.Tracked.Count + status.NotTracked.Count);
-        Assert.Equal(42, status.Tracked.Single(s => s.Prn == 1).SignalStrength);
+        // Four satellites were reported and four survive. It was three.
+        Assert.Equal(4, status.Tracked.Count + status.NotTracked.Count);
+
+        // Both number 1s are present, and they are told apart by constellation rather than by
+        // arrival order - GPS 1 at 42, GLONASS 1 at 44.
+        Assert.Equal(42, status.Tracked.Single(s => s.Id == new SatelliteId(SatelliteConstellation.Gps, 1)).SignalStrength);
+        Assert.Equal(44, status.Tracked.Single(s => s.Id == new SatelliteId(SatelliteConstellation.Glonass, 1)).SignalStrength);
+
+        // And they are distinguishable on screen, which is what makes keeping both honest rather
+        // than merely more numerous: two rows reading "1" would be worse than one.
+        Assert.Equal("G01", status.Tracked.Single(s => s.Prn == 1 && s.SignalStrength == 42).Id.Designation);
+        Assert.Equal("R01", status.Tracked.Single(s => s.Prn == 1 && s.SignalStrength == 44).Id.Designation);
+    }
+
+    [Fact]
+    public void ADuplicateWithinOneConstellationIsStillCollapsed()
+    {
+        // The dedupe still has a job. A talker that repeats a satellite across its own pages - a
+        // retransmitted page, or a page counted twice - must not produce two of it, and widening the
+        // identity must not quietly turn that off.
+        string repeated = string.Join('\n',
+        [
+            Sentence("GNRMC,200000.00,A,3726.2550,N,12210.5017,W,0.02,0.00,060926,,,A"),
+            Sentence("GPGSV,2,1,02,07,40,083,42,08,17,308,38"),
+            Sentence("GPGSV,2,2,02,07,40,083,42"),
+        ]);
+
+        ReceiverStatus status = NmeaStatusParser.Parse(repeated, Now);
+
+        Assert.Equal(2, status.Tracked.Count + status.NotTracked.Count);
+        Assert.Single(status.Tracked, s => s.Prn == 7);
+    }
+
+    [Theory]
+    [InlineData("GP", 1, SatelliteConstellation.Gps, "G01")]
+    [InlineData("GP", 46, SatelliteConstellation.Sbas, "S46")]
+    [InlineData("GL", 65, SatelliteConstellation.Glonass, "R65")]
+    [InlineData("GA", 9, SatelliteConstellation.Galileo, "E09")]
+    [InlineData("GB", 4, SatelliteConstellation.BeiDou, "C04")]
+    [InlineData("GQ", 3, SatelliteConstellation.Qzss, "J03")]
+    [InlineData("GI", 5, SatelliteConstellation.NavIC, "I05")]
+    [InlineData("GN", 4, SatelliteConstellation.Unknown, "4")]
+    public void ATalkerNamesItsConstellationAndTheDesignationFollows(
+        string talker, int prn, SatelliteConstellation expected, string designation)
+    {
+        // GN is the one that must NOT be guessed: it means "combined", so the honest answer is
+        // Unknown and the satellite renders exactly as a SmartClock's would - a bare number.
+        Assert.Equal(expected, NmeaStatusParser.ConstellationFor(talker, prn));
+        Assert.Equal(designation, new SatelliteId(expected, prn).Designation);
+    }
+
+    [Fact]
+    public void ASmartClockSatelliteIsUnchanged()
+    {
+        // The widened identity STOPS AT THE NMEA DRIVER (#424). A satellite from a status screen has
+        // no constellation to declare, and must render as the bare number it always has - otherwise
+        // this change reaches every surface of a receiver it has nothing to say about.
+        TrackedSatellite fromAScreen = new() { Prn = 17, ElevationDegrees = 65, SignalStrength = 49 };
+
+        Assert.Equal(SatelliteConstellation.Unknown, fromAScreen.Constellation);
+        Assert.Equal("17", fromAScreen.Id.Designation);
     }
 
     [Fact]
@@ -244,16 +295,14 @@ public sealed class NmeaMixedConstellationTests
     }
 
     /// <summary>
-    /// A real receiver colliding, and the parser dropping one of the two (#424).
+    /// A real receiver colliding, and both satellites surviving it (#424).
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>NOT A FIX - A RECORD OF WHAT HAPPENS TODAY</b>, exactly as
-    /// <see cref="TwoConstellationsNumberingTheirSatellitesTheSameWayLoseOne"/> is. The difference is
-    /// the evidence. That test builds a collision to show what would happen, which is why #424 could
-    /// only ever call the defect "latent, not active" and reachable in principle. This one replays
-    /// <c>form8n-gps-beidou-outdoors.nmea</c>: the forM8N on its own patch antenna outdoors, where
-    /// BeiDou actually tracks.
+    /// <b>This was the record of the defect and is now the proof of the fix.</b> The synthetic test
+    /// above builds a collision to show what happens; this one replays
+    /// <c>form8n-gps-beidou-outdoors.nmea</c> — the forM8N on its own patch antenna outdoors, where
+    /// BeiDou actually tracks — so the claim rests on bytes a receiver sent.
     /// </para>
     /// <para>
     /// It is neither latent nor rare. That receiver numbers BeiDou per constellation - 6, 20, 23, 24,
@@ -270,7 +319,7 @@ public sealed class NmeaMixedConstellationTests
     /// </para>
     /// </remarks>
     [Fact]
-    public void ARealReceiverCollidesAndTheParserDropsASatellite()
+    public void ARealReceiverCollidesAndBothSatellitesSurvive()
     {
         string path = Path.Combine(
             AppContext.BaseDirectory, "Nmea", "Captures", "form8n-gps-beidou-outdoors.nmea");
@@ -323,15 +372,85 @@ public sealed class NmeaMixedConstellationTests
             $"only {colliding} of {cycles} cycles collided, where this capture was measured at 1,217.");
         Assert.NotNull(first);
 
-        // What the receiver reported, against what the parser kept.
+        // What the receiver reported, against what the parser keeps. It used to be one fewer.
         ReceiverStatus status = NmeaStatusParser.Parse(first, Now);
-        Assert.Equal(reportedInFirst - 1, status.Tracked.Count + status.NotTracked.Count);
+        Assert.Equal(reportedInFirst, status.Tracked.Count + status.NotTracked.Count);
 
-        // And the loss is invisible: the number survives, once, so nothing on screen suggests a
-        // satellite is missing. That is the part of #424 that sends someone onto the roof.
-        int keptFour = status.Tracked.Count(satellite => satellite.Prn == 4)
-            + status.NotTracked.Count(satellite => satellite.Prn == 4);
-        Assert.Equal(1, keptFour);
+        // Both claimants of the contested number are present, and each says which constellation it
+        // belongs to - so the count is right AND the two are told apart on screen.
+        SatelliteId[] fours =
+        [
+            .. status.Tracked.Where(s => s.Prn == 4).Select(s => s.Id),
+            .. status.NotTracked.Where(s => s.Prn == 4).Select(s => s.Id),
+        ];
+
+        Assert.Equal(2, fours.Length);
+        Assert.Contains(new SatelliteId(SatelliteConstellation.Gps, 4), fours);
+        Assert.Contains(new SatelliteId(SatelliteConstellation.BeiDou, 4), fours);
+        Assert.Equal(["C04", "G04"], fours.Select(id => id.Designation).Order());
+    }
+
+    /// <summary>
+    /// The whole sitting, not one cycle of it — every cycle keeps everything its talkers reported (#424).
+    /// </summary>
+    /// <remarks>
+    /// The single-cycle assertion above proves the mechanism; this one proves it holds for all 1,800
+    /// cycles, including the 1,217 that collide. A fix that worked on the first colliding cycle and
+    /// failed on a later one — a satellite changing constellation mid-sitting, say, or a page
+    /// repeated across talkers — would pass the test above and still under-report on the bench.
+    /// </remarks>
+    [Fact]
+    public void AcrossTheWholeSittingNoCycleLosesASatellite()
+    {
+        string path = Path.Combine(
+            AppContext.BaseDirectory, "Nmea", "Captures", "form8n-gps-beidou-outdoors.nmea");
+        Assert.True(File.Exists(path), $"{path} is missing; the capture is the evidence.");
+
+        string[] lines = File.ReadAllText(path).Split('\n');
+
+        int cycles = 0;
+        int collidingCycles = 0;
+        int underReported = 0;
+        List<string> current = [];
+
+        foreach (string raw in lines)
+        {
+            string line = raw.TrimEnd('\r');
+            if (line.Length < 9 || line[0] != '$')
+            {
+                continue;
+            }
+
+            // RMC is the driver's cycle boundary, and the trailing partial cycle is left uncounted -
+            // the same accounting the single-cycle test above uses, so both report 1,800.
+            if (line.AsSpan(3, 3) is "RMC")
+            {
+                if (current.Count > 0)
+                {
+                    cycles++;
+                    int reported = Reported(current, out bool clashed);
+                    if (clashed)
+                    {
+                        collidingCycles++;
+                    }
+
+                    ReceiverStatus status = NmeaStatusParser.Parse(string.Join('\n', current), Now);
+                    if (status.Tracked.Count + status.NotTracked.Count != reported)
+                    {
+                        underReported++;
+                    }
+                }
+
+                current = [line];
+                continue;
+            }
+
+            current.Add(line);
+        }
+
+        Assert.Equal(1800, cycles);
+        Assert.True(collidingCycles >= 1000, $"only {collidingCycles} cycles collided; the capture was measured at 1,217.");
+        Assert.Equal(0, underReported);
     }
 
     /// <summary>
