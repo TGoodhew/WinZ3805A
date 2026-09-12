@@ -60,6 +60,16 @@ jobs:
         shell: pwsh
         run: ./build/Test-NoHexLiterals.ps1
 
+      # #520. The token system was checked from the definition side only - the
+      # parity gate below asks that a key defined in one theme is defined in the
+      # others - and never from the usage side. A misspelled key is not a compile
+      # error: it throws while the page's XAML loads, so the page silently will
+      # not open, with nothing logged. #512 shipped `WzSpaceS`, which has never
+      # existed, and the Timing page stopped opening while every gate passed.
+      - name: Every Wz* resource key referenced is defined
+        shell: pwsh
+        run: ./build/Test-ResourceKeysResolve.ps1
+
       # A11Y-3 / §9.9
       - name: Icon-only controls carry an automation name and a tooltip
         shell: pwsh
