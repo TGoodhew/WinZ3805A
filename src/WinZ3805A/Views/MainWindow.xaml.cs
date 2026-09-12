@@ -287,7 +287,14 @@ public sealed partial class MainWindow : Window
                 }
 
                 // Fire and forget deliberately: KeyboardAccelerator.Invoked is void-returning, and
-                // the command already owns its own re-entrancy guard and its own error surface.
+                // the command owns its own re-entrancy guard and its own error surface.
+                //
+                // That sentence was here before either was true (#503). The guard was a button's
+                // IsEnabled, which this route never consults, and the branch a mid-connect press
+                // actually takes had neither. A discarded task is only safe over a method that
+                // cannot throw, so the claim is load-bearing rather than decorative: if
+                // ToggleConnectionAsync ever stops catching, this becomes an unobserved exception
+                // and a silent process death.
                 _ = _page.ToggleConnectionAsync();
                 return true;
             });

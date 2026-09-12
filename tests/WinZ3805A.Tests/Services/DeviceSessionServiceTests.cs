@@ -595,6 +595,54 @@ public class DeviceSessionServiceTests
         await Assert.ThrowsAsync<ObjectDisposedException>(() => session.ExecuteAsync(Status));
     }
 
+    /// <summary>
+    /// #503: disconnecting a disposed session asks for a state it is already in, so it returns
+    /// instead of throwing — unlike its three siblings, which throw, and deliberately so.
+    /// </summary>
+    /// <remarks>
+    /// The caller that made this matter reaches <c>DisconnectAsync</c> from a discarded task, where
+    /// an <see cref="ObjectDisposedException"/> is unobserved rather than reported.
+    /// </remarks>
+    [Fact]
+    public async Task DisconnectingADisposedSessionIsHarmless()
+    {
+        DeviceSessionService session = new((_, _) => Receiver(), new FakeTimeProvider());
+        await session.ConnectAsync("COM3", SerialSettings.Default).WaitAsync(TestTimeout);
+
+        await session.DisposeAsync();
+
+        await session.DisconnectAsync().WaitAsync(TestTimeout);
+        await session.DisconnectAsync().WaitAsync(TestTimeout);
+
+        // The siblings still throw — this is one method's contract, not a general relaxation.
+        await Assert.ThrowsAsync<ObjectDisposedException>(
+            () => session.ConnectAsync("COM3", SerialSettings.Default));
+        await Assert.ThrowsAsync<ObjectDisposedException>(() => session.AutoDetectAsync("COM3"));
+    }
+
+    /// <summary>
+    /// The half the flag cannot cover: disposal landing while a disconnect is already parked on the
+    /// lifecycle semaphore, which is what pressing Disconnect during an in-flight connect produces.
+    /// </summary>
+    [Fact]
+    public async Task DisconnectingWhileTheSessionIsBeingDisposedIsHarmless()
+    {
+        DeviceSessionService session = new((_, _) => Receiver(), new FakeTimeProvider());
+        await session.ConnectAsync("COM3", SerialSettings.Default).WaitAsync(TestTimeout);
+
+        // Parked behind a connect that holds the semaphore, so the disconnect is waiting rather than
+        // running when disposal arrives.
+        Task parked = Task.Run(async () =>
+        {
+            await Task.Yield();
+            await session.DisconnectAsync();
+        });
+
+        await session.DisposeAsync();
+
+        await parked.WaitAsync(TestTimeout);
+    }
+
     // -------------------------------------------------------------------------------------
     // A caller is never left waiting on a completion nobody will set (#259)
     // -------------------------------------------------------------------------------------
