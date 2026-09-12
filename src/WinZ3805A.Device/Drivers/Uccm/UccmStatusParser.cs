@@ -305,6 +305,11 @@ public static class UccmStatusParser
             Position = info.Position,
             HeightDatum = info.HeightDatum,
             LeapPending = time?.LeapPending == true ? LeapSecondPending.Plus : LeapSecondPending.None,
+
+            // The one place this family states GPS - UTC at all: it answers none of the :PTIM:LEAP
+            // queries, and puts the offset in every time code it broadcasts (#481). Null rather than
+            // zero when no code has arrived - zero is a legal offset, and was the true one until 1981.
+            GpsUtcOffsetSeconds = time?.LeapSecondOffset,
             CapturedAt = capturedAt,
             ParseWarnings = warnings,
         };

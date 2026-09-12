@@ -192,6 +192,9 @@ public sealed partial class TimePage : Page
     {
         if (!Capability.Reports(_device?.Driver, ReceiverReading.LeapSecond))
         {
+            // The sentence is right for a family that carries nothing, and Render suppresses it if
+            // the receiver turns out to broadcast the offset anyway (#481) — so a driver that
+            // declares it cannot *answer* the queries never contradicts a value it sent unasked.
             _leap = LeapSecondReading.Unknown with
             {
                 Error = Capability.NotReported(_device?.Driver, "a leap second or a GPS − UTC offset"),
@@ -214,6 +217,10 @@ public sealed partial class TimePage : Page
                     await AskLinesAsync(LeapSecondQueries.Date, token).ConfigureAwait(true));
             }
 
+            // This records only what the QUERIES said. Where a receiver states GPS − UTC unasked -
+            // a UCCM does, in every time code it broadcasts - Render falls back to it (#481), so the
+            // precedence lives in one place and follows the store as it fills rather than being
+            // frozen at whatever had arrived when the page was opened.
             _leap = new LeapSecondReading(
                 accumulated,
                 LeapSecondQueries.Decode(status, direction),
@@ -378,7 +385,11 @@ public sealed partial class TimePage : Page
         // The pill follows the direct query where there is one, and the status screen otherwise.
         // They agree in every case seen so far; where they could not both be read, the screen is
         // the one that arrives without asking.
-        LeapSecondPending pending = _leap.AccumulatedSeconds is null && _leap.Error is null
+        // Widened for #481: the fallback now applies when the queries *failed* as well as when they
+        // said nothing, which is what the sentence above already claimed it did. A UCCM errors on
+        // every :PTIM:LEAP node and carries the pending bit in its time code, so the old condition
+        // took None from the failed query in preference to the flag the receiver had broadcast.
+        LeapSecondPending pending = _leap.AccumulatedSeconds is null
             ? model.LeapPending
             : _leap.Pending;
 
@@ -390,7 +401,14 @@ public sealed partial class TimePage : Page
             _ => "None announced",
         };
 
-        AccumulatedText.Text = _leap.AccumulatedSeconds is int seconds
+        // The query where it answered, the broadcast otherwise (#481). A UCCM answers none of the
+        // :PTIM:LEAP nodes and states the offset in every binary time code, so this readout was an
+        // em dash for a number the application was already holding. Resolved here rather than in
+        // ReadLeapAsync so it follows the store: the page reads the queries once on navigation, and
+        // the first full-tier status can easily arrive after that.
+        int? accumulated = _leap.AccumulatedSeconds ?? model.ReportedGpsUtcOffsetSeconds;
+
+        AccumulatedText.Text = accumulated is int seconds
             ? $"{seconds.ToString("+0;\u22120;0", CultureInfo.CurrentCulture)}{ReadoutFormatter.HairSpace}s"
             : ReadoutFormatter.NoValue;
 
@@ -400,8 +418,14 @@ public sealed partial class TimePage : Page
         AnnouncedDateText.Text = _leap.AnnouncedDate?.ToString("d MMM yyyy", CultureInfo.CurrentCulture)
             ?? string.Empty;
 
-        LeapErrorText.Text = _leap.Error ?? string.Empty;
-        LeapErrorText.Visibility = _leap.Error is null ? Visibility.Collapsed : Visibility.Visible;
+        // Suppressed once the offset is in hand, however it got here. "The receiver did not answer
+        // the leap-second queries" is true of a UCCM and reads as a fault when it is printed beside
+        // the number that receiver broadcast unasked - an accusation about the route rather than a
+        // statement about the reading (#481, and the same argument #435 makes for a talker).
+        string? leapError = accumulated is null ? _leap.Error : null;
+
+        LeapErrorText.Text = leapError ?? string.Empty;
+        LeapErrorText.Visibility = leapError is null ? Visibility.Collapsed : Visibility.Visible;
 
         TimeCodeFormatText.Text = _timeCode.FormatText;
 

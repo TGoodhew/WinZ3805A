@@ -286,6 +286,26 @@ public sealed record ReceiverStatus
     /// <summary>Whether a leap second is scheduled.</summary>
     public LeapSecondPending LeapPending { get; init; }
 
+    /// <summary>
+    /// GPS − UTC in whole seconds, where the receiver states it without being asked (#481).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Null for a family that only answers the question when asked</b>, which is the SmartClock:
+    /// §10.14's <c>:PTIM:LEAP:ACC?</c> is a query, its answer belongs to the page that asked, and
+    /// nothing about it reaches this type. A UCCM is the other case — it answers none of the
+    /// <c>:PTIM:LEAP</c> queries at all, and states the offset in every binary time code it
+    /// broadcasts.
+    /// </para>
+    /// <para>
+    /// So this is not a duplicate of the queried value and must never override it: it is the same
+    /// figure arriving unasked, and it exists so a receiver that cannot be asked can still be read.
+    /// Measured at 18 on <c>TRIMBLE,57964-80,40896646,V2.0.1.6-01</c>, 12 Sep 2026, which is the
+    /// true offset.
+    /// </para>
+    /// </remarks>
+    public int? GpsUtcOffsetSeconds { get; init; }
+
     // ---- POSITION -----------------------------------------------------------------------------
 
     /// <summary>Whether the receiver is holding a position or surveying for one.</summary>
