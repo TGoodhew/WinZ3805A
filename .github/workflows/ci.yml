@@ -254,6 +254,45 @@ jobs:
         run: ./build/Test-GuideCoverage.ps1
 
   # ---------------------------------------------------------------------------
+  # The only gate that checks the PULL REQUEST rather than the source. GitHub closes
+  # an issue on merge wherever a closing keyword stands beside its number, and it
+  # reads neither the sentence around them nor the heading above them. #487 was
+  # closed twice on 13 Sep 2026 by sentences written to prevent exactly that - the
+  # second time by the commit message of the very change that documented the first,
+  # past a PR body its author had read moments before.
+  #
+  # Hence the commit half, and hence fetch-depth: 0. A clean body does not protect a
+  # commit whose message carries the keyword: a rebase merge puts that message on
+  # main verbatim, where GitHub reads it.
+  #
+  # Title and body arrive through the environment rather than through ${{ }} inside
+  # the script line, so that a PR body containing a quote, a backtick or a newline
+  # is data rather than shell.
+  # ---------------------------------------------------------------------------
+  closing-keywords:
+    name: Closing keywords are meant
+    timeout-minutes: 5
+    if: github.event_name == 'pull_request'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: The rule itself still judges the known cases
+        shell: pwsh
+        run: ./build/Test-NoClosingKeywords.ps1 -SelfTest
+
+      - name: No closing keyword closes an issue nobody meant to close
+        shell: pwsh
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: ./build/Test-NoClosingKeywords.ps1
+
+  # ---------------------------------------------------------------------------
   tooling:
     name: Tooling self-tests
     timeout-minutes: 10
