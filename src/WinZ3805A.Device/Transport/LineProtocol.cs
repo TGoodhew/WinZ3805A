@@ -112,6 +112,28 @@ public sealed class LineProtocol
     /// </remarks>
     private BinaryFrameGrammar _frames;
 
+    /// <summary>
+    /// Whether the last read ended part-way through a binary frame (#481).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The hole this closes was only visible against hardware.</b> A frame trails the prompt, so
+    /// a read routinely ends with the prompt matched and the frame's first few bytes behind it. The
+    /// transaction completes — correctly, the prompt is the terminator — leaving those bytes
+    /// unconsumed for the next read to finish. But the next transaction opens with
+    /// <see cref="DiscardStaleInput"/>, which threw the frame's <i>head</i> away; the rest then
+    /// arrived with no marker in front of it, so nothing recognised it and it was glued to the front
+    /// of the next reply.
+    /// </para>
+    /// <para>
+    /// That is the same corruption #481 set out to fix, surviving the fix in one case out of many —
+    /// which is why it read as intermittent and why the unit tests, each of which writes a whole
+    /// frame, could not see it. Measured on a Trimble UCCM-P on 12 Sep 2026: the poller's lock-state
+    /// reading came back with binary in front of it about four times a minute.
+    /// </para>
+    /// </remarks>
+    private bool _framePending;
+
     /// <param name="transport">The open link. Not owned, and not disposed by this type.</param>
     /// <param name="timeProvider">The clock every timeout here is measured against.</param>
     /// <param name="logger">Where transaction faults are recorded.</param>
@@ -502,6 +524,16 @@ public sealed class LineProtocol
         {
             _transport.DiscardInput();
         }
+        else if (_framePending)
+        {
+            // Those bytes are the start of a frame this link is mid-way through reading, not
+            // leftovers (#481). Draining them loses the marker, and the rest then arrives looking
+            // like text and lands on the front of the next reply - the exact corruption the frame
+            // grammar exists to prevent. The receiver has finished its answer, so there is nothing
+            // else in there to discard.
+            _framePending = false;
+            return;
+        }
 
         PipeReader reader = _transport.Input;
         long discarded = 0;
@@ -628,6 +660,10 @@ public sealed class LineProtocol
         // discards which byte the delimiter was.
         BinaryFrameStripper.Result stripped = BinaryFrameStripper.Strip(buffer, _frames);
         ReadOnlySequence<byte> clean = new(stripped.Clean);
+
+        // A frame that has begun but not finished arriving. Its bytes stay in the pipe for the next
+        // read to complete — so the next transaction must not open by discarding them.
+        _framePending = stripped.OriginalLength < buffer.Length;
 
         bool found = TryReadLines(
             clean, lines, ref pendingLineFeed, out SequencePosition cleanConsumed, out _, out promptStatus);
