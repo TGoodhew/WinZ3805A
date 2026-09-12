@@ -222,7 +222,12 @@ public sealed class NmeaCaptureReplayTests
                 AssertSky(satellite.ElevationDegrees, satellite.AzimuthDegrees, name);
             }
 
-            Assert.Empty(status.Tracked.Select(s => s.Prn).Intersect(status.NotTracked.Select(s => s.Prn)));
+            // No satellite is both tracked and not tracked - KEYED ON IDENTITY, NOT ON THE NUMBER
+            // (#424). Keyed on the number this fails against form8n-gps-beidou-outdoors.nmea, where
+            // GPS 4 is tracked while BeiDou 4 is only in view: two different satellites, and a
+            // perfectly ordinary sky. The invariant was written when a number was an identity, and
+            // it is the same conflation the parser itself was making.
+            Assert.Empty(status.Tracked.Select(s => s.Id).Intersect(status.NotTracked.Select(s => s.Id)));
 
             if (status.Position is GeoPosition position)
             {

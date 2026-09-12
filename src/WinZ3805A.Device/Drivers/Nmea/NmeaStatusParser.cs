@@ -147,11 +147,50 @@ public static class NmeaStatusParser
         };
     }
 
+    /// <summary>
+    /// Which constellation a GSV page's talker says a satellite belongs to (#424).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The talker is the only thing in a GSV page that says this — the sentence carries no system
+    /// field, and NMEA 4.11's trailing signal id names a frequency rather than a constellation. So
+    /// <c>GN</c>, which a few receivers use for GSV, is answered
+    /// <see cref="SatelliteConstellation.Unknown"/>: it means "combined", and guessing from the
+    /// number would be inventing the very attribution this method exists to read.
+    /// </para>
+    /// <para>
+    /// <b>The one number-based rule is the standard's own.</b> NMEA reserves 33–64 for satellite-based
+    /// augmentation inside the GPS talker, and that is not a hypothesis here: four of the VK-162
+    /// captures in the corpus carry <c>$GPGSV</c> satellites 46 and 48, which are WAAS. Numbers
+    /// outside that range in a <c>GP</c> page are left as GPS rather than guessed at, because a
+    /// receiver using raw SBAS numbering is one nobody here has seen.
+    /// </para>
+    /// </remarks>
+    /// <param name="talker">The sentence's two-letter talker.</param>
+    /// <param name="prn">The satellite number, which decides SBAS inside the GPS talker.</param>
+    public static SatelliteConstellation ConstellationFor(string? talker, int prn) => talker switch
+    {
+        "GP" => prn is >= 33 and <= 64 ? SatelliteConstellation.Sbas : SatelliteConstellation.Gps,
+        "GL" => SatelliteConstellation.Glonass,
+        "GA" => SatelliteConstellation.Galileo,
+        "GB" or "BD" => SatelliteConstellation.BeiDou,
+        "GQ" => SatelliteConstellation.Qzss,
+        "GI" => SatelliteConstellation.NavIC,
+        _ => SatelliteConstellation.Unknown,
+    };
+
     private static (IReadOnlyList<TrackedSatellite>, IReadOnlyList<PredictedSatellite>) Satellites(List<NmeaSentence> pages, List<string> warnings)
     {
         List<TrackedSatellite> tracked = [];
         List<PredictedSatellite> inView = [];
-        HashSet<int> seen = [];
+
+        // KEYED BY CONSTELLATION AND NUMBER, NOT BY NUMBER ALONE (#424). This was a HashSet<int>,
+        // and against a receiver that numbers per constellation the second claimant of a number was
+        // dropped - measured at 1,217 of 1,800 cycles in form8n-gps-beidou-outdoors.nmea, where GPS
+        // 4 and BeiDou 4 are in view together. The user-visible symptom was the bad part: the sky
+        // plot and the satellite count under-reported, which reads as poor reception rather than as
+        // a parsing choice, and sends someone onto the roof.
+        HashSet<SatelliteId> seen = [];
 
         foreach (NmeaSentence page in pages)
         {
@@ -161,7 +200,13 @@ public static class NmeaStatusParser
             for (int index = 3; index + 3 < page.Fields.Count + 1 && index < page.Fields.Count; index += 4)
             {
                 int? prn = ParseInt(page.Field(index));
-                if (prn is null || !seen.Add(prn.Value))
+                if (prn is null)
+                {
+                    continue;
+                }
+
+                SatelliteConstellation constellation = ConstellationFor(page.Talker, prn.Value);
+                if (!seen.Add(new SatelliteId(constellation, prn.Value)))
                 {
                     continue;
                 }
@@ -175,6 +220,7 @@ public static class NmeaStatusParser
                     tracked.Add(new TrackedSatellite
                     {
                         Prn = prn.Value,
+                        Constellation = constellation,
                         ElevationDegrees = elevation,
                         AzimuthDegrees = azimuth,
                         SignalStrength = strength,
@@ -185,6 +231,7 @@ public static class NmeaStatusParser
                     inView.Add(new PredictedSatellite
                     {
                         Prn = prn.Value,
+                        Constellation = constellation,
                         ElevationDegrees = elevation,
                         AzimuthDegrees = azimuth,
                     });
