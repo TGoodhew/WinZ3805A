@@ -286,6 +286,10 @@ public sealed partial class MainPage : Page
     public async Task ShowConnectionDialogAsync()
     {
         ConnectionDialog dialog = new(NewConnectionViewModel()) { XamlRoot = XamlRoot };
+
+        // Before ShowAsync, which is when the template reads the cap (#506).
+        dialog.AllowHeightUpTo(XamlRoot?.Size.Height ?? 0);
+
         await dialog.ShowAsync();
     }
 

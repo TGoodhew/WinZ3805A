@@ -127,6 +127,7 @@
          min/max-per-column rule is what stops a one-second excursion vanishing at the 7-day range,
          and it is the kind of thing that looks correct in a screenshot of a smooth trace. -->
     <Compile Include="..\..\src\WinZ3805A\Controls\FirstRun.cs" Link="Controls\FirstRun.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Controls\DialogHeight.cs" Link="Controls\DialogHeight.cs" />
     <Compile Include="..\..\src\WinZ3805A\Controls\ConnectionBanner.cs" Link="Controls\ConnectionBanner.cs" />
     <Compile Include="..\..\src\WinZ3805A\Controls\CommandRetryPolicy.cs" Link="Controls\CommandRetryPolicy.cs" />
     <Compile Include="..\..\src\WinZ3805A\Controls\SurveyRefusalAdvice.cs" Link="Controls\SurveyRefusalAdvice.cs" />

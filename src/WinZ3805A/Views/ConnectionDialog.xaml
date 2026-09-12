@@ -32,6 +32,14 @@
         The fixed Width was the other half. It cannot grow with the text, so the port combo
         truncated to "COM3 - Prolific l". MinWidth keeps the designed proportions at 100 % while
         letting the dialog use the width it has when the text is larger.
+
+        #506: scrolling is the fallback, not the plan. Left to itself a ContentDialog stops growing
+        at 758 effective pixels, and this dialog reaches that exactly - measured at 125 % scale it
+        fits with 20 px to spare while idle and overflows by 5 px the moment the progress area below
+        appears, inside a window with some 56 px it was not allowed to use. So the dialog is now told
+        how tall it may be before it is shown (AllowHeightUpTo), which only ever raises the cap. This
+        ScrollViewer still has to be here: at 200 % text no window is big enough, and that is the
+        case it was added for.
     -->
     <ScrollViewer VerticalScrollBarVisibility="Auto"
                   VerticalScrollMode="Auto"
