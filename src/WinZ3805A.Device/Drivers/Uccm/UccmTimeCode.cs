@@ -14,12 +14,25 @@ namespace WinZ3805A.Device.Drivers.Uccm;
 /// <b>Nothing in this class has been checked against hardware.</b>
 /// </para>
 /// <para>
-/// <b>The line is not only a response.</b> Heather has a dedicated <c>uccm_time_line()</c> whose
-/// comment says it "handles the case where the Symmetricom units send a time code packet in the
-/// middle of another message's response". So a UCCM interleaves unsolicited time codes with ordinary
-/// query answers, and any reader of this family must tolerate one turning up anywhere. That is why
-/// this parses a single line rather than a whole response, and why the status parser lifts these
-/// lines out wherever it meets them.
+/// <b>The code is not only a response, and where it lands has now been measured.</b> Heather has a
+/// dedicated <c>uccm_time_line()</c> whose comment says it "handles the case where the Symmetricom
+/// units send a time code packet in the middle of another message's response". That was carried here
+/// as established fact until 12 Sep 2026, when it was put to a receiver — see
+/// <c>tests/WinZ3805A.Tests/Uccm/Captures/hypothesis2-12sep2026.md</c>.
+/// </para>
+/// <para>
+/// <b>A Trimble UCCM-P does not interleave, and does not drop.</b> Fifty <c>SYST:STAT?</c> reads,
+/// 38% of the sitting spent with a reply on the wire, 25 codes arriving where ~25 were due — and
+/// <b>none</b> mid-reply against ~9 expected by chance, reproduced three times. Every code arrived
+/// and none collided, so this firmware <i>defers</i> a broadcast to the end of the reply rather than
+/// interleaving it or suppressing it. That is why every code seen across four sittings has trailed
+/// the <c>UCCM-P &gt;</c> prompt.
+/// </para>
+/// <para>
+/// <b>Heather's claim is about Symmetricom units and remains untested</b>, this being a Trimble. So
+/// the tolerance stays: the transport lifts a frame out of the byte stream wherever it sits, which
+/// costs nothing, and removing it on another vendor's measured behaviour would be the same reasoning
+/// that put the claim here unexamined, running backwards.
 /// </para>
 /// <para>
 /// The line is scanned from the <c>C5 </c> marker, three characters per value — two hex digits and a

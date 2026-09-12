@@ -30,10 +30,18 @@ namespace WinZ3805A.Device.Drivers.Uccm;
 /// the bench on 10 Sep 2026, and three things came back. The module did <b>not</b> echo, in eight
 /// sittings — so the echo claim is unsupported rather than confirmed, and
 /// <c>LineProtocol</c>'s echo detection compares rather than assumes, which is why nothing depended
-/// on it. The time codes did not land mid-reply, but they do land <i>between the reply and the
-/// prompt</i>, which is enough to matter: see <see cref="Prompt"/>. And the prompt is not the
-/// SmartClock's, which is what made every transaction time out with the answer already read.
-/// Everything else below is still a hypothesis.
+/// on it. The time codes did not land mid-reply, but they do land <i>after the prompt</i>, which is
+/// enough to matter: see <see cref="Prompt"/>. And the prompt is not the SmartClock's, which is what
+/// made every transaction time out with the answer already read.
+/// </para>
+/// <para>
+/// <b>Two of the three are now settled for this module, and the interleaving one is settled the
+/// other way (#481).</b> Fifty <c>SYST:STAT?</c> reads on 12 Sep 2026, with a reply on the wire 38%
+/// of the time, produced 25 codes where ~25 were due and <b>none</b> mid-reply against ~9 expected
+/// by chance. Nothing was dropped and nothing collided, so the module <i>defers</i> a broadcast to
+/// the end of a reply. Heather's claim names <i>Symmetricom</i> units, so it stands untested rather
+/// than refuted, and the tolerance costs nothing and stays. Everything else below is still a
+/// hypothesis.
 /// </para>
 /// <para>
 /// <b>Vendor and variant are two dimensions and this driver keeps them apart (#418).</b> One driver

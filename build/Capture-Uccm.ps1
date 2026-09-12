@@ -74,10 +74,30 @@
 .PARAMETER Label
     Names the output files. Required for a real run.
 
+.PARAMETER Only
+    Restrict the sitting to one catalogued mnemonic. It must still be one the
+    catalog names — this narrows what is asked, never what may be sent.
+
+    THE POINT OF IT IS HYPOTHESIS 2. A time code can only land *inside* a reply
+    that is still arriving, so the chance of catching one is the reply's wire time
+    over the broadcast interval. A scalar answers in a few milliseconds against a
+    ~2 s interval and will essentially never catch one however long you sit there;
+    `SYST:STAT?` is ~2176 bytes, about 378 ms at 57600-8-N-1, which is roughly 19%
+    of the interval. Asking the long one repeatedly is the whole experiment.
+
+.PARAMETER Repeat
+    How many times to walk the command list. Default 1.
+
+    With `-Only SYST:STAT? -Repeat 50`, zero interleaved codes puts the chance of
+    a module that interleaves freely producing this sitting at (1 - 0.19)^50, or
+    about 0.003% - which is a refutation rather than a quiet afternoon. The note
+    reports the arithmetic rather than asserting the conclusion.
+
 .PARAMETER SelfTest
     Checks the reply-anatomy analysis against replies whose shape is known,
-    including deliberately malformed ones, and the catalog read against the real
-    `UccmCommands.cs` and against sources broken on purpose. Needs no port.
+    including deliberately malformed ones; the catalog read against the real
+    `UccmCommands.cs` and against sources broken on purpose; and every branch of the
+    hypothesis 2 verdict. Needs no port.
 
 .NOTES
     THE PROVENANCE NOTE IS `.md` ON PURPOSE, for the reason #221 established:
@@ -94,6 +114,8 @@ param(
     [int] $BaudRate,
     [string] $OutputDirectory,
     [string] $Label,
+    [string] $Only,
+    [int] $Repeat = 1,
     [switch] $SelfTest
 )
 
@@ -395,6 +417,60 @@ function Get-UccmLineEndings {
 
 <#
 .SYNOPSIS
+    Turns a mid-reply count into a verdict on hypothesis 2 (#481).
+.DESCRIPTION
+    A COUNT OF ZERO REFUTES NOTHING ON ITS OWN, and every sitting so far has had to say so. What
+    turns it into a refutation is knowing the codes were arriving *while replies were in flight*.
+    A code can only land inside a reply that is still arriving, so the exposure is the reply wire
+    time over the sitting - and a scalar query, answering in milliseconds against a ~2 s broadcast
+    interval, can never test this however long anyone sits there.
+
+    THE THIRD OUTCOME IS THE ONE WORTH HAVING. Zero interleaves with the codes UNACCOUNTED FOR is
+    not a quiet module: it is evidence the module holds its broadcasts back while it is answering,
+    which is a different fact about the firmware and one nobody would go looking for. Collapsing it
+    into "refuted" would throw away the more interesting of the two negative results.
+
+    Pure, so the self-test drives every branch without a port.
+#>
+function Get-UccmHypothesis2Verdict {
+    [CmdletBinding()]
+    param(
+        [int] $Interleaved,
+        [int] $Answered,
+        [int] $BinaryCodes,
+        [double] $Exposure,
+        [double] $ExpectedFrames
+    )
+
+    $expectedInterleaves = [Math]::Round($BinaryCodes * $Exposure, 2)
+
+    if ($Interleaved -gt 0) {
+        return "CONFIRMED for this module: $Interleaved of $Answered replies carried a code mid-reply."
+    }
+
+    if ($BinaryCodes -eq 0) {
+        return 'INCONCLUSIVE: no time codes were seen at all, so nothing was exposed to the test.'
+    }
+
+    # Fewer than one expected by chance means the sitting simply was not big enough - reporting that
+    # as a refutation would be the "confirms it by construction" failure pointing the other way.
+    if ($expectedInterleaves -lt 1.0) {
+        return "INCONCLUSIVE: $BinaryCodes code(s) seen, but only ~$expectedInterleaves would have " +
+            'landed mid-reply by chance. Ask a longer reply, or ask more often.'
+    }
+
+    if ($ExpectedFrames -gt 0 -and $BinaryCodes -lt ($ExpectedFrames * 0.5)) {
+        return "DEFERRAL SUSPECTED: 0 mid-reply, and only $BinaryCodes code(s) where ~$ExpectedFrames " +
+            'were due. The module may be holding its broadcasts back rather than never interleaving.'
+    }
+
+    return "REFUTED for this module: 0 mid-reply against ~$expectedInterleaves expected, with " +
+        "$BinaryCodes code(s) seen where ~$ExpectedFrames were due."
+}
+
+
+<#
+.SYNOPSIS
     The UCCM query catalog, read out of `UccmCommands.cs` rather than restated (#482).
 .DESCRIPTION
     THIS SCRIPT USED TO HAND-COPY THE LIST, AND THE COPY DRIFTED. Three of the nine entries
@@ -629,6 +705,37 @@ if ($SelfTest) {
     # A value must NOT be mistaken for a prompt.
     if ((Get-UccmLineKind -Line '-1.234E-008' -Sent 'X?') -ne 'Payload') { $failures += 'a value was misread as a prompt' }
 
+    # --- Hypothesis 2 is a decision, not a count (#481) --------------------------------------
+    #
+    # Every branch, because the whole value of this verdict is that it distinguishes three ways of
+    # seeing zero. A rule that collapsed them would read as authoritative and say nothing.
+    $confirmed = Get-UccmHypothesis2Verdict -Interleaved 3 -Answered 50 -BinaryCodes 40 -Exposure 0.19 -ExpectedFrames 40
+    if ($confirmed -notmatch '^CONFIRMED') { $failures += "a mid-reply code did not confirm: $confirmed" }
+
+    # Nothing broadcast at all: the test was never run, whatever the count says.
+    $noCodes = Get-UccmHypothesis2Verdict -Interleaved 0 -Answered 50 -BinaryCodes 0 -Exposure 0.19 -ExpectedFrames 40
+    if ($noCodes -notmatch '^INCONCLUSIVE') { $failures += "a sitting with no codes at all was not called inconclusive: $noCodes" }
+
+    # Codes arrived, but the sitting was too small for one to be expected inside a reply. Calling
+    # this a refutation is the "confirms it by construction" failure pointing the other way.
+    $tooSmall = Get-UccmHypothesis2Verdict -Interleaved 0 -Answered 9 -BinaryCodes 3 -Exposure 0.02 -ExpectedFrames 20
+    if ($tooSmall -notmatch '^INCONCLUSIVE') { $failures += "an underpowered sitting was not called inconclusive: $tooSmall" }
+
+    # THE INTERESTING NEGATIVE. Plenty of exposure, plenty of replies, and the codes are MISSING -
+    # which is not a module that never interleaves, it is one that stops broadcasting while it
+    # answers. Reported as itself rather than folded into a refutation.
+    $deferred = Get-UccmHypothesis2Verdict -Interleaved 0 -Answered 50 -BinaryCodes 12 -Exposure 0.5 -ExpectedFrames 40
+    if ($deferred -notmatch '^DEFERRAL SUSPECTED') { $failures += "missing codes were not reported as deferral: $deferred" }
+
+    # The real refutation: codes all present and accounted for, none of them mid-reply.
+    $refuted = Get-UccmHypothesis2Verdict -Interleaved 0 -Answered 50 -BinaryCodes 40 -Exposure 0.19 -ExpectedFrames 40
+    if ($refuted -notmatch '^REFUTED') { $failures += "a well-powered null result was not called a refutation: $refuted" }
+
+    # A confirmation outranks everything: even one code mid-reply settles it, however odd the rest
+    # of the arithmetic looks. This is the branch that must never be reachable past.
+    $oneIsEnough = Get-UccmHypothesis2Verdict -Interleaved 1 -Answered 1 -BinaryCodes 1 -Exposure 0 -ExpectedFrames 0
+    if ($oneIsEnough -notmatch '^CONFIRMED') { $failures += "a single mid-reply code did not confirm: $oneIsEnough" }
+
     # --- The catalog is READ, not restated (#482) -------------------------------------------
     #
     # The drift this replaced was invisible precisely because both lists looked plausible. So the
@@ -728,7 +835,7 @@ public static class UccmCommands {
     }
 
     Write-Host 'PASS - the reply anatomy, the echo rule, the time-code distinction, the'
-    Write-Host '  line-ending report and the catalog read are checked.'
+    Write-Host '  line-ending report, the catalog read and hypothesis 2 verdict are checked.'
     Write-Host ''
     Write-Host '  The serial half is not checked here and cannot be. It has however been SMOKE-RUN'
     Write-Host '  against the bench Z3805A on 8 Sep 2026 - not a UCCM, but a real port and real'
@@ -782,6 +889,23 @@ if (-not (Test-Path $catalogPath)) {
 }
 $commands = Get-UccmCatalogMnemonics -Source (Get-Content -LiteralPath $catalogPath -Raw)
 Write-Host "Asking $($commands.Count) catalogued quer$(if ($commands.Count -eq 1) { 'y' } else { 'ies' }), read from $catalogRelative."
+
+# -Only narrows what is ASKED; it can never widen what may be SENT, because the list it filters is
+# the catalog itself (#482). A mnemonic that is not in the catalog is an error rather than a
+# passthrough - the whole point of reading the list from the driver is that nothing else reaches
+# the wire.
+if ($Only) {
+    $wanted = $Only.Trim()
+    $matched = @($commands | Where-Object { $_ -eq $wanted })
+    if ($matched.Count -eq 0) {
+        Write-Error "'$wanted' is not in the UCCM catalog. Catalogued: $($commands -join ', ')"
+    }
+    $commands = $matched
+    Write-Host "Restricted to $wanted."
+}
+
+if ($Repeat -lt 1) { Write-Error "-Repeat must be at least 1." }
+if ($Repeat -gt 1) { Write-Host "Walking the list $Repeat times." }
 
 function Invoke-UccmCommand {
     param([System.IO.Ports.SerialPort] $Serial, [string] $Command, [int] $WaitMs = 3000)
@@ -848,29 +972,58 @@ $results = @()
 [void]$transcript.AppendLine('# are the evidence, not noise.')
 [void]$transcript.AppendLine('')
 
-foreach ($command in $commands) {
-    Write-Host ("  {0,-22} " -f $command) -NoNewline
-    $bytes = Invoke-UccmCommand -Serial $serial -Command $command -WaitMs 5000
-    # BYTES, NOT TEXT. Passing the ASCII string here is what made every binary time code invisible.
-    $anatomy = Get-UccmReplyAnatomy -Bytes $bytes -Sent $command
+$sittingStarted = Get-Date
 
-    $verdict = if ($bytes.Length -eq 0) { 'SILENT' }
-    elseif ($anatomy.Errored) { 'error' }
-    else { "$($anatomy.PayloadLines.Count) payload line(s)" }
-    Write-Host $verdict
+for ($pass = 1; $pass -le $Repeat; $pass++) {
+    foreach ($command in $commands) {
+        if ($Repeat -gt 1) { Write-Host ("  {0,4}/{1} {2,-22} " -f $pass, $Repeat, $command) -NoNewline }
+        else { Write-Host ("  {0,-22} " -f $command) -NoNewline }
 
-    $results += [pscustomobject]@{ Command = $command; Anatomy = $anatomy; Bytes = $bytes }
+        $bytes = Invoke-UccmCommand -Serial $serial -Command $command -WaitMs 5000
+        # BYTES, NOT TEXT. Passing the ASCII string here is what made every binary time code invisible.
+        $anatomy = Get-UccmReplyAnatomy -Bytes $bytes -Sent $command
 
-    [void]$transcript.AppendLine("==== SENT: $command")
-    [void]$transcript.AppendLine("---- TERMINATORS: $((Get-UccmLineEndings -Bytes $bytes).Summary)")
-    [void]$transcript.AppendLine('---- BYTES')
-    [void]$transcript.AppendLine((Format-UccmBytes -Bytes $bytes))
-    [void]$transcript.AppendLine('---- LINES')
-    for ($i = 0; $i -lt $anatomy.Lines.Count; $i++) {
-        [void]$transcript.AppendLine(('  [{0}] {1}' -f $anatomy.Kinds[$i], $anatomy.Lines[$i]))
+        $verdict = if ($bytes.Length -eq 0) { 'SILENT' }
+        elseif ($anatomy.Errored) { 'error' }
+        else { "$($anatomy.PayloadLines.Count) payload line(s)" }
+        if ($anatomy.TimeCodeInterleaved) { $verdict += '  <<< TIME CODE MID-REPLY' }
+        elseif ($anatomy.BinaryTimeCodes -gt 0) { $verdict += "  (+$($anatomy.BinaryTimeCodes) trailing)" }
+        Write-Host $verdict
+
+        $results += [pscustomobject]@{ Command = $command; Anatomy = $anatomy; Bytes = $bytes }
+
+        # ON A REPEAT SITTING THE FULL DUMP IS KEPT ONLY WHERE THERE IS SOMETHING TO SEE. Fifty
+        # status replies hex-dumped in full is a third of a megabyte of near-identical screens, and
+        # the evidence is not the fiftieth ordinary reply. A TRAILING code is the ordinary case on
+        # this family and is counted rather than dumped; what earns a full dump is a code landing
+        # MID-reply - hypothesis 2 itself - or an anomaly: a stray 0xC5, or silence. The first pass
+        # is kept whole as a specimen, so the file can be read by someone who has not seen one.
+        $worthKeeping = $Repeat -eq 1 -or $pass -eq 1 -or $anatomy.TimeCodeInterleaved -or
+            $anatomy.UnframedC5 -gt 0 -or $bytes.Length -eq 0
+
+        if (-not $worthKeeping) {
+            [void]$transcript.AppendLine(
+                ("==== SENT: {0}  (pass {1}) - {2} byte(s), {3} payload line(s), {4} trailing time code(s)" -f $command, $pass, $bytes.Length, $anatomy.PayloadLines.Count, $anatomy.BinaryTimeCodes))
+            [void]$transcript.AppendLine('')
+            continue
+        }
+
+        [void]$transcript.AppendLine("==== SENT: $command$(if ($Repeat -gt 1) { "  (pass $pass)" })")
+        [void]$transcript.AppendLine("---- TERMINATORS: $((Get-UccmLineEndings -Bytes $bytes).Summary)")
+        if ($anatomy.TimeCodeInterleaved) {
+            [void]$transcript.AppendLine('---- TIME CODE MID-REPLY: this is hypothesis 2, caught.')
+        }
+        [void]$transcript.AppendLine('---- BYTES')
+        [void]$transcript.AppendLine((Format-UccmBytes -Bytes $bytes))
+        [void]$transcript.AppendLine('---- LINES')
+        for ($i = 0; $i -lt $anatomy.Lines.Count; $i++) {
+            [void]$transcript.AppendLine(('  [{0}] {1}' -f $anatomy.Kinds[$i], $anatomy.Lines[$i]))
+        }
+        [void]$transcript.AppendLine('')
     }
-    [void]$transcript.AppendLine('')
 }
+
+$sittingSeconds = [Math]::Round(((Get-Date) - $sittingStarted).TotalSeconds, 1)
 
 $serial.Close()
 
@@ -903,6 +1056,36 @@ $allBytes = [byte[]]@()
 foreach ($r in $answered) { $allBytes += $r.Bytes }
 $endings = Get-UccmLineEndings -Bytes $allBytes
 $unterminatedCount = @($answered | Where-Object { -not (Get-UccmLineEndings -Bytes $_.Bytes).EndsTerminated }).Count
+
+# --- Hypothesis 2, as a decision rather than a count (#481) -----------------------------------
+#
+# A COUNT OF ZERO ON ITS OWN REFUTES NOTHING, and that has been written on every sitting so far.
+# What turns it into a refutation is knowing the codes were arriving while the replies were in
+# flight - so this reports the exposure and the expected yield, and names the case where zero means
+# something else entirely: a module that stops broadcasting while it is answering.
+#
+# THE THIRD OUTCOME IS THE ONE WORTH HAVING. Zero interleaves with the frames unaccounted for is not
+# a quiet module, it is evidence of deferral, which is a different fact about the firmware and one
+# nobody would go looking for.
+$replyBytes = 0
+foreach ($r in $answered) { $replyBytes += $r.Bytes.Length }
+
+# Wire time is the exposure: a code can only land inside a reply that is still arriving.
+$wireSeconds = if ($found -gt 0) { [Math]::Round($replyBytes / ($found / 10.0), 2) } else { 0 }
+$expectedFrames = if ($sittingSeconds -gt 0) { [Math]::Round($sittingSeconds / 2.0, 1) } else { 0 }
+$exposure = if ($sittingSeconds -gt 0) { $wireSeconds / $sittingSeconds } else { 0 }
+
+# Of the codes that did arrive, how many should have landed inside a reply if the module simply
+# broadcasts on its own clock and lets them fall where they may.
+$expectedInterleaves = [Math]::Round($binaryCodes * $exposure, 2)
+
+$hypothesis2 = Get-UccmHypothesis2Verdict `
+    -Interleaved $interleaved.Count `
+    -Answered $answered.Count `
+    -BinaryCodes $binaryCodes `
+    -Exposure $exposure `
+    -ExpectedFrames $expectedFrames
+
 
 $note = @"
 # $Label
@@ -938,6 +1121,20 @@ The time-code row counts **binary** packets - byte ``0xC5`` through ``0xCA`` - f
 stream. Until 10 Sep 2026 this script looked for the *characters* ``C5`` in text decoded as ASCII,
 which turns every byte above ``0x7F`` into ``?``, so the row could only ever have read 0.
 
+### Hypothesis 2, with the exposure it was tested against
+
+A count of zero refutes nothing on its own, so here is what the count was measured against. A code
+can only land *inside* a reply that is still arriving, so the exposure is reply wire time over the
+sitting; a scalar query answers in milliseconds and cannot test this however long anyone sits there.
+
+| | |
+|---|---|
+| Sitting length | $sittingSeconds s |
+| Reply wire time | $wireSeconds s, $("{0:P0}" -f $exposure) of the sitting |
+| Codes seen / due at one per 2 s | $binaryCodes / ~$expectedFrames |
+| Mid-reply expected by chance | ~$expectedInterleaves |
+| **Verdict** | **$hypothesis2** |
+
 ## What was happening
 
 _Fill this in by hand: which module this is, how it was wired, whether it had an antenna and had
@@ -970,6 +1167,12 @@ Write-Host ("Time code mid-reply: {0} of {1}" -f $interleaved.Count, $answered.C
 Write-Host ("Binary C5 packets:   {0}{1}" -f $binaryCodes,
     $(if ($unframedC5 -gt 0) { " ($unframedC5 stray 0xC5 byte(s) not matching the packet shape)" } else { '' }))
 Write-Host ("COMMAND COMPLETE:    {0} of {1}" -f $terminated.Count, $answered.Count)
+Write-Host ''
+Write-Host ('Reply wire time:     {0} s of {1} s ({2:P0} exposure)' -f $wireSeconds, $sittingSeconds, $exposure)
+Write-Host ('Codes seen / due:    {0} / ~{1} at one per 2 s' -f $binaryCodes, $expectedFrames)
+Write-Host ('Mid-reply expected:  ~{0}' -f $expectedInterleaves)
+Write-Host ('Hypothesis 2:        ' + $hypothesis2)
+
 Write-Host ''
 Write-Host "Wrote $capturePath"
 Write-Host "Provenance in $notePath - FILL IN 'What was happening' WHILE YOU REMEMBER IT."
