@@ -134,6 +134,25 @@ public sealed class LineProtocol
     /// </remarks>
     private bool _framePending;
 
+    /// <summary>
+    /// Frames found while clearing the buffer between transactions (#481).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Where nearly every frame is actually found.</b> A broadcast arrives on the receiver's own
+    /// schedule — about every two seconds for a UCCM — while a transaction lasts some tens of
+    /// milliseconds. Measured on a Trimble UCCM-P on 12 Sep 2026: 115 transactions in 40 seconds,
+    /// and <b>not one</b> of them contained a frame, because the link is idle when the broadcasts
+    /// land. Reading them only from inside a transaction gathers almost none.
+    /// </para>
+    /// <para>
+    /// So the drain is where they are caught. It was already the code that saw them; it simply threw
+    /// them away with everything else, which is why the corruption stopped and the readings never
+    /// appeared — a fix that looked complete from the symptom alone.
+    /// </para>
+    /// </remarks>
+    private readonly List<byte[]> _idleFrames = [];
+
     /// <param name="transport">The open link. Not owned, and not disposed by this type.</param>
     /// <param name="timeProvider">The clock every timeout here is measured against.</param>
     /// <param name="logger">Where transaction faults are recorded.</param>
@@ -228,6 +247,13 @@ public sealed class LineProtocol
         try
         {
             DiscardStaleInput();
+
+            // Whatever the receiver broadcast while the link was idle, carried on this transaction
+            // because it is the next one to report (#481). Nearly every frame is found here rather
+            // than in the read below: broadcasts are seconds apart and a transaction is milliseconds
+            // long, so the link is almost always idle when one lands.
+            frames.AddRange(_idleFrames);
+            _idleFrames.Clear();
 
             await _transport.WriteAsync(Encoding.ASCII.GetBytes($"{sent}\r\n"), linked.Token).ConfigureAwait(false);
             TransportLog.CommandSent(_logger, sent);
@@ -517,6 +543,8 @@ public sealed class LineProtocol
     /// </remarks>
     private void DiscardStaleInput()
     {
+        _idleFrames.Clear();
+
         // The PURGE is conditional (#395); the pipe drain below is not. Draining costs nothing and
         // catches anything the pump has already collected. Purging costs an aborted read, and is
         // only worth it when the receiver may still be mid-sentence - see _mayHaveStaleInput.
@@ -540,8 +568,31 @@ public sealed class LineProtocol
 
         while (reader.TryRead(out ReadResult result))
         {
-            discarded += result.Buffer.Length;
-            reader.AdvanceTo(result.Buffer.End);
+            if (_frames.IsNone || result.Buffer.IsEmpty)
+            {
+                discarded += result.Buffer.Length;
+                reader.AdvanceTo(result.Buffer.End);
+            }
+            else
+            {
+                // KEEP THE BROADCASTS, DISCARD THE LEFTOVERS (#481). These are two different things
+                // that happen to be in the buffer together: a frame is the receiver talking on its
+                // own schedule and is a reading, while the rest is the tail of somebody's abandoned
+                // reply and is not.
+                BinaryFrameStripper.Result stripped = BinaryFrameStripper.Strip(result.Buffer, _frames);
+                _idleFrames.AddRange(stripped.Frames);
+                discarded += stripped.Clean.Length;
+
+                // A frame that has begun but not finished arriving stops the drain where it starts,
+                // so its head survives for the read that will complete it. Advancing past it here is
+                // exactly the bug the _framePending guard was written for, one layer down.
+                reader.AdvanceTo(result.Buffer.GetPosition(stripped.OriginalLength));
+
+                if (stripped.OriginalLength < result.Buffer.Length)
+                {
+                    break;
+                }
+            }
 
             if (result.IsCompleted || result.IsCanceled || result.Buffer.IsEmpty)
             {

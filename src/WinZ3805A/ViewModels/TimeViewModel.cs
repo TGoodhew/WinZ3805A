@@ -96,6 +96,18 @@ public sealed class TimeViewModel : INotifyPropertyChanged, IDisposable
     /// <summary>Which scale the receiver's clock is referenced to.</summary>
     public TimeScale TimeScale => Status?.TimeScale ?? TimeScale.Unknown;
 
+    /// <summary>
+    /// GPS − UTC as the receiver states it unasked, or null where it only answers when asked (#481).
+    /// </summary>
+    /// <remarks>
+    /// <b>A fallback, never an override.</b> §10.14's <c>:PTIM:LEAP:ACC?</c> is the authority where
+    /// a receiver answers it — that value is what the user asked for and what the receiver chose to
+    /// say in reply. This is the same figure arriving unasked, and it exists so a family that cannot
+    /// be asked at all is read rather than dashed. Null for the SmartClock, which is exactly the
+    /// case where the query is the answer.
+    /// </remarks>
+    public int? ReportedGpsUtcOffsetSeconds => Status?.GpsUtcOffsetSeconds;
+
     /// <summary>That scale in words.</summary>
     public string TimeScaleText => TimeScale switch
     {

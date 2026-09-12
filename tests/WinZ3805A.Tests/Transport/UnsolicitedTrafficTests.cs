@@ -389,6 +389,94 @@ public class UnsolicitedTrafficTests
         Assert.Equal(TimeCode.ToArray(), Assert.Single(two.BinaryFrames));
     }
 
+
+    /// <summary>
+    /// A frame that arrives while the link is idle is kept, not discarded with the leftovers.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>This is where nearly every frame is actually found, and missing it made the whole feature
+    /// inert.</b> A broadcast arrives on the receiver's own schedule — about every two seconds for a
+    /// UCCM — while a transaction lasts tens of milliseconds. Measured on a Trimble UCCM-P on
+    /// 12 Sep 2026: <b>115 transactions in 40 seconds and not one carried a frame</b>, because the
+    /// link is idle whenever one lands. Reading them only from inside a transaction gathers almost
+    /// none of them.
+    /// </para>
+    /// <para>
+    /// <b>The symptom hid it.</b> `DiscardStaleInput` threw the frames away with the leftovers, so
+    /// the corruption they had been causing stopped — which looked exactly like the fix working.
+    /// The readings simply never appeared, and GPS − UTC stayed an em dash for a value the receiver
+    /// was broadcasting every two seconds. After this, 18 of the same 115 transactions carried one,
+    /// spaced two seconds apart.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AFrameArrivingWhileTheLinkIsIdleIsReportedOnTheNextTransaction()
+    {
+        await using FakeTransport transport = new();
+        await transport.OpenAsync();
+        LineProtocol protocol = UccmProtocol(transport);
+
+        // One transaction, so the link is in its ordinary "finished cleanly" state.
+        Task<Transaction> first = protocol.ExecuteAsync("*IDN?");
+        Assert.Equal("*IDN?", await transport.ReadCommandAsync().AsTask().WaitAsync(s_testTimeout));
+        await transport.EmitAsync(UccmIdentity + "\r\n");
+        await transport.EmitAsync(Encoding.Latin1.GetBytes(UccmPrompt));
+        await first.WaitAsync(s_testTimeout);
+
+        // The receiver broadcasts with nothing in flight — the overwhelmingly common case.
+        await transport.EmitAsync(TimeCode.ToArray());
+        await Task.Delay(50);
+
+        Task<Transaction> second = protocol.ExecuteAsync("LED:GPSL?");
+        Assert.Equal("LED:GPSL?", await transport.ReadCommandAsync().AsTask().WaitAsync(s_testTimeout));
+        await transport.EmitAsync("1\r\n");
+        await transport.EmitAsync(Encoding.Latin1.GetBytes(UccmPrompt));
+
+        Transaction two = await second.WaitAsync(s_testTimeout);
+
+        Assert.Equal(["1"], two.Lines);
+        Assert.Equal(TimeCode.ToArray(), Assert.Single(two.BinaryFrames));
+    }
+
+    /// <summary>
+    /// Genuine leftovers are still discarded, and are never mistaken for a reading.
+    /// </summary>
+    /// <remarks>
+    /// The guard on the above. #395's drain exists because an abandoned reply's tail must not be
+    /// read as the next reply, and keeping frames out of it must not turn into keeping everything.
+    /// Only whole, well-formed frames survive; the rest goes, exactly as before.
+    /// </remarks>
+    [Fact]
+    public async Task LeftoverTextIsStillDiscardedWhileFramesAreKept()
+    {
+        await using FakeTransport transport = new();
+        await transport.OpenAsync();
+        LineProtocol protocol = UccmProtocol(transport);
+
+        Task<Transaction> first = protocol.ExecuteAsync("*IDN?");
+        Assert.Equal("*IDN?", await transport.ReadCommandAsync().AsTask().WaitAsync(s_testTimeout));
+        await transport.EmitAsync(UccmIdentity + "\r\n");
+        await transport.EmitAsync(Encoding.Latin1.GetBytes(UccmPrompt));
+        await first.WaitAsync(s_testTimeout);
+
+        // The tail of somebody's abandoned reply, with a broadcast landing in the middle of it.
+        await transport.EmitAsync("STRAY LINE FROM EARLIER\r\n");
+        await transport.EmitAsync(TimeCode.ToArray());
+        await transport.EmitAsync("ANOTHER STRAY\r\n");
+        await Task.Delay(50);
+
+        Task<Transaction> second = protocol.ExecuteAsync("LED:GPSL?");
+        Assert.Equal("LED:GPSL?", await transport.ReadCommandAsync().AsTask().WaitAsync(s_testTimeout));
+        await transport.EmitAsync("1\r\n");
+        await transport.EmitAsync(Encoding.Latin1.GetBytes(UccmPrompt));
+
+        Transaction two = await second.WaitAsync(s_testTimeout);
+
+        Assert.Equal(["1"], two.Lines);
+        Assert.Equal(TimeCode.ToArray(), Assert.Single(two.BinaryFrames));
+    }
+
     private static byte[] PromptThen(ReadOnlySpan<byte> frame)
     {
         byte[] prompt = Encoding.Latin1.GetBytes(UccmPrompt);
