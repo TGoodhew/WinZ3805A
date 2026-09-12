@@ -87,6 +87,45 @@ public sealed class UccmVendorDivergenceTests
         Assert.Equal(UccmVendor.Trimble, driver.Profile.Vendor);
     }
 
+    [Fact]
+    public void TheSweepAsksForTheLoopSoTheVendorCanBeSettledAtAll()
+    {
+        // Without this the whole of #418 is unreachable in the running application: every
+        // vendor-specific path waits on a reply nobody ever asks for, and the only signal left is
+        // the status bytes' nibble hypothesis. It was absent from the plan until 13 Sep 2026.
+        Assert.Contains(UccmCommands.Loop, Driver().Plan.FastTier);
+    }
+
+    [Fact]
+    public void AnOrdinarySweepSettlesTheVendorWithoutAnyoneCallingReadLoop()
+    {
+        UccmDriver driver = Driver();
+        int loop = driver.Plan.FastTier.ToList().IndexOf(UccmCommands.Loop);
+
+        string?[] answers = new string?[driver.Plan.FastTier.Count];
+        answers[0] = "1";
+        answers[loop] = MeasuredTrimbleLoop;
+
+        driver.InterpretSweep(answers);
+
+        Assert.Equal(UccmVendor.Trimble, driver.Profile.Vendor);
+    }
+
+    [Fact]
+    public void ARefusedLoopLeavesTheVendorUnknownRatherThanGuessed()
+    {
+        UccmDriver driver = Driver();
+        int loop = driver.Plan.FastTier.ToList().IndexOf(UccmCommands.Loop);
+
+        string?[] answers = new string?[driver.Plan.FastTier.Count];
+        answers[0] = "1";
+        answers[loop] = "DIAG:LOOP?\r\n-113 Undefined header\r\nCOMMAND COMPLETE";
+
+        driver.InterpretSweep(answers);
+
+        Assert.Equal(UccmVendor.Unknown, driver.Profile.Vendor);
+    }
+
     // ---- 2. only Symmetricom reports temperature ------------------------------------------------
 
     [Fact]
