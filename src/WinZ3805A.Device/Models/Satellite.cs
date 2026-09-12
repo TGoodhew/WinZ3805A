@@ -94,6 +94,27 @@ public readonly record struct SatelliteId(SatelliteConstellation Constellation, 
         : SatelliteConstellations.Code(Constellation) + Prn.ToString("00", CultureInfo.InvariantCulture);
 
     /// <summary>
+    /// The satellite as a sentence names it — <c>GPS 4</c>, <c>BeiDou 4</c>, or <c>PRN 4</c> when
+    /// the constellation is not known.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The unknown case is <b>§9.10.2's own wording</b>, whose example sentence reads "PRN 19,
+    /// elevation 65 degrees, azimuth 52 degrees, carrier to noise 49, tracked." — so a SmartClock's
+    /// satellite is spoken exactly as the specification says it should be.
+    /// </para>
+    /// <para>
+    /// Naming the constellation instead, where one is known, is an extension into ground the
+    /// specification had no receiver for: "PRN 4" spoken twice in one plot, for two different
+    /// satellites, is the failure this whole change exists to prevent, and a screen reader has no
+    /// shape or colour to fall back on.
+    /// </para>
+    /// </remarks>
+    public string Spoken => Constellation is SatelliteConstellation.Unknown
+        ? $"PRN {Prn.ToString(CultureInfo.InvariantCulture)}"
+        : $"{SatelliteConstellations.Name(Constellation)} {Prn.ToString(CultureInfo.InvariantCulture)}";
+
+    /// <summary>
     /// Orders by number first and constellation second, so §9.10.2's keyboard order stays
     /// number-ascending and two claimants of one number land next to each other.
     /// </summary>

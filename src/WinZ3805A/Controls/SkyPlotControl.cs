@@ -5,6 +5,8 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
 
+using WinZ3805A.Device.Models;
+
 using Windows.System;
 
 namespace WinZ3805A.Controls;
@@ -56,10 +58,10 @@ public sealed class SkyPlotControl : Control
         typeof(SkyPlotControl),
         new PropertyMetadata(null, OnPlotChanged));
 
-    /// <summary>Identifies the <see cref="SelectedPrn"/> dependency property.</summary>
-    public static readonly DependencyProperty SelectedPrnProperty = DependencyProperty.Register(
-        nameof(SelectedPrn),
-        typeof(int?),
+    /// <summary>Identifies the <see cref="SelectedSatellite"/> dependency property.</summary>
+    public static readonly DependencyProperty SelectedSatelliteProperty = DependencyProperty.Register(
+        nameof(SelectedSatellite),
+        typeof(SatelliteId?),
         typeof(SkyPlotControl),
         new PropertyMetadata(null, OnSelectionChanged));
 
@@ -107,17 +109,18 @@ public sealed class SkyPlotControl : Control
     private Canvas? _canvas;
     private Panel? _surface;
 
-    /// <summary>The satellites currently plotted, in PRN order — the keyboard's order too.</summary>
+    /// <summary>The satellites currently plotted, in identity order — the keyboard's order too.</summary>
     private IReadOnlyList<SkyPlotSatellite> _plotted = [];
 
     /// <summary>
-    /// Which satellite the arrow keys are on, <b>by PRN</b>, or null before they have moved.
+    /// Which satellite the arrow keys are on, <b>by identity</b>, or null before they have moved.
     /// </summary>
     /// <remarks>
-    /// A PRN and not an index into <see cref="_plotted"/>, which is rebuilt and re-sorted on every
-    /// reading. See <see cref="SkyPlotCursor"/> for what an index cost and what a PRN buys.
+    /// An identity and not an index into <see cref="_plotted"/>, which is rebuilt and re-sorted on
+    /// every reading. See <see cref="SkyPlotCursor"/> for what an index cost and what a stable key
+    /// buys — and #424 for why the key is no longer a bare PRN.
     /// </remarks>
-    private int? _cursorPrn;
+    private SatelliteId? _cursorId;
 
     /// <summary>Initialises a new sky plot.</summary>
     public SkyPlotControl()
@@ -134,7 +137,7 @@ public sealed class SkyPlotControl : Control
     }
 
     /// <summary>Raised when the user picks a satellite, by click, tap or Enter.</summary>
-    public event EventHandler<int>? SatelliteInvoked;
+    public event EventHandler<SatelliteId>? SatelliteInvoked;
 
     /// <summary>What to draw. Satellites without both angles are skipped.</summary>
     public IReadOnlyList<SkyPlotSatellite>? Satellites
@@ -151,10 +154,10 @@ public sealed class SkyPlotControl : Control
     }
 
     /// <summary>Which satellite is highlighted, kept in step with the table beside the plot.</summary>
-    public int? SelectedPrn
+    public SatelliteId? SelectedSatellite
     {
-        get => (int?)GetValue(SelectedPrnProperty);
-        set => SetValue(SelectedPrnProperty, value);
+        get => (SatelliteId?)GetValue(SelectedSatelliteProperty);
+        set => SetValue(SelectedSatelliteProperty, value);
     }
 
     /// <summary>
@@ -212,23 +215,23 @@ public sealed class SkyPlotControl : Control
                 return;
 
             case VirtualKey.Home:
-                SetCursor(PlottedPrns[0]);
+                SetCursor(PlottedIds[0]);
                 e.Handled = true;
                 return;
 
             case VirtualKey.End:
-                SetCursor(PlottedPrns[^1]);
+                SetCursor(PlottedIds[^1]);
                 e.Handled = true;
                 return;
 
             case VirtualKey.Enter:
             case VirtualKey.Space:
                 // Only a satellite that is currently plotted can be selected. A cursor left on a
-                // PRN that has since dropped out selects nothing at all rather than whatever now
-                // occupies its old place, which is the whole point of keying on the PRN.
+                // satellite that has since dropped out selects nothing at all rather than whatever
+                // now occupies its old place, which is the whole point of keying on identity.
                 if (CursorSatellite is { } target)
                 {
-                    Invoke(target.Prn);
+                    Invoke(target.Id);
                     e.Handled = true;
                 }
 
@@ -248,9 +251,9 @@ public sealed class SkyPlotControl : Control
     private static void OnSelectionChanged(DependencyObject sender, DependencyPropertyChangedEventArgs e) =>
         ((SkyPlotControl)sender).Rebuild();
 
-    /// <summary>The satellite the cursor is on, or null when its PRN is not currently plotted.</summary>
+    /// <summary>The satellite the cursor is on, or null when it is not currently plotted.</summary>
     private SkyPlotSatellite? CursorSatellite =>
-        _cursorPrn is int prn ? _plotted.FirstOrDefault(satellite => satellite.Prn == prn) : null;
+        _cursorId is SatelliteId id ? _plotted.FirstOrDefault(satellite => satellite.Id == id) : null;
 
     /// <summary>
     /// §9.10.2's keyboard order, as <see cref="SkyPlotCursor"/> wants it.
@@ -260,20 +263,20 @@ public sealed class SkyPlotControl : Control
     /// press costs nothing, and a second field would be one more thing that has to be rebuilt in
     /// step with the first — which is the class of mistake this whole change is repairing.
     /// </remarks>
-    private IReadOnlyList<int> PlottedPrns => _plotted.Select(satellite => satellite.Prn).ToList();
+    private IReadOnlyList<SatelliteId> PlottedIds => _plotted.Select(satellite => satellite.Id).ToList();
 
-    private void MoveCursor(int delta) => SetCursor(SkyPlotCursor.Step(PlottedPrns, _cursorPrn, delta));
+    private void MoveCursor(int delta) => SetCursor(SkyPlotCursor.Step(PlottedIds, _cursorId, delta));
 
-    private void SetCursor(int? prn)
+    private void SetCursor(SatelliteId? id)
     {
-        _cursorPrn = prn;
+        _cursorId = id;
         UpdateCursorRing();
     }
 
-    private void Invoke(int prn)
+    private void Invoke(SatelliteId id)
     {
-        SelectedPrn = prn;
-        SatelliteInvoked?.Invoke(this, prn);
+        SelectedSatellite = id;
+        SatelliteInvoked?.Invoke(this, id);
     }
 
     /// <summary>Redraws everything. Cheap enough at a dozen markers on a 10 s cadence.</summary>
@@ -446,7 +449,7 @@ public sealed class SkyPlotControl : Control
                 Height = MarkerHitSize,
                 Padding = new Thickness((MarkerHitSize / 2) - markerRadius),
                 IsTabStop = false,
-                Tag = satellite.Prn,
+                Tag = satellite.Id,
                 Background = tracked
                     ? Brush($"WzSequential{SkyPlotGeometry.RampStep(satellite.SignalStrength, scale)}Brush")
                     : Brush("WzCardFillBrush"),
@@ -484,10 +487,10 @@ public sealed class SkyPlotControl : Control
             ToolTipService.SetToolTip(marker, satellite.Description);
             marker.Click += (sender, _) =>
             {
-                if (sender is Button clicked && clicked.Tag is int prn)
+                if (sender is Button clicked && clicked.Tag is SatelliteId id)
                 {
-                    _cursorPrn = prn;
-                    Invoke(prn);
+                    _cursorId = id;
+                    Invoke(id);
                 }
             };
 
@@ -502,12 +505,12 @@ public sealed class SkyPlotControl : Control
     /// <summary>The ring that says which satellite the table has selected.</summary>
     private void DrawSelection(double centre, double radius)
     {
-        if (SelectedPrn is not int prn)
+        if (SelectedSatellite is not SatelliteId id)
         {
             return;
         }
 
-        SkyPlotSatellite? found = _plotted.FirstOrDefault(satellite => satellite.Prn == prn);
+        SkyPlotSatellite? found = _plotted.FirstOrDefault(satellite => satellite.Id == id);
         if (found is null)
         {
             return;
@@ -593,8 +596,8 @@ public sealed class SkyPlotControl : Control
     /// describing a satellite that has since dropped out of the plot.
     /// </para>
     /// <para>
-    /// A cursor whose PRN is no longer plotted says so. Losing the satellite you were on is a thing
-    /// that happened, and the ring disappearing is not information a reader receives.
+    /// A cursor whose satellite is no longer plotted says so. Losing the satellite you were on is a
+    /// thing that happened, and the ring disappearing is not information a reader receives.
     /// </para>
     /// <para>
     /// An unset cursor is left alone. The name it still carries is the hint the page put there —
@@ -610,9 +613,9 @@ public sealed class SkyPlotControl : Control
             return;
         }
 
-        if (_cursorPrn is int prn)
+        if (_cursorId is SatelliteId id)
         {
-            AutomationProperties.SetName(this, $"Sky plot. PRN {prn} is no longer shown.");
+            AutomationProperties.SetName(this, $"Sky plot. {id.Spoken} is no longer shown.");
         }
     }
 

@@ -183,7 +183,14 @@ public sealed class SatellitesViewModel : INotifyPropertyChanged, IDisposable
             : [.. Status.NotTracked.Select(satellite => new PredictedSatelliteRow(satellite, ElevationMaskDegrees)
             {
                 IsAcquiring = satellite.AttemptingToTrack,
-                IsIgnored = _excluded.Contains(satellite.Prn),
+
+                // The exclusion list comes from `:GPS:SAT:TRAC:IGN?`, which is a SmartClock command
+                // taking a bare PRN - so it can only ever mean a satellite of the family that has
+                // one constellation. Matching a number alone would let an excluded GPS 4 dim a
+                // BeiDou 4 the operator never touched (#424); today the list is empty for any
+                // driver that could produce one, and this says so rather than relying on it.
+                IsIgnored = (satellite.Constellation is SatelliteConstellation.Unknown or SatelliteConstellation.Gps)
+                    && _excluded.Contains(satellite.Prn),
             })];
 
         _skyPlot = BuildSkyPlot();
@@ -232,6 +239,7 @@ public sealed class SatellitesViewModel : INotifyPropertyChanged, IDisposable
             {
                 markers.Add(new SkyPlotSatellite(
                     row.Prn,
+                    row.Constellation,
                     row.ElevationDegrees,
                     row.AzimuthDegrees,
                     row.SignalStrength,
@@ -244,6 +252,7 @@ public sealed class SatellitesViewModel : INotifyPropertyChanged, IDisposable
             {
                 markers.Add(new SkyPlotSatellite(
                     row.Prn,
+                    row.Constellation,
                     row.ElevationDegrees,
                     row.AzimuthDegrees,
                     null,
@@ -324,14 +333,21 @@ public sealed class TrackedSatelliteRow
         ArgumentNullException.ThrowIfNull(satellite);
 
         Prn = satellite.Prn;
+        Constellation = satellite.Constellation;
         ElevationDegrees = satellite.ElevationDegrees;
         AzimuthDegrees = satellite.AzimuthDegrees;
         SignalStrength = satellite.SignalStrength;
         Kind = kind;
     }
 
-    /// <summary>The satellite's PRN.</summary>
+    /// <summary>The satellite's number within its constellation.</summary>
     public int Prn { get; }
+
+    /// <summary>Which constellation that number belongs to, if the receiver said (#424).</summary>
+    public SatelliteConstellation Constellation { get; }
+
+    /// <summary>The satellite's identity, which the plot and the tables key on.</summary>
+    public SatelliteId Id => new(Constellation, Prn);
 
     /// <summary>Elevation in degrees, or <see langword="null"/>.</summary>
     public int? ElevationDegrees { get; }
@@ -345,8 +361,11 @@ public sealed class TrackedSatelliteRow
     /// <summary>Which scale that reading is on.</summary>
     public SignalStrengthKind Kind { get; }
 
-    /// <summary>The PRN as it is shown.</summary>
-    public string PrnText => Prn.ToString(System.Globalization.CultureInfo.CurrentCulture);
+    /// <summary>
+    /// The satellite as it is shown — <c>G04</c>, <c>C04</c>, or a bare number from a receiver
+    /// with one constellation, which is every family but NMEA.
+    /// </summary>
+    public string PrnText => Id.Designation;
 
     /// <summary>Elevation as it is shown, with the degree sign.</summary>
     public string ElevationText => Degrees(ElevationDegrees);
@@ -364,7 +383,7 @@ public sealed class TrackedSatelliteRow
     /// on screen under the plot, where it is simply wrong.
     /// </remarks>
     public string Description =>
-        $"PRN {Prn}, elevation {Describe(ElevationDegrees)}, azimuth {Describe(AzimuthDegrees)}, "
+        $"{Id.Spoken}, elevation {Describe(ElevationDegrees)}, azimuth {Describe(AzimuthDegrees)}, "
         + SignalStrengthScale.For(Kind).Describe(SignalStrength);
 
     internal static string Degrees(int? value) => ReadoutFormatter.Degrees(value);
@@ -383,13 +402,20 @@ public sealed class PredictedSatelliteRow
         ArgumentNullException.ThrowIfNull(satellite);
 
         Prn = satellite.Prn;
+        Constellation = satellite.Constellation;
         ElevationDegrees = satellite.ElevationDegrees;
         AzimuthDegrees = satellite.AzimuthDegrees;
         ElevationMaskDegrees = elevationMaskDegrees;
     }
 
-    /// <summary>The satellite's PRN.</summary>
+    /// <summary>The satellite's number within its constellation.</summary>
     public int Prn { get; }
+
+    /// <summary>Which constellation that number belongs to, if the receiver said (#424).</summary>
+    public SatelliteConstellation Constellation { get; }
+
+    /// <summary>The satellite's identity, which the plot and the tables key on.</summary>
+    public SatelliteId Id => new(Constellation, Prn);
 
     /// <summary>Predicted elevation in degrees, or <see langword="null"/>.</summary>
     public int? ElevationDegrees { get; }
@@ -400,8 +426,11 @@ public sealed class PredictedSatelliteRow
     /// <summary>The mask this satellite is being judged against.</summary>
     public int? ElevationMaskDegrees { get; }
 
-    /// <summary>The PRN as it is shown.</summary>
-    public string PrnText => Prn.ToString(System.Globalization.CultureInfo.CurrentCulture);
+    /// <summary>
+    /// The satellite as it is shown — <c>G04</c>, <c>C04</c>, or a bare number from a receiver
+    /// with one constellation.
+    /// </summary>
+    public string PrnText => Id.Designation;
 
     /// <summary>Elevation as it is shown.</summary>
     public string ElevationText => TrackedSatelliteRow.Degrees(ElevationDegrees);
@@ -479,7 +508,7 @@ public sealed class PredictedSatelliteRow
     {
         get
         {
-            string basics = $"PRN {Prn}, elevation {Describe(ElevationDegrees)}, azimuth {Describe(AzimuthDegrees)}";
+            string basics = $"{Id.Spoken}, elevation {Describe(ElevationDegrees)}, azimuth {Describe(AzimuthDegrees)}";
 
             return this switch
             {

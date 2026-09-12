@@ -312,6 +312,64 @@ public sealed class SatellitesViewModelTests
     }
 
     /// <summary>
+    /// Two satellites numbered the same are told apart on every surface the page has (#424).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Keeping both satellites is only half the fix. A plot drawing two markers that both say "4",
+    /// and a table with two rows reading "4", would be the remedy #424 rejected — more numerous and
+    /// no more honest. The identity has to reach the text, the sentence a screen reader speaks, and
+    /// the key selection is made on, or the surface still cannot say which is which.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void TwoSatellitesNumberedTheSameAreDistinguishableOnEverySurface()
+    {
+        SatellitesViewModel model = Connected(Screen(
+            tracked:
+            [
+                new() { Prn = 4, Constellation = SatelliteConstellation.Gps, ElevationDegrees = 40, AzimuthDegrees = 83, SignalStrength = 42 },
+                new() { Prn = 4, Constellation = SatelliteConstellation.BeiDou, ElevationDegrees = 55, AzimuthDegrees = 200, SignalStrength = 44 },
+            ]));
+
+        // Both reach the table, and each says which constellation it is.
+        Assert.Equal(["G04", "C04"], model.Tracked.Select(row => row.PrnText));
+
+        // The plot's list alternate agrees with the table, satellite for satellite.
+        Assert.Equal(
+            model.Tracked.Select(row => row.PrnText),
+            model.SkyPlotSatellites.Select(marker => marker.PrnText));
+
+        // The spoken sentence names the constellation rather than repeating "PRN 4" twice, which is
+        // all a screen reader would otherwise have: it has no marker shape or colour to fall back on.
+        Assert.StartsWith("GPS 4, elevation 40 degrees", model.Tracked[0].Description, StringComparison.Ordinal);
+        Assert.StartsWith("BeiDou 4, elevation 55 degrees", model.Tracked[1].Description, StringComparison.Ordinal);
+
+        // And they are two different keys, so selecting one cannot ring the other.
+        Assert.NotEqual(model.Tracked[0].Id, model.Tracked[1].Id);
+        Assert.Equal(2, model.SkyPlotSatellites.Select(marker => marker.Id).Distinct().Count());
+    }
+
+    /// <summary>
+    /// A receiver with one constellation is untouched by #424 — §9.10.2's own wording, still.
+    /// </summary>
+    /// <remarks>
+    /// The widened identity stops at the NMEA driver. A SmartClock satellite has no constellation to
+    /// declare, so its row must read "17" and its sentence must open "PRN 17, elevation…" exactly as
+    /// the specification's example does. A change that reached this receiver would be inventing an
+    /// attribution its status screen never made.
+    /// </remarks>
+    [Fact]
+    public void ASatelliteFromAStatusScreenIsUnchanged()
+    {
+        SatellitesViewModel model = Connected(Screen(
+            tracked: [new() { Prn = 17, ElevationDegrees = 63, AzimuthDegrees = 64, SignalStrength = 35 }]));
+
+        Assert.Equal("17", model.Tracked[0].PrnText);
+        Assert.StartsWith("PRN 17, elevation 63 degrees", model.Tracked[0].Description, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// §11.1's em dash reaches the list too. A satellite the receiver named without a position is a
     /// row of dashes rather than a row of zeros.
     /// </summary>
