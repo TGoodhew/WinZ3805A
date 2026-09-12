@@ -55,6 +55,9 @@ public sealed class ReceiverStateStore : INotifyPropertyChanged
 
 
     private ReceiverStatus? _status;
+
+    /// <summary>Accumulated across the session; emptied when the device changes (#515, #492).</summary>
+    private TalkerBanner _banner = TalkerBanner.None;
     private string? _syncState;
     private int? _tfom;
     private int? _ffom;
@@ -183,6 +186,14 @@ public sealed class ReceiverStateStore : INotifyPropertyChanged
     private void ClearReadings()
     {
         Status = null;
+
+        // The banner belongs to the receiver that said it, and a new one says its own or says
+        // nothing (#515). Keeping it here is the whole reason retention lives in the store rather
+        // than on the driver: drivers are registered as singletons, so a driver that remembered a
+        // banner would show the previous receiver's antenna status on the next one — which is #492,
+        // the defect this method exists to prevent.
+        Banner = TalkerBanner.None;
+
         SyncState = null;
         Tfom = null;
         Ffom = null;
@@ -215,6 +226,28 @@ public sealed class ReceiverStateStore : INotifyPropertyChanged
     {
         get => _status;
         private set => Set(ref _status, value);
+    }
+
+    /// <summary>
+    /// What the receiver has said about itself, accumulated across the session (#515).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Held here rather than on the driver, and that is the load-bearing decision.</b> The banner
+    /// is emitted once at power-up, so it has to be remembered by something — and drivers are
+    /// registered as singletons, so a driver that remembered one would carry it to the next receiver
+    /// on the next port. That is #492 exactly, and this class already owns the lifetime that fixes
+    /// it: <see cref="BeginDevice"/> keys the state and <c>ClearReadings</c> empties it.
+    /// </para>
+    /// <para>
+    /// Never null, so a consumer reads <see cref="TalkerBanner.IsEmpty"/> rather than checking for
+    /// null and then for emptiness.
+    /// </para>
+    /// </remarks>
+    public TalkerBanner Banner
+    {
+        get => _banner;
+        private set => Set(ref _banner, value);
     }
 
     /// <summary>The disciplining state from <c>:SYNC:STAT?</c>, such as <c>LOCK</c>.</summary>
@@ -492,6 +525,12 @@ public sealed class ReceiverStateStore : INotifyPropertyChanged
         _fastTierCarries = carries;
 
         Status = status;
+
+        // MERGED, NEVER REPLACED (#515). A talker prints its banner once at power-up, so all but one
+        // cycle in a session carry none — assigning status.Banner would blank it a second later.
+        // Merging field by field also keeps a re-sent ANTSTATUS, which arrives alone, from throwing
+        // away the hardware and firmware that came with the original burst.
+        Banner = Banner.MergedWith(status.Banner);
 
         if (!carries.HasFlag(FastFields.Tfom)) { Tfom = status.Tfom; }
         if (!carries.HasFlag(FastFields.Ffom)) { Ffom = status.Ffom; }
