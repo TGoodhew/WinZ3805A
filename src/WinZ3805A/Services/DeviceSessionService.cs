@@ -62,6 +62,9 @@ public sealed class DeviceSessionService : IAsyncDisposable
     private readonly IReadOnlyList<IReceiverDriver> _drivers;
     private readonly ILogger<DeviceSessionService> _logger;
 
+    /// <summary>Where the transport's own lines go, kept for each protocol this session builds (#524).</summary>
+    private readonly ILogger<LineProtocol>? _protocolLogger;
+
     /// <summary>The driver for the receiver on this port. Starts as the first registered (#287).</summary>
     /// <remarks>
     /// Volatile because the poller reads it from its own thread between sweeps, and the write
@@ -110,11 +113,18 @@ public sealed class DeviceSessionService : IAsyncDisposable
     /// the family this application was written against — so every existing construction site keeps
     /// working untouched (#122, #287).
     /// </param>
+    /// <param name="protocolLogger">
+    /// Where the transport's own lines go (#524). Separate from <paramref name="logger"/> so they
+    /// keep <see cref="LineProtocol"/>'s category and can be filtered on their own — the
+    /// per-transaction pair is <c>Trace</c> and would otherwise be turned on and off with the
+    /// session's.
+    /// </param>
     public DeviceSessionService(
         Func<string, SerialSettings, ITransport> transportFactory,
         TimeProvider timeProvider,
         ILogger<DeviceSessionService>? logger = null,
-        IReadOnlyList<IReceiverDriver>? drivers = null)
+        IReadOnlyList<IReceiverDriver>? drivers = null,
+        ILogger<LineProtocol>? protocolLogger = null)
     {
         ArgumentNullException.ThrowIfNull(transportFactory);
         ArgumentNullException.ThrowIfNull(timeProvider);
@@ -122,6 +132,7 @@ public sealed class DeviceSessionService : IAsyncDisposable
         _transportFactory = transportFactory;
         _timeProvider = timeProvider;
         _logger = logger ?? NullLogger<DeviceSessionService>.Instance;
+        _protocolLogger = protocolLogger;
 
         // Optional, and defaulting to the family this application was written against, so every
         // existing construction site and every existing test keeps working untouched (#122).
@@ -641,9 +652,16 @@ public sealed class DeviceSessionService : IAsyncDisposable
             // recognised before there is a driver to ask — which means the walk carries every
             // family's vocabulary and narrows to none. The words do not collide, and Union keeps
             // registration order, so an added driver can only append.
+            // THE LOGGER IS PASSED, AND IT WAS NOT (#524). Naming `prompt:` and letting the third
+            // parameter default sent every TransportLog message to NullLogger — the command sent,
+            // the transaction completed, the timeouts, the faults, and #209's realignment line,
+            // which exists to say the stream had to be resynchronised on a link where misalignment
+            // is a known failure mode. None of it reached app.log, and raising the minimum level
+            // did nothing, because the messages were not filtered but discarded.
             _protocol = new LineProtocol(
                 _transport,
                 _timeProvider,
+                _protocolLogger,
                 prompt: PromptGrammar.Union(_drivers.Select(driver => driver.Prompt)));
 
             // The receiver emits an identity banner on DTR assert and eats the first command with a
