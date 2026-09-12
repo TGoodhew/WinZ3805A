@@ -56,6 +56,12 @@ state; in the compact layout (below) the ring is uniform and the centre shows th
 A value the receiver has not reported, or reported in a form the application could not read, is
 shown as **—**. An old value is never blanked; the footer says how old it is.
 
+**A reading your receiver can never make is not shown at all.** The dash means *"nothing yet"*, so
+leaving it there for a reading that will never come would be a promise the receiver cannot keep. A
+plain GNSS receiver — a USB puck speaking NMEA, say — has no disciplined oscillator, so it has no
+1 PPS time interval and no figures of merit, and those readouts simply do not appear for it. The
+window is shorter as a result. A GPSDO such as the Z3805A shows all of them.
+
 ### The figures of merit
 
 ![Two pills: a green dot with "TFOM 3" and a green dot with "FFOM 0"](images/how-to-use/main-figures-of-merit.png)
