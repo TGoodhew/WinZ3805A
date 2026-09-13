@@ -16,7 +16,11 @@ talker replaces it without changing the driver, which is the point: the driver n
 the simulator, only on the sentence codec they share.
 
 **The family was chosen because it is the opposite shape to the SmartClock.** A talker speaks
-unprompted and is never written to; it has no status screen, no error queue and no commands.
+unprompted and was, when this was written, never written to; it has no status screen, no error
+queue and no commands. (**That last premise has since been qualified** — #508 gave the family one
+outgoing sentence, asked only of a recognised u-blox module. The tutorial is left describing the
+driver as it was built, because the findings below are about what the seam assumed *then*; the
+qualification is noted where it changes a finding.)
 Every assumption the seam had made about a receiver that answers questions surfaced, and each
 one is recorded below as a *finding* — what was assumed, what changed, and where. That is what the
 issue that asked for this ([#310](https://github.com/TGoodhew/WinZ3805A/issues/310)) wanted from
@@ -127,6 +131,13 @@ A talker cannot be sent anything, so the allowlist is reads only: one entry per 
 driver understands (`$--RMC`, `$--GGA`, …, written the way the standard writes a sentence's
 format, talker-agnostic) and one for the whole cycle. The Advanced Console offers these as reads;
 picking one shows the latest of what was heard.
+
+> **Since #508 there is one entry that is sent rather than overheard** — `$PUBX,04`, catalogued as
+> `UBX`. It changes the shape of this step rather than the step itself: the catalog is still an
+> allowlist and the entry is still §8.1 *Safe*, but "reads only" became a property of the entries
+> rather than of the link. The reasoning, and why only a module that identified itself as u-blox is
+> asked, is in `NmeaPoll`'s remarks; §7.1 has not been amended to match, which is
+> [#543](https://github.com/TGoodhew/WinZ3805A/issues/543).
 
 > **Finding 4 — the error-queue query was a SmartClock habit wearing a contract's clothes.** The
 > contract test required `:SYST:ERR?` of every driver, because `CommandInvoker` drains it after
@@ -253,7 +264,7 @@ Made here, because the issue said to make the contract changes here or file them
 |---|---|---|
 | `LinkStyle Link`, `Overhear`, `ClassifyLine` on `IReceiverDriver`, all defaulted | `Drivers/IReceiverDriver.cs`, `Drivers/LinkStyle.cs` | A broadcast family cannot be described without them; a query/response family need not know they exist |
 | `PollPlan.WholeCycle` | `Drivers/IReceiverDriver.cs` | A talker's status is spread across sentences and `Parse` takes one response |
-| `BroadcastListener` | `Transport/BroadcastListener.cs` | The read side of a link that is never written to |
+| `BroadcastListener` | `Transport/BroadcastListener.cs` | The read side of a broadcast link — and, since #508, its one write: `PollAsync` sends the driver's outgoing text and waits on the reply's *arrival* rather than on a clock |
 | The connect sequence overhears before it asks; a broadcast driver is served from its listener | `Services/DeviceSessionService.cs` | Recognition by hearing; nothing on the wire |
 | 4800 and 38400 baud | `Transport/SerialSettings.cs`, §7.1 | The standard's rate was not offered |
 | The error-queue contract test binds query/response families | `ReceiverDriverTests` | Finding 4 |
@@ -273,11 +284,15 @@ concrete, and **both shipped on 30 Aug 2026**; the other three are recorded only
   the rest still find nothing and show dashes — that part is honest — but their tier C controls are
   now disabled with a sentence naming the family, rather than resolving to a command the catalog
   does not have.
-- **The console says *"Will send"* over a link that sends nothing.** Picking `$--GGA` shows the
-  latest GGA, which is right; the label is a query/response word.
-- **The synchronise step writes `*CLS`** before it knows what it is talking to. A talker ignores
-  it, and the end-to-end test pins that it is the *only* thing written — but a link that is never
-  written to is written to once.
+- **The console says *"Will send"* over a link that mostly sends nothing.** Picking `$--GGA` shows
+  the latest GGA, which is right; the label is a query/response word. It became literally true of
+  exactly one entry at #508, which makes the label more confusing rather than less: two entries in
+  one list now mean different things by it.
+- ~~**The synchronise step writes `*CLS`** before it knows what it is talking to.~~ **Overtaken by
+  #508.** The observation was that a link defined as never written to is written to once, and the
+  end-to-end test pinned `*CLS` as the *only* thing written. It is no longer the only thing: a
+  recognised u-blox module is polled once per sweep. The premise this finding rested on is what
+  [#543](https://github.com/TGoodhew/WinZ3805A/issues/543) is about.
 - **Auto-detect is not exercised over a fake transport.** The session reuses one transport per
   candidate and the fakes are single-use; the walk's *order* is tested, its *outcome* for a talker
   was checked by reasoning: at the wrong rate a talker produces no valid checksum, so nothing is
