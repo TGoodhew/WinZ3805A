@@ -340,6 +340,22 @@ a picture.
 > threshold is 864 px. The guide's prose and its "upper half" / "lower half" pairs are written
 > around a single column, so the default of 860 is what keeps the pictures matching the words.
 
+> **Three pages are known stale as of 13 Sep 2026, found by the documentation audit rather than by
+> looking at them.** The prose describes all three additions and the pictures predate them, which is
+> the exact failure this section exists to catch — so they are named here rather than left for
+> whoever next compares 17 images to 17 pages:
+>
+> | Image | What the page gained since 30 Aug |
+> |---|---|
+> | `page-position.png` | **Position uncertainty**, a seventh row under the coordinates (#516) |
+> | `page-timing-2.png` | The **Disciplining loop** card — three rows from `DIAG:LOOP?` (#512). It shows only on a UCCM, so a Z3805A screenshot is still correct for a Z3805A; the guide says which receiver has it |
+> | `page-overview.png` | The **Antenna** and **Integrity** pills on the Health monitor card (#515, #516) |
+>
+> Re-taking needs a connected receiver, so it waits for a sitting. Two of the three want a Z3805A,
+> which is what every other image in the guide was taken against; the disciplining-loop card cannot
+> be photographed on one at all, and wants a separate decision about whether the guide illustrates a
+> receiver it was not written about.
+
 ---
 
 ## 14. Memory over hours (#385, #399, G1)
