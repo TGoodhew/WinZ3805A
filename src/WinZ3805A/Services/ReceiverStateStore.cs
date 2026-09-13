@@ -58,6 +58,9 @@ public sealed class ReceiverStateStore : INotifyPropertyChanged
 
     /// <summary>Accumulated across the session; emptied when the device changes (#515, #492).</summary>
     private TalkerBanner _banner = TalkerBanner.None;
+
+    /// <summary>The vendor poll's last answer; emptied with the banner (#508).</summary>
+    private PollReadings? _poll;
     private string? _syncState;
     private int? _tfom;
     private int? _ffom;
@@ -193,6 +196,7 @@ public sealed class ReceiverStateStore : INotifyPropertyChanged
         // banner would show the previous receiver's antenna status on the next one — which is #492,
         // the defect this method exists to prevent.
         Banner = TalkerBanner.None;
+        Poll = null;
 
         SyncState = null;
         Tfom = null;
@@ -248,6 +252,20 @@ public sealed class ReceiverStateStore : INotifyPropertyChanged
     {
         get => _banner;
         private set => Set(ref _banner, value);
+    }
+
+    /// <summary>
+    /// What the vendor poll last answered, or <see langword="null"/> if it has never been asked
+    /// (#508).
+    /// </summary>
+    /// <remarks>
+    /// Kept beside <see cref="Banner"/> and cleared with it, for the same reason: it belongs to the
+    /// receiver that answered, and a different one must not inherit it (#492).
+    /// </remarks>
+    public PollReadings? Poll
+    {
+        get => _poll;
+        private set => Set(ref _poll, value);
     }
 
     /// <summary>The disciplining state from <c>:SYNC:STAT?</c>, such as <c>LOCK</c>.</summary>
@@ -544,6 +562,19 @@ public sealed class ReceiverStateStore : INotifyPropertyChanged
 
         LastFullPoll = _timeProvider.GetUtcNow();
         OnPropertyChanged(nameof(LastDisplayedPoll));
+    }
+
+    /// <summary>Records what the vendor poll answered (#508).</summary>
+    /// <remarks>
+    /// Replaced rather than merged, unlike <see cref="Banner"/>: this is a reading taken on demand
+    /// and every field of it is re-answered each time it is asked, so a new answer supersedes the
+    /// old one entirely. A poll that went unanswered does not reach here at all — the caller has
+    /// nothing to record — so the previous reading stands and ages rather than being blanked.
+    /// </remarks>
+    public void UpdatePoll(PollReadings readings)
+    {
+        ArgumentNullException.ThrowIfNull(readings);
+        Poll = readings;
     }
 
     private void Set<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)

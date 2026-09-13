@@ -120,6 +120,11 @@ public sealed class NmeaDriver(TimeProvider timeProvider) : IReceiverDriver
         Read("GLL", "Position", "Latitude and longitude with the time of the fix."),
         Read("VTG", "Track and speed", "Track made good and ground speed."),
         Read("TXT", "Text and banner", "Free text the receiver prints about itself at power-up — its hardware, firmware, protocol version and antenna status — and again whenever the antenna status changes."),
+
+        // The only entry in this catalog that is SENT rather than overheard (#508). It is a §8.1
+        // Safe query — it configures nothing and persists nothing — and it is asked only of a
+        // receiver that has said it is u-blox.
+        Read("UBX", "Time and clock poll", "u-blox's $PUBX,04: GPS − UTC, the receiver's clock bias and drift, and the time-pulse quantisation error. Asked rather than overheard, and only of a u-blox module."),
         new(
             Mnemonic: PollPlan.WholeCycle,
             ShortForm: PollPlan.WholeCycle,
@@ -226,7 +231,16 @@ public sealed class NmeaDriver(TimeProvider timeProvider) : IReceiverDriver
         ReceiverReading.AntennaDelay => false,
         ReceiverReading.OutputValidity => false,
         ReceiverReading.DeviceIdentity => false,
-        ReceiverReading.LeapSecond => false,
+        // TRUE SINCE #508, AND THE FLIP IS THE POINT. This said false while the family could not
+        // ask: $PUBX,04 carries GPS − UTC and there was no send path, so the honest answer was that
+        // a talker would never tell you. There is one now, so the family CAN report it — on u-blox
+        // hardware, which is most of the NMEA market.
+        //
+        // It is a family-level claim and this reading is available per-device, so the two do not fit
+        // perfectly: a MediaTek talker will show an em dash for ever. The interface says which way
+        // to err — a wrong FALSE tells a user their receiver can never report something it reports
+        // perfectly well, and stops them looking, where a blank only leaves them waiting.
+        ReceiverReading.LeapSecond => true,
         ReceiverReading.TimeCodeFormat => false,
         ReceiverReading.PowerOnHours => false,
         ReceiverReading.GpsEngineIdentity => false,

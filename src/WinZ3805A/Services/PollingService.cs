@@ -4,6 +4,10 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using WinZ3805A.Device.Commands;
 using WinZ3805A.Device.Drivers;
+
+// The one family-specific reference in this file, and it is the poll's own rule (#508). The gate it
+// answers needs the banner and the session together, and this is the only place that has both.
+using WinZ3805A.Device.Drivers.Nmea;
 using WinZ3805A.Device.Models;
 using WinZ3805A.Device.Parsing;
 using WinZ3805A.Device.Transport;
@@ -605,6 +609,9 @@ public sealed class PollingService : IAsyncDisposable
         _store.UpdateFull(status, driver.Plan.FastTierCarries);
         FullSweeps++;
 
+        // After UpdateFull, so the banner the gate reads is the freshest one (#508).
+        await PollVendorAsync(driver, cancellationToken).ConfigureAwait(false);
+
         if (status.ParseWarnings.Count > 0)
         {
             _logger.LogDebug(
@@ -624,6 +631,45 @@ public sealed class PollingService : IAsyncDisposable
     /// the user would see an application that stops updating rather than one that says it has lost
     /// the link.
     /// </remarks>
+    /// <summary>
+    /// Asks the one vendor poll this application sends, when the receiver is one that understands it
+    /// (#508).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The gate lives here because this is the only place that has both halves.</b> Whether to
+    /// send depends on the banner, which the <see cref="ReceiverStateStore"/> remembers across the
+    /// cycles that do not repeat it (#515); sending depends on the session. The driver has neither —
+    /// and it is a singleton, so a driver that remembered the banner itself would carry one
+    /// receiver's answer to the next, which is #492.
+    /// </para>
+    /// <para>
+    /// <b>Two guards, and they answer different questions.</b> The banner says the receiver is
+    /// u-blox and will understand the sentence; <c>OutgoingTextFor</c> says this driver is willing to
+    /// send it at all, which is false for every other family. Either alone would be wrong: the first
+    /// would have a SmartClock asked for a sentence it has no idea about, and the second would send
+    /// one vendor's private sentence to another vendor's hardware.
+    /// </para>
+    /// <para>
+    /// A receiver that has printed no banner is not asked. That is the conservative direction — the
+    /// cost is a field staying dashed, which is honest, and the alternative is guessing whose module
+    /// this is.
+    /// </para>
+    /// </remarks>
+    private async Task PollVendorAsync(IReceiverDriver driver, CancellationToken cancellationToken)
+    {
+        if (!NmeaPoll.IsUnderstoodBy(_store.Banner) || driver.OutgoingTextFor(NmeaPoll.ReplyKey) is null)
+        {
+            return;
+        }
+
+        string? reply = await AskAsync(driver, NmeaPoll.ReplyKey, cancellationToken).ConfigureAwait(false);
+        if (NmeaPoll.Parse(reply) is PollReadings readings)
+        {
+            _store.UpdatePoll(readings);
+        }
+    }
+
     private async Task<string?> AskAsync(IReceiverDriver driver, string mnemonic, CancellationToken cancellationToken) =>
         (await AskWithStatusAsync(driver, mnemonic, cancellationToken).ConfigureAwait(false)).Text;
 

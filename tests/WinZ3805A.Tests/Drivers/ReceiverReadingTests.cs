@@ -72,6 +72,15 @@ public sealed class ReceiverReadingTests
     /// Every disciplined-oscillator reading is refused by a talker, because a talker has no
     /// oscillator to discipline.
     /// </summary>
+    /// <remarks>
+    /// <b><c>LeapSecond</c> left this list at #508, and it never quite belonged on it.</b> It is a
+    /// fact about GPS rather than about an oscillator, and it sat here only because a talker could
+    /// not be asked: <c>$PUBX,04</c> carries it and there was no send path. There is one now, so the
+    /// family can report it on u-blox hardware and the honest answer flipped to true. The claim is
+    /// family-level while the reading is per-device, so a MediaTek talker will dash for ever — the
+    /// interface says which way to err, and a wrong <c>false</c> stops a user looking for something
+    /// their receiver reports perfectly well.
+    /// </remarks>
     [Theory]
     [InlineData(ReceiverReading.Tfom)]
     [InlineData(ReceiverReading.Ffom)]
@@ -81,7 +90,6 @@ public sealed class ReceiverReadingTests
     [InlineData(ReceiverReading.AntennaDelay)]
     [InlineData(ReceiverReading.OutputValidity)]
     [InlineData(ReceiverReading.DeviceIdentity)]
-    [InlineData(ReceiverReading.LeapSecond)]
     [InlineData(ReceiverReading.TimeCodeFormat)]
     [InlineData(ReceiverReading.PowerOnHours)]
     [InlineData(ReceiverReading.HealthMonitor)]
