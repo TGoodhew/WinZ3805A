@@ -66,7 +66,10 @@ condition that the notice accompany "substantial portions of the Software" is no
 engaged. The acknowledgement is here anyway, because the distinction is a
 judgement and the work was genuinely useful — and because a reader of that driver
 should be able to find where its claims came from. Each file cites it, and the
-driver states plainly that none of it has been verified against hardware.
+driver states plainly which of its claims have since been checked against a
+receiver and which have not — one Trimble UCCM-P has been on the bench since
+10 September 2026, and it refuted two of the protocol conventions listed above
+for that module while leaving the rest standing as citations.
 
 ## Trademarks
 

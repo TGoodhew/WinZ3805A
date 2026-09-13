@@ -1,7 +1,8 @@
 WinZ3805A
 Monitoring and control for HP/Symmetricom SmartClock GPS-disciplined
 oscillators - the Z3805A and its siblings - over RS-232, and monitoring
-for any GPS receiver that speaks NMEA 0183.
+for any GPS receiver that speaks NMEA 0183 or any Symmetricom or Trimble
+UCCM telecom module.
 
 
 TO INSTALL

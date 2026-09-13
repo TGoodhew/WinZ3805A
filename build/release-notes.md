@@ -47,7 +47,9 @@ from a clone, or delete the entry by hand from `certlm.msc` → *Trusted People*
 
 A WinUI 3 monitor and control application for HP/Symmetricom SmartClock
 GPS-disciplined oscillators — the Z3805A and its siblings (Z3801A, 58503A/B,
-59551A, Z3816A) — over RS-232, plus a generic NMEA 0183 talker.
+59551A, Z3816A) — over RS-232, plus monitoring for any GPS receiver that speaks
+NMEA 0183 and read-only monitoring of Symmetricom and Trimble UCCM telecom
+modules.
 
 Destructive receiver commands are **unreachable rather than warned about**: the
 command catalog is an allowlist, and the excluded commands are not entries with

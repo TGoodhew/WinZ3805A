@@ -141,9 +141,13 @@ C:\Users\Tony\source\WinZ3805A\
 ├── Directory.Build.props              Nullable + warnings-as-errors (§6.4), shared by every project
 ├── global.json                        Pins the .NET SDK
 ├── .github/workflows/ci.yml           Runs every build/ gate first, then builds and tests
-├── build/                             Test-*.ps1 — the eleven CI gates (§8.4, §9.12, §9.13);
-│   │                                  Capture-Fixtures.ps1 (the §11.1 harness); the sideload
-│   │                                  packager, Invoke-Wack.ps1, New-AppAssets.ps1;
+├── build/                             Test-*.ps1 — eighteen gates: fifteen over the source
+│   │                                  (§8.4, §9.12, §9.13), two over the documents and one over
+│   │                                  the pull request; Capture-Fixtures.ps1 (the §11.1 harness)
+│   │                                  with Capture-Talker.ps1 and Capture-Uccm.ps1 for the other
+│   │                                  two families, Capture-GuideImages.ps1, Watch-Soak.ps1;
+│   │                                  the sideload packager, New-SigningSecrets.ps1,
+│   │                                  New-ReleaseNotes.ps1, Invoke-Wack.ps1, New-AppAssets.ps1;
 │   │                                  fluent-stock-colours.txt (§9.4.1's measured stock values)
 │   ├── palette/                       The §9.4.4 palette derivation and its validator (#87)
 │   └── sideload/                      Installer script and README shipped with a sideload package
@@ -153,7 +157,10 @@ C:\Users\Tony\source\WinZ3805A\
 │   ├── adding-a-receiver.md           Driver author's guide (#287), with tutorial-nmea-driver.md (#310)
 │   ├── manual-qa.md                   The release checklist §6.4 and §9.12 point at
 │   ├── privacy.md, store-listing.md   Privacy policy and listing copy for the Store (OQ-6)
-│   ├── lady-heather-comparison.md, index.md, _config.yml   GitHub Pages site
+│   ├── lady-heather-comparison.md, nmea-against-lady-heather.md   Against the incumbent
+│   ├── porting-to-python-qt.md        The Linux port's work plan (smartclock-monitor)
+│   ├── index.md, _config.yml          GitHub Pages site
+│   ├── review/                        Frozen review artefacts; nothing here ships
 │   └── images/                        Screenshots the user's guide embeds
 ├── src/
 │   ├── WinZ3805A/                     WinUI 3 app, single-project MSIX
@@ -176,18 +183,24 @@ C:\Users\Tony\source\WinZ3805A\
 │       ├── Transport/                 SerialTransport, ITransport, LineProtocol, BroadcastListener
 │       ├── Commands/                  ScpiCommand, CommandCatalog, SafetyTier, BlockedCommands
 │       ├── Drivers/                   IReceiverDriver, LinkStyle, SmartClockDriver (#287)
-│       │   └── Nmea/                  NmeaDriver, NmeaSentence, NmeaStatusParser (#310)
+│       │   ├── Nmea/                  NmeaDriver, NmeaSentence, NmeaStatusParser, NmeaPoll (#310, #508)
+│       │   └── Uccm/                  UccmDriver, UccmCommands, UccmStatusParser, UccmTimeCode (#416)
 │       ├── Parsing/                   StatusScreenParser, ScalarParsers, DiagnosticLogParser
 │       └── Models/                    ReceiverStatus, Satellite, Position, ModelProfile
 ├── tests/
 │   └── WinZ3805A.Tests/               xUnit; folders mirror the source
-│       └── Fixtures/                  Captured .txt status screens (§11.1) with README.md
-│           └── captured/              The 27–28 Aug sitting, one file per state, and its log
+│       ├── Fixtures/                  Captured .txt status screens (§11.1) with README.md
+│       │   └── captured/              The 27–28 Aug sitting, one file per state, and its log
+│       ├── Nmea/Captures/             Captured talker cycles, replayed in CI (#420)
+│       └── Uccm/Captures/             Captured UCCM sittings, bytes verbatim (#416, #481, #534)
 └── tools/
-    └── NmeaSimulator/                 Console NMEA talker for driving the §7 seam without hardware (#310)
+    ├── NmeaSimulator/                 Console NMEA talker for driving the §7 seam without hardware (#310)
+    └── UccmSimulator/                 The UCCM shapes the driver was written against, before hardware (#416)
 ```
 
 *(Tree regenerated from the working copy on 29 Aug 2026, #316. The original named a `SettingsService` and a `HealthState` model, neither of which exists: settings are the `*Preferences` records persisted through `JsonPreferenceFile`, and health is carried on `ReceiverStatus` as its health items and `ClockAdvisory`.)*
+
+*(Regenerated again 13 Sep 2026. What had drifted since August is what the tree could not describe when it was written: **the UCCM driver and its simulator**, the **two capture directories** that hold the evidence for the families that are not the SmartClock, and the **gate count**, which said eleven and is eighteen — and no longer one kind of thing, since three of them read something other than the source. The gate list with what each guards is `CLAUDE.md`; this tree gives only the shape.)*
 
 The `Device` library must have zero dependency on `Microsoft.UI.*`. All parsing and safety classification lives there and is unit-tested against captured status-screen text files.
 

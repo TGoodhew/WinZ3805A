@@ -1,9 +1,12 @@
 ﻿# Adding a receiver to WinZ3805A
 
-WinZ3805A ships speaking to two families of hardware — the HP/Symmetricom
-SmartClock GPS-disciplined oscillators it was written for, and any NMEA 0183
+WinZ3805A ships speaking to three families of hardware — the HP/Symmetricom
+SmartClock GPS-disciplined oscillators it was written for; any NMEA 0183
 GNSS talker (proven against the simulator under `tools/` and, since 7 Sep
-2026, against a captured VK-162, #420) — because every piece of
+2026, against ten captures from two real pucks, #420, #516); and the
+Symmetricom and Trimble UCCM telecom modules (#416, mostly written from a
+third-party implementation, with one Trimble UCCM-P on the bench since
+10 Sep 2026) — because every piece of
 device-specific knowledge sits behind one
 interface, `IReceiverDriver`, so that supporting another receiver means
 **writing a driver, not modifying the application**. This document is the
@@ -12,7 +15,11 @@ safety obligations, the development process in order, and — because a promise
 like that is only worth what it excludes — an honest account of where the
 boundary currently sits. [`tutorial-nmea-driver.md`](tutorial-nmea-driver.md)
 is this process followed to the end for the second family, with the files that
-resulted and every finding along the way; read the two together.
+resulted and every finding along the way; read the two together. The third
+family is the same process with its most important step missing — it was
+written before any such module could be found, and
+[the captures' README](../tests/WinZ3805A.Tests/Uccm/Captures/README.md)
+records what that cost and what a module then settled.
 
 It replaces the shorter walkthrough that used to live in the README, and it is
 written for a developer who has the repository building and a receiver on the
