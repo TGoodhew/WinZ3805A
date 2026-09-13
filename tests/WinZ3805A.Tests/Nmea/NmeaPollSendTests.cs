@@ -2,6 +2,7 @@ using Microsoft.Extensions.Time.Testing;
 
 using WinZ3805A.Device.Drivers;
 using WinZ3805A.Device.Drivers.Nmea;
+using WinZ3805A.Device.Models;
 using WinZ3805A.Device.Transport;
 
 namespace WinZ3805A.Tests.Nmea;

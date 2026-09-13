@@ -106,7 +106,14 @@ public sealed class TimeViewModel : INotifyPropertyChanged, IDisposable
     /// be asked at all is read rather than dashed. Null for the SmartClock, which is exactly the
     /// case where the query is the answer.
     /// </remarks>
-    public int? ReportedGpsUtcOffsetSeconds => Status?.GpsUtcOffsetSeconds;
+    /// <remarks>
+    /// <b>A third source joins the chain at #508, and it is last for a reason.</b> The order is: what
+    /// the receiver answered when asked (§10.14), then what it stated unasked (#481), then what the
+    /// vendor poll returned. The poll is last because it is the most indirect — a proprietary
+    /// sentence this application chose to send — and because a receiver that answers either of the
+    /// other two has already given the figure in its own words.
+    /// </remarks>
+    public int? ReportedGpsUtcOffsetSeconds => Status?.GpsUtcOffsetSeconds ?? _store.Poll?.LeapSeconds;
 
     /// <summary>That scale in words.</summary>
     public string TimeScaleText => TimeScale switch

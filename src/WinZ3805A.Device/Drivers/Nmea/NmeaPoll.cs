@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 
 using WinZ3805A.Device.Models;
 
@@ -131,30 +131,4 @@ public static class NmeaPoll
         double.TryParse(field?.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out double value)
             ? value
             : null;
-}
-
-/// <summary>What a <c>$PUBX,04</c> reply carries (#508).</summary>
-/// <remarks>
-/// Every member is nullable: a reply can be well formed and still leave a field empty, and §11.1's
-/// rule is that an unreadable field is absent rather than guessed.
-/// </remarks>
-public sealed record PollReadings
-{
-    /// <summary>
-    /// GPS − UTC in whole seconds, <b>only when decoded from the satellites</b>.
-    /// </summary>
-    /// <remarks>
-    /// Null when the module reported its firmware default, which is a constant rather than a
-    /// reading — see <see cref="NmeaPoll.Parse"/>.
-    /// </remarks>
-    public int? LeapSeconds { get; init; }
-
-    /// <summary>The receiver's clock offset in nanoseconds.</summary>
-    public double? ClockBiasNanoseconds { get; init; }
-
-    /// <summary>How fast that offset is changing, in nanoseconds per second.</summary>
-    public double? ClockDriftNanosecondsPerSecond { get; init; }
-
-    /// <summary>Time-pulse quantisation error in nanoseconds — an uncertainty figure.</summary>
-    public double? TimePulseGranularityNanoseconds { get; init; }
 }
