@@ -136,8 +136,8 @@ picking one shows the latest of what was heard.
 > `UBX`. It changes the shape of this step rather than the step itself: the catalog is still an
 > allowlist and the entry is still §8.1 *Safe*, but "reads only" became a property of the entries
 > rather than of the link. The reasoning, and why only a module that identified itself as u-blox is
-> asked, is in `NmeaPoll`'s remarks; §7.1 has not been amended to match, which is
-> [#543](https://github.com/TGoodhew/WinZ3805A/issues/543).
+> asked, is in `NmeaPoll`'s remarks, and **§7.2's write rule** is the specification's account of it
+> — three gates a broadcast family passes before anything goes out, amended for this at #543.
 
 > **Finding 4 — the error-queue query was a SmartClock habit wearing a contract's clothes.** The
 > contract test required `:SYST:ERR?` of every driver, because `CommandInvoker` drains it after

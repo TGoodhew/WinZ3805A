@@ -169,8 +169,8 @@ surface for one vendor's receiver, which is the shape of decision §13 exists to
 > **The sentence above about the protection is the part worth re-reading.** "Protected by its
 > absence" was a structural guarantee and it is now a policy: `NmeaDriver.IsBlocked` permits one
 > prefix and refuses every other proprietary sentence, `$PUBX,41` — which reconfigures a port —
-> included. §7.1 has not been amended to match and still says a broadcast family is never written
-> to; that is [#543](https://github.com/TGoodhew/WinZ3805A/issues/543).
+> included. **§7.2's write rule** is where that policy is now written down — three gates, and the
+> note that a rule enforced by code is weaker than a property enforced by absence (#543).
 >
 > What did **not** change: `PSTI` is still unread, a module is asked only when its own `$GxTXT`
 > banner identified it as u-blox, and nothing is ever sent to configure anything.
