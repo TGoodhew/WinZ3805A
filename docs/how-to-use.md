@@ -29,7 +29,7 @@ beside it** all say the same thing, so you never have to read the colour alone:
 | **Locked to GPS** | green | tick | Disciplining the oscillator to GPS. The normal state. |
 | **Recovering** | amber | refresh arrows | Coming back from holdover; not yet locked. |
 | **Waiting to recover** | amber | pause | Ready to recover but held back — the Holdover page says why. |
-| **Holdover** | red | warning | Lost GPS and running on the oscillator alone. Time error grows the longer this lasts. |
+| **Holdover** | red | pause inside a clock face | Lost GPS and running on the oscillator alone. Time error grows the longer this lasts. |
 | **Power-up** | grey | clock | Just switched on; nothing to report yet. |
 | **Diagnostic / off** | grey | power symbol | The receiver is in a diagnostic mode or its outputs are off. |
 | **Disconnected** | grey | disconnected drive | The application is not talking to a receiver. |
@@ -152,11 +152,14 @@ The first time the application runs it shows a **Connect your receiver** panel w
 - **Port** lists the serial ports Windows can see; **Refresh** re-scans after plugging an adapter
   in. If no ports appear at all, the adapter's driver is the likely cause — check it in Device
   Manager.
-- **Auto-detect settings** tries the likely baud rates and framings — listening first for a
-  receiver that talks by itself, then asking for an identity — until one is recognised. Use it
-  unless you know the settings. **Manual** exposes baud, data bits, parity and stop bits — the
-  Z3805A's factory setting is 9600-8-N-1; a Z3801A leaves the factory at 19200-7-O-1, though
-  some units in the field are set to even parity.
+- **Auto-detect settings** tries the eleven likely baud rates and framings in turn — listening at
+  each for a receiver that talks by itself, then asking for an identity — until one is recognised,
+  saying *Trying 9600-8-N-1 — 1 of 11* as it goes. Use it unless you know the settings. **If you have connected on
+  this port before, the settings that worked are tried first**, so a second connection is usually
+  immediate even when the receiver sits near the end of the list; the full walk takes over a minute.
+  **Manual** exposes baud, data bits, parity and stop bits — the Z3805A's factory setting is
+  9600-8-N-1; a Z3801A leaves the factory at 19200-7-O-1, though some units in the field are set to
+  even parity; the Trimble UCCM-P on the bench here answers at 57600-8-N-1.
 - **Reconnect automatically** keeps trying after the link drops — the adapter unplugged, the
   receiver power-cycled — with a growing pause between attempts.
 - **Connect to this device on launch** does what it says; with it on, the application connects
@@ -167,20 +170,52 @@ adapters need.
 
 ### Other receivers
 
-The application also connects to any GPS receiver that speaks **NMEA 0183** — a u-blox module, a
-marine receiver — through the same dialog: auto-detect hears it talking and chooses the NMEA driver
-by itself. Such a receiver has no disciplined oscillator, so the application shows only what NMEA
-carries: the mode (**Locked to GPS** with a fix, **Power-up** without one), the satellites being
-tracked and the sky plot, the position, and the time and date. The 1 PPS TI, TFOM and FFOM, the
-outputs, holdover, EFC, cable delay, status registers, self test, receiver log and error queue have
-nothing behind them and show **—**, and the Advanced Console offers reads only; nothing is ever
-sent to the receiver.
+Three kinds of receiver are recognised, and the dialog is the same for all of them — auto-detect
+walks each one's likely settings, listens for a receiver that talks by itself, and asks `*IDN?`
+only if nothing has claimed what it heard.
 
-**Anything the receiver cannot do is greyed out with a line saying why** — *"This receiver does not
-support an elevation mask. The NMEA 0183 driver has no command for it."* The controls are not
-hidden: a page that quietly lost half of itself would look either broken or, worse, complete, and a
-button that is visible and silently does nothing is the one thing that must not happen. So the
-pages stay as they are, with dashes where a reading would be and a reason where a command would be.
+**A SmartClock GPSDO** — a Z3805A or one of its siblings — is what the application was written for,
+and it is the only family that fills every page.
+
+**Any GPS receiver that speaks NMEA 0183** — a u-blox module, a marine receiver — is heard talking
+and claimed by the NMEA driver without being asked anything. Such a receiver has no disciplined
+oscillator, so the application shows only what NMEA carries: the mode (**Locked to GPS** with a fix,
+**Power-up** without one), the satellites being tracked and the sky plot, the position and the
+quality of the fix, the antenna's state if the module reports one, and the time and date.
+
+> **One sentence is sent, and only to a u-blox module.** When the receiver's power-up banner says
+> it is u-blox hardware, the application asks it `$PUBX,04` once per sweep. That is a **poll**: it
+> reads back GPS − UTC and the module's own clock bias and drift, and it configures nothing, stores
+> nothing and cannot leave a receiver unreachable. Nothing else is ever sent to a talker — a module
+> from any other maker is asked nothing at all, and a receiver that does not understand the poll
+> simply says nothing. This is why a u-blox puck fills in the **Leap second** card on the Time page
+> and other talkers leave it dashed.
+
+**A Symmetricom or Trimble UCCM / UCCM-P** — the telecom GPSDO modules that turn up second-hand
+from cellular base stations — is recognised from its identity. It is **read-only**: the application
+asks it questions and never writes to it, so nothing on its pages can change a setting. Treat what
+it reports as provisional. Most of this driver was written from another program's source rather
+than from a vendor's manual, and only one module of one variant has ever been on the bench, so a
+reading that looks wrong probably is. It reports no status registers, no health monitor and no
+leap-second queries, and those pages and cards say so rather than waiting.
+
+### When a receiver cannot do something
+
+The application never leaves a control that silently does nothing. What it does instead depends on
+how much of a page is missing.
+
+- **A whole page** the receiver cannot fill — Timing, Holdover or Status registers on a plain
+  talker — is **dimmed in the navigation pane**, and its tooltip says *"Not supported on a NMEA 0183
+  receiver."* It is dimmed rather than disabled deliberately: a disabled item cannot be hovered, so
+  you would have no way to ask why. Select it and you land on a page that says the same thing at
+  length.
+- **One control on a page that otherwise works** is greyed out with a line beside it saying why —
+  *"This receiver does not support an elevation mask. The NMEA 0183 driver has no command for it."*
+  The control is not hidden: a page that quietly lost half of itself would look either broken or,
+  worse, complete.
+- **A reading the receiver could supply but has not yet** is an em dash. The dash always means
+  *nothing yet*, never *never* — which is why a family that can never report something says so in
+  words instead of leaving a dash sitting there for ever.
 
 ---
 
@@ -354,9 +389,11 @@ Everything from the main window, with the words behind the numbers:
   moment that moved. **Orange is above the zero line and teal below it**, and the further from
   zero, the bolder the mark; a mark that crosses zero is grey, because within that slice the
   interval was on both sides of it.
-- **Disciplining loop** — three readings the receiver takes from its own control loop, shown only
-  for receivers that have one. A plain NMEA talker has no disciplined oscillator, so the card is not
-  there at all rather than empty.
+- **Disciplining loop** — three readings a receiver takes from its own control loop and reports
+  directly. **Only a UCCM module does**, so this card is on that receiver's Timing page and on no
+  other; a Z3805A does not publish these figures, and the card is absent rather than empty. (The
+  whole Timing page is out of reach on a plain NMEA talker, which has no disciplined oscillator at
+  all — its entry in the navigation pane is dimmed.)
 
   **Frequency offset** is how far off frequency the oscillator is *measured* to be, in parts per
   billion. This is not the same thing as the oscillator control above it: that is the correction the
