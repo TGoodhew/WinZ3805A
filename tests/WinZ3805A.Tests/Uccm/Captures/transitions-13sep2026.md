@@ -10,13 +10,31 @@ time-code bytes never moved and the corpus could say nothing about what any of t
 | Port | COM3 at 57600-8-N-1, Prolific PL2303GT |
 | Site | Mt Warrigal; surveyed position S 34:32:39.019, E 150:50:25.107, +49.72 m MSL |
 | Taken | 13 Sep 2026, 10:02 to 10:30 +10:00 |
-| Harness | `Watch-UccmTransitions.ps1` — listens continuously rather than taking one catalogue pass |
+| Harness | `build/Watch-UccmTransitions.ps1` — listens continuously rather than taking one catalogue pass |
 
 Three files, written as they arrived rather than at the end:
 
 - `.frames.txt` — every 44-byte `C5`..`CA` time code, one per line, timestamped
 - `.events.txt` — each watched byte the moment it changed, and each gap in the data
 - `.replies.txt` — a probe of six catalogued queries once a minute, verbatim
+
+## Taking another one
+
+The harness was committed on 14 Sep 2026 (#544). Until then it existed only in the session
+scratchpad it was written in on the Mt Warrigal machine, so this sitting could not be repeated by
+running anything in this tree — which mattered, because a second one is wanted: everything below
+is one module of one variant.
+
+```powershell
+pwsh build\Watch-UccmTransitions.ps1 -SelfTest
+pwsh build\Watch-UccmTransitions.ps1 -Port COMn -Label <what-this-sitting-is>
+```
+
+`Capture-Uccm.ps1` is not a substitute. It sends the catalogue and records the replies, where the
+question here is what arrives **unasked**, continuously, across a power cycle and an antenna pull.
+
+The self-test replays the three files below back through the harness, so the reading that produced
+them is checked on every push rather than only on the day.
 
 ## What was done to the receiver, and when
 
@@ -105,6 +123,11 @@ The harness prints a human-readable GPS time beside the first frame of each run,
 annotations are 11 hours late**. `[datetime]'1980-01-06T00:00:00Z'` in PowerShell converts to
 *local* time, and 6 January falls in Australian daylight saving, so the epoch was taken as UTC+11.
 The script has been corrected; the files here were written before that.
+
+**The wrong annotations stay.** They are what the run produced, and the harness self-test asserts
+they are still here — a later tidy-up of the evidence should fail rather than pass. The correction
+itself pins the returned type and offset rather than only the value, because the defective form is
+right wherever local time is UTC, which is most build agents.
 
 **No raw data is affected.** The frames, the byte values and the seconds counts are exactly what
 came off the wire — only the convenience annotation was wrong, and only in `.events.txt`. Decoded

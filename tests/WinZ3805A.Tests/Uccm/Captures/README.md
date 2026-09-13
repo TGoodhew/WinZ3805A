@@ -21,6 +21,18 @@ pwsh build\Capture-Uccm.ps1 -SelfTest
 pwsh build\Capture-Uccm.ps1 -Port COMn -Label <what-this-sitting-is>
 ```
 
+`build/Watch-UccmTransitions.ps1` fills it too, and answers a different question. That one listens
+continuously instead of taking one catalogue pass, because power-up, acquisition and holdover
+happen once, take minutes, and arrive **unasked** — a catalogue pass cannot see them at all. It
+produced `transitions-13sep2026.*`, still the only capture of this family in any state other than
+locked and settled, and it was committed on 14 Sep 2026 (#544) after a day existing nowhere but
+the scratchpad on the machine it ran on.
+
+```powershell
+pwsh build\Watch-UccmTransitions.ps1 -SelfTest
+pwsh build\Watch-UccmTransitions.ps1 -Port COMn -Label <what-this-sitting-is>
+```
+
 ## The three hypotheses a capture here settles
 
 Each is in the driver as a claim with a citation and nothing else behind it. The script reports each
