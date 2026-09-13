@@ -331,7 +331,7 @@ verbatim — so the description of the rule tripped the rule. Both are now descr
 It is a small thing and it is the whole argument for the gate: these are exactly the references nobody
 re-reads.
 
-Three more scripts run in CI and are **not** gates on the source — they check tools rather
+Five more scripts run in CI and are **not** gates on the source — they check tools rather
 than rules, and share one job:
 
 ```powershell
@@ -339,6 +339,7 @@ pwsh build/Capture-Fixtures.ps1 -SelfTest # #4 / #185 — the harness, not the a
 pwsh build/Watch-Soak.ps1 -SelfTest       # #385 / #399 — the soak's arithmetic, not the memory
 pwsh build/Capture-Talker.ps1 -SelfTest   # #420 — the checksum accounting, not the receiver
 pwsh build/Capture-Uccm.ps1   -SelfTest   # #416 — a reply's anatomy, not the module
+pwsh build/Watch-UccmTransitions.ps1 -SelfTest # #544 — the capture replayed, not the sitting
 ```
 
 `Capture-Talker.ps1` is the third of these and exists because **`Capture-Fixtures.ps1` cannot
@@ -373,6 +374,31 @@ were tested against deliberate violations.
 **A count of zero for the time codes does not refute anything**, because an interleaved broadcast
 depends on timing. The note says so, in the file, so nobody later reads a quiet sitting as a
 finding.
+
+`Watch-UccmTransitions.ps1` is the fifth, added 14 Sep 2026, and it is the only one that **replays a
+capture it has already taken**. It listens continuously rather than taking one catalogue pass,
+because the states worth having — power-up, cold acquisition, holdover — happen once, take minutes,
+and arrive unasked: `Capture-Uccm.ps1` sends the catalogue and records replies, and a catalogue pass
+cannot see them at all. Its self-test pushes the 785 committed frames of the 13 Sep 2026 sitting
+back through the framing as one contiguous stream and requires them to produce the events file
+committed beside them, the eight state-byte combinations the capture note publishes included — the
+table #534 turned on.
+
+**It existed nowhere but a session scratchpad for a day**, which is the whole reason #544 was
+filed: the sitting it produced is still the only capture of this family in any state but locked and
+settled, and until the script was committed that sitting could not be repeated by running anything
+in this tree. It was committed **exactly as it ran** first, with a one-line correction made on the
+bench restored as a separate commit, because a harness that produced a capture is evidence about
+that capture and a tidied one is a different program.
+
+Two things worth not rediscovering. The framing anchors on **length** — a `C5` with a `CA` exactly
+43 bytes later — and not on the terminator, because offset 30 is the low byte of the GPS seconds
+counter and is `CA` once every 256 seconds; six frames of that one sitting carry an inner `CA`, so a
+scan to the first one would halve them twice an hour and never on the bench. And the GPS epoch
+check pins the returned **type and offset**, not the value: the defect it guards parsed the epoch
+as a local time, which is right wherever local time is UTC — the CI runner included — so a
+value-only check would have been green on the fault. Nine deliberate violations were tried against
+it and all nine fail.
 
 `.github/workflows/ci.yml` runs every one of them in its own dependency-free job, alongside the
 build rather than ahead of it — they need no restore, so a token, accessibility, or safety
