@@ -35,10 +35,14 @@ Feature-complete against the specification's P0 set and in daily use against a
 bench Z3805A; **it is sideloaded rather than published to the Store**
 ([latest release](https://github.com/TGoodhew/WinZ3805A/releases/latest)). The transport, parser, command
 model, design system and every view are implemented, with the test suite and
-eleven CI gates green. Progress is tracked in the
-[issue backlog](https://github.com/TGoodhew/WinZ3805A/issues), whose `§`
-references resolve against the specification. Where it stands against Lady
-Heather, the tool most people run on these receivers today, is in
+every CI gate green, and the
+[issue backlog](https://github.com/TGoodhew/WinZ3805A/issues) — whose `§`
+references resolve against the specification — is currently empty. Three
+receiver families are driven, and at least one member of each has now answered
+on the bench — though for the UCCM that is a single module of one variant, and
+the caveat below still stands.
+Where it stands against Lady Heather, the tool most people run on these
+receivers today, is in
 [docs/lady-heather-comparison.md](docs/lady-heather-comparison.md).
 
 ## Supported hardware
@@ -50,29 +54,44 @@ Heather, the tool most people run on these receivers today, is in
 | HP/Symmetricom 58503A/B | — |
 | Symmetricom 59551A | — |
 | Symmetricom Z3816A | — |
-| **Any NMEA 0183 GNSS talker** — a u-blox module, a marine receiver; proven against the simulator under `tools/`, not yet against hardware | 4800-8-N-1 (the standard), commonly 9600 |
-| **Symmetricom and Trimble UCCM / UCCM-P** — telecom GPSDO modules; **written from a third-party implementation**, and identified against one Trimble UCCM-P on 10 Sep 2026 | **57600-8-N-1** on that unit; other rates unverified |
+| **Any NMEA 0183 GNSS talker** — a u-blox module, a marine receiver; proven against the simulator under `tools/` and, since 7 Sep 2026, against two real pucks — ten captures replayed in CI | 4800-8-N-1 (the standard), commonly 9600 |
+| **Symmetricom and Trimble UCCM / UCCM-P** — telecom GPSDO modules; **mostly written from a third-party implementation**, with one Trimble UCCM-P on the bench over 10–13 Sep 2026 | **57600-8-N-1** on that unit; other rates unverified |
 
 The SmartClock units share the 58503A/B command set. The NMEA family is the
 second driver ([docs/tutorial-nmea-driver.md](docs/tutorial-nmea-driver.md)): it
-gets the monitoring core — fix state, satellites, position and time — and is
-never written to once recognised; a talker has no disciplined oscillator, so the
-timing pages show dashes. The UCCM family is the third, and it comes with a
-caveat the other two do not: it was written by reading another program's source
-rather than a vendor document or a capture from real hardware, so **treat what it
-reports as provisional**. One Trimble UCCM-P has now been on the bench
-([the capture](tests/WinZ3805A.Tests/Uccm/Captures/README.md)), which settled the
-line settings and two of the three protocol hypotheses — the module does **not**
-echo, and its `C5` time codes are **binary packets** rather than the text the
-capture harness had been looking for. That is one module of one variant: a plain
-UCCM has still never been seen, and most of the driver remains a citation. It is read-only —
+gets the monitoring core — fix state, satellites, position and time — and a
+talker has no disciplined oscillator, so the pages that are only about one are
+dimmed in the navigation pane rather than filled with dashes. It sends **exactly
+one sentence, and only to a u-blox module** (#508): `$PUBX,04`, a poll that
+configures nothing, reads back GPS − UTC and the module's clock bias and drift,
+and is asked only of hardware whose own banner said whose it was. Every other
+talker is overheard and never written to.
+
+The UCCM family is the third, and it comes with a caveat the other two do not:
+most of it was written by reading another program's source rather than a vendor
+document or a capture from real hardware, so **treat what it reports as
+provisional**. One Trimble UCCM-P has now been on the bench across seven sittings
+between 10 and 13 September 2026
+([the captures](tests/WinZ3805A.Tests/Uccm/Captures/README.md)), which settled the
+line settings, all three protocol hypotheses — the module does **not** echo, its
+`C5` time codes are **binary packets** rather than the text the capture harness
+had been looking for, and `Command complete` does terminate a reply — and, on the
+last day, the state bytes for a module that is *not* locked, which no earlier
+sitting could reach. That is still one module of one variant: a plain UCCM has
+never been seen, no Symmetricom module has, and much of the driver remains a
+citation. It is read-only —
 the several writes those modules accept are deliberately absent from its catalog,
 because deciding their safety tier without watching one execute would be guessing
-at consequences. Because the defaults
+at consequences.
+
+Because the defaults
 differ between siblings, every serial parameter is user-settable — baud, data
 bits, parity, and stop bits — and the connection dialog offers an auto-detect
-that walks every registered driver's likely combinations, listening first for a
-receiver that talks unprompted and then sending `*IDN?`, until one is recognised.
+that walks the union of every registered driver's likely combinations — **eleven
+today** — listening at each for a receiver that talks unprompted and sending
+`*IDN?` only when nothing has claimed what it heard, until one is recognised. The
+settings that worked on a given port last time are tried first (#502), so only a
+first connection pays for the walk.
 Handshaking is always off; DTR and RTS are asserted on open. §7.1 of the
 specification gives the full parameter ranges.
 
@@ -282,16 +301,20 @@ the release checklist.
 
 ### The CI gates
 
-Eleven acceptance criteria — design-system, accessibility and safety — are
-enforced by script rather than by review, and two further gates check the
-**documents**: that every link and section reference resolves, and that every
-option in the interface is named in the user's guide. All are dependency-free and
-answer in seconds, which makes them the fastest local check available;
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs every one in its own
-dependency-free job alongside the build, so a regression fails in seconds instead of
-after a full build (a fourteenth script there checks the fixture-capture harness rather
-than the source). The list, with what each guards and why it exists, is in
-[CLAUDE.md](CLAUDE.md); the two below are the ones to know first:
+**Fifteen** acceptance criteria — design-system, accessibility, object lifetime
+and safety — are enforced by script over the **source** rather than by review.
+Three more gates check things the source is not: two read the **documents**
+(that every link and section reference resolves, and that every option in the
+interface is named in the user's guide) and one reads the **pull request** (that
+no closing keyword closes an issue nobody meant to close). All are
+dependency-free and answer in seconds, which makes them the fastest local check
+available; [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs every one
+in its own dependency-free job alongside the build, so a regression fails in
+seconds instead of after a full build. Four further scripts there self-test the
+**tooling** — the fixture, talker and UCCM capture harnesses and the soak's
+arithmetic — rather than gating the source. The full list, with what each guards
+and why it exists, is in [CLAUDE.md](CLAUDE.md); the two below are the ones to
+know first:
 
 ```powershell
 pwsh build/Test-NoHexLiterals.ps1       # no hex colour literals outside Themes/Colors.xaml
@@ -307,9 +330,10 @@ docs/requirements.md          the specification
 docs/                         the other project documents — listed under Documentation below
 src/WinZ3805A/                WinUI 3 app, single-project MSIX
 src/WinZ3805A.Device/         class library — no UI references
-tests/WinZ3805A.Tests/        xUnit, with Fixtures/ for captured status screens
+tests/WinZ3805A.Tests/        xUnit, with Fixtures/ for captured SmartClock status screens, Nmea/Captures/ for captured talker cycles and Uccm/Captures/ for captured UCCM sittings
 tools/NmeaSimulator/          the NMEA 0183 talker the tests and the tutorial run against
-build/                        the CI gate scripts and their inputs (palette/, fluent-stock-colours.txt), the fixture-capture harness, the asset generator, and the sideload and WACK packaging scripts
+tools/UccmSimulator/          a UCCM module that is not one — the shapes the driver was written against, before hardware
+build/                        the CI gate scripts and their inputs (palette/, fluent-stock-colours.txt), the three capture harnesses and the soak watcher, the asset generator, and the sideload, signing and WACK packaging scripts
 .github/workflows/ci.yml      the gates in their own jobs, alongside the Debug and Release x64 builds and the tests
 ```
 
@@ -337,7 +361,10 @@ SmartClock dialect. [docs/tutorial-nmea-driver.md](docs/tutorial-nmea-driver.md)
 is the walkthrough followed to the end for the second family that ships, an
 NMEA 0183 talker — the opposite shape to the SmartClock, which is why it was
 chosen — with a simulator under `tools/` so it can be followed with nothing on
-the desk.
+the desk. The third family, the UCCM, is the walkthrough followed with the
+hardest part missing: it was written before any such module existed to test
+against, and what that cost — and what a capture then settled — is recorded in
+[the captures' README](tests/WinZ3805A.Tests/Uccm/Captures/README.md).
 
 ## Documentation
 
@@ -383,6 +410,9 @@ The rest of `docs/`, and the other documents worth knowing about:
   that need a person, a receiver, or a machine setting.
 - [docs/lady-heather-comparison.md](docs/lady-heather-comparison.md) — where the
   application stands against Lady Heather, the incumbent tool for this family.
+- [docs/nmea-against-lady-heather.md](docs/nmea-against-lady-heather.md) — the
+  narrower comparison of the two NMEA implementations, sentence by sentence,
+  which reaches a different kind of conclusion from the one above.
 - [docs/privacy.md](docs/privacy.md) — the privacy policy: the application
   collects nothing and transmits nothing.
 - [docs/store-listing.md](docs/store-listing.md) — everything the Microsoft
@@ -396,7 +426,10 @@ The rest of `docs/`, and the other documents worth knowing about:
   handed to someone who has not seen this repository; it is being followed in
   [smartclock-monitor](https://github.com/TGoodhew/smartclock-monitor).
 - [tests/WinZ3805A.Tests/Fixtures/README.md](tests/WinZ3805A.Tests/Fixtures/README.md)
-  — provenance of the captured status screens the parser is tested against.
+  — provenance of the captured status screens the parser is tested against, with
+  [Nmea/Captures/](tests/WinZ3805A.Tests/Nmea/Captures/README.md) and
+  [Uccm/Captures/](tests/WinZ3805A.Tests/Uccm/Captures/README.md) doing the same
+  for the other two families.
 - [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) — the third-party components
   the application ships with, and the trademark position.
 
