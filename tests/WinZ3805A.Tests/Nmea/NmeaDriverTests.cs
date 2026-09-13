@@ -353,8 +353,9 @@ public sealed class NmeaDriverTests
     // The catalog and the safety model
     // -------------------------------------------------------------------------------------
 
+    /// <summary>The catalog is still reads only, which #508 did not change.</summary>
     [Fact]
-    public void TheCatalogIsReadsOnlyAndNothingIsBlocked()
+    public void TheCatalogIsReadsOnly()
     {
         (_, NmeaDriver driver, _) = Bench();
 
@@ -364,7 +365,32 @@ public sealed class NmeaDriverTests
         Assert.NotNull(driver.Find(" $--gsv "));
         Assert.NotNull(driver.Find(PollPlan.WholeCycle));
         Assert.Null(driver.Find(":SYST:STAT?"));
-        Assert.False(driver.IsBlocked("$PUBX,41,1,0007,0003,9600,0"));
+    }
+
+    /// <summary>
+    /// <c>$PUBX,41</c> reconfigures a port and IS now refused — this assertion used to be the
+    /// opposite, and the reversal is the point (#508).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The old assertion was <c>Assert.False</c>, on the model that nothing was blocked because
+    /// nothing could be sent: the catalog held reads only, so a vendor's configuration sentences
+    /// were excluded by there being nowhere to type one. That was a <b>structural</b> guarantee and
+    /// #508 removed it by adding a send path.
+    /// </para>
+    /// <para>
+    /// So the safety model changed direction rather than degree, and the sentence chosen to pin it is
+    /// the one that matters: <c>$PUBX,41</c> sets a port's baud rate and protocols, and getting it
+    /// wrong leaves the receiver unreachable at the settings auto-detect found it on. The full policy
+    /// lives in <c>NmeaPollPolicyTests</c>.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void ThePortConfigurationSentenceIsRefused()
+    {
+        (_, NmeaDriver driver, _) = Bench();
+
+        Assert.True(driver.IsBlocked("$PUBX,41,1,0007,0003,9600,0"));
         Assert.False(driver.IsBlocked(null));
     }
 
