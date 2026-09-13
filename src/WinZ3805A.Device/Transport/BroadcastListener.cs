@@ -55,6 +55,12 @@ public sealed class BroadcastListener : IAsyncDisposable
     private Task? _loop;
     private bool _ended;
 
+    /// <summary>The key a poll is waiting for, or null when none is in flight (#508).</summary>
+    private string? _awaitedKey;
+
+    /// <summary>Completed by the read loop the moment <see cref="_awaitedKey"/> arrives.</summary>
+    private TaskCompletionSource<string>? _awaiting;
+
     /// <summary>Creates a listener over an open transport for a broadcast driver.</summary>
     public BroadcastListener(ITransport transport, IReceiverDriver driver, TimeProvider timeProvider, ILogger? logger = null)
     {
@@ -151,6 +157,106 @@ public sealed class BroadcastListener : IAsyncDisposable
         {
             _lastHeardAt ??= _timeProvider.GetTimestamp();
             _loop ??= Task.Run(ReadLoopAsync, CancellationToken.None);
+        }
+    }
+
+    /// <summary>
+    /// Sends one sentence and waits for the reply it asks for (#508).
+    /// </summary>
+    /// <param name="sentence">The line to write, already framed and checksummed.</param>
+    /// <param name="key">The reply's key, as <c>ClassifyLine</c> would give it.</param>
+    /// <param name="timeout">How long to wait before calling it unanswered.</param>
+    /// <param name="cancellationToken">Cancels the wait; the write is not undone.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>This is the only thing a broadcast link ever writes, and it exists because one family
+    /// turned out to have a poll worth asking</b> (#508). Everything else on such a link is
+    /// overheard — <see cref="Answer"/> returns what has already been said — and that remains true
+    /// of every sentence but this one.
+    /// </para>
+    /// <para>
+    /// <b>The wait is on the arrival, not on a clock.</b> Polling <see cref="Answer"/> in a loop
+    /// would work and is the wrong shape: it turns a race into a timeout, which is the flake this
+    /// project has now fixed twice (#213, #510). The read loop knows the moment a line arrives, so
+    /// the completion is raised there.
+    /// </para>
+    /// <para>
+    /// A receiver that does not understand the sentence says nothing, so the honest failure is a
+    /// timeout rather than an error — which is also what a receiver that has gone quiet looks like,
+    /// and both mean the same thing to a caller: no reading this time.
+    /// </para>
+    /// </remarks>
+    public async Task<Transaction> PollAsync(
+        string sentence,
+        string key,
+        TimeSpan timeout,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sentence);
+        ArgumentException.ThrowIfNullOrWhiteSpace(key);
+
+        TaskCompletionSource<string> waiter = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        lock (_gate)
+        {
+            _awaitedKey = key;
+            _awaiting = waiter;
+        }
+
+        long started = _timeProvider.GetTimestamp();
+        try
+        {
+            byte[] bytes = Encoding.Latin1.GetBytes(sentence.EndsWith('\n') ? sentence : sentence + "\r\n");
+            await _transport.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
+
+            string reply = await waiter.Task.WaitAsync(timeout, _timeProvider, cancellationToken).ConfigureAwait(false);
+
+            return new Transaction
+            {
+                Command = sentence,
+                Outcome = TransactionOutcome.Completed,
+                Lines = [reply],
+                EchoDiscarded = false,
+                Elapsed = _timeProvider.GetElapsedTime(started),
+            };
+        }
+        catch (Exception exception) when (exception is TimeoutException or OperationCanceledException)
+        {
+            return new Transaction
+            {
+                Command = sentence,
+                Outcome = TransactionOutcome.TimedOut,
+                Lines = [],
+                EchoDiscarded = false,
+                Elapsed = _timeProvider.GetElapsedTime(started),
+            };
+        }
+        catch (TransportException exception)
+        {
+            // A REPORTED FAULT RATHER THAN A THROW, which is what Answer does for the same condition
+            // and what the pump above expects. The link going while a poll is in flight is ordinary
+            // — the adapter was unplugged, the session is tearing down — and letting it escape would
+            // put a transport failure into a path that treats non-transport exceptions as fatal.
+            return new Transaction
+            {
+                Command = sentence,
+                Outcome = TransactionOutcome.Faulted,
+                Lines = [],
+                EchoDiscarded = false,
+                Elapsed = _timeProvider.GetElapsedTime(started),
+                Fault = exception.Fault,
+                FaultMessage = exception.Message,
+            };
+        }
+        finally
+        {
+            lock (_gate)
+            {
+                if (ReferenceEquals(_awaiting, waiter))
+                {
+                    _awaitedKey = null;
+                    _awaiting = null;
+                }
+            }
         }
     }
 
@@ -343,6 +449,19 @@ public sealed class BroadcastListener : IAsyncDisposable
         lock (_gate)
         {
             _lastHeardAt = _timeProvider.GetTimestamp();
+
+            // A poll in flight is waiting for exactly one key, and this is the only place a line's
+            // arrival is known (#508). Completed inside the lock so two lines cannot both claim it,
+            // and the waiter is cleared first so a second matching line falls through to the
+            // ordinary path rather than completing a task that is already done.
+            if (key is not null && key == _awaitedKey)
+            {
+                TaskCompletionSource<string>? waiter = _awaiting;
+                _awaitedKey = null;
+                _awaiting = null;
+                waiter?.TrySetResult(line);
+            }
+
             if (key is null)
             {
                 LinesDiscarded++;

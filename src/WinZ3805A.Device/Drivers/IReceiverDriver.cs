@@ -308,6 +308,31 @@ public interface IReceiverDriver
     /// </remarks>
     bool IsBlocked(string? header);
 
+    /// <summary>
+    /// The text to put on the wire for a command on a <see cref="LinkStyle.Broadcast"/> link, or
+    /// <see langword="null"/> when the answer is simply overheard (#508).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Null for everything is the right answer for a broadcast family, and was the only answer
+    /// until #508.</b> Such a receiver talks unprompted and is never written to; the session serves
+    /// its commands from what the listener has already heard. This member exists because one family
+    /// turned out to have a single poll worth asking, and the alternative was teaching the session
+    /// about NMEA.
+    /// </para>
+    /// <para>
+    /// <b>A driver returning a non-null value here is claiming the right to transmit</b>, which for
+    /// a broadcast family is a decision about its character rather than a detail — see
+    /// <see cref="IsBlocked"/>, whose whole argument changes the moment this stops being null. The
+    /// default therefore says nothing, so a family that has not thought about it cannot acquire a
+    /// send path by inheritance.
+    /// </para>
+    /// <para>
+    /// It is not consulted on a query/response link, where every command is sent by definition.
+    /// </para>
+    /// </remarks>
+    string? OutgoingTextFor(string? mnemonic) => null;
+
     /// <summary>How long to wait for a given command, per §7.2's classes.</summary>
     /// <remarks>
     /// Per-device by nature. These are measurements, not conventions: the Z3805A's GPS self-test
