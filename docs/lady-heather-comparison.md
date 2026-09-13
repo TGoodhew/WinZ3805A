@@ -33,8 +33,8 @@ guessed at.
 
 | Area | Lady Heather | WinZ3805A today | Specified, unbuilt |
 |---|---|---|---|
-| **Receiver coverage** | ~20 families: Trimble Thunderbolt/-E and TSIP, UCCM, Datum STARLOC II, NEC/STAR-4, Jupiter-T, Lucent KS24361, Motorola binary, NMEA, SiRF, u-blox UBX, Venus, Nortel SCPI, **Z3801A and compatible SCPI**, HP 5xxxx SCPI, NVS, Oscilloquartz, GPSD | The SmartClock family plus any generic NMEA 0183 talker (#310) — two drivers behind `IReceiverDriver` (#122, #287); the NMEA driver is proven against a simulator, not hardware | No second family on the bench (#309 closed, not planned); page gating for non-SmartClock families is #304 |
-| **Auto-detect** | Tries 9600:8:N:1, 115200:8:N:1, 57600:8:N:1, 19200:7:E:1 (per `heather.cfg`'s comment; the source tree's generic list has 19200:7:O:1); uses **19200:7:O:1** for the Z3801A specifically | Ten — the SmartClock's eight, documented default first (§7.1), plus the NMEA driver's 4800 and 38400 (#310) | — |
+| **Receiver coverage** | ~20 families: Trimble Thunderbolt/-E and TSIP, UCCM, Datum STARLOC II, NEC/STAR-4, Jupiter-T, Lucent KS24361, Motorola binary, NMEA, SiRF, u-blox UBX, Venus, Nortel SCPI, **Z3801A and compatible SCPI**, HP 5xxxx SCPI, NVS, Oscilloquartz, GPSD | The SmartClock family, any generic NMEA 0183 talker (#310) and the Symmetricom / Trimble UCCM modules (#416) — **three** drivers behind `IReceiverDriver` (#122, #287). The NMEA driver is proven against ten captures from two real pucks (#420, #516); the UCCM driver is mostly read from Lady Heather's own source and has met one Trimble UCCM-P (#470, #481, #534) | Symmetricom UCCM and plain (non-P) UCCM hardware has never been seen, so much of that driver is still a citation |
+| **Auto-detect** | Tries 9600:8:N:1, 115200:8:N:1, 57600:8:N:1, 19200:7:E:1 (per `heather.cfg`'s comment; the source tree's generic list has 19200:7:O:1); uses **19200:7:O:1** for the Z3801A specifically | Eleven — the SmartClock's eight, documented default first (§7.1), plus the NMEA driver's 4800 and 38400 (#310) and the UCCM's 57600, measured (#470). The settings a port answered on last time are tried ahead of the walk (#502) | — |
 | **Deviation statistics** | **ADEV, HDEV, MDEV and TDEV**, adapted from Tom Van Baak's `adev1.c` | **Overlapping ADEV only** (#63, shipped 28 Aug) with gap-aware segmentation and a pair count per τ | MDEV/TDEV/HDEV have **no §13 row** |
 | **Plotting** | Multi-trace on shared axes, keyboard-driven scaling and annotation | Single-series `TrendChart`, EFC and 1 PPS TI on separate axes, min/max decimation that preserves excursions | Multi-series requires §9.4.4's second channel first |
 | **Logging** | Configurable interval (default 1 s), optional comments, signal-level comments, optional timestamp header, tab **or comma** separator, reads its own older formats | CSV export (P0-13, P1-1; §10.7) and image export of the sky plot (OQ-D6), plus a durable SQLite `trend.db` with retention and compaction | No interop with any external log format |
@@ -46,6 +46,15 @@ guessed at.
 | **Accessibility** | Not a stated goal | Thirteen A11Y criteria, high contrast as a first-class theme, colour never the sole channel | — |
 | **Help** | — (not checked) | The user's guide opens in the application on `F1` (#312) | — |
 | **Ambient operation** | — (not checked) | Notification-area icon, lock and holdover notifications, compact mode — §9.1's premise of a window left running for weeks | — |
+
+**One row has since been closed by borrowing from the program in the other column, and that is worth
+stating plainly.** The UCCM driver (#416) exists because Lady Heather's source — MIT licensed —
+records what its author established by observation about those modules: the `C5` time code's field
+meanings, the two vendor shapes of `DIAG:LOOP?`, the lock and date-validity codes. No source was
+copied and the facts are not copyrightable, but the debt is real and
+[`THIRD-PARTY-NOTICES.md`](../THIRD-PARTY-NOTICES.md) acknowledges it. It also cuts the other way:
+two of the protocol beliefs taken from that source turned out not to hold for the one module
+since measured, which is a caution about second-hand knowledge rather than about Heather.
 
 ## Where this project is deliberately different
 

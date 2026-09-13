@@ -4,7 +4,7 @@ title: WinZ3805A privacy policy
 
 # Privacy policy
 
-**Last updated: 29 August 2026**
+**Last updated: 13 September 2026**
 
 ## The short version
 
@@ -34,7 +34,7 @@ behaves the way you left it, and so it can show you a trend:
 | `window.json`, `details-window.json` | Where each window was on screen and how big it was |
 | `details-view.json` | Whether the navigation pane was open |
 | `satellites-view.json` | Whether the Satellites page shows the plot or the list |
-| `advanced.json` | The Advanced Console, undocumented-queries, lock-notification, keep-running and start-minimised switches |
+| `advanced.json` | The Advanced Console, undocumented-queries, front-panel-lamps, lock-notification, keep-running and start-minimised switches, and whether the "still running" notice has been shown once |
 | `appearance.json` | Whether to use the Windows accent colour |
 | `trend.db` | The recorded trend: samples of the oscillator's control voltage, the 1 PPS time interval, the synchronisation state and the number of satellites tracked, kept for 56 days |
 | `logs\app.log`, and up to four older copies | The application log: the port opened and the settings auto-detect settled on, every connection change, the receiver's synchronisation state, time figure of merit and satellite count as they change, and survey progress. It does not record command traffic and it does not record the receiver's position. |
