@@ -154,10 +154,12 @@ public class UccmTransitionStateTests
     /// minutes. Her table describes the warm path correctly; the cold path is what nobody recorded.
     /// </para>
     /// <para>
-    /// So <c>AntennaOk</c> answers correctly for the case that matters operationally — a working
-    /// installation losing its antenna — and answers <c>null</c>, meaning unknown, for a receiver
-    /// that was powered up without one. This test pins both, including the null, so that #534
-    /// changes it deliberately rather than by accident.
+    /// <b>This test was written pinning the defect, and then failed on the fix, which is what it
+    /// was for.</b> It originally asserted <c>AntennaOk</c> was <c>null</c> for <c>0x08</c> — the
+    /// behaviour at the time — with a note saying the pin existed so that #534 would change it
+    /// deliberately rather than by accident. Adding <c>0x08</c> to the table broke it on the next
+    /// run. The assertion below is the corrected expectation and the remark is kept so the sequence
+    /// is legible: the value was measured, pinned as wrong, and then fixed.
     /// </para>
     /// </remarks>
     [Fact]
@@ -170,7 +172,7 @@ public class UccmTransitionStateTests
         Assert.NotNull(warm);
 
         Assert.Equal(0x08, cold.AntennaState);
-        Assert.Null(cold.AntennaOk);
+        Assert.False(cold.AntennaOk);
 
         Assert.Equal(0x0C, warm.AntennaState);
         Assert.False(warm.AntennaOk);
@@ -213,5 +215,82 @@ public class UccmTransitionStateTests
         Assert.Equal(18, holdover.LeapSecondOffset);
         Assert.Equal(0x41, cold.PpsState);
         Assert.Equal(0x60, holdover.PpsState);
+    }
+
+    /// <summary>
+    /// <b>Exactly one of the eight captured state combinations is holdover.</b>
+    /// </summary>
+    /// <remarks>
+    /// The discriminator is only worth anything if it is specific. These are every distinct
+    /// combination of offsets 32 to 36 in the 13 Sep 2026 capture — leap, PPS, antenna, lock, date —
+    /// with the number of frames each accounted for. Seven of them are a receiver that has never
+    /// locked, is acquiring, is transitional, or is locked; one is a module that had a fix and lost
+    /// it. A rule that said yes to two of these would be no better than the lock byte it replaces.
+    /// </remarks>
+    [Theory]
+    [InlineData(0x00, 0x41, 0x08, 0x4F, 0x90, false)] // cold, antenna never present     (111 frames)
+    [InlineData(0x00, 0x41, 0x00, 0x4F, 0x90, false)] // antenna back, not yet validated  (64 frames)
+    [InlineData(0x00, 0x41, 0x00, 0x4F, 0x80, false)] // transitional                      (5 frames)
+    [InlineData(0x12, 0x41, 0x00, 0x4F, 0x80, false)] // transitional                     (25 frames)
+    [InlineData(0x12, 0x41, 0x04, 0x4F, 0x80, false)] // acquiring, antenna good          (50 frames)
+    [InlineData(0x12, 0x60, 0x04, 0x45, 0x80, false)] // locked                           (59 frames)
+    [InlineData(0x12, 0x60, 0x04, 0x4F, 0x90, true)]  // holdover, antenna byte lagging    (9 frames)
+    [InlineData(0x12, 0x60, 0x0C, 0x4F, 0x90, true)]  // holdover, settled               (462 frames)
+    public void OnlyTheHoldoverCombinationsReadAsHoldover(
+        int leap, int pps, int antenna, int lockState, int date, bool expected)
+    {
+        UccmTimeCode? code = UccmTimeCode.TryParse(FrameWith(leap, pps, antenna, lockState, date));
+
+        Assert.NotNull(code);
+        Assert.Equal(expected, code.InHoldover);
+    }
+
+    /// <summary>
+    /// The antenna-disconnected value the bench measured now reads as a fault rather than a shrug.
+    /// </summary>
+    [Theory]
+    [InlineData(0x04, true)]
+    [InlineData(0x06, true)]
+    [InlineData(0x08, false)] // measured 13 Sep 2026; in neither Heather's table nor ours before
+    [InlineData(0x0C, false)]
+    [InlineData(0x00, null)]  // power-up, and also a reconnected antenna still being validated
+    public void TheAntennaByteIsRead(int antenna, bool? expected)
+    {
+        UccmTimeCode? code = UccmTimeCode.TryParse(FrameWith(0x12, 0x60, antenna, 0x45, 0x80));
+
+        Assert.NotNull(code);
+        Assert.Equal(expected, code.AntennaOk);
+    }
+
+    /// <summary>
+    /// An unknown vendor answers null rather than guessing which byte means a valid date.
+    /// </summary>
+    /// <remarks>
+    /// Symmetricom reads <c>40</c> valid and Trimble <c>80</c>, with no bit in common, so a byte
+    /// belonging to neither family cannot be decided. #418 is the issue about exactly this class of
+    /// guess.
+    /// </remarks>
+    [Fact]
+    public void AnUnknownVendorWillNotGuessAtHoldover()
+    {
+        UccmTimeCode? code = UccmTimeCode.TryParse(FrameWith(0x12, 0x60, 0x0C, 0x22, 0x22));
+
+        Assert.NotNull(code);
+        Assert.Null(code.DateValid);
+        Assert.Null(code.InHoldover);
+    }
+
+    /// <summary>
+    /// A frame with the five state bytes set, and everything else as the module actually sends it.
+    /// </summary>
+    private static byte[] FrameWith(int leap, int pps, int antenna, int lockState, int date)
+    {
+        byte[] frame = Relocked.ToArray();
+        frame[32] = (byte)leap;
+        frame[33] = (byte)pps;
+        frame[34] = (byte)antenna;
+        frame[35] = (byte)lockState;
+        frame[36] = (byte)date;
+        return frame;
     }
 }
