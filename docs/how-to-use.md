@@ -175,7 +175,9 @@ walks each one's likely settings, listens for a receiver that talks by itself, a
 only if nothing has claimed what it heard.
 
 **A SmartClock GPSDO** — a Z3805A or one of its siblings — is what the application was written for,
-and it is the only family that fills every page.
+and it is the only family for which no page is out of reach. Even it does not fill every readout:
+it reports no geoid separation, no satellites-used count and no dilution of precision, because
+nothing on its status screen carries them.
 
 **Any GPS receiver that speaks NMEA 0183** — a u-blox module, a marine receiver — is heard talking
 and claimed by the NMEA driver without being asked anything. Such a receiver has no disciplined
