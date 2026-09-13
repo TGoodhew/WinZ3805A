@@ -236,6 +236,7 @@ public class UccmTransitionStateTests
     [InlineData(0x12, 0x60, 0x04, 0x45, 0x80, false)] // locked                           (59 frames)
     [InlineData(0x12, 0x60, 0x04, 0x4F, 0x90, true)]  // holdover, antenna byte lagging    (9 frames)
     [InlineData(0x12, 0x60, 0x0C, 0x4F, 0x90, true)]  // holdover, settled               (462 frames)
+    [InlineData(0x12, 0x70, 0x09, 0x4F, 0x90, true)]  // holdover, four hours in          (30 frames)
     public void OnlyTheHoldoverCombinationsReadAsHoldover(
         int leap, int pps, int antenna, int lockState, int date, bool expected)
     {
@@ -252,6 +253,7 @@ public class UccmTransitionStateTests
     [InlineData(0x04, true)]
     [InlineData(0x06, true)]
     [InlineData(0x08, false)] // measured 13 Sep 2026; in neither Heather's table nor ours before
+    [InlineData(0x09, false)] // measured four hours into holdover; also in neither table
     [InlineData(0x0C, false)]
     [InlineData(0x00, null)]  // power-up, and also a reconnected antenna still being validated
     public void TheAntennaByteIsRead(int antenna, bool? expected)
