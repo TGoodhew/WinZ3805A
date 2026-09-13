@@ -75,6 +75,25 @@
     matters for a USB puck: a full reset re-enumerates the device and takes the port with it, which
     would end the capture rather than continue it.
 
+.PARAMETER EnableSentences
+    NMEA sentence identifiers to switch on with UBX-CFG-MSG before the capture starts - `GST`, `GBS`,
+    `GRS`, `ZDA`, `VLW` and the rest of the standard set. Empty, the default, sends nothing.
+
+    This exists for #516, whose two wanted sentences no receiver here emits by default. `GST` carries
+    the position's actual uncertainty and `GBS` its RAIM integrity, and #435 filed both as waiting
+    for hardware that sends them. Neither unit on the bench does, and both will if asked: measured on
+    the forM8N on 12 Sep 2026, GST and GBS at 1 Hz within a second of the frames going out.
+
+    Written to RAM, so a power cycle undoes it and the receiver returns to its factory output. That
+    is the whole reason this is acceptable in a capture script - nothing is left changed for the next
+    person to discover.
+
+    A control is sent too. A CFG-MSG frame the receiver does not like is ignored in silence, so a
+    sentence that never appears has two explanations - the receiver will not, or the frame was wrong
+    - and they look identical in the capture. Enabling one sentence that is ALREADY arriving
+    separates them: if it keeps arriving while the wanted one stays silent, the frames were
+    understood and the answer is genuinely no.
+
 .PARAMETER SelfTest
     Exercises everything that does not need a serial port - the summariser, the sentence and talker
     accounting, and the provenance writer - against synthetic input, and says plainly which half was
@@ -105,6 +124,9 @@ param(
 
     # See the .PARAMETER block above: 0 sends nothing.
     [int] $ColdStartAfterMinutes = 0,
+
+    # See the .PARAMETER block above: empty sends nothing.
+    [string[]] $EnableSentences = @(),
 
     [switch] $SelfTest
 )
@@ -267,6 +289,54 @@ function New-ColdStartFrame {
     return New-UbxFrame -Class 0x06 -Id 0x04 -Payload @(0xFF, 0xFF, 0x02, 0x00)
 }
 
+<#
+.SYNOPSIS
+    The UBX message ids of the standard NMEA sentences, for UBX-CFG-MSG.
+.DESCRIPTION
+    Class 0xF0 is "standard NMEA", and the id within it is the sentence. The table is written out
+    rather than computed because there is no rule to compute: the ids follow the order the sentences
+    were added to the protocol, not the alphabet, and GST at 0x07 sits between GRS and ZDA.
+
+    Only the sentences this repository has a reason to ask for are listed. A shorter list is a
+    better one here - an unrecognised name stops the script before it opens the port, which is
+    kinder than a sitting that captures nothing and cannot say why.
+#>
+$script:NmeaMessageIds = @{
+    DTM = 0x0A
+    GBS = 0x09
+    GGA = 0x00
+    GLL = 0x01
+    GNS = 0x0D
+    GRS = 0x06
+    GSA = 0x02
+    GST = 0x07
+    GSV = 0x03
+    RMC = 0x04
+    VLW = 0x0F
+    VTG = 0x05
+    ZDA = 0x08
+}
+
+<#
+.SYNOPSIS
+    UBX-CFG-MSG, setting one standard NMEA sentence's rate on the port the frame arrives on.
+.DESCRIPTION
+    The three-byte form is deliberate. CFG-MSG also has an eight-byte form carrying a rate for every
+    port, and using it here would rewrite the configuration of five ports nobody asked about in
+    order to change the one being listened to. The short form changes exactly the port the frame
+    came in on.
+
+    RAM only. Persisting it would need a CFG-CFG save afterwards, which this never sends, so the
+    receiver is back to its factory output at the next power cycle.
+#>
+function New-MessageRateFrame {
+    param(
+        [Parameter(Mandatory)] [byte] $MessageId,
+        [Parameter(Mandatory)] [byte] $Rate)
+
+    return New-UbxFrame -Class 0x06 -Id 0x01 -Payload @(0xF0, $MessageId, $Rate)
+}
+
 function Write-Provenance {
     [CmdletBinding()]
     param(
@@ -280,7 +350,9 @@ function Write-Provenance {
         [object] $Summary,
         [int] $PartialBytes = 0,
         [object] $ColdStartAt = $null,
-        [object] $ColdStartOffset = $null)
+        [object] $ColdStartOffset = $null,
+        [string[]] $Enabled = @(),
+        [string] $StoppedEarly = $null)
 
     $lines = @(
         "# $LogName",
@@ -310,7 +382,30 @@ function Write-Provenance {
         $(if ($null -ne $ColdStartAt) {
                 "| **Cold start sent** | $(([datetime]$ColdStartAt).ToString('yyyy-MM-dd HH:mm:ss zzz')), at byte $ColdStartOffset |"
             }),
+        # A run that did not reach its deadline is not a shorter run: whatever the receiver was
+        # about to do next is missing, and a reader comparing this against its stated duration
+        # deserves to be told rather than left to notice.
+        $(if ($StoppedEarly) {
+                "| **Stopped early** | yes - $StoppedEarly |"
+            }),
+        # Stated in the table rather than left to the reader to infer from the sentence list,
+        # because the inference runs the wrong way: a capture containing GST looks like evidence
+        # that this receiver sends GST, and here it is evidence only that it can be made to.
+        $(if ($Enabled.Count -gt 0) {
+                "| **Sentences switched on** | $($Enabled -join ', '), by UBX-CFG-MSG to RAM before the capture |"
+            }),
         '',
+        $(if ($Enabled.Count -gt 0) {
+                @(
+                    '> **This receiver does not send these by default.** They were enabled for the sitting',
+                    # SINGLE quotes: a backtick inside a double-quoted PowerShell string is the escape
+                    # character, so the markdown code span here came out as bare text the first time.
+                    '> with `UBX-CFG-MSG` and the configuration was written to RAM, so a power cycle undoes',
+                    '> it. Read the capture as what the hardware is *capable* of, not as what arrives from',
+                    '> it out of the box.',
+                    ''
+                )
+            }),
         '## What was happening',
         '',
         '_Fill this in by hand: where the antenna was, what was done to the receiver and when,',
@@ -430,6 +525,38 @@ if ($SelfTest) {
     $empty = New-UbxFrame -Class 0x06 -Id 0x04 -Payload @()
     if ($empty.Length -ne 8) { $failures += "an empty payload framed to $($empty.Length) bytes, not 8" }
 
+    # THE MESSAGE-RATE FRAMES (#516), for the same reason the cold-start frame is checked: a frame
+    # the receiver dislikes is dropped without a word, so a wrong one produces a full-length capture
+    # missing the sentence it was taken for, and a provenance note saying the sentence was enabled.
+    #
+    # The bytes are stated, not recomputed. B5 62 sync, 06 01 CFG-MSG, 03 00 length, F0 the standard
+    # NMEA class, the sentence's id, 01 once per cycle, then the two checksum bytes. These two were
+    # sent to the bench forM8N on 12 Sep 2026 and both sentences began arriving.
+    $gstHex = ((New-MessageRateFrame -MessageId $script:NmeaMessageIds['GST'] -Rate 1) |
+        ForEach-Object { '{0:X2}' -f $_ }) -join ' '
+    if ($gstHex -ne 'B5 62 06 01 03 00 F0 07 01 02 1E') {
+        $failures += "the GST enable frame is $gstHex, not the expected B5 62 06 01 03 00 F0 07 01 02 1E"
+    }
+
+    $gbsHex = ((New-MessageRateFrame -MessageId $script:NmeaMessageIds['GBS'] -Rate 1) |
+        ForEach-Object { '{0:X2}' -f $_ }) -join ' '
+    if ($gbsHex -ne 'B5 62 06 01 03 00 F0 09 01 04 22') {
+        $failures += "the GBS enable frame is $gbsHex, not the expected B5 62 06 01 03 00 F0 09 01 04 22"
+    }
+
+    # A rate of zero is how a sentence is switched OFF, and it must frame rather than being mistaken
+    # for an absent payload byte - which is what a length computed from a truthiness test would do.
+    $off = New-MessageRateFrame -MessageId $script:NmeaMessageIds['GST'] -Rate 0
+    if ($off.Length -ne 11) { $failures += "a rate-0 frame is $($off.Length) bytes, not 11" }
+    if ($off[4] -ne 0x03) { $failures += 'a rate-0 frame does not carry a 3-byte payload length' }
+
+    # The ids are the protocol's, and getting one wrong enables a different sentence in silence -
+    # a capture full of plausible NMEA that does not contain what was asked for.
+    if ($script:NmeaMessageIds['GGA'] -ne 0x00 -or $script:NmeaMessageIds['GST'] -ne 0x07 -or
+        $script:NmeaMessageIds['GBS'] -ne 0x09 -or $script:NmeaMessageIds['ZDA'] -ne 0x08) {
+        $failures += 'the standard NMEA message id table does not match the protocol'
+    }
+
     # The provenance writer round-trips.
     $tmp = Join-Path ([System.IO.Path]::GetTempPath()) "talker-selftest-$([guid]::NewGuid()).md"
     try {
@@ -451,8 +578,8 @@ if ($SelfTest) {
     }
 
     Write-Host 'Capture-Talker self-test passed.'
-    Write-Host '  The summariser, the checksum accounting, the cold-start frame and the provenance'
-    Write-Host '  note are checked.'
+    Write-Host '  The summariser, the checksum accounting, the cold-start and message-rate frames'
+    Write-Host '  and the provenance note are checked.'
     Write-Host '  Opening a port, reading a real talker and writing its bytes are NOT, and cannot'
     Write-Host '  be here. That half is exercised the day a receiver is on the bench.'
     exit 0
@@ -471,6 +598,27 @@ if (-not $Port) {
     Write-Host ''
     Write-Host 'A USB talker appears as a new port when it is plugged in; compare this list before'
     Write-Host 'and after plugging it in rather than guessing.'
+    exit 2
+}
+
+# Checked before the port is opened, so a typo costs a second rather than a sitting. A sentence
+# name this table does not know is refused rather than skipped: silently ignoring it would produce
+# a capture missing the very thing it was taken for, with a provenance note claiming otherwise.
+#
+# Split on commas as well as taking an array, because the two ways of running this script disagree
+# about what a comma means. `pwsh build/Capture-Talker.ps1 -EnableSentences GST,GBS` from a
+# PowerShell prompt binds two elements; the same text after `pwsh -File` binds ONE element spelt
+# "GST,GBS", because -File does not evaluate PowerShell syntax. Accepting both costs a Split and
+# removes a way to lose a sitting to an invocation that looked right.
+$wanted = @(
+    $EnableSentences |
+        ForEach-Object { $_ -split '[,\s]+' } |
+        ForEach-Object { $_.Trim().ToUpperInvariant() } |
+        Where-Object { $_ })
+$unknown = @($wanted | Where-Object { -not $script:NmeaMessageIds.ContainsKey($_) })
+if ($unknown.Count -gt 0) {
+    Write-Host "Unknown sentence(s) for -EnableSentences: $($unknown -join ', ')" -ForegroundColor Red
+    Write-Host "Known: $(($script:NmeaMessageIds.Keys | Sort-Object) -join ', ')" -ForegroundColor Yellow
     exit 2
 }
 
@@ -503,6 +651,24 @@ if ($ColdStartAfterMinutes -gt 0) {
 }
 Write-Host ''
 
+# The frames go out before the first byte is read, so the whole file has the same sentence set and
+# a test does not have to find the point where it changed. The receiver acts on CFG-MSG within a
+# cycle, and the settling pause is there so the capture does not open with a partial cycle that
+# reads as a gap.
+if ($wanted.Count -gt 0) {
+    Write-Host "Enabling $($wanted -join ', ') with UBX-CFG-MSG (RAM only; a power cycle undoes it)." -ForegroundColor Yellow
+    foreach ($sentence in $wanted) {
+        $frame = New-MessageRateFrame -MessageId $script:NmeaMessageIds[$sentence] -Rate 1
+        $serial.Write($frame, 0, $frame.Length)
+        Write-Host ("  {0}  {1}" -f $sentence, (($frame | ForEach-Object { '{0:X2}' -f $_ }) -join ' '))
+        Start-Sleep -Milliseconds 400
+    }
+
+    Start-Sleep -Milliseconds 1200
+    $serial.DiscardInBuffer()
+    Write-Host ''
+}
+
 $startedAt = Get-Date
 $deadline = $startedAt.AddMinutes($DurationMinutes)
 $file = [System.IO.File]::Open($logPath, 'Create', 'Write', 'Read')
@@ -513,6 +679,7 @@ $lastReport = $startedAt
 $cumulative = $null
 $coldStartSentAt = $null
 $coldStartOffset = $null
+$stoppedEarly = $null
 
 try {
     while ((Get-Date) -lt $deadline) {
@@ -520,6 +687,24 @@ try {
         try { $read = $serial.BaseStream.Read($buffer, 0, $buffer.Length) }
         catch [TimeoutException] { $read = 0 }
         catch [System.IO.IOException] { $read = 0 }
+        catch [System.OperationCanceledException] {
+            # A cancelled read is the capture being stopped from outside rather than a device fault,
+            # and the cause found on 12 Sep 2026 was ANOTHER PROCESS OPENING THE SAME PORT: a second
+            # opener aborts the first's pending I/O, and the receiver is present and talking
+            # throughout. Three sittings were lost to it at 78 s, 30 s and 4 s before the overlap
+            # was spotted, because the failure names the read rather than the port.
+            #
+            # It is not a reason to throw: the bytes already written are a real sitting, and the
+            # finally below writes the note that makes them usable. Breaking rather than continuing
+            # keeps Ctrl+C meaning what the help says it means.
+            #
+            # A capture needs the port to itself for its whole length. Nothing here can enforce
+            # that, so the note records the early stop and a reader is told.
+            Write-Host ''
+            Write-Host 'The read was cancelled - stopping early and writing the note.' -ForegroundColor Yellow
+            $stoppedEarly = 'the read was cancelled'
+            break
+        }
 
         if ($read -gt 0) {
             # The file gets the bytes and nothing else touches them.
@@ -579,7 +764,8 @@ finally {
 
     Write-Provenance -Path $notePath -LogName (Split-Path $logPath -Leaf) -Port $Port `
         -BaudRate $BaudRate -Bytes $total -StartedAt $startedAt -EndedAt $endedAt -Summary $cumulative `
-        -PartialBytes $partialBytes -ColdStartAt $coldStartSentAt -ColdStartOffset $coldStartOffset
+        -PartialBytes $partialBytes -ColdStartAt $coldStartSentAt -ColdStartOffset $coldStartOffset `
+        -Enabled $wanted -StoppedEarly $stoppedEarly
 
     Write-Host ''
     Write-Host "Wrote $total bytes to $logPath"
