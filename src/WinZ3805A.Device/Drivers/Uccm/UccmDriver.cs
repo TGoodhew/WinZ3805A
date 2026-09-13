@@ -325,13 +325,28 @@ public sealed class UccmDriver(TimeProvider timeProvider) : IReceiverDriver
     /// broken because it had not answered a question it has no way to answer.
     /// </para>
     /// <para>
-    /// <b><see cref="ReceiverReading.Holdover"/> is deliberately not here.</b> Every field of the
-    /// Holdover page reads as absent on this module, which looks like the same case and is not:
-    /// <c>:ROSC:HOLD:DUR?</c> answers <c>Command error</c> rather than <c>Undefined header</c>, so
-    /// the node exists and is refused for some other reason — state being the obvious candidate,
-    /// since the unit has been locked throughout every sitting. The test that separates "unsupported"
-    /// from "not valid now" is re-asking it <i>in holdover</i>, and until that is done, declaring it
-    /// <c>false</c> would be the hypothesis-in-costume this method exists to keep out.
+    /// <b><see cref="ReceiverReading.Holdover"/> is deliberately not here</b>, and the reasoning has
+    /// changed since it was written. It used to say that <c>:ROSC:HOLD:DUR?</c> answers
+    /// <c>Command error</c> rather than <c>Undefined header</c>, so the node exists and is refused
+    /// for some other reason — with state the obvious candidate, since the unit had been locked
+    /// throughout every sitting — and that the test separating "unsupported" from "not valid now"
+    /// was re-asking it <i>in holdover</i>.
+    /// </para>
+    /// <para>
+    /// <b>That test was run on 13 Sep 2026 and the hypothesis lost.</b> The module was locked with a
+    /// valid fix, its antenna was physically disconnected, and <c>:ROSC:HOLD:DUR?</c> was re-asked
+    /// through fourteen minutes of genuine holdover. It answered <c>Command error</c> every time,
+    /// identically to the cold and locked states. So state is <i>not</i> why it is refused, and this
+    /// firmware never answers it in any condition the bench can produce.
+    /// </para>
+    /// <para>
+    /// <b>It still does not belong in the absence list, for a different reason.</b> This reading
+    /// covers holdover "in every form" — including whether the receiver is <i>in</i> it, which the
+    /// driver can now determine from the time code rather than from that query (see
+    /// <see cref="UccmTimeCode.InHoldover"/>). Declaring the whole reading absent would hide a state
+    /// the module reports perfectly well, to describe a duration it does not. The duration, the
+    /// uncertainties and the threshold are absent fields within a reading that is present, which is
+    /// what §11.1's em dash is for.
     /// </para>
     /// </remarks>
     public bool Reports(ReceiverReading reading) => reading switch

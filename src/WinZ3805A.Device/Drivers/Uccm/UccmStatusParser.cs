@@ -82,6 +82,36 @@ public static class UccmStatusParser
 
         SmartClockMode mode = SmartClockMode.Unknown;
         string? modeDetail = null;
+
+        // HOW STRONG A CLAIM THE BEST MATCHING LINE MADE, AND WHY THERE IS A RANK AT ALL.
+        //
+        // These markers are scattered across a screen and more than one can be present at once, so
+        // the loop below used to assign on every match with no break - which made the LAST line on
+        // the screen win, an ordering nobody chose. A real screen on 13 Sep 2026 carried both
+        // `UCCM A Status[OCXO WARMUP]` and, three lines later, `>> GPS: [phase:..., settling]`, and
+        // resolved to Recovery - "reacquiring after a loss of GPS" - for a module that had never
+        // locked in its life.
+        //
+        // The order is by what the line is ABOUT. `UCCM A Status[...]` is the module's own word for
+        // its own state; the GPS line describes the reference, which is a symptom. An oscillator
+        // that is warming up is warming up whatever the reference is doing, so warm-up outranks
+        // settling, and both outrank a missing reference.
+        const int WarmupRank = 0;
+        const int SettlingRank = 1;
+        const int NoReferenceRank = 2;
+        int modeRank = int.MaxValue;
+
+        void Propose(int rank, SmartClockMode proposed, string detail)
+        {
+            if (rank >= modeRank)
+            {
+                return;
+            }
+
+            modeRank = rank;
+            mode = proposed;
+            modeDetail = detail;
+        }
         int? tfom = null;
         int? ffom = null;
         int? elevationMask = null;
@@ -210,14 +240,12 @@ public static class UccmStatusParser
 
             if (upper.Contains("SETTLING", StringComparison.Ordinal))
             {
-                mode = SmartClockMode.Recovery;
-                modeDetail = "Settling";
+                Propose(SettlingRank, SmartClockMode.Recovery, "Settling");
                 sawAnything = true;
             }
             else if (upper.Contains("WARMUP", StringComparison.Ordinal))
             {
-                mode = SmartClockMode.PowerUp;
-                modeDetail = "Warming up";
+                Propose(WarmupRank, SmartClockMode.PowerUp, "Warming up");
                 sawAnything = true;
             }
             else if (upper.Contains("NO REF", StringComparison.Ordinal) ||
@@ -226,19 +254,35 @@ public static class UccmStatusParser
                 // Heather maps both of these to its acquiring mode. We have no acquiring member,
                 // and PowerUp is the nearest honest one: the receiver is not disciplined and is
                 // waiting for GPS, which is what PowerUp describes.
-                mode = SmartClockMode.PowerUp;
-                modeDetail = upper.Contains("NO REF", StringComparison.Ordinal)
-                    ? "No reference"
-                    : "Waiting for GPS";
+                Propose(
+                    NoReferenceRank,
+                    SmartClockMode.PowerUp,
+                    upper.Contains("NO REF", StringComparison.Ordinal) ? "No reference" : "Waiting for GPS");
                 sawAnything = true;
             }
         }
 
-        // The hex line is the authority on lock, because the text lines only ever say what is
-        // WRONG - there is no "LOCKED" line to match. So a reply with a healthy lock byte and no
-        // complaint is a locked receiver.
-        if (time is not null && mode == SmartClockMode.Unknown)
+        // THE FRAME OUTRANKS THE SCREEN, BECAUSE THE SCREEN CANNOT SEE THIS AT ALL.
+        //
+        // Measured on 13 Sep 2026: through fourteen minutes with the antenna physically
+        // disconnected, a locked Trimble UCCM-P went on printing `UCCM A Status[ACTIVE]`, never
+        // degraded TFOM or FFOM past 2, and answered LED:GPSL? with 1. The only thing on that
+        // screen that changed was `>> GPS:` becoming `XX GPS: [No Ref]` - which the loop above
+        // reads as PowerUp, because a receiver waiting for GPS and one that has LOST it print the
+        // same words.
+        //
+        // The time code can tell them apart and the text cannot, so where they disagree this wins.
+        // Before this, no path in this parser ever assigned Holdover.
+        if (time?.InHoldover is true)
         {
+            mode = SmartClockMode.Holdover;
+            modeDetail = "No GPS reference";
+        }
+        else if (time is not null && mode == SmartClockMode.Unknown)
+        {
+            // The hex line is the authority on lock, because the text lines only ever say what is
+            // WRONG - there is no "LOCKED" line to match. So a reply with a healthy lock byte and no
+            // complaint is a locked receiver.
             mode = ModeFromLockState(time.LockState, profile.Vendor, out string? detail);
             modeDetail ??= detail;
         }
