@@ -302,6 +302,14 @@ public sealed partial class OverviewPage : Page
             AntennaPill.Severity = model.AntennaOk ? Severity.Success : Severity.Critical;
         }
 
+        // #516, and the same no-SetName rule as above applies for the same reason.
+        IntegrityPill.Visibility = model.IntegrityText is null ? Visibility.Collapsed : Visibility.Visible;
+        if (model.IntegrityText is string integrity)
+        {
+            IntegrityPill.Text = integrity;
+            IntegrityPill.Severity = model.IntegrityOk ? Severity.Success : Severity.Critical;
+        }
+
         OscillatorControl.Value = model.OscillatorControl;
 
         // P0-1's identity card.

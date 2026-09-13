@@ -238,6 +238,13 @@ Everything from the main window, with the words behind the numbers:
   or the antenna is unplugged or broken. Most receivers say nothing about their antenna and show no
   pill at all. A GPS talker has no health monitor otherwise, so on one of those this is the only
   entry on the card — and it is the most useful one a timing receiver has.
+
+  **Integrity** — a second extra pill appears for a receiver that checks its own solution for a
+  satellite that disagrees with the others, reading *Integrity checked — no fault* or naming the
+  satellite it suspects. This is about the constellation rather than the receiver's own hardware, so
+  it is separate from the health monitor above. No pill means nothing was reported, which is not the
+  same as nothing being wrong — most receivers do not send this unless asked, and this application
+  does not ask.
 - **Oscillator control (EFC)** — the voltage the receiver is applying to steer its oscillator, as a
   percentage of its range, with a trend over the last **1 h**, **6 h**, **24 h** or **7 d**. A
   slowly drifting EFC is the oscillator ageing; a sudden change is worth a look.
@@ -300,6 +307,15 @@ Everything from the main window, with the words behind the numbers:
   and vertical figures. Smaller is better: around 1 is ideal and under 2 is excellent. It measures
   geometry only and says nothing about how good the ranging was. The vertical figure is normally
   worse than the horizontal one, because satellites are above the antenna and never below it.
+
+- **Position uncertainty** — how far out the receiver believes its own answer is, in metres,
+  horizontally and vertically. This is the figure dilution of precision cannot give you: dilution is
+  geometry, and a fix can have excellent geometry and still be several metres out because the
+  ranging was noisy. Both are marked **1σ**, which is roughly a 65% confidence — the "95%" figure
+  quoted in survey work is about twice these numbers, so do not read one as the other.
+
+  Most receivers do not send this unless they are asked to, and this application does not ask, so an
+  em dash here is the normal state rather than a fault.
 
   A receiver that does not report these shows an em dash, the same as any other reading it cannot
   supply.
