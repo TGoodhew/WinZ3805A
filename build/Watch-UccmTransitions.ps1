@@ -624,9 +624,17 @@ if ($SelfTest) {
     exit 0
 }
 
+# Beside the other UCCM captures, which is where the 13 Sep sitting ended up by hand anyway.
+# This read $PSScriptRoot/transitions while the script lived in a session scratchpad; now that it
+# lives in build/ that default would write three files into a source directory on every run.
+#
+# Deliberately NOT tests/WinZ3805A.Tests/Fixtures: FixtureCorpusTests globs every *.txt there and
+# asserts each one is a SmartClock status screen, so a .frames.txt written into it fails the test
+# run rather than the capture. See that folder's README.
 if (-not $OutputDirectory) {
-    $OutputDirectory = Join-Path $PSScriptRoot 'transitions'
+    $OutputDirectory = Join-Path $PSScriptRoot '..\tests\WinZ3805A.Tests\Uccm\Captures'
 }
+$OutputDirectory = [System.IO.Path]::GetFullPath($OutputDirectory)
 New-Item -ItemType Directory -Force -Path $OutputDirectory | Out-Null
 
 $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
