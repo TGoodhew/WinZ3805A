@@ -11,19 +11,28 @@ namespace WinZ3805A.Device.Drivers.Uccm;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>THIS DRIVER HAS NEVER MET A RECEIVER.</b> It is written from Lady Heather's source
+/// <b>MOST OF THIS DRIVER HAS NEVER MET A RECEIVER.</b> It was written from Lady Heather's source
 /// (heathgps.cpp, MIT licensed, © 2008-2016 Mark S. Sims) and carries the same caveat the NMEA
-/// driver carries for the opposite reason (#310): every command, every timeout, every field meaning
-/// and every state code here is a reading of somebody else's reverse engineering, not a measurement.
-/// Heather's own comments hedge several of them with question marks. §11.1 asks for captured
-/// fixtures and there are none. Treat everything below as a hypothesis with a source.
+/// driver carries for the opposite reason (#310): most commands, timeouts, field meanings
+/// and state codes here are a reading of somebody else's reverse engineering, not a measurement.
+/// Heather's own comments hedge several of them with question marks. Treat everything below as a
+/// hypothesis with a source <i>unless its own comment says it was measured</i> — several now do,
+/// and the paragraphs that follow say which.
 /// </para>
 /// <para>
-/// <b>Two protocol facts make this family unlike the SmartClock, and both need confirming first.</b>
-/// The receiver echoes each command before answering it, and it emits unsolicited <c>C5</c> time
-/// codes that can land in the middle of another reply. <see cref="UccmReply"/> holds both, with the
-/// evidence. Our transport is line-and-prompt oriented, so how these interact with
-/// <c>LineProtocol</c> is the first thing to check on real hardware.
+/// <b>One Trimble UCCM-P has been on the bench, seven times between 10 and 13 Sep 2026</b>, and
+/// §11.1's captured fixtures for this family are
+/// <c>tests/WinZ3805A.Tests/Uccm/Captures/</c>. That is one module of one variant: <b>a plain UCCM
+/// has never been seen, and no Symmetricom module has</b>, so a claim measured below is measured
+/// for Trimble's UCCM-P and not for the family.
+/// </para>
+/// <para>
+/// <b>Two protocol facts were said to make this family unlike the SmartClock, and neither survived
+/// the bench.</b> The receiver was believed to echo each command before answering it, and to emit
+/// unsolicited <c>C5</c> time codes that land in the middle of another reply. <see cref="UccmReply"/>
+/// holds both, with the evidence. Our transport is line-and-prompt oriented, so how these interact
+/// with <c>LineProtocol</c> was the first thing checked on real hardware — see the next two
+/// paragraphs for what came back.
 /// </para>
 /// <para>
 /// <b>That check has now happened once, and it cost a connect (#470).</b> A Trimble UCCM-P was on
@@ -387,11 +396,19 @@ public sealed class UccmDriver(TimeProvider timeProvider) : IReceiverDriver
     /// Five seconds for the status reply, two for everything else.
     /// </summary>
     /// <remarks>
-    /// <b>Guesses, and the interface warns specifically against exactly this.</b> The Z3805A's
+    /// <b>Still guesses, and the interface warns specifically against exactly this.</b> The Z3805A's
     /// self-test reached 24 s against a 30 s class, so a figure carried over from another receiver
     /// may be wastefully long or short enough to fail healthy hardware. These are deliberately
     /// generous rather than tuned: a slow timeout costs a late reading, a short one costs a false
-    /// fault. Measure them when a unit is available.
+    /// fault.
+    /// <para>
+    /// <b>A unit has since been available seven times and these were still not measured</b>, which
+    /// is a gap rather than a decision: no sitting recorded reply latency, so nothing in
+    /// <c>tests/WinZ3805A.Tests/Uccm/Captures/</c> can settle them after the fact. What is known is
+    /// an arithmetic floor rather than a measurement — <c>SYST:STAT?</c> is ~2176 bytes, which is
+    /// ~378 ms of wire time at 57600-8-N-1 before the module has thought about anything. Timing the
+    /// replies is one line in <c>Capture-Uccm.ps1</c> and wants doing on the next sitting.
+    /// </para>
     /// </remarks>
     public TimeSpan TimeoutFor(string? mnemonic) =>
         string.Equals(mnemonic?.Trim(), UccmCommands.Status, StringComparison.OrdinalIgnoreCase)
