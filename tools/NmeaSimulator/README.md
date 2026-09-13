@@ -8,9 +8,10 @@ the sky and time that advances. It is the tutorial's receiver on the bench (#310
 the desk.
 
 It is not a particular product. There are no proprietary sentences, no lock or holdover state —
-NMEA has none — and no serial quirks. A real talker was captured on 7 Sep 2026 — a VK-162, under
-[`tests/WinZ3805A.Tests/Nmea/Captures/`](../../tests/WinZ3805A.Tests/Nmea/Captures/) (#420) — and
-what it does that this does not is recorded there and in
+NMEA has none — and no serial quirks. Real talkers have been captured since 7 Sep 2026 — a VK-162
+and a forM8N, ten captures under
+[`tests/WinZ3805A.Tests/Nmea/Captures/`](../../tests/WinZ3805A.Tests/Nmea/Captures/) (#420, #516),
+replayed cycle by cycle in CI — and what they do that this does not is recorded there and in
 [`docs/tutorial-nmea-driver.md`](../../docs/tutorial-nmea-driver.md).
 
 ## In-process
@@ -40,9 +41,16 @@ dotnet run --project tools\NmeaSimulator -- --port COM7 --baud 4800
 ```
 
 and in the application choose the other port with **Auto-detect settings**, or **Manual** at
-4800-8-N-1. The application listens for the talker, recognises it by its sentences, and never
-sends it a command — the connect sequence's one `*CLS` write, which a talker ignores, goes out
-before recognition. One of `--port` or `--stdout` is required (the program prints its usage and
+4800-8-N-1. The application listens for the talker and recognises it by its sentences; the connect
+sequence's one `*CLS` write, which a talker ignores, goes out before recognition.
+
+**It will send nothing else to this simulator**, and that is worth knowing because it is no longer
+true of every talker. Since #508 the application asks a u-blox module `$PUBX,04` once per sweep — a
+poll that configures nothing — but only when the receiver's own `$GxTXT` banner has said it is
+u-blox hardware. This simulator prints no banner, so it is never asked, and the send path stays
+unexercised here. `NmeaPollSendTests` is where that path is driven instead.
+
+One of `--port` or `--stdout` is required (the program prints its usage and
 exits otherwise); in port mode a per-second phase / tracked / used line goes to standard error,
 which is useful for comparing with what the application shows. Options:
 
