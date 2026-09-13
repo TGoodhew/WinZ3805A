@@ -383,6 +383,18 @@ public sealed class UccmDriver(TimeProvider timeProvider) : IReceiverDriver
             ? TimeSpan.FromSeconds(5)
             : TimeSpan.FromSeconds(2);
 
+    /// <summary>
+    /// The word this driver adds to the sync token when the time code says the receiver is coasting.
+    /// </summary>
+    /// <remarks>
+    /// <b>The sync token is this driver's own vocabulary.</b> It produces it in
+    /// <see cref="InterpretSweep"/> and reads it back in <see cref="InterpretSyncState"/>; nothing
+    /// between the two interprets it, so adding a word costs no one else anything. It is a constant
+    /// rather than a literal in two places because the two places must agree, and a typo in either
+    /// would silently restore the defect it exists to fix.
+    /// </remarks>
+    internal const string HoldoverMarker = "HOLDOVER";
+
     /// <summary>The most recent time code the module broadcast, or null if none has arrived.</summary>
     /// <remarks>
     /// <b>Last one wins.</b> The codes arrive about every two seconds carrying a counter, so the
@@ -530,6 +542,16 @@ public sealed class UccmDriver(TimeProvider timeProvider) : IReceiverDriver
 
         string? lockState = UccmReply.FirstPayload(led, UccmCommands.LockLed);
 
+        // The lamp says 1 - locked - all the way through holdover, so it cannot be the only thing
+        // in the token. The overheard time code can tell the difference and the lamp cannot, so
+        // where they disagree the frame wins and says so in the token itself. See InterpretSyncState.
+        if (_lastTimeCode?.InHoldover is true)
+        {
+            lockState = string.IsNullOrWhiteSpace(lockState)
+                ? HoldoverMarker
+                : $"{lockState} {HoldoverMarker}";
+        }
+
         FastReadings readings = new(
             SyncState: lockState,
             Tfom: null,
@@ -561,6 +583,15 @@ public sealed class UccmDriver(TimeProvider timeProvider) : IReceiverDriver
     /// byte, which <see cref="UccmStatusParser"/> reads.
     /// </para>
     /// <para>
+    /// <b>So the lamp is no longer the only thing in the token.</b> The lamp answers <c>1</c>
+    /// throughout genuine holdover — measured on 13 Sep 2026, through fourteen minutes with the
+    /// antenna physically disconnected and nothing tracked — and <c>1</c> means locked, so the
+    /// largest element on the primary window said "Locked to GPS" about a free-running oscillator.
+    /// <see cref="InterpretSweep"/> now appends <see cref="HoldoverMarker"/> when the overheard time
+    /// code says otherwise, and the holdover branch below is what reads it. That branch existed
+    /// before and had never once fired, because nothing produced a token it could match.
+    /// </para>
+    /// <para>
     /// Anything unrecognised is <see cref="ReceiverMode.Disconnected"/> and never a guess, on the
     /// interface's own reasoning: showing "Locked to GPS" on a maybe is the worst available default.
     /// </para>
@@ -573,6 +604,15 @@ public sealed class UccmDriver(TimeProvider timeProvider) : IReceiverDriver
             return ReceiverMode.Disconnected;
         }
 
+        // BEFORE the lamp, and the order is load-bearing. A plain UCCM answers the lamp as free
+        // text, so a marked token can read "NORMAL HOLDOVER" - and testing NORMAL first would
+        // return Locked for a receiver the frame says is coasting, which is this whole defect
+        // reintroduced through the back door. Holdover is the more specific claim, so it wins.
+        if (token.Contains("HOLD", StringComparison.OrdinalIgnoreCase))
+        {
+            return ReceiverMode.Holdover;
+        }
+
         if (token.Contains("NORMAL", StringComparison.OrdinalIgnoreCase) || token == "1")
         {
             return ReceiverMode.Locked;
@@ -581,11 +621,6 @@ public sealed class UccmDriver(TimeProvider timeProvider) : IReceiverDriver
         if (token.Contains("INIT", StringComparison.OrdinalIgnoreCase) || token == "0")
         {
             return ReceiverMode.PowerUp;
-        }
-
-        if (token.Contains("HOLD", StringComparison.OrdinalIgnoreCase))
-        {
-            return ReceiverMode.Holdover;
         }
 
         return ReceiverMode.Disconnected;

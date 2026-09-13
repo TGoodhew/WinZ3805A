@@ -280,4 +280,71 @@ public sealed class UccmSimulatedSessionTests
             }
         }
     }
+
+    // ---- holdover, which the lamp alone cannot see (#534) -----------------------------------------
+
+    /// <summary>
+    /// A real holdover frame overrides a lamp that still says locked.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is the defect measured on the bench on 13 Sep 2026, end to end through the driver. A
+    /// Trimble UCCM-P was locked with a valid fix, its antenna was physically disconnected, and for
+    /// fourteen minutes <c>LED:GPSL?</c> went on answering <c>1</c> — so the mode the shell shows,
+    /// which comes from <c>InterpretSyncState</c> on the sweep's sync token, stayed
+    /// <see cref="ReceiverMode.Locked"/> and the primary window read "Locked to GPS" about a
+    /// free-running oscillator.
+    /// </para>
+    /// <para>
+    /// The frame below is that receiver, captured at 10:26:56 and archived in
+    /// <c>Uccm/Captures/transitions-13sep2026.frames.txt</c>. The simulator's lamp answers <c>1</c>,
+    /// exactly as the hardware did, so the only thing that can change the outcome is the frame.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void AnOverheardHoldoverFrameOutranksALampThatSaysLocked()
+    {
+        (UccmDriver driver, UccmModuleSimulator module, _) = Bench();
+
+        // Locked first, and from the same lamp reply - so the difference below is the frame alone.
+        Assert.Equal(ReceiverMode.Locked, driver.InterpretSyncState(Sweep(driver, module).Readings.SyncState));
+
+        driver.Observe([[
+            0xC5, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x28, 0x1C, 0x52, 0x00,
+            0x00, 0x20, 0x60, 0xC1, 0x91, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x57, 0xD0, 0xB0, 0x62, 0x00, 0x12,
+            0x60, 0x0C, 0x4F, 0x90, 0x00, 0x00, 0x00, 0x00, 0xC7, 0x74, 0xCA,
+        ]]);
+
+        SweepInterpretation result = Sweep(driver, module);
+
+        Assert.Null(result.Rejection);
+        Assert.Equal(ReceiverMode.Holdover, driver.InterpretSyncState(result.Readings.SyncState));
+    }
+
+    /// <summary>
+    /// A frame from a receiver that has never locked does not read as holdover.
+    /// </summary>
+    /// <remarks>
+    /// The complement, and the reason the rule is about history rather than about the lock byte:
+    /// this frame carries the <i>same</i> lock byte <c>4F</c> and the <i>same</i> date byte <c>90</c>
+    /// as the holdover frame above. It is the cold module from the same morning, powered up with no
+    /// antenna, and it must not be mistaken for one that has lost a reference it never had.
+    /// </remarks>
+    [Fact]
+    public void AFrameFromAReceiverThatHasNeverLockedIsNotHoldover()
+    {
+        (UccmDriver driver, UccmModuleSimulator module, _) = Bench();
+
+        driver.Observe([[
+            0xC5, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x28, 0x1C, 0x52, 0x00,
+            0x00, 0x20, 0x60, 0xC1, 0x91, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x24, 0xEA, 0x00, 0x02, 0x00, 0x00,
+            0x41, 0x08, 0x4F, 0x90, 0x00, 0x00, 0x00, 0x00, 0x47, 0xE7, 0xCA,
+        ]]);
+
+        SweepInterpretation result = Sweep(driver, module);
+
+        Assert.NotEqual(ReceiverMode.Holdover, driver.InterpretSyncState(result.Readings.SyncState));
+    }
 }
