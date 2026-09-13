@@ -50,8 +50,15 @@ public sealed class ReceiverReadingTests
     /// </para>
     /// <para>
     /// So the narrower claim is the true one, and it is still worth pinning: everything the screen
-    /// prints is reported, and the exclusions are exactly three. A driver that began declining a
-    /// fourth would fail here, which is the direction the interface warns about.
+    /// prints is reported, and the exclusions are exactly the GNSS fix statistics. A driver that
+    /// began declining something the screen does print would fail here, which is the direction the
+    /// interface warns about.
+    /// </para>
+    /// <para>
+    /// <b>Two more joined the list at #516</b>, and they are the same kind of thing as the first
+    /// three rather than a new kind: <c>GST</c>'s position uncertainty and <c>GBS</c>'s RAIM
+    /// integrity are computed per fix by a GNSS engine, and the captured screens carry neither. The
+    /// exclusion is a reading of those screens, not a guess about the family.
     /// </para>
     /// </remarks>
     [Theory]
@@ -61,7 +68,9 @@ public sealed class ReceiverReadingTests
         bool onTheScreen = reading is not (
             ReceiverReading.DilutionOfPrecision or
             ReceiverReading.GeoidSeparation or
-            ReceiverReading.SatellitesUsed);
+            ReceiverReading.SatellitesUsed or
+            ReceiverReading.PositionUncertainty or
+            ReceiverReading.FixIntegrity);
 
         Assert.Equal(
             onTheScreen,

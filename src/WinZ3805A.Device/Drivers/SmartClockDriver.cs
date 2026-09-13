@@ -72,6 +72,11 @@ public sealed class SmartClockDriver(TimeProvider timeProvider) : IReceiverDrive
         ReceiverReading.DilutionOfPrecision => false,
         ReceiverReading.GeoidSeparation => false,
         ReceiverReading.SatellitesUsed => false,
+
+        // Neither appears on any captured screen, and both are per-fix GNSS statistics rather than
+        // anything a disciplined oscillator publishes about itself (#516).
+        ReceiverReading.PositionUncertainty => false,
+        ReceiverReading.FixIntegrity => false,
         _ => true,
     };
 
