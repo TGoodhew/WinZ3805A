@@ -304,6 +304,17 @@
                                                    ItemsStretch="None" />
                             </ItemsRepeater.Layout>
                         </ItemsRepeater>
+
+                        <!--
+                            #515. A talker has no health monitor at all, which is what the text above
+                            says — but a u-blox module supervises its antenna, and a shorted or
+                            missing antenna is the most useful health fact a timing receiver has. It
+                            sits below the items rather than among them because it is not one of
+                            them: those come from a status screen, this from a power-on banner, and
+                            merging the two would make a talker look like it had a health monitor
+                            with a single entry.
+                        -->
+                        <controls:SeverityPill x:Name="AntennaPill" Visibility="Collapsed" />
                     </StackPanel>
                 </Border>
 

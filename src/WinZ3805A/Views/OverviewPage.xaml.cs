@@ -292,6 +292,16 @@ public sealed partial class OverviewPage : Page
             HealthItems.ItemsSource = model.Health.Select(BuildHealthPill).ToList();
         }
 
+        // #515. No automation name is pushed here, deliberately: this runs on every reading, and
+        // SetName marshals the control into WinRT each time — which is #403's mechanism and #527's
+        // fix. SeverityPill's own AutomationPeer reports its Text, so there is nothing to push.
+        AntennaPill.Visibility = model.AntennaText is null ? Visibility.Collapsed : Visibility.Visible;
+        if (model.AntennaText is string antenna)
+        {
+            AntennaPill.Text = antenna;
+            AntennaPill.Severity = model.AntennaOk ? Severity.Success : Severity.Critical;
+        }
+
         OscillatorControl.Value = model.OscillatorControl;
 
         // P0-1's identity card.

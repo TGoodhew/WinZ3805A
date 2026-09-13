@@ -231,6 +231,13 @@ Everything from the main window, with the words behind the numbers:
   receiver's self-test now — it asks first, because the receiver stops doing other things while it
   tests itself. A failing subsystem turns its pill red; the summary line above says whether
   everything passes.
+
+  **Antenna** — an extra pill appears here for a receiver that supervises its antenna, reading
+  *Antenna OK*, *starting up*, *short circuit*, *open circuit — none detected*, or *not supervised*.
+  A short or open circuit turns it red: on an active antenna that usually means the feed is shorted,
+  or the antenna is unplugged or broken. Most receivers say nothing about their antenna and show no
+  pill at all. A GPS talker has no health monitor otherwise, so on one of those this is the only
+  entry on the card — and it is the most useful one a timing receiver has.
 - **Oscillator control (EFC)** — the voltage the receiver is applying to steer its oscillator, as a
   percentage of its range, with a trend over the last **1 h**, **6 h**, **24 h** or **7 d**. A
   slowly drifting EFC is the oscillator ageing; a sudden change is worth a look.
