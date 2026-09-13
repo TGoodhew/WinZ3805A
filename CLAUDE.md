@@ -679,7 +679,7 @@ tests/WinZ3805A.Tests/        xUnit, with Fixtures/ for captured status screens 
                               Nmea/Captures/ and Uccm/Captures/ for the other two families
 tools/NmeaSimulator/          the NMEA 0183 talker the tests and the tutorial run against
 tools/UccmSimulator/          the UCCM shapes the driver was written against, before hardware
-build/                        the gate scripts, the four capture and soak harnesses,
+build/                        the gate scripts, the five capture, transitions and soak harnesses,
                               the sideload packager, the palette derivation
 .github/workflows/ci.yml      the gates in their own jobs, then the Debug and Release builds and the tests
 ```

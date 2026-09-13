@@ -310,9 +310,9 @@ no closing keyword closes an issue nobody meant to close). All are
 dependency-free and answer in seconds, which makes them the fastest local check
 available; [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs every one
 in its own dependency-free job alongside the build, so a regression fails in
-seconds instead of after a full build. Four further scripts there self-test the
-**tooling** — the fixture, talker and UCCM capture harnesses and the soak's
-arithmetic — rather than gating the source. The full list, with what each guards
+seconds instead of after a full build. Five further scripts there self-test the
+**tooling** — the fixture, talker, UCCM and UCCM-transitions capture harnesses
+and the soak's arithmetic — rather than gating the source. The full list, with what each guards
 and why it exists, is in [CLAUDE.md](CLAUDE.md); the two below are the ones to
 know first:
 
