@@ -22,6 +22,7 @@ It is what made #424 answerable, though not on the first attempt: see the table'
 | `form8n-gps-beidou-first-light` | 6.7 min | 202 KB | The forM8N as it arrived, on a GPS **timing** antenna. BeiDou is enabled, reports every cycle and **tracks nothing** — `$GBGSV,1,1,00` and a `GSA` row with only its system id. A talker advertising a constellation it cannot see. |
 | `form8n-gns-without-gga` | 2.2 min | 77 KB | The same module's `GNS` configuration, where the mode indicator is **four** characters (`ANNN`) against the VK-162's two — the field is one character per constellation, not a fixed code. |
 | `form8n-gps-beidou-outdoors` | 30 min | 1.1 MB | The same module on its **own patch antenna, outdoors**, where BeiDou does track. 1,217 of its 1,800 cycles have two talkers reporting the same satellite number, and it is the corpus's **only** crossing of UTC midnight. |
+| `form8n-gst-gbs` | 5 min | 247 KB | **The only capture carrying `GST` or `GBS`** — 300 of each, enabled with `UBX-CFG-MSG` because no receiver here sends them (#516). Position error in metres, and RAIM integrity. Also the corpus's clearest case of **geometry and error disagreeing**: HDOP 0.65–0.82 with a horizontal error near 3.2 m. Its `GST` range RMS spans 17 to 3,179,277 and is **not usable**; the deviations beside it are steady. |
 | `form8n-fix-lost` | 12 min | 413 KB | **The only capture in which a fix is taken away and comes back** — 120 cycles of 3D, a `UBX-CFG-RST` cold start at byte 87164, **65 cycles with no fix**, then 536 with it back. Also the only one holding the "time but no date" state, and a second colliding sitting at 433 of 721 cycles. |
 
 Each has a `.md` beside it saying what was happening; read those rather than this table.
@@ -68,6 +69,19 @@ gap somebody later assumes is covered.
   `vk162-gns-no-gga` is twelve minutes of the result. #429 said the reachability of that
   configuration "is unknown"; it is two frames. What remains open on that issue is the decision of
   whether to read `GNS`, not the evidence for it.
+- ~~**Pseudorange error statistics and RAIM integrity.** `GST` and `GBS` are emitted by nothing on
+  the bench, so #435 filed both as waiting for hardware that sends them.~~ **Answered 12 September
+  2026, and it did not need hardware.** It needed two `UBX-CFG-MSG` frames, the same technique
+  `vk162-gns-no-gga` and `form8n-fix-lost` already rest on, and
+  `build/Capture-Talker.ps1 -EnableSentences GST,GBS` sends them. The second doubt in that issue —
+  that RAIM needs redundancy so an indoor fix might yield an empty `GBS` — did not survive contact
+  either: a 12-satellite indoor fix filled the error estimates in all 300 cycles.
+
+  **What the capture does not contain is a fault.** No satellite was ever flagged in it, so the
+  populated half of `GBS` — a satellite id, a bias, a missed-detection probability — remains
+  unobserved, and the only test of it is explicitly synthetic. A healthy receiver and a receiver
+  never asked both leave those fields blank, which is why the model distinguishes an absent report
+  from a clean one rather than treating a blank id as good news.
 - **A dynamic model that changes anything the driver sees.** `CFG-NAV5` was set to **stationary**
   and a 12-minute sitting taken on 8 Sep 2026. The sentence set was identical and the latitude
   spread was **12.04 m against 12.98 m** for the portable `vk162-steady-state` — indistinguishable.
