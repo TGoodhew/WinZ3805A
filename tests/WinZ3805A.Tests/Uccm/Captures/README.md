@@ -6,6 +6,23 @@
 11 Sep**, `trimble-uccm-p-2026-09-11.txt`, and that second sitting is the screen
 `UccmStatusParser` is written against and tested on.
 
+**Seven sittings now, over four days**, and the later five were each taken to answer one question
+the earlier ones had raised. In date order:
+
+| Sitting | Taken to find out |
+|---|---|
+| `trimble-uccm-p-2026-09-10` | Whether anything answers at all, and on what line settings (#470) |
+| `trimble-uccm-p-2026-09-11` | The status screen `UccmStatusParser` is written against |
+| `bench-12sep2026` | The catalogue against a settled module, with the prompt understood |
+| `hypothesis2-12sep2026` | 50 reads with a reply on the wire 38 % of the time, to put the interleaving claim to the module properly (#481) |
+| `catalog-spellings-12sep2026` | Which of the catalogued spellings this firmware actually answers (#416) |
+| `frames-13sep2026` | 300 s of pure listening: 150 frames, 2 s apart, no gaps — the broadcast's own shape rather than a reply's |
+| `coldstart-no-antenna-13sep2026`, `transitions-13sep2026` | **The only capture of this family in any state but locked and settled** (#534). Every earlier sitting caught a module that had been up for hours on a good antenna, so forty of the forty-four time-code bytes never moved and the corpus could say nothing about what any of them meant. |
+
+The last row is the one that changed the driver: it is what `UccmTransitionStateTests` pins, and
+what #534 corrected a shipped misreading from — a coasting module had been reported as *Locked to
+GPS*, because the lock byte alone cannot tell holdover from lock and nothing else was being read.
+
 Until that day nothing was here, because the UCCM driver had never met a receiver: every command,
 timeout, field meaning and state code in `src/WinZ3805A.Device/Drivers/Uccm/` was read out of Lady
 Heather's source rather than a vendor document or a capture, and the driver says so at length. Most
@@ -49,13 +66,17 @@ construction — the one outcome that would be worthless.
 **A count of zero for the second does not refute it.** An interleaved broadcast depends on timing, so
 zero means this sitting did not see one — a weaker statement, and the note records it as such.
 
-## What the two sittings answered
+## What the sittings answered
 
 | Hypothesis | Verdict |
 |---|---|
-| 1. The module echoes the command | **Refuted.** 0 of 9. Replies begin with the answer. |
-| 2. `C5` time codes interleave | **The codes are binary.** 4 packets, 0 of them mid-reply. |
+| 1. The module echoes the command | **Refuted.** 0 echoes in every sitting — 9 of 9 replies, and 50 of 50 in `hypothesis2`. Replies begin with the answer. |
+| 2. `C5` time codes interleave | **The codes are binary, and this module defers them.** 44-byte packets, `0xC5`–`0xCA`, one every 2 s. `hypothesis2-12sep2026` kept a reply on the wire 38 % of the time and caught **0 of 25** mid-reply against ~9 expected by chance, so this is a measurement rather than a quiet sitting. |
 | 3. `COMMAND COMPLETE` terminates | **Confirmed.** 6 of 9, spelled `Command complete`. |
+
+**Hypothesis 2 stands untested rather than refuted for the family.** Heather's claim names
+*Symmetricom* units and every sitting here is one Trimble UCCM-P. The driver's tolerance for a
+mid-reply code costs nothing and stays.
 
 Hypothesis 2 is the one worth reading twice. The codes are **44-byte binary packets**, `0xC5` to
 `0xCA`, broadcast about every 2 s and arriving with **no line terminator** — one came back appended
