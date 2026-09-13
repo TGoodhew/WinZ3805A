@@ -134,8 +134,14 @@ public sealed record UccmTimeCode
     /// </remarks>
     public bool? AntennaOk => AntennaState switch
     {
+        0x00 => null,
+        // Bit 3 is the fault bit. Three values with it set have now been measured on one module,
+        // all of them with the antenna physically disconnected and none of them in Heather's list:
+        // 08 powered up with no antenna, 0C pulled from a locked state, and 09 four hours into that
+        // same holdover. Matching the bit rather than listing the values is what stopped the third
+        // one from falling through to "unknown" the way the first two did.
+        _ when (AntennaState & 0x08) != 0 => false,
         0x04 or 0x06 => true,
-        0x08 or 0x0C => false,
         _ => null,
     };
 
@@ -178,19 +184,34 @@ public sealed record UccmTimeCode
     /// either: it reads <c>90</c> in both.
     /// </para>
     /// <para>
-    /// The other three bytes separate them cleanly, and the rule is a statement about history
-    /// rather than a threshold. A leap-second offset and a stable PPS state mean the module
-    /// <i>has had</i> a fix — neither is present before one. An invalid date means it does not have
-    /// one <i>now</i>. Both at once can only describe a receiver that acquired and then lost its
-    /// reference, which is what holdover is. A module that has never locked carries no leap offset
-    /// and a PPS state still settling, so it cannot satisfy this however long it sits there.
+    /// The rule is a statement about history rather than a threshold. <b>A leap-second offset means
+    /// the module has had a fix</b> — it is not present before one, and this firmware clears it on
+    /// power-up rather than retaining it. An invalid date means it does not have a fix <i>now</i>.
+    /// Both at once can only describe a receiver that acquired and then lost its reference, which is
+    /// what holdover is. A module that has never locked carries no leap offset, so it cannot satisfy
+    /// this however long it sits there.
     /// </para>
     /// <para>
-    /// Measured against the 13 Sep 2026 transition capture — 785 frames spanning eight distinct
-    /// state-byte combinations across a power cycle, a cold acquisition, a lock, fourteen minutes of
-    /// holdover and a warm reacquisition. <b>Exactly one of the eight satisfies it</b>, and it is
-    /// the holdover one. It becomes true within one frame of the antenna being pulled, before the
-    /// antenna byte itself has caught up.
+    /// <b>THE PPS STATE IS DELIBERATELY NOT PART OF THIS TEST, AND WAS, AND THAT WAS A BUG.</b> The
+    /// first version also required a stable PPS state of <c>0x60</c>, which was true of every frame
+    /// in a fourteen-minute holdover. Four hours into the same holdover — same receiver, nothing
+    /// touched — the module moved <c>[33]</c> to <c>0x70</c>, a value in nobody's table, and the
+    /// rule silently went false. The application fell back to the lamp, which by then read <c>0</c>,
+    /// and reported a coasting receiver as <b>powering up</b>. It was caught by redeploying onto the
+    /// bench and reading the screen, and it would have shipped otherwise.
+    /// </para>
+    /// <para>
+    /// The lesson is in the shape of the rule and not just its contents: a condition fitted to every
+    /// frame of a short observation is fitted to the observation. The leap offset is the marker
+    /// because it is the one that means something — it records history — where the PPS state merely
+    /// happened to be constant for as long as anyone had watched.
+    /// </para>
+    /// <para>
+    /// Measured against every state-byte combination this bench has produced: <b>nine</b> of them,
+    /// from 815 frames across a power cycle, a cold acquisition, a lock, four hours of holdover and
+    /// a warm reacquisition. Exactly three satisfy it and all three are holdover — the early one
+    /// before the antenna byte catches up, the settled one, and the deep one that broke the first
+    /// version. It becomes true within one frame of the antenna being pulled.
     /// </para>
     /// <para>
     /// Null rather than false when the vendor is unknown, because <see cref="DateValid"/> is, and
@@ -206,8 +227,9 @@ public sealed record UccmTimeCode
                 return null;
             }
 
-            bool hadAFix = LeapSecondOffset is not null && (PpsState & 0xF0) == 0x60;
-            return hadAFix && !valid;
+            // The leap offset alone is the "has had a fix" marker, and the PPS state is NOT part of
+            // this test - see the remarks above for what including it cost.
+            return LeapSecondOffset is not null && !valid;
         }
     }
 
