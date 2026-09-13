@@ -1017,7 +1017,28 @@ public sealed class DeviceSessionService : IAsyncDisposable
                 return;
             }
 
-            Transaction heard = listener.Answer(pending.Command.Mnemonic, TimeoutFor(pending.Command));
+            // Almost always null, and then the answer is simply what was overheard. One family has
+            // one poll worth asking (#508), and it says so here rather than the session knowing
+            // anything about NMEA. IsBlocked is asked as well as the driver's own text being used,
+            // because §8.1's guarantee is that every command sent passes the allowlist — a driver
+            // returning text it also blocks is a programming error and should be caught, not
+            // trusted.
+            string? outgoing = _driver.OutgoingTextFor(pending.Command.Mnemonic);
+            if (outgoing is not null && _driver.IsBlocked(outgoing))
+            {
+                outgoing = null;
+                _logger.LogError(
+                    "The {Family} driver offered {Mnemonic} as outgoing text that its own IsBlocked refuses; it was not sent.",
+                    _driver.Family,
+                    pending.Command.Mnemonic);
+            }
+
+            Transaction heard = outgoing is null
+                ? listener.Answer(pending.Command.Mnemonic, TimeoutFor(pending.Command))
+                : await listener
+                    .PollAsync(outgoing, pending.Command.Mnemonic, TimeoutFor(pending.Command), sessionToken)
+                    .ConfigureAwait(false);
+
             pending.Completion.TrySetResult(heard);
             Record(pending.Origin, heard);
             await NoteOutcomeAsync(heard).ConfigureAwait(false);

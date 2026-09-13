@@ -248,8 +248,21 @@ public sealed class NmeaDriver(TimeProvider timeProvider) : IReceiverDriver
     public string? ClassifyLine(string line)
     {
         NmeaSentence? sentence = NmeaSentence.TryParse(line);
+        if (sentence is null || !sentence.ChecksumValid)
+        {
+            return null;
+        }
+
+        // The reply to the one poll this family sends (#508). Its talker is "P" rather than a GNSS
+        // prefix, because it is proprietary — so it is matched by name rather than by falling
+        // through the GNSS test below, which would reject it.
+        if (sentence.Talker == "P" && sentence.Identifier == NmeaPoll.ReplyIdentifier && sentence.Field(0) == "04")
+        {
+            return sentence.Key;
+        }
+
         // Kept, not Sentences: the banner is worth reading and is not evidence of anything (#515).
-        return sentence is not null && sentence.ChecksumValid && GnssTalkers.Contains(sentence.Talker) && Kept.Contains(sentence.Identifier)
+        return GnssTalkers.Contains(sentence.Talker) && Kept.Contains(sentence.Identifier)
             ? sentence.Key
             : null;
     }
@@ -309,6 +322,19 @@ public sealed class NmeaDriver(TimeProvider timeProvider) : IReceiverDriver
 
         return !wanted.StartsWith(NmeaPoll.TimePoll, StringComparison.OrdinalIgnoreCase);
     }
+
+    /// <summary>
+    /// The one sentence this family sends, and nothing else (#508).
+    /// </summary>
+    /// <remarks>
+    /// Guarded by <see cref="IsBlocked"/> rather than trusted: the text is built from
+    /// <c>NmeaPoll</c>, so the two cannot drift apart, and a caller asking for anything else gets
+    /// null and is overheard as every other command on this link is.
+    /// </remarks>
+    public string? OutgoingTextFor(string? mnemonic) =>
+        string.Equals(mnemonic?.Trim(), NmeaPoll.ReplyKey, StringComparison.OrdinalIgnoreCase)
+            ? NmeaPoll.Outgoing
+            : null;
 
     /// <inheritdoc />
     public TimeSpan TimeoutFor(string? mnemonic) => SilenceTimeout;

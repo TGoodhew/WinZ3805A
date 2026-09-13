@@ -33,6 +33,22 @@ public static class NmeaPoll
     /// <summary>The poll, without its checksum — also the one prefix <c>IsBlocked</c> permits.</summary>
     public const string TimePoll = "$PUBX,04";
 
+    /// <summary>The identifier the reply parses as, its talker being the proprietary <c>P</c>.</summary>
+    public const string ReplyIdentifier = "UBX";
+
+    /// <summary>The key the reply is kept under, and the mnemonic the poll is catalogued as.</summary>
+    public static string ReplyKey { get; } = NmeaSentence.KeyFor(ReplyIdentifier);
+
+    /// <summary>
+    /// The poll as it goes on the wire, checksummed.
+    /// </summary>
+    /// <remarks>
+    /// Built rather than written down, for the reason <c>NmeaDriverTests</c> records: two of that
+    /// file's first expectations were wrong because a checksum was computed by hand.
+    /// </remarks>
+    public static string Outgoing { get; } =
+        $"{TimePoll}*{NmeaSentence.Checksum(TimePoll.AsSpan(1)):X2}";
+
     /// <summary>
     /// Whether the receiver that sent <paramref name="banner"/> understands <see cref="TimePoll"/>.
     /// </summary>
