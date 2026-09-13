@@ -152,8 +152,30 @@ public sealed class UccmDriverTests
     [InlineData("0", ReceiverMode.PowerUp)]
     [InlineData("Initializing", ReceiverMode.PowerUp)]
     [InlineData("Holdover", ReceiverMode.Holdover)]
+    // The lamp still reads 1 - locked - throughout genuine holdover, so the driver marks the token
+    // from the time code. Both shapes below are what InterpretSweep can now produce.
+    [InlineData("1 HOLDOVER", ReceiverMode.Holdover)]
+    [InlineData("HOLDOVER", ReceiverMode.Holdover)]
     public void TheLampMapsOntoTheModesItCanActuallyDistinguish(string token, ReceiverMode expected) =>
         Assert.Equal(expected, Driver().InterpretSyncState(token));
+
+    /// <summary>
+    /// The holdover marker beats the lamp, whichever way round the words fall.
+    /// </summary>
+    /// <remarks>
+    /// <b>The order of the tests inside <c>InterpretSyncState</c> is load-bearing, and this is what
+    /// says so.</b> A plain UCCM answers the lamp as free text rather than as <c>0</c> or <c>1</c>,
+    /// so a marked token can read <c>NORMAL HOLDOVER</c> — and the lamp test used to come first,
+    /// which would match <c>NORMAL</c> and report a coasting receiver as locked. That is the whole
+    /// defect reintroduced by a line ordering, with no other symptom, so it gets its own test rather
+    /// than a comment.
+    /// </remarks>
+    [Theory]
+    [InlineData("NORMAL HOLDOVER")]
+    [InlineData("HOLDOVER NORMAL")]
+    [InlineData("1 HOLDOVER")]
+    public void TheHoldoverMarkerBeatsALampThatStillClaimsNormal(string token) =>
+        Assert.Equal(ReceiverMode.Holdover, Driver().InterpretSyncState(token));
 
     [Theory]
     [InlineData(null)]
