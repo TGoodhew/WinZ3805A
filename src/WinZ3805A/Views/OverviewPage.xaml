@@ -315,6 +315,15 @@
                             with a single entry.
                         -->
                         <controls:SeverityPill x:Name="AntennaPill" Visibility="Collapsed" />
+
+                        <!--
+                            #516. RAIM is the constellation's health rather than the receiver's, so
+                            it is a third kind of fact again and gets its own pill for the same
+                            reason the antenna does. It appears only when a GBS sentence has
+                            actually arrived: a receiver that was never asked must not read as one
+                            reporting a clean bill of health.
+                        -->
+                        <controls:SeverityPill x:Name="IntegrityPill" Visibility="Collapsed" />
                     </StackPanel>
                 </Border>
 

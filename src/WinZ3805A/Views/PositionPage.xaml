@@ -99,15 +99,17 @@
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
                             <!--
-                                SIX ROWS FOR SIX ROWS OF CONTENT. There were three when #435 added
+                                SEVEN ROWS FOR SEVEN ROWS OF CONTENT. There were three when #435 added
                                 the last three TextBlocks, and a Grid silently puts content beyond
                                 its last definition INTO that last row rather than failing: height,
                                 geoid separation and satellites used all drew on top of each other
                                 over the Height row. Nothing caught it — no gate reads row coverage
                                 and the readouts are tested through the view model, which cannot see
-                                a layout.
+                                a layout. #516 added the seventh; count them against the Grid.Row
+                                numbers below before adding an eighth.
                             -->
                             <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
@@ -161,6 +163,18 @@
                                        Foreground="{ThemeResource WzTextSecondaryBrush}"
                                        Text="Dilution of precision" />
                             <TextBlock x:Name="DilutionText" Grid.Row="5" Grid.Column="1"
+                                       Style="{ThemeResource WzMonoTextStyle}" IsTextSelectionEnabled="True" />
+
+                            <!--
+                                #516: directly under the dilution, because the two are read together
+                                and mistaking one for the other is the whole hazard. Dilution is
+                                geometry; this is metres.
+                            -->
+                            <TextBlock x:Name="UncertaintyLabel" Grid.Row="6" Grid.Column="0"
+                                       Style="{ThemeResource WzBodyTextStyle}"
+                                       Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                       Text="Position uncertainty" />
+                            <TextBlock x:Name="UncertaintyText" Grid.Row="6" Grid.Column="1"
                                        Style="{ThemeResource WzMonoTextStyle}" IsTextSelectionEnabled="True" />
                         </Grid>
 

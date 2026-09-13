@@ -439,6 +439,40 @@ public sealed class OverviewViewModel : INotifyPropertyChanged, IDisposable
     /// <summary>Whether the antenna reading is something to worry about (§9.4.3: colour plus text).</summary>
     public bool AntennaOk => _store.Banner.Antenna is not (AntennaState.ShortCircuit or AntennaState.OpenCircuit);
 
+    /// <summary>
+    /// What the receiver's own integrity check says about the satellites in its fix (#516).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Null when no <c>GBS</c> has arrived, which is most receivers most of the time</b> — and
+    /// that is the distinction the whole reading exists to keep. A receiver that has never been
+    /// asked and one that has looked and found nothing wrong both have no satellite to name; only
+    /// the presence of the report separates them, so the pill is hidden rather than shown as good
+    /// news nobody reported.
+    /// </para>
+    /// <para>
+    /// The satellite is named when there is one, because "a satellite is faulty" without saying
+    /// which sends a user to the sky plot with nothing to look for.
+    /// </para>
+    /// </remarks>
+    public string? IntegrityText
+    {
+        get
+        {
+            if (Connection != ConnectionStatus.Connected || Status?.Integrity is not { } integrity)
+            {
+                return null;
+            }
+
+            return integrity.SuspectSatelliteId is int suspect
+                ? $"Satellite {suspect} flagged faulty"
+                : "Integrity checked — no fault";
+        }
+    }
+
+    /// <summary>Whether the integrity report is something to worry about (§9.4.3: colour plus text).</summary>
+    public bool IntegrityOk => Status?.Integrity?.FaultSuspected is not true;
+
     /// <summary>The health summary line, which carries the state in text as §9.4.3 requires.</summary>
     public string HealthSummary
     {

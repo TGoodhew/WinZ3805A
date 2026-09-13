@@ -184,6 +184,49 @@ public sealed class PositionViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
+    /// <summary>
+    /// How large the receiver believes its position error to be, in metres (#516).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The companion to <see cref="DilutionText"/> and not a restatement of it.</b> Dilution says
+    /// how favourably the satellites were placed; this says how wrong the answer may be. A fix can
+    /// have excellent geometry and poor ranging, and only this line would show it — on the bench, a
+    /// horizontal dilution of 0.74 alongside a horizontal error over three metres.
+    /// </para>
+    /// <para>
+    /// <b>The confidence is stated in the text, because a sigma quoted without one is wrong by a
+    /// factor of two to whoever assumes the other convention.</b> One DRMS is roughly 65%; the
+    /// familiar "95%" figure is about twice it. Writing ±3.2 m and leaving the reader to choose is
+    /// the failure worth avoiding.
+    /// </para>
+    /// <para>
+    /// Horizontal and vertical on one line, in that order, because a user comparing a fix against a
+    /// survey marker reads them together — and vertical is routinely the worse of the two for the
+    /// same geometric reason the vertical dilution is.
+    /// </para>
+    /// </remarks>
+    public string UncertaintyText
+    {
+        get
+        {
+            if (Status?.Uncertainty is not { } uncertainty)
+            {
+                return ReadoutFormatter.NoValue;
+            }
+
+            string Metres(double? value) => value is double number
+                ? $"{ReadoutFormatter.Format(number, decimalPlaces: 1)} m"
+                : ReadoutFormatter.NoValue;
+
+            // Not every receiver fills both halves — u-blox sends the three deviations and no error
+            // ellipse — so each is asked for separately and a missing one shows as a dash rather
+            // than collapsing the whole line.
+            return $"H ±{Metres(uncertainty.HorizontalDrmsMetres)}   " +
+                $"V ±{Metres(uncertainty.AltitudeSigmaMetres)}   (1σ, ≈65%)";
+        }
+    }
+
     /// <summary>Whether there is a position to show at all.</summary>
     public bool HasPosition => Status?.Position is
         { LatitudeDegrees: not null, LongitudeDegrees: not null };

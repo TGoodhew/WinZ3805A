@@ -277,6 +277,8 @@ public sealed partial class PositionPage : Page
                 [SatellitesUsedLabel, SatellitesUsedText]),
             (ReceiverReading.DilutionOfPrecision, "a dilution of precision",
                 [DilutionLabel, DilutionText]),
+            (ReceiverReading.PositionUncertainty, "an estimate of its position error",
+                [UncertaintyLabel, UncertaintyText]),
         ];
 
         List<string> absent = [];
@@ -320,6 +322,7 @@ public sealed partial class PositionPage : Page
         GeoidSeparationText.Text = model.GeoidSeparationText;
         SatellitesUsedText.Text = model.SatellitesUsedText;
         DilutionText.Text = model.DilutionText;
+        UncertaintyText.Text = model.UncertaintyText;
 
         ShowFixQuality();
 
