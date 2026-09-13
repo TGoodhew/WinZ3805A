@@ -402,6 +402,43 @@ public sealed class OverviewViewModel : INotifyPropertyChanged, IDisposable
     /// <summary>Whether every health item passed.</summary>
     public bool HealthOk => Connection == ConnectionStatus.Connected && (Status?.HealthOk ?? false);
 
+    /// <summary>
+    /// What the antenna supervisor says, for a receiver that has one (#515).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>#435's audit said the health card "has nothing to show" for a talker, and this is the
+    /// thing it has.</b> A GPS talker has no oscillator, no self test and no health monitor — but a
+    /// u-blox module does supervise its antenna, and a shorted or missing antenna is the single most
+    /// useful health fact about a timing receiver.
+    /// </para>
+    /// <para>
+    /// Deliberately <b>not</b> folded into <see cref="Health"/>. Those items come from a status
+    /// screen's health monitor and are gated by <c>ReceiverReading.HealthMonitor</c>; this comes from
+    /// a power-on banner and exists for families that report no health monitor at all. Presenting
+    /// them as one list would make a talker look like it had a health monitor with one entry.
+    /// </para>
+    /// <para>
+    /// <see cref="AntennaState.DoNotKnow"/> is shown rather than hidden, because a module saying it
+    /// cannot tell is a different statement from one that never mentioned an antenna — and §9.11's
+    /// whole subject is not conflating those two.
+    /// </para>
+    /// </remarks>
+    public string? AntennaText => Connection == ConnectionStatus.Connected
+        ? _store.Banner.Antenna switch
+        {
+            AntennaState.Ok => "Antenna OK",
+            AntennaState.Initialising => "Antenna starting up",
+            AntennaState.ShortCircuit => "Antenna short circuit",
+            AntennaState.OpenCircuit => "Antenna open circuit — none detected",
+            AntennaState.DoNotKnow => "Antenna not supervised",
+            _ => null,
+        }
+        : null;
+
+    /// <summary>Whether the antenna reading is something to worry about (§9.4.3: colour plus text).</summary>
+    public bool AntennaOk => _store.Banner.Antenna is not (AntennaState.ShortCircuit or AntennaState.OpenCircuit);
+
     /// <summary>The health summary line, which carries the state in text as §9.4.3 requires.</summary>
     public string HealthSummary
     {
