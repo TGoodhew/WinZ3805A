@@ -330,6 +330,20 @@ jobs:
         shell: pwsh
         run: ./build/Capture-Uccm.ps1 -SelfTest
 
+      # #544. The fifth harness, and the only one that replays a capture it has already taken:
+      # the 785 frames of the 13 Sep 2026 sitting go back through the framing and have to produce
+      # the events file committed beside them, including the eight state-byte combinations #534
+      # turned on. The bargain is the same as the four above and at its sharpest here - the states
+      # this script records happen while someone is holding the antenna, and it has one sitting to
+      # its name because a plain UCCM and any Symmetricom module have still never been seen.
+      #
+      # Note the GPS epoch check pins the returned TYPE and OFFSET, not just the value. The defect
+      # it guards reads the epoch as a local time, which is correct wherever local time is UTC -
+      # this runner included - so a value-only check would be green on the fault.
+      - name: The transitions harness still frames its own capture
+        shell: pwsh
+        run: ./build/Watch-UccmTransitions.ps1 -SelfTest
+
   # ---------------------------------------------------------------------------
   # §6.1 requires x64 only and forbids AnyCPU, x86 and ARM64. The matrix keeps its
   # shape for the two configurations, not for a second architecture: ARM64 is not a
