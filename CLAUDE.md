@@ -12,12 +12,19 @@ device's 80×24 terminal screen.
 
 Every receiver-specific fact sits behind a driver (§12, `src/WinZ3805A.Device/Drivers/`).
 The SmartClock family is the first driver; a generic NMEA 0183 talker (#310) is the second,
-proven against the simulator under `tools/` and, since 7 Sep 2026, against a real receiver —
-three VK-162 captures under `tests/WinZ3805A.Tests/Nmea/Captures/`, replayed cycle by cycle in
-CI (#420). It shows only what NMEA carries. The UCCM family (#416, #418) is the third, and it is weaker evidence than
+proven against the simulator under `tools/` and, since 7 Sep 2026, against real receivers —
+ten captures from a VK-162 and a forM8N under `tests/WinZ3805A.Tests/Nmea/Captures/`, replayed
+cycle by cycle in CI (#420, #516). It shows only what NMEA carries, and since #508 it sends
+exactly one sentence — `$PUBX,04`, a poll, and only to a module whose own banner said it is
+u-blox. The UCCM family (#416, #418) is the third, and it is weaker evidence than
 either: it was written from Lady Heather's source rather than from a capture or a vendor
-document, so **every command, timeout and state code in it is a hypothesis with a citation**.
-It says so itself, at length, and that caveat stays until a receiver has been on the bench.
+document, so **most command, timeout and state codes in it remain hypotheses with citations**.
+One Trimble UCCM-P has now sat seven times, 10–13 Sep 2026
+(`tests/WinZ3805A.Tests/Uccm/Captures/`), which settled the line settings, all three protocol
+hypotheses and — on the last day — the state bytes of a module that is *not* locked, which is
+what #534's shipped misreading turned on. **A plain UCCM and any Symmetricom module have still
+never been seen**, so the caveat narrows rather than lifts: read each claim's citation before
+trusting it.
 
 ---
 
@@ -189,9 +196,10 @@ must be clean with zero warnings** — including code-style rules. Block-scoped
 namespaces are a build error (`IDE0161` is `Convert to file-scoped namespace`),
 not a suggestion — the tree is file-scoped throughout.
 
-Three things the tree does not make obvious. `tools/NmeaSimulator` is referenced by the
-test project, so changing the simulator changes the tests; its README says how to run it
-against a port or to stdout. `docs/how-to-use.md` and its images ship inside the package
+Three things the tree does not make obvious. **Both** simulators under `tools/` are referenced
+by the test project, so changing either changes the tests; each README says how to run it
+against a port or to stdout, and `UccmSimulator`'s now also says which of the behaviours it
+reproduces a real module has since contradicted. `docs/how-to-use.md` and its images ship inside the package
 as linked `Content` items, and `HelpDocumentTests` parses the real document and checks
 every image it names, so editing the guide can fail the tests. And `Themes/Colors.xaml`
 is also an `EmbeddedResource` that `ThemePalette` reads at run time, so colours are never
@@ -358,12 +366,19 @@ prompt while its **echo is evidence rather than noise**, so the fixture script w
 thing worth keeping. It writes into `tests/WinZ3805A.Tests/Uccm/Captures/`, which is deliberately
 not `Fixtures/` — see that folder's README.
 
-**Its whole job is #416's step one, which is identification and not code.** The UCCM driver has
-never met a receiver, and three of its load-bearing claims come from Lady Heather's source alone:
-that the module echoes each command before answering, that unsolicited `C5` time codes interleave
-*mid*-reply, and that `COMMAND COMPLETE` terminates. The script **reports each as a count and
-assumes none of them** — a harness built on a hypothesis confirms it by construction, which is the
-one outcome worth nothing.
+**Its whole job was #416's step one, which is identification and not code.** Three of the UCCM
+driver's load-bearing claims came from Lady Heather's source alone: that the module echoes each
+command before answering, that unsolicited `C5` time codes interleave *mid*-reply, and that
+`COMMAND COMPLETE` terminates. The script **reports each as a count and assumes none of them** — a
+harness built on a hypothesis confirms it by construction, which is the one outcome worth nothing.
+
+**That design earned itself out, and the result is the argument for it.** Seven sittings with a
+Trimble UCCM-P between 10 and 13 Sep 2026 refuted the echo outright, found the time codes to be
+44-byte *binary* packets that this module defers to the end of a reply rather than text that
+interleaves, and confirmed the terminator — spelled `Command complete`. Two of three beliefs were
+wrong, and a harness that had assumed any of them would have reported agreement. **Heather's
+interleaving claim names Symmetricom units and none has been seen**, so it stands untested rather
+than refuted and the driver's tolerance for it stays.
 
 The self-tested half is the **reply anatomy**, and the check that matters most is the distinction
 between a time code arriving *in the middle* of a reply and one arriving *after* it. Only the first
@@ -373,7 +388,10 @@ were tested against deliberate violations.
 
 **A count of zero for the time codes does not refute anything**, because an interleaved broadcast
 depends on timing. The note says so, in the file, so nobody later reads a quiet sitting as a
-finding.
+finding. **The way past that is to make the sitting not quiet**, which is what
+`hypothesis2-12sep2026` did: fifty reads keeping a reply on the wire 38 % of the time, so ~9 of the
+25 codes should have collided by chance and none did. A count is only evidence against a
+denominator you arranged.
 
 `Watch-UccmTransitions.ps1` is the fifth, added 14 Sep 2026, and it is the only one that **replays a
 capture it has already taken**. It listens continuously rather than taking one catalogue pass,
@@ -656,10 +674,13 @@ docs/requirements.md          the specification
 src/WinZ3805A/                WinUI 3 app, single-project MSIX
   Views/ ViewModels/ Controls/ Themes/ Services/ Assets/Fonts/
 src/WinZ3805A.Device/         class library, no UI references
-  Transport/ Commands/ Parsing/ Models/ Drivers/ (SmartClock, and Nmea/)
-tests/WinZ3805A.Tests/        xUnit, with Fixtures/ for captured status screens
+  Transport/ Commands/ Parsing/ Models/ Drivers/ (SmartClock, and Nmea/, Uccm/)
+tests/WinZ3805A.Tests/        xUnit, with Fixtures/ for captured status screens and
+                              Nmea/Captures/ and Uccm/Captures/ for the other two families
 tools/NmeaSimulator/          the NMEA 0183 talker the tests and the tutorial run against
-build/                        the gate scripts, the sideload packager, the palette derivation
+tools/UccmSimulator/          the UCCM shapes the driver was written against, before hardware
+build/                        the gate scripts, the four capture and soak harnesses,
+                              the sideload packager, the palette derivation
 .github/workflows/ci.yml      the gates in their own jobs, then the Debug and Release builds and the tests
 ```
 
