@@ -252,33 +252,79 @@ public sealed class UccmVendorDivergenceTests
 
     // ---- 4. the lock byte means different things -------------------------------------------------
 
-    private static string StatusWithLock(int lockState, int date) =>
+    /// <summary>
+    /// A synthesised frame whose leap and PPS bytes match the state it is meant to describe.
+    /// </summary>
+    /// <remarks>
+    /// <b>These used to be hard-coded to 18 and <c>0x60</c> for every row, and that was a bug in the
+    /// fixture rather than a simplification.</b> A leap-second offset and a stable PPS state do not
+    /// exist on a receiver before its first fix, so pinning them on while varying the lock byte
+    /// produced frames no module can emit — a "powering up" row carrying the leap count and a
+    /// settled PPS, which is a contradiction, and a "settling" row that was indistinguishable from
+    /// genuine holdover.
+    /// </remarks>
+    private static string StatusWithLock(int lockState, int date, int leap, int pps) =>
         string.Join(
             ' ',
             Enumerable.Range(0, 44).Select(i => i switch
             {
                 0 => 0xC5,
-                32 => 18,
-                33 => 0x60,
+                32 => leap,
+                33 => pps,
                 34 => 0x04,
                 35 => lockState,
                 36 => date,
                 _ => 0,
             }).Select(v => v.ToString("X2", System.Globalization.CultureInfo.InvariantCulture)));
 
+    /// <summary>
+    /// Each vendor's lock codes, on a frame that is coherent about everything else.
+    /// </summary>
+    /// <remarks>
+    /// <b>The lock byte no longer decides this on its own, and these rows say why.</b> A receiver
+    /// that has locked carries the leap count and a stable PPS; one that has not carries neither.
+    /// The two "settling" rows are therefore the <i>cold</i> reading — the lock byte is the same
+    /// <c>4F</c> or <c>8F</c> a module in holdover shows, and what separates them is the rest of the
+    /// frame, which is the whole of #534's discriminator.
+    /// </remarks>
     [Theory]
-    [InlineData(UccmVendor.Trimble, 0x45, 0x80, SmartClockMode.Locked)]
-    [InlineData(UccmVendor.Trimble, 0x4F, 0x90, SmartClockMode.Recovery)]
-    [InlineData(UccmVendor.Trimble, 0x41, 0x90, SmartClockMode.PowerUp)]
-    [InlineData(UccmVendor.Symmetricom, 0x85, 0x40, SmartClockMode.Locked)]
-    [InlineData(UccmVendor.Symmetricom, 0x8F, 0x50, SmartClockMode.Recovery)]
+    [InlineData(UccmVendor.Trimble, 0x45, 0x80, 18, 0x60, SmartClockMode.Locked)]
+    [InlineData(UccmVendor.Trimble, 0x4F, 0x90, 0, 0x41, SmartClockMode.Recovery)]
+    [InlineData(UccmVendor.Trimble, 0x41, 0x90, 0, 0x41, SmartClockMode.PowerUp)]
+    [InlineData(UccmVendor.Symmetricom, 0x85, 0x40, 18, 0x60, SmartClockMode.Locked)]
+    [InlineData(UccmVendor.Symmetricom, 0x8F, 0x50, 0, 0x41, SmartClockMode.Recovery)]
     public void EachVendorsOwnLockCodesAreReadCorrectly(
-        UccmVendor vendor, int lockState, int date, SmartClockMode expected)
+        UccmVendor vendor, int lockState, int date, int leap, int pps, SmartClockMode expected)
     {
         ReceiverStatus status = UccmStatusParser.Parse(
-            StatusWithLock(lockState, date), Start, new UccmProfile(vendor, UccmVariant.Unknown));
+            StatusWithLock(lockState, date, leap, pps),
+            Start,
+            new UccmProfile(vendor, UccmVariant.Unknown));
 
         Assert.Equal(expected, status.Mode);
+    }
+
+    /// <summary>
+    /// The same lock byte, on a frame that has had a fix, is holdover for both vendors.
+    /// </summary>
+    /// <remarks>
+    /// The complement of the two settling rows above, and the reason they had to be made coherent.
+    /// <c>4F</c> and <c>8F</c> are what each vendor shows both while settling from cold and while
+    /// coasting after a loss of GPS; the lock byte cannot tell those apart and never could. This
+    /// pins that the rest of the frame does.
+    /// </remarks>
+    [Theory]
+    [InlineData(UccmVendor.Trimble, 0x4F, 0x90)]
+    [InlineData(UccmVendor.Symmetricom, 0x8F, 0x50)]
+    public void TheSameSettlingByteOnAFrameThatHasHadAFixIsHoldover(
+        UccmVendor vendor, int lockState, int date)
+    {
+        ReceiverStatus status = UccmStatusParser.Parse(
+            StatusWithLock(lockState, date, leap: 18, pps: 0x60),
+            Start,
+            new UccmProfile(vendor, UccmVariant.Unknown));
+
+        Assert.Equal(SmartClockMode.Holdover, status.Mode);
     }
 
     [Fact]
@@ -289,7 +335,7 @@ public sealed class UccmVendorDivergenceTests
         // working perfectly. Before the vendor is settled, the low nibble - common to both in every
         // value Heather records - carries the state.
         ReceiverStatus status = UccmStatusParser.Parse(
-            StatusWithLock(0x45, 0x80), Start, UccmProfile.Unknown);
+            StatusWithLock(0x45, 0x80, leap: 18, pps: 0x60), Start, UccmProfile.Unknown);
 
         Assert.Equal(SmartClockMode.Locked, status.Mode);
     }
@@ -298,7 +344,7 @@ public sealed class UccmVendorDivergenceTests
     public void AnUnknownLockByteIsUnknownAndNotAGuessAtLocked()
     {
         ReceiverStatus status = UccmStatusParser.Parse(
-            StatusWithLock(0x33, 0x00), Start, UccmProfile.Unknown);
+            StatusWithLock(0x33, 0x00, leap: 0, pps: 0x41), Start, UccmProfile.Unknown);
 
         Assert.Equal(SmartClockMode.Unknown, status.Mode);
     }
@@ -327,7 +373,7 @@ public sealed class UccmVendorDivergenceTests
     public void AVendorThatIsNotYetKnownIsSaidToBeUnknownRatherThanAssumed()
     {
         ReceiverStatus status = UccmStatusParser.Parse(
-            StatusWithLock(0x33, 0x11), Start, UccmProfile.Unknown);
+            StatusWithLock(0x33, 0x11, leap: 0, pps: 0x41), Start, UccmProfile.Unknown);
 
         Assert.Contains(
             status.ParseWarnings,
