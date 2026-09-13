@@ -104,14 +104,38 @@ public sealed record UccmTimeCode
     public bool LeapPending => (PpsState & 0x02) != 0;
 
     /// <summary>The antenna state byte (value 34), undecoded.</summary>
-    /// <remarks>Heather: <c>00</c> at power-up, <c>04</c> normal, <c>0C</c> open or shorted, <c>06</c> normal(?).</remarks>
+    /// <remarks>
+    /// Heather: <c>00</c> at power-up, <c>04</c> normal, <c>0C</c> open or shorted, <c>06</c> normal(?).
+    /// <b>And <c>08</c>, which she does not list</b> — see <see cref="AntennaOk"/>.
+    /// </remarks>
     public int AntennaState { get; private init; }
 
     /// <summary>Whether the antenna reads as connected and healthy.</summary>
+    /// <remarks>
+    /// <para>
+    /// <b><c>0x08</c> was measured on hardware and is in nobody's table.</b> On 13 Sep 2026 a Trimble
+    /// UCCM-P was powered up with no antenna attached and read <c>08</c> — not Heather's <c>0C</c>,
+    /// and not our <c>00</c>. It fell through to null, so the property whose whole purpose is to
+    /// report the antenna answered "unknown" about a module that plainly had none.
+    /// </para>
+    /// <para>
+    /// <b>The two disconnects take different paths, and that is why the value is new rather than a
+    /// mistake.</b> Pulling the antenna from a <i>locked</i> module gives <c>04 → 0C</c>, and
+    /// reconnecting gives <c>0C → 04</c> at once — exactly what Heather documents, and what the
+    /// same bench produced an hour later. Powering up with no antenna gives <c>08</c>, and
+    /// reconnecting from there climbs <c>08 → 00 → 04</c> over about three minutes. Her table
+    /// describes the warm path; the cold path is what nobody had recorded.
+    /// </para>
+    /// <para>
+    /// <c>00</c> stays null deliberately. It is the value during power-up <i>and</i> the value
+    /// while a freshly reconnected antenna is still being validated, so it genuinely means "not yet
+    /// established" rather than either answer.
+    /// </para>
+    /// </remarks>
     public bool? AntennaOk => AntennaState switch
     {
         0x04 or 0x06 => true,
-        0x0C => false,
+        0x08 or 0x0C => false,
         _ => null,
     };
 
@@ -127,6 +151,65 @@ public sealed record UccmTimeCode
     /// <summary>The date-validity byte (value 36), undecoded.</summary>
     /// <remarks>Heather: Symmetricom <c>40</c> valid, <c>50</c>/<c>60</c> invalid; Trimble <c>80</c> valid, <c>90</c> invalid.</remarks>
     public int DateValidityState { get; private init; }
+
+    /// <summary>Whether the receiver's date is currently valid, or null if the vendor is unknown.</summary>
+    /// <remarks>
+    /// Per vendor, because the two families use different values for the same meaning and there is
+    /// no bit in common: Symmetricom reads <c>40</c> valid against <c>50</c> and <c>60</c> invalid,
+    /// Trimble <c>80</c> valid against <c>90</c> invalid. Guessing across the gap is what #418
+    /// exists to prevent, so an unrecognised vendor answers null rather than a coin toss.
+    /// </remarks>
+    public bool? DateValid => SuggestedVendor switch
+    {
+        UccmVendor.Trimble => DateValidityState == 0x80,
+        UccmVendor.Symmetricom => DateValidityState == 0x40,
+        _ => null,
+    };
+
+    /// <summary>
+    /// Whether the receiver is in holdover — it <i>had</i> a GPS reference and has lost it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The lock byte cannot answer this, which is the whole reason this property exists.</b> On
+    /// a Trimble UCCM-P, <see cref="LockState"/> reads <c>4F</c> in genuine holdover and <c>4F</c>
+    /// during a cold settle — the same value for two states §11.1 keeps apart, so any mapping from
+    /// that byte alone must get one of them wrong. <see cref="DateValidityState"/> is no help
+    /// either: it reads <c>90</c> in both.
+    /// </para>
+    /// <para>
+    /// The other three bytes separate them cleanly, and the rule is a statement about history
+    /// rather than a threshold. A leap-second offset and a stable PPS state mean the module
+    /// <i>has had</i> a fix — neither is present before one. An invalid date means it does not have
+    /// one <i>now</i>. Both at once can only describe a receiver that acquired and then lost its
+    /// reference, which is what holdover is. A module that has never locked carries no leap offset
+    /// and a PPS state still settling, so it cannot satisfy this however long it sits there.
+    /// </para>
+    /// <para>
+    /// Measured against the 13 Sep 2026 transition capture — 785 frames spanning eight distinct
+    /// state-byte combinations across a power cycle, a cold acquisition, a lock, fourteen minutes of
+    /// holdover and a warm reacquisition. <b>Exactly one of the eight satisfies it</b>, and it is
+    /// the holdover one. It becomes true within one frame of the antenna being pulled, before the
+    /// antenna byte itself has caught up.
+    /// </para>
+    /// <para>
+    /// Null rather than false when the vendor is unknown, because <see cref="DateValid"/> is, and
+    /// §11.1 would rather say nothing than guess.
+    /// </para>
+    /// </remarks>
+    public bool? InHoldover
+    {
+        get
+        {
+            if (DateValid is not bool valid)
+            {
+                return null;
+            }
+
+            bool hadAFix = LeapSecondOffset is not null && (PpsState & 0xF0) == 0x60;
+            return hadAFix && !valid;
+        }
+    }
 
     /// <summary>
     /// What the lock and date bytes suggest about the vendor, or <see cref="UccmVendor.Unknown"/>.
