@@ -77,7 +77,8 @@ otherwise — and it deliberately contains no company mark.
 > WinZ3805A is a modern Windows application for monitoring and controlling
 > GPS-disciplined oscillators over RS-232. It works with HP and Symmetricom SCPI
 > GPS receivers including the Z3805A, Z3801A, 58503A/B, 59551A and Z3816A, and
-> monitors any GPS receiver that speaks NMEA 0183.
+> monitors any GPS receiver that speaks NMEA 0183 as well as Symmetricom and
+> Trimble UCCM telecom modules.
 >
 > It is built for the way these instruments are actually used: left running on a
 > bench for weeks at a time. The main window is a single glanceable surface —
@@ -125,7 +126,7 @@ is metrology and amateur radio rather than either.
 
 GPSDO, GPS disciplined oscillator, frequency standard, 10 MHz reference, 1 PPS,
 SCPI, RS-232, NMEA 0183, u-blox, time and frequency, Z3805A, Z3801A, 58503A,
-59551A, Thunderbolt alternative, laboratory instrument
+59551A, UCCM, Thunderbolt alternative, laboratory instrument
 
 ### Age rating
 

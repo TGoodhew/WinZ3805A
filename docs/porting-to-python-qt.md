@@ -154,7 +154,7 @@ winz3805a/
 │   ├── commands/                catalog.py, blocked.py, scpi_command.py
 │   ├── parsing/                 status_screen.py, diagnostic_log.py, scalars.py
 │   ├── models/                  receiver_status.py, satellite.py, coordinates.py, …
-│   └── drivers/                 base.py, smartclock.py, nmea/
+│   └── drivers/                 base.py, smartclock.py, nmea/, uccm/ (port last — see Phase 3)
 ├── src/winz3805a/               the application
 │   ├── services/                session, polling, trend_store, preferences, logging
 │   ├── viewmodels/              the 30-odd view models, still Qt-free where possible
@@ -238,12 +238,22 @@ exclusions are not entries with a flag, they do not exist as data. `BlockedComma
 the only file in the repository where those patterns appear, reached solely through an
 `is_blocked(candidate) -> bool` predicate that cannot be enumerated or iterated.
 
-Port both drivers. The NMEA driver is the cheaper one to prove because
-[`tools/NmeaSimulator`](../tools/NmeaSimulator/) can be run against it — port the simulator
-in this phase too, or shell out to the existing C# one.
+**There are three drivers now, not two**, and they are not equally worth porting first. The NMEA
+driver is the cheapest to prove because [`tools/NmeaSimulator`](../tools/NmeaSimulator/) can be run
+against it — port the simulator in this phase too, or shell out to the existing C# one — and
+because ten captures under `tests/WinZ3805A.Tests/Nmea/Captures/` replay cycle by cycle, so a port
+can be held to the same bytes. The SmartClock has its own fixture corpus and is the reason the
+project exists.
+
+**The UCCM driver is the one to port last, or not at all at first.** Most of it is read from a
+third party's source rather than measured, and a port carries the hypotheses across without
+carrying the caveats that make them readable — a second implementation of an unverified belief
+looks like corroboration and is not. If it is ported, port
+`tests/WinZ3805A.Tests/Uccm/Captures/` with it: those bytes are the only thing in that family that
+is evidence.
 
 **Done when:** the catalog tests pass, `is_blocked` rejects every §8.4 pattern, no test
-fixture or docstring anywhere contains one, and both drivers parse their sample streams.
+fixture or docstring anywhere contains one, and each ported driver parses its sample streams.
 
 ### Phase 4 — Session, polling, storage
 

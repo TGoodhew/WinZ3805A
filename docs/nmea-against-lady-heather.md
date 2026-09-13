@@ -20,6 +20,14 @@ was written. Heather has seen wild inputs we have not.
 > two "needs hardware" questions answered without any. **The asymmetry is still real, but it was
 > being overstated by an assumption rather than measured.** What this puck genuinely cannot do is
 > run two constellations at once.
+>
+> *Amended 13 Sep 2026.* **Ten captures now, from two receivers.** A second puck — a forM8N — runs
+> GPS and BeiDou together outdoors, which settled the numbering-collision question this review could
+> only pin by test (#424), and the fix was taken away and given back by a `UBX-CFG-RST` cold start
+> rather than by an RF enclosure, which produced the outage the simulator could only imitate.
+> `GST` and `GBS` were captured by switching them on with `UBX-CFG-MSG` rather than waiting for a
+> receiver that sends them unasked (#516). **The asymmetry narrows again and does not close**: two
+> pucks of one vendor, over a week.
 
 What the review actually found was not what was expected. **Two of the differences are defects in
 Heather**, one is a defect of ours that is now fixed, one is a real limitation of ours that needs
@@ -151,6 +159,22 @@ judgement: a proprietary sentence carries vendor-specific state that this applic
 honest to display, and §7's design is to show what NMEA carries and no more. Adding one would mean a
 surface for one vendor's receiver, which is the shape of decision §13 exists to make deliberately.
 
+> ***Reversed 12 Sep 2026 by #508, and the reversal is narrower than it looks.*** The application
+> now both reads and sends exactly one proprietary sentence: `$PUBX,04`, the same `PUBX` family
+> Heather uses. What changed the judgement was that the sentence is a **poll**, not configuration —
+> it carries GPS − UTC, which is not vendor-specific state but a number every GNSS receiver knows
+> and the standard's sentences happen not to carry — so there *is* somewhere honest to display it,
+> namely the Time page's existing leap-second card, and no vendor-specific surface was added.
+>
+> **The sentence above about the protection is the part worth re-reading.** "Protected by its
+> absence" was a structural guarantee and it is now a policy: `NmeaDriver.IsBlocked` permits one
+> prefix and refuses every other proprietary sentence, `$PUBX,41` — which reconfigures a port —
+> included. §7.1 has not been amended to match and still says a broadcast family is never written
+> to; that is [#543](https://github.com/TGoodhew/WinZ3805A/issues/543).
+>
+> What did **not** change: `PSTI` is still unread, a module is asked only when its own `$GxTXT`
+> banner identified it as u-blox, and nothing is ever sent to configure anything.
+
 ## 6. Malformed input — the habits worth having, and the one we already had
 
 This was expected to be the richest section, on the reasoning that a decade of real-world
@@ -174,10 +198,10 @@ real thing, and the transport rather than the parser is where that belongs.
 | Finding | Outcome |
 |---|---|
 | GSV page accounting conflated constellations | **Fixed**, with tests for both the false alarm and the real one |
-| Satellite numbering collisions across constellations | **Pinned by test, tracked separately** — needs hardware |
+| Satellite numbering collisions across constellations | **Pinned by test, then answered with hardware** — a forM8N tracking GPS and BeiDou outdoors, `form8n-gps-beidou-outdoors` (#424) |
 | `GNS` causes no fix | **Premise corrected**; the enhancement done in #429, and worth more than the altitude — 720 differential fixes were being reported as plain ones |
 | Talkers beyond `GP`/`GN` | **Verified working**, test added for `GL`, `GA`, `GB`, `GQ` |
-| Proprietary sentences | **Decision recorded**: read none, send none |
+| Proprietary sentences | **Decision recorded**: read none, send none — **and reversed for one, `$PUBX,04`, at #508**; see §5's amendment |
 | Malformed input | **Nothing to adopt**; our position is already the stronger one |
 | Heather's `BDRCM` typo and missing `GQ` | **Nothing to do**, recorded as the argument for our design |
 
