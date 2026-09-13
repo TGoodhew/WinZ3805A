@@ -144,8 +144,9 @@ C:\Users\Tony\source\WinZ3805A\
 ├── build/                             Test-*.ps1 — eighteen gates: fifteen over the source
 │   │                                  (§8.4, §9.12, §9.13), two over the documents and one over
 │   │                                  the pull request; Capture-Fixtures.ps1 (the §11.1 harness)
-│   │                                  with Capture-Talker.ps1 and Capture-Uccm.ps1 for the other
-│   │                                  two families, Capture-GuideImages.ps1, Watch-Soak.ps1;
+│   │                                  with Capture-Talker.ps1, Capture-Uccm.ps1 and
+│   │                                  Watch-UccmTransitions.ps1 (#544) for the other two
+│   │                                  families, Capture-GuideImages.ps1, Watch-Soak.ps1;
 │   │                                  the sideload packager, New-SigningSecrets.ps1,
 │   │                                  New-ReleaseNotes.ps1, Invoke-Wack.ps1, New-AppAssets.ps1;
 │   │                                  fluent-stock-colours.txt (§9.4.1's measured stock values)
