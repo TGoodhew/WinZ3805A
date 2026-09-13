@@ -63,11 +63,24 @@ public sealed class NmeaDriver(TimeProvider timeProvider) : IReceiverDriver
     /// The sentences that identify a GNSS talker. Anything else it sends is heard and discarded.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// <b>This set is evidence of what the receiver IS</b>, which is why <c>TXT</c> is not in it —
     /// see <see cref="Kept"/>.
+    /// </para>
+    /// <para>
+    /// <b><c>GST</c> and <c>GBS</c> joined it at #516 and they belong here rather than only in
+    /// <see cref="Kept"/>.</b> Unlike <c>TXT</c> they are not free text: each is a standard sentence
+    /// whose content is a GNSS solution's error statistics, so hearing one is evidence of a GNSS
+    /// talker in exactly the way hearing <c>VTG</c> is. Nothing turns on it in practice — no receiver
+    /// here emits either until asked — but a set whose membership rule is "is this evidence" must not
+    /// acquire exceptions for sentences that are.
+    /// </para>
     /// </remarks>
     private static readonly IReadOnlySet<string> Sentences =
-        new HashSet<string>(StringComparer.Ordinal) { "RMC", "GGA", "GNS", "GSA", "GSV", "ZDA", "GLL", "VTG" };
+        new HashSet<string>(StringComparer.Ordinal)
+        {
+            "RMC", "GGA", "GNS", "GSA", "GSV", "ZDA", "GLL", "VTG", "GST", "GBS",
+        };
 
     /// <summary>
     /// The sentences worth keeping for the parser: <see cref="Sentences"/> plus the banner (#515).
@@ -87,7 +100,10 @@ public sealed class NmeaDriver(TimeProvider timeProvider) : IReceiverDriver
     /// </para>
     /// </remarks>
     private static readonly IReadOnlySet<string> Kept =
-        new HashSet<string>(StringComparer.Ordinal) { "RMC", "GGA", "GNS", "GSA", "GSV", "ZDA", "GLL", "VTG", "TXT" };
+        new HashSet<string>(StringComparer.Ordinal)
+        {
+            "RMC", "GGA", "GNS", "GSA", "GSV", "ZDA", "GLL", "VTG", "GST", "GBS", "TXT",
+        };
 
     private static readonly string[] FastTierOrder =
     [

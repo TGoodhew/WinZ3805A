@@ -330,6 +330,28 @@ public sealed record ReceiverStatus
     public DilutionOfPrecision? Dop { get; init; }
 
     /// <summary>
+    /// How large the receiver believes its position error to be, or <see langword="null"/> if
+    /// unreported (#516).
+    /// </summary>
+    /// <remarks>
+    /// Beside <see cref="Dop"/> rather than inside it, because the two answer different questions
+    /// and reading one as the other is the mistake worth preventing: dilution is geometry and this
+    /// is metres. Null is the ordinary case — it needs a <c>GST</c> sentence, which nothing here
+    /// sends by default.
+    /// </remarks>
+    public PositionUncertainty? Uncertainty { get; init; }
+
+    /// <summary>
+    /// Whether the receiver has flagged a satellite in its solution as faulty, or
+    /// <see langword="null"/> if it did not say (#516).
+    /// </summary>
+    /// <remarks>
+    /// Null and <see cref="IntegrityReport.FaultSuspected"/> being false are different answers, and
+    /// the second is good news. See the remarks on <see cref="IntegrityReport"/>.
+    /// </remarks>
+    public IntegrityReport? Integrity { get; init; }
+
+    /// <summary>
     /// How many satellites went into the fix, which is not how many are tracked (#435).
     /// </summary>
     /// <remarks>

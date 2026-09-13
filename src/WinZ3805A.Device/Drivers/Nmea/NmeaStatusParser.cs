@@ -59,6 +59,8 @@ public static class NmeaStatusParser
         NmeaSentence? gns = null;
         NmeaSentence? gsa = null;
         NmeaSentence? zda = null;
+        NmeaSentence? gst = null;
+        NmeaSentence? gbs = null;
         List<NmeaSentence> gsv = [];
         List<NmeaSentence> txt = [];
 
@@ -92,6 +94,12 @@ public static class NmeaStatusParser
                     break;
                 case "ZDA":
                     zda = sentence;
+                    break;
+                case "GST":
+                    gst = sentence;
+                    break;
+                case "GBS":
+                    gbs = sentence;
                     break;
                 case "GSV":
                     gsv.Add(sentence);
@@ -143,6 +151,8 @@ public static class NmeaStatusParser
             Position = position,
             HeightDatum = position?.HeightMetres is null ? HeightDatum.Unknown : HeightDatum.Msl,
             Dop = Dop(gsa),
+            Uncertainty = Uncertainty(gst),
+            Integrity = Integrity(gbs),
 
             // GGA only. GNS has no satellites-used field, and inventing one from the GSA slots would
             // be counting a different thing — those are the satellites offered to the solution, not
@@ -189,6 +199,83 @@ public static class NmeaStatusParser
         };
 
         return dop.IsEmpty ? null : dop;
+    }
+
+    /// <summary>
+    /// The position error estimates from a <c>GST</c> sentence, or <see langword="null"/> if none
+    /// parsed (#516).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Field 0 is the UTC time and is dropped: the cycle already has a time from RMC, GGA or ZDA,
+    /// and taking a second source for one fact is the mistake this parser has already been bitten by
+    /// once — see <c>Time</c> and the 24-hour error it used to build at midnight.
+    /// </para>
+    /// <para>
+    /// <b>Fields 2, 3 and 4 are empty on both bench receivers</b>, u-blox declining to publish the
+    /// error ellipse, so this routinely returns a record with four of seven values. That is the
+    /// sentence being partly filled rather than misread, which is why each field is read
+    /// independently and none is required.
+    /// </para>
+    /// </remarks>
+    private static PositionUncertainty? Uncertainty(NmeaSentence? gst)
+    {
+        if (gst is null)
+        {
+            return null;
+        }
+
+        PositionUncertainty uncertainty = new()
+        {
+            RangeResidualRmsMetres = ParseDouble(gst.Field(1)),
+            SemiMajorMetres = ParseDouble(gst.Field(2)),
+            SemiMinorMetres = ParseDouble(gst.Field(3)),
+            OrientationDegrees = ParseDouble(gst.Field(4)),
+            LatitudeSigmaMetres = ParseDouble(gst.Field(5)),
+            LongitudeSigmaMetres = ParseDouble(gst.Field(6)),
+            AltitudeSigmaMetres = ParseDouble(gst.Field(7)),
+        };
+
+        return uncertainty.IsEmpty ? null : uncertainty;
+    }
+
+    /// <summary>
+    /// The RAIM report from a <c>GBS</c> sentence, or <see langword="null"/> if none parsed (#516).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>A healthy receiver fills the first three fields and leaves the rest empty</b>, so the
+    /// common case is a record whose <see cref="IntegrityReport.FaultSuspected"/> is false and whose
+    /// <see cref="IntegrityReport.IsEmpty"/> is also false. Those two mean different things and the
+    /// difference is the whole value of the sentence: one is "nothing is wrong", the other is
+    /// "nobody looked".
+    /// </para>
+    /// <para>
+    /// Fields 8 and 9 — the NMEA 4.10 system and signal ids — are read by nothing here. They
+    /// identify which constellation the suspect satellite belongs to, which matters only once a
+    /// suspect exists, and no sitting has produced one to check the decoding against. Guessing at
+    /// them from the standard alone would put an unverified number beside a satellite id on screen.
+    /// </para>
+    /// </remarks>
+    private static IntegrityReport? Integrity(NmeaSentence? gbs)
+    {
+        if (gbs is null)
+        {
+            return null;
+        }
+
+        IntegrityReport integrity = new()
+        {
+            LatitudeErrorMetres = ParseDouble(gbs.Field(1)),
+            LongitudeErrorMetres = ParseDouble(gbs.Field(2)),
+            AltitudeErrorMetres = ParseDouble(gbs.Field(3)),
+            SuspectSatelliteId = ParseInt(gbs.Field(4)),
+            MissedDetectionProbability = ParseDouble(gbs.Field(5)),
+            BiasMetres = ParseDouble(gbs.Field(6)),
+            BiasSigmaMetres = ParseDouble(gbs.Field(7)),
+        };
+
+        return integrity.IsEmpty ? null : integrity;
     }
 
     /// <summary>

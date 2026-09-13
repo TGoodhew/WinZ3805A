@@ -150,4 +150,27 @@ public enum ReceiverReading
     /// a family that states it separately can report it.
     /// </remarks>
     SatellitesUsed,
+
+    // ---- What the fix's own error statistics say, once a receiver is asked for them (#516) -------
+
+    /// <summary>
+    /// The receiver's estimate of its position error, in metres (§10.6).
+    /// </summary>
+    /// <remarks>
+    /// <b>Not <see cref="DilutionOfPrecision"/> in different units.</b> Dilution is geometry and says
+    /// nothing about how noisy the ranging was; this is the error the receiver believes it actually
+    /// has. NMEA carries it in <c>GST</c>; a SmartClock status screen has no field for it, which is
+    /// a reading of the captured screens rather than an assumption.
+    /// </remarks>
+    PositionUncertainty,
+
+    /// <summary>
+    /// Whether a satellite in the solution is believed faulty — RAIM integrity (§10.6).
+    /// </summary>
+    /// <remarks>
+    /// The nearest thing a talker has to the SmartClock's health monitor, and it is about the
+    /// constellation rather than about the receiver's own hardware, so the two are not
+    /// interchangeable. NMEA carries it in <c>GBS</c>.
+    /// </remarks>
+    FixIntegrity,
 }
