@@ -264,12 +264,51 @@ public sealed class NmeaDriver(TimeProvider timeProvider) : IReceiverDriver
     }
 
     /// <summary>
-    /// Nothing is excluded because nothing can be sent: the catalog holds reads only and the
-    /// console offers only the catalog. A talker with proprietary configuration sentences — a
-    /// u-blox's <c>$PUBX</c>, a MediaTek's <c>$PMTK</c> — is protected by their absence, which
-    /// is §8.4's rule applied to a family that has no setters to exclude.
+    /// Every proprietary sentence except the one poll this family is allowed to send (#508).
     /// </summary>
-    public bool IsBlocked(string? header) => false;
+    /// <remarks>
+    /// <para>
+    /// <b>This used to return <see langword="false"/> for everything, and the reason it gave stopped
+    /// being true.</b> It said nothing was excluded because nothing could be sent: the catalog held
+    /// reads only, so a talker's configuration sentences were protected by their absence rather than
+    /// by any rule. That was a <i>structural</i> guarantee — there was no send path, so there was
+    /// nothing to exclude — and #508 removed it by adding one.
+    /// </para>
+    /// <para>
+    /// <b>What replaces it is a policy, and a policy has to be written down and tested.</b> The rule
+    /// is: a proprietary sentence is refused unless it is the exact poll this driver polls with.
+    /// Refusing by prefix rather than naming the dangerous ones is deliberate — §8.4's list cannot
+    /// be enumerated, and more to the point the dangerous ones are not knowable. <c>$PUBX,41</c>
+    /// reconfigures a port and can leave a receiver unreachable at the settings it was found on;
+    /// <c>$PMTK</c> and <c>$PSRF</c> are whole vendor languages nobody here has read. A rule that
+    /// listed what to refuse would be a list of what somebody happened to think of.
+    /// </para>
+    /// <para>
+    /// <b>So the allowance is the exception and everything else is refused</b>, which is the same
+    /// shape as the command catalog being an allowlist rather than a blocklist (§8.1).
+    /// </para>
+    /// <para>
+    /// Standard sentences are not proprietary and are not the business of this predicate: they are
+    /// broadcast, nothing here ever sends one, and the console offers only the catalog.
+    /// </para>
+    /// </remarks>
+    public bool IsBlocked(string? header)
+    {
+        string? wanted = header?.Trim();
+        if (string.IsNullOrEmpty(wanted))
+        {
+            return false;
+        }
+
+        // A proprietary sentence begins "$P" — the standard reserves that prefix for vendors, which
+        // is what makes a prefix rule sound rather than a guess about names.
+        if (!wanted.StartsWith("$P", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return !wanted.StartsWith(NmeaPoll.TimePoll, StringComparison.OrdinalIgnoreCase);
+    }
 
     /// <inheritdoc />
     public TimeSpan TimeoutFor(string? mnemonic) => SilenceTimeout;
