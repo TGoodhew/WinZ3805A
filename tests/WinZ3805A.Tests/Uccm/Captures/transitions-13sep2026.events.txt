@@ -1,0 +1,73 @@
+# Transitions and gaps. Started 2026-09-13 10:02:21 +10:00.
+10:02:23.273  first frame: LockState [35] 0x4F = SETTLING
+10:02:23.309  first frame: GPS seconds 619315254 = 1999-08-22 11:00:54 GPS
+10:02:27.541  probe LED:GPSL? -> 0 | Command complete
+10:02:31.344  probe complete; 2 frame(s) so far
+10:03:03.251  SILENCE - no bytes for 8 s. If this is the power cycle, the gap length is the down time.
+10:03:13.378  DATA RESUMED after 18.2 s of silence - the module is back on the wire.
+10:03:13.378  first frame: LockState [35] 0x4F = SETTLING
+10:03:13.378  first frame: GPS seconds 619315202 = 1999-08-22 11:00:02 GPS
+10:03:27.645  probe LED:GPSL? -> 0 | Command complete
+10:03:31.367  probe complete; 24 frame(s) so far
+10:04:28.182  probe LED:GPSL? -> 0 | Command complete
+10:04:31.971  probe complete; 54 frame(s) so far
+10:05:27.731  probe LED:GPSL? -> 0 | Command complete
+10:05:31.361  probe complete; 84 frame(s) so far
+10:06:21.389      byte34 [34] 0x08 -> 0x00
+10:06:27.822  probe LED:GPSL? -> 0 | Command complete
+10:06:31.634  probe complete; 114 frame(s) so far
+10:07:27.796  probe LED:GPSL? -> 0 | Command complete
+10:07:31.498  probe complete; 144 frame(s) so far
+10:08:27.883  probe LED:GPSL? -> 0 | Command complete
+10:08:31.684  probe complete; 175 frame(s) so far
+10:08:31.835      DateValidity [36] 0x90 -> 0x80
+10:08:38.456      byte32 [32] 0x00 -> 0x12
+10:09:27.954  probe LED:GPSL? -> 1 | Command complete
+10:09:31.781  probe complete; 205 frame(s) so far
+10:09:31.922      byte34 [34] 0x00 -> 0x04
+10:10:28.083  probe LED:GPSL? -> 1 | Command complete
+10:10:31.791  probe complete; 235 frame(s) so far
+10:11:08.573      PpsState [33] 0x41 -> 0x60
+10:11:08.573  *** LockState [35] 0x4F -> 0x45   SETTLING -> LOCKED
+10:11:28.160  probe LED:GPSL? -> 1 | Command complete
+10:11:31.958  probe complete; 265 frame(s) so far
+10:12:28.248  probe LED:GPSL? -> 1 | Command complete
+10:12:32.028  probe complete; 295 frame(s) so far
+10:12:40.470      DateValidity [36] 0x80 -> 0x90
+10:12:40.473  *** LockState [35] 0x45 -> 0x4F   LOCKED -> SETTLING
+10:12:50.537      byte34 [34] 0x04 -> 0x0C
+10:13:28.276  probe LED:GPSL? -> 1 | Command complete
+10:13:31.948  probe complete; 325 frame(s) so far
+10:14:28.311  probe LED:GPSL? -> 1 | Command complete
+10:14:32.012  probe complete; 354 frame(s) so far
+10:15:28.410  probe LED:GPSL? -> 1 | Command complete
+10:15:32.180  probe complete; 384 frame(s) so far
+10:16:28.526  probe LED:GPSL? -> 1 | Command complete
+10:16:32.255  probe complete; 414 frame(s) so far
+10:17:28.655  probe LED:GPSL? -> 1 | Command complete
+10:17:32.284  probe complete; 444 frame(s) so far
+10:18:28.744  probe LED:GPSL? -> 1 | Command complete
+10:18:32.551  probe complete; 474 frame(s) so far
+10:19:28.823  probe LED:GPSL? -> 1 | Command complete
+10:19:32.616  probe complete; 504 frame(s) so far
+10:20:28.916  probe LED:GPSL? -> 1 | Command complete
+10:20:32.661  probe complete; 534 frame(s) so far
+10:21:29.014  probe LED:GPSL? -> 1 | Command complete
+10:21:32.799  probe complete; 564 frame(s) so far
+10:22:29.037  probe LED:GPSL? -> 1 | Command complete
+10:22:32.740  probe complete; 594 frame(s) so far
+10:23:29.138  probe LED:GPSL? -> 1 | Command complete
+10:23:32.886  probe complete; 624 frame(s) so far
+10:24:29.176  probe LED:GPSL? -> .......(.R.. `.............W.....`.O..... | S.1
+10:24:32.944  probe complete; 654 frame(s) so far
+10:25:29.185  probe LED:GPSL? -> 1 | Command complete
+10:25:32.956  probe complete; 684 frame(s) so far
+10:26:29.322  probe LED:GPSL? -> 1 | Command complete
+10:26:33.107  probe complete; 714 frame(s) so far
+10:27:29.361  probe LED:GPSL? -> 1 | Command complete
+10:27:33.016  probe complete; 744 frame(s) so far
+10:28:18.527      byte34 [34] 0x0C -> 0x04
+10:28:26.451      DateValidity [36] 0x90 -> 0x80
+10:28:26.454  *** LockState [35] 0x4F -> 0x45   SETTLING -> LOCKED
+10:28:29.516  probe LED:GPSL? -> 1 | Command complete
+10:28:33.319  probe complete; 774 frame(s) so far

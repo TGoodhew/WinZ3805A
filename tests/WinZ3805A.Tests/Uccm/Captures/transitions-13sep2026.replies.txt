@@ -1,0 +1,1408 @@
+# Probe replies. Started 2026-09-13 10:02:21 +10:00.
+
+===== PROBE at 10:02:26 =====
+---- LED:GPSL?
+0
+Command complete
+UCCM-P >.......(.R.. `.............$..:..A.O........
+---- DIAG:LOOP?
+LINK0: [-1.00E+00]
+DAC_LINK    DAC_AVG    DAC_GPS   FREQ_CORR  LINK_OFF   FREQ_DIFF  FREQ_FRAC
++5.91E-08  -3.00E-07  +5.91E-08  +0.00E+00  -3.59E-07  -3.59E-07  +0.00E+00
+Command complete
+UCCM-P >
+---- :ROSC:HOLD:DUR?
+Command error
+UCCM-P >
+---- :GPS:POS:SURV:STAT?
+Undefined header
+UCCM-P >.......(.R.. `.............$..<..A.O........
+---- :GPS:POS:SURV:PROG?
+Undefined header
+UCCM-P >
+---- SYST:STAT?
+
+-------------------------------------------------------------------------------
+.57964-80     serial number  40896646     firmware ver  2.0.1.6-01 LINK    mode 
+.-------------------------------------------------------------------------------
+.Reference Status __________________________   Reference Outputs _______________
+.XX Ref 8KHz 0: [LOS]                                                           
+.XX Ref 8KHz 1: [LOS]                          TFOM     2            FFOM      3
+.XX Ref 8KHz 2: [LOS]                          UCCM A Status[OCXO WARMUP]       
+.XX Ref 8KHz 3: [LOS]                                                           
+.XX GPS: [No Ref]                                                               
+.ACQUISITION .................................................[GPS 1PPS Invalid]
+.Tracking: 0 ____   Not Tracking: 12 _______   Time ____________________________
+.PRN  El  Az  C/N   PRN  El  Az                GPS      00:01:01 (?) 22 Aug 1999
+.                     3  -- ---                                                 
+.                     8  -- ---                ANT DLY  0 ns                    
+.                    10  -- ---                Position ________________________
+.                    11  -- ---                MODE     Hold                    
+.                    12  -- ---                                                 
+.                    13  -- ---                LAT      S  34:32:39.019         
+.                    27  -- ---                LON      E 150:50:25.107         
+.                     6  -- ---                HGT               +49.72 m (MSL) 
+.                    14  -- ---                                                 
+.                    23  -- ---                                                 
+.                    21  -- ---                                                 
+.                    16  -- ---                                                 
+.ELEV MASK  5 deg                                                               
+.-------------------------------------------------------------------------------
+.
+Command complete
+UCCM-P >.......(.R.. `.............$..>..A.O.....
+..
+
+===== PROBE at 10:03:26 =====
+---- LED:GPSL?
+0
+Command complete
+UCCM-P >.......(.R.. `.............$.....A.O.....w..
+---- DIAG:LOOP?
+LINK0: [-1.00E+00]
+DAC_LINK    DAC_AVG    DAC_GPS   FREQ_CORR  LINK_OFF   FREQ_DIFF  FREQ_FRAC
++5.91E-08  -3.00E-07  +5.91E-08  +0.00E+00  -3.59E-07  -3.59E-07  +0.00E+00
+Command complete
+UCCM-P >
+---- :ROSC:HOLD:DUR?
+Command error
+UCCM-P >
+---- :GPS:POS:SURV:STAT?
+Undefined header
+UCCM-P >.......(.R.. `.............$.....A.O........
+---- :GPS:POS:SURV:PROG?
+Undefined header
+UCCM-P >
+---- SYST:STAT?
+
+-------------------------------------------------------------------------------
+.57964-80     serial number  40896646     firmware ver  2.0.1.6-01 LINK    mode 
+.-------------------------------------------------------------------------------
+.Reference Status __________________________   Reference Outputs _______________
+.XX Ref 8KHz 0: [LOS]                                                           
+.XX Ref 8KHz 1: [LOS]                          TFOM     2            FFOM      3
+.XX Ref 8KHz 2: [LOS]                          UCCM A Status[OCXO WARMUP]       
+.XX Ref 8KHz 3: [LOS]                                                           
+.XX GPS: [No Ref]                                                               
+.ACQUISITION .................................................[GPS 1PPS Invalid]
+.Tracking: 0 ____   Not Tracking: 12 _______   Time ____________________________
+.PRN  El  Az  C/N   PRN  El  Az                GPS      00:00:19 (?) 22 Aug 1999
+.                    15  -- ---                                                 
+.                     4  -- ---                ANT DLY  0 ns                    
+.                    24  -- ---                Position ________________________
+.                    29  -- ---                MODE     Hold                    
+.                     5  -- ---                                                 
+.                    20  -- ---                LAT      S  34:32:39.019         
+.                    22  -- ---                LON      E 150:50:25.107         
+.                     2  -- ---                HGT               +49.72 m (MSL) 
+.                    31  -- ---                                                 
+.                     7  -- ---                                                 
+.                    28  -- ---                                                 
+.                    17  -- ---                                                 
+.ELEV MASK  5 deg                                                               
+.-------------------------------------------------------------------------------
+.
+Command complete
+UCCM-P >
+
+===== PROBE at 10:04:26 =====
+---- LED:GPSL?
+0
+Command complete
+UCCM-P >.......(.R.. `.............$..L..A.O......T.
+---- DIAG:LOOP?
+LINK0: [-1.00E+00]
+DAC_LINK    DAC_AVG    DAC_GPS   FREQ_CORR  LINK_OFF   FREQ_DIFF  FREQ_FRAC
++5.91E-08  -3.00E-07  +5.91E-08  +0.00E+00  -3.59E-07  -3.59E-07  +0.00E+00
+Command complete
+UCCM-P >
+---- :ROSC:HOLD:DUR?
+Command error
+UCCM-P >.......(.R.. `.............$..N..A.O.....z..
+---- :GPS:POS:SURV:STAT?
+Undefined header
+UCCM-P >
+---- :GPS:POS:SURV:PROG?
+Undefined header
+UCCM-P >
+---- SYST:STAT?
+
+-------------------------------------------------------------------------------
+.57964-80     serial number  40896646     firmware ver  2.0.1.6-01 LINK    mode 
+.-------------------------------------------------------------------------------
+.Reference Status __________________________   Reference Outputs _______________
+.XX Ref 8KHz 0: [LOS]                                                           
+.XX Ref 8KHz 1: [LOS]                          TFOM     2            FFOM      3
+.XX Ref 8KHz 2: [LOS]                          UCCM A Status[OCXO WARMUP]       
+.XX Ref 8KHz 3: [LOS]                                                           
+.XX GPS: [No Ref]                                                               
+.ACQUISITION .................................................[GPS 1PPS Invalid]
+.Tracking: 0 ____   Not Tracking: 12 _______   Time ____________________________
+.PRN  El  Az  C/N   PRN  El  Az                GPS      00:01:19 (?) 22 Aug 1999
+.                     5  -- ---                                                 
+.                     8  -- ---                ANT DLY  0 ns                    
+.                    10  -- ---                Position ________________________
+.                    11  -- ---                MODE     Hold                    
+.                    12  -- ---                                                 
+.                    13  -- ---                LAT      S  34:32:39.019         
+.                    30  -- ---                LON      E 150:50:25.107         
+.                    32  -- ---                HGT               +49.72 m (MSL) 
+.                     1  -- ---                                                 
+.                    18  -- ---                                                 
+.                    26  -- ---                                                 
+.                    29  -- ---                                                 
+.ELEV MASK  5 deg                                                               
+.-------------------------------------------------------------------------------
+.
+Command complete
+UCCM-P >.......(.R.. `.............$..P..A.O.....\m.
+
+===== PROBE at 10:05:27 =====
+---- LED:GPSL?
+0
+Command complete
+UCCM-P >.......(.R.. `.............$.....A.O.....0.
+---- DIAG:LOOP?
+LINK0: [-1.00E+00]
+DAC_LINK    DAC_AVG    DAC_GPS   FREQ_CORR  LINK_OFF   FREQ_DIFF  FREQ_FRAC
++5.91E-08  -3.00E-07  +5.91E-08  +0.00E+00  -3.59E-07  -3.59E-07  +0.00E+00
+Command complete
+UCCM-P >
+---- :ROSC:HOLD:DUR?
+Command error
+UCCM-P >
+---- :GPS:POS:SURV:STAT?
+Undefined header
+UCCM-P >.......(.R.. `.............$.....A.O........
+---- :GPS:POS:SURV:PROG?
+Undefined header
+UCCM-P >
+---- SYST:STAT?
+
+-------------------------------------------------------------------------------
+.57964-80     serial number  40896646     firmware ver  2.0.1.6-01 LINK    mode 
+.-------------------------------------------------------------------------------
+.Reference Status __________________________   Reference Outputs _______________
+.XX Ref 8KHz 0: [LOS]                                                           
+.XX Ref 8KHz 1: [LOS]                          TFOM     2            FFOM      3
+.XX Ref 8KHz 2: [LOS]                          UCCM A Status[OCXO WARMUP]       
+.XX Ref 8KHz 3: [LOS]                                                           
+.XX GPS: [No Ref]                                                               
+.ACQUISITION .................................................[GPS 1PPS Invalid]
+.Tracking: 0 ____   Not Tracking: 12 _______   Time ____________________________
+.PRN  El  Az  C/N   PRN  El  Az                GPS      00:02:19 (?) 22 Aug 1999
+.                    25  -- ---                                                 
+.                    19  -- ---                ANT DLY  0 ns                    
+.                    27  -- ---                Position ________________________
+.                     6  -- ---                MODE     Hold                    
+.                    14  -- ---                                                 
+.                     1  -- ---                LAT      S  34:32:39.019         
+.                    18  -- ---                LON      E 150:50:25.107         
+.                    26  -- ---                HGT               +49.72 m (MSL) 
+.                    29  -- ---                                                 
+.                     5  -- ---                                                 
+.                    20  -- ---                                                 
+.                     9  -- ---                                                 
+.ELEV MASK  5 deg                                                               
+.-------------------------------------------------------------------------------
+.
+Command complete
+UCCM-P >
+
+===== PROBE at 10:06:27 =====
+---- LED:GPSL?
+0
+Command complete
+UCCM-P >.......(.R.. `.............$.....A.O.....z
+.
+---- DIAG:LOOP?
+LINK0: [-1.00E+00]
+DAC_LINK    DAC_AVG    DAC_GPS   FREQ_CORR  LINK_OFF   FREQ_DIFF  FREQ_FRAC
++5.91E-08  -3.00E-07  +5.91E-08  +0.00E+00  -3.59E-07  -3.59E-07  +0.00E+00
+Command complete
+UCCM-P >
+---- :ROSC:HOLD:DUR?
+Command error
+UCCM-P >
+---- :GPS:POS:SURV:STAT?
+Undefined header
+UCCM-P >.......(.R.. `.............$.....A.O........
+---- :GPS:POS:SURV:PROG?
+Undefined header
+UCCM-P >
+---- SYST:STAT?
+
+-------------------------------------------------------------------------------
+.57964-80     serial number  40896646     firmware ver  2.0.1.6-01 LINK    mode 
+.-------------------------------------------------------------------------------
+.Reference Status __________________________   Reference Outputs _______________
+.XX Ref 8KHz 0: [LOS]                                                           
+.XX Ref 8KHz 1: [LOS]                          TFOM     2            FFOM      3
+.XX Ref 8KHz 2: [LOS]                          UCCM A Status[OCXO WARMUP]       
+.XX Ref 8KHz 3: [LOS]                                                           
+.>> GPS: [phase:+0.0E+00, settling]                                             
+.ACQUISITION .................................................[GPS 1PPS Invalid]
+.Tracking: 0 ____   Not Tracking: 12 _______   Time ____________________________
+.PRN  El  Az  C/N   PRN  El  Az                GPS      00:03:19 (?) 22 Aug 1999
+.                    30  -- ---                                                 
+.                    32  -- ---                ANT DLY  0 ns                    
+.                     1  -- ---                Position ________________________
+.                    18  -- ---                MODE     Hold                    
+.                    26  -- ---                                                 
+.                    29  -- ---                LAT      S  34:32:39.019         
+.                     5  -- ---                LON      E 150:50:25.107         
+.                    20  -- ---                HGT               +49.72 m (MSL) 
+.                    10  -- ---                                                 
+.                    11  -- ---                                                 
+.                    12  -- ---                                                 
+.                    13  -- ---                                                 
+.ELEV MASK  5 deg                                                               
+.-------------------------------------------------------------------------------
+.
+Command complete
+UCCM-P >.......(.R.. `.............$.....A.O.....l..
+
+===== PROBE at 10:07:27 =====
+---- LED:GPSL?
+0
+Command complete
+UCCM-P >.......(.R.. `.............$.....A.O.....U..
+---- DIAG:LOOP?
+LINK0: [-1.00E+00]
+DAC_LINK    DAC_AVG    DAC_GPS   FREQ_CORR  LINK_OFF   FREQ_DIFF  FREQ_FRAC
++5.91E-08  -3.00E-07  +5.91E-08  +0.00E+00  -3.59E-07  -3.59E-07  +0.00E+00
+Command complete
+UCCM-P >
+---- :ROSC:HOLD:DUR?
+Command error
+UCCM-P >
+---- :GPS:POS:SURV:STAT?
+Undefined header
+UCCM-P >.......(.R.. `.............$.....A.O......P.
+---- :GPS:POS:SURV:PROG?
+Undefined header
+UCCM-P >
+---- SYST:STAT?
+
+-------------------------------------------------------------------------------
+.57964-80     serial number  40896646     firmware ver  2.0.1.6-01 LINK    mode 
+.-------------------------------------------------------------------------------
+.Reference Status __________________________   Reference Outputs _______________
+.XX Ref 8KHz 0: [LOS]                                                           
+.XX Ref 8KHz 1: [LOS]                          TFOM     2            FFOM      3
+.XX Ref 8KHz 2: [LOS]                          UCCM A Status[OCXO WARMUP]       
+.XX Ref 8KHz 3: [LOS]                                                           
+.>> GPS: [phase:+0.0E+00, settling]                                             
+.ACQUISITION .................................................[GPS 1PPS Invalid]
+.Tracking: 0 ____   Not Tracking: 12 _______   Time ____________________________
+.PRN  El  Az  C/N   PRN  El  Az                GPS      00:04:19 (?) 22 Aug 1999
+.                     1  -- ---                                                 
+.                    18  -- ---                ANT DLY  0 ns                    
+.                    17  -- ---                Position ________________________
+.                    26  -- ---                MODE     Hold                    
+.                    24  -- ---                                                 
+.                    29  -- ---                LAT      S  34:32:39.019         
+.                     5  -- ---                LON      E 150:50:25.107         
+.                    19  -- ---                HGT               +49.72 m (MSL) 
+.                    22  -- ---                                                 
+.                     6  -- ---                                                 
+.                    27  -- ---                                                 
+.                    14  -- ---                                                 
+.ELEV MASK  5 deg                                                               
+.-------------------------------------------------------------------------------
+.
+Command complete
+UCCM-P >.......(.R.. `.............$.....A.O......7.
+
+===== PROBE at 10:08:27 =====
+---- LED:GPSL?
+0
+Command complete
+UCCM-P >
+---- DIAG:LOOP?
+LINK0: [-1.00E+00]
+DAC_LINK    DAC_AVG    DAC_GPS   FREQ_CORR  LINK_OFF   FREQ_DIFF  FREQ_FRAC
++5.91E-08  -3.00E-07  +5.91E-08  +0.00E+00  -3.59E-07  -3.59E-07  +0.00E+00
+Command complete
+UCCM-P >.......(.R.. `.............W.....A.O........
+---- :ROSC:HOLD:DUR?
+Command error
+UCCM-P >
+---- :GPS:POS:SURV:STAT?
+Undefined header
+UCCM-P >
+---- :GPS:POS:SURV:PROG?
+Undefined header
+UCCM-P >.......(.R.. `.............W.....A.O.....*..
+---- SYST:STAT?
+
+-------------------------------------------------------------------------------
+.57964-80     serial number  40896646     firmware ver  2.0.1.6-01 LINK    mode 
+.-------------------------------------------------------------------------------
+.Reference Status __________________________   Reference Outputs _______________
+.XX Ref 8KHz 0: [LOS]                                                           
+.XX Ref 8KHz 1: [LOS]                          TFOM     8            FFOM      3
+.XX Ref 8KHz 2: [LOS]                          UCCM A Status[OCXO WARMUP]       
+.XX Ref 8KHz 3: [LOS]                                                           
+.>> GPS: [phase:-9.1E-01, settling]                                             
+.ACQUISITION ...................................................[GPS 1PPS Valid]
+.Tracking: 5 ____   Not Tracking: 7 ________   Time ____________________________
+.PRN  El  Az  C/N   PRN  El  Az                GPS      00:08:48     13 Sep 2026
+. 17  27 129   37    18  -- ---                                                 
+. 24  54 263   39    11  -- ---                ANT DLY  0 ns                    
+. 19  56 146   40    12  -- ---                Position ________________________
+. 22  33  88   36    13  -- ---                MODE     Hold                    
+.  6  63  65   42    30  -- ---                                                 
+.                    32  -- ---                LAT      S  34:32:39.019         
+.                     1  -- ---                LON      E 150:50:25.107         
+.                                              HGT               +49.72 m (MSL) 
+.                                                                               
+.                                                                               
+.                                                                               
+.                                                                               
+.ELEV MASK  5 deg                                                               
+.-------------------------------------------------------------------------------
+.
+Command complete
+UCCM-P >
+
+===== PROBE at 10:09:27 =====
+---- LED:GPSL?
+1
+Command complete
+UCCM-P >
+---- DIAG:LOOP?
+LINK0: [-1.00E+00]
+DAC_LINK    DAC_AVG    DAC_GPS   FREQ_CORR  LINK_OFF   FREQ_DIFF  FREQ_FRAC
++5.91E-08  -3.00E-07  +5.91E-08  +0.00E+00  -3.59E-07  -3.59E-07  +0.00E+00
+Command complete
+UCCM-P >.......(.R.. `.............W..J..A.O.....Fa.
+---- :ROSC:HOLD:DUR?
+Command error
+UCCM-P >
+---- :GPS:POS:SURV:STAT?
+Undefined header
+UCCM-P >
+---- :GPS:POS:SURV:PROG?
+Undefined header
+UCCM-P >.......(.R.. `.............W..L..A.O.....M..
+---- SYST:STAT?
+
+-------------------------------------------------------------------------------
+.57964-80     serial number  40896646     firmware ver  2.0.1.6-01 LINK    mode 
+.-------------------------------------------------------------------------------
+.Reference Status __________________________   Reference Outputs _______________
+.XX Ref 8KHz 0: [LOS]                                                           
+.XX Ref 8KHz 1: [LOS]                          TFOM     2            FFOM      3
+.XX Ref 8KHz 2: [LOS]                          UCCM A Status[OCXO WARMUP]       
+.XX Ref 8KHz 3: [LOS]                                                           
+.>> GPS: [phase:-4.7E-07, settling]                                             
+.ACQUISITION ...................................................[GPS 1PPS Valid]
+.Tracking: 5 ____   Not Tracking: 7 ________   Time ____________________________
+.PRN  El  Az  C/N   PRN  El  Az                GPS      00:09:48     13 Sep 2026
+. 17  26 129   35    13  -- ---                                                 
+. 24  54 263   38     4  -- ---                ANT DLY  0 ns                    
+. 19  56 146   39     9  -- ---                Position ________________________
+. 22  33  87   34    25  -- ---                MODE     Hold                    
+.  6  63  66   41    10  -- ---                                                 
+.                    11  -- ---                LAT      S  34:32:39.019         
+.                    12  -- ---                LON      E 150:50:25.107         
+.                                              HGT               +49.72 m (MSL) 
+.                                                                               
+.                                                                               
+.                                                                               
+.                                                                               
+.ELEV MASK  5 deg                                                               
+.-------------------------------------------------------------------------------
+.
+Command complete
+UCCM-P >
+
+===== PROBE at 10:10:27 =====
+---- LED:GPSL?
+1
+Command complete
+UCCM-P >
+---- DIAG:LOOP?
+LINK0: [-1.00E+00]
+DAC_LINK    DAC_AVG    DAC_GPS   FREQ_CORR  LINK_OFF   FREQ_DIFF  FREQ_FRAC
++5.91E-08  -3.00E-07  +5.91E-08  +0.00E+00  -3.59E-07  -3.59E-07  +0.00E+00
+Command complete
+UCCM-P >.......(.R.. `.............W.....A.O.....,n.
+---- :ROSC:HOLD:DUR?
+Command error
+UCCM-P >
+---- :GPS:POS:SURV:STAT?
+Undefined header
+UCCM-P >
+---- :GPS:POS:SURV:PROG?
+Undefined header
+UCCM-P >.......(.R.. `.............W.....A.O......b.
+---- SYST:STAT?
+
+-------------------------------------------------------------------------------
+.57964-80     serial number  40896646     firmware ver  2.0.1.6-01 LINK    mode 
+.-------------------------------------------------------------------------------
+.Reference Status __________________________   Reference Outputs _______________
+.XX Ref 8KHz 0: [LOS]                                                           
+.XX Ref 8KHz 1: [LOS]                          TFOM     3            FFOM      3
+.XX Ref 8KHz 2: [LOS]                          UCCM A Status[OCXO WARMUP]       
+.XX Ref 8KHz 3: [LOS]                                                           
+.>> GPS: [phase:-6.6E-06, settling]                                             
+.ACQUISITION ...................................................[GPS 1PPS Valid]
+.Tracking: 6 ____   Not Tracking: 6 ________   Time ____________________________
+.PRN  El  Az  C/N   PRN  El  Az                GPS      00:10:48     13 Sep 2026
+. 17  26 129   37    15  -- ---                                                 
+. 24  54 264   39     9  -- ---                ANT DLY  0 ns                    
+. 19  56 146   39    25  -- ---                Position ________________________
+. 22  32  87   34     7  -- ---                MODE     Hold                    
+.  6  64  67   42    28  -- ---                                                 
+. 11  45   5   40     4  -- ---                LAT      S  34:32:39.019         
+.                                              LON      E 150:50:25.107         
+.                                              HGT               +49.72 m (MSL) 
+.                                                                               
+.                                                                               
+.                                                                               
+.                                                                               
+.ELEV MASK  5 deg                                                               
+.-------------------------------------------------------------------------------
+.
+Command complete
+UCCM-P >
+
+===== PROBE at 10:11:27 =====
+---- LED:GPSL?
+1
+Command complete
+UCCM-P >
+---- DIAG:LOOP?
+LINK0: [-1.00E+00]
+DAC_LINK    DAC_AVG    DAC_GPS   FREQ_CORR  LINK_OFF   FREQ_DIFF  FREQ_FRAC
++5.91E-08  +6.01E-08  +5.91E-08  +0.00E+00  +1.01E-09  +1.01E-09  +0.00E+00
+Command complete
+UCCM-P >.......(.R.. `.............W.....`.E.....g..
+---- :ROSC:HOLD:DUR?
+Command error
+UCCM-P >
+---- :GPS:POS:SURV:STAT?
+Undefined header
+UCCM-P >
+---- :GPS:POS:SURV:PROG?
+.......(.R.. `.............W.....`.E.....l..Undefined header
+UCCM-P >
+---- SYST:STAT?
+
+-------------------------------------------------------------------------------
+.57964-80     serial number  40896646     firmware ver  2.0.1.6-01 LINK    mode 
+.-------------------------------------------------------------------------------
+.Reference Status __________________________   Reference Outputs _______________
+.XX Ref 8KHz 0: [LOS]                                                           
+.XX Ref 8KHz 1: [LOS]                          TFOM     3            FFOM      0
+.XX Ref 8KHz 2: [LOS]                          UCCM A Status[ACTIVE]            
+.XX Ref 8KHz 3: [LOS]                                                           
+.>> GPS: [phase:+1.1E-06]                                                       
+.ACQUISITION ...................................................[GPS 1PPS Valid]
+.Tracking: 6 ____   Not Tracking: 6 ________   Time ____________________________
+.PRN  El  Az  C/N   PRN  El  Az                GPS      00:11:48     13 Sep 2026
+. 17  25 129   35     2  -- ---                                                 
+. 24  54 265   38     7  -- ---                ANT DLY  0 ns                    
+. 19  55 145   40    28  -- ---                Position ________________________
+. 22  32  87   32    15  -- ---                MODE     Hold                    
+.  6  64  68   43     4  -- ---                                                 
+. 11  46   6   40    31  -- ---                LAT      S  34:32:39.019         
+.                                              LON      E 150:50:25.107         
+.                                              HGT               +49.72 m (MSL) 
+.                                                                               
+.                                                                               
+.                                                                               
+.                                                                               
+.ELEV MASK  5 deg                                                               
+.-------------------------------------------------------------------------------
+.
+Command complete
+UCCM-P >
+
+===== PROBE at 10:12:27 =====
+---- LED:GPSL?
+1
+Command complete
+UCCM-P >
+---- DIAG:LOOP?
+LINK0: [-1.00E+00]
+DAC_LINK    DAC_AVG    DAC_GPS   FREQ_CORR  LINK_OFF   FREQ_DIFF  FREQ_FRAC
++5.91E-08  +5.98E-08  +5.91E-08  +0.00E+00  +7.18E-10  +7.18E-10  +0.00E+00
+Command complete
+UCCM-P >.......(.R.. `.............W.....`.E.....*).
+---- :ROSC:HOLD:DUR?
+Command error
+UCCM-P >
+---- :GPS:POS:SURV:STAT?
+Undefined header
+UCCM-P >.......(.R.. `.............W.....`.E.....C .
+---- :GPS:POS:SURV:PROG?
+Undefined header
+UCCM-P >
+---- SYST:STAT?
+
+-------------------------------------------------------------------------------
+.57964-80     serial number  40896646     firmware ver  2.0.1.6-01 LINK    mode 
+.-------------------------------------------------------------------------------
+.Reference Status __________________________   Reference Outputs _______________
+.XX Ref 8KHz 0: [LOS]                                                           
+.XX Ref 8KHz 1: [LOS]                          TFOM     2            FFOM      0
+.XX Ref 8KHz 2: [LOS]                          UCCM A Status[ACTIVE]            
+.XX Ref 8KHz 3: [LOS]                                                           
+.>> GPS: [phase:+4.5E-07]                                                       
+.ACQUISITION ...................................................[GPS 1PPS Valid]
+.Tracking: 5 ____   Not Tracking: 7 ________   Time ____________________________
+.PRN  El  Az  C/N   PRN  El  Az                GPS      00:12:48     13 Sep 2026
+. 17  25 129   36    28  -- ---                                                 
+. 24  54 266   39     5  -- ---                ANT DLY  0 ns                    
+. 19  55 145   40     2  -- ---                Position ________________________
+.  6  64  70   42    31  -- ---                MODE     Hold                    
+. 11  46   6   39     7  -- ---                                                 
+.                    22  32  86                LAT      S  34:32:39.019         
+.                    15  -- ---                LON      E 150:50:25.107         
+.                                              HGT               +49.72 m (MSL) 
+.                                                                               
+.                                                                               
+.                                                                               
+.                                                                               
+.ELEV MASK  5 deg                                                               
+.-------------------------------------------------------------------------------
+.
+Command complete
+UCCM-P >
+
+===== PROBE at 10:13:27 =====
+---- LED:GPSL?
+1
+Command complete
+UCCM-P >
+---- DIAG:LOOP?
+LINK0: [-1.00E+00]
+DAC_LINK    DAC_AVG    DAC_GPS   FREQ_CORR  LINK_OFF   FREQ_DIFF  FREQ_FRAC
++5.91E-08  +5.98E-08  +5.91E-08  +0.00E+00  +6.80E-10  +6.80E-10  +0.00E+00
+Command complete
+UCCM-P >.......(.R.. `.............W..:..`.O........
+---- :ROSC:HOLD:DUR?
+Command error
+UCCM-P >
+---- :GPS:POS:SURV:STAT?
+Undefined header
+UCCM-P >.......(.R.. `.............W..<.
+---- :GPS:POS:SURV:PROG?
+Undefined header
+UCCM-P >
+---- SYST:STAT?
+
+-------------------------------------------------------------------------------
+.57964-80     serial number  40896646     firmware ver  2.0.1.6-01 LINK    mode 
+.-------------------------------------------------------------------------------
+.Reference Status __________________________   Reference Outputs _______________
+.XX Ref 8KHz 0: [LOS]                                                           
+.XX Ref 8KHz 1: [LOS]                          TFOM     2            FFOM      2
+.XX Ref 8KHz 2: [LOS]                          UCCM A Status[ACTIVE]            
+.XX Ref 8KHz 3: [LOS]                                                           
+.XX GPS: [No Ref]                                                               
+.ACQUISITION ...................................................[GPS 1PPS Valid]
+.Tracking: 0 ____   Not Tracking: 12 _______   Time ____________________________
+.PRN  El  Az  C/N   PRN  El  Az                GPS      00:13:48 (?) 13 Sep 2026
+.                    26  -- ---                                                 
+.                     5  -- ---                ANT DLY  0 ns                    
+.                    17  25 128                Position ________________________
+.                    30  -- ---                MODE     Hold                    
+.                    24  54 267                                                 
+.                    32  -- ---                LAT      S  34:32:39.019         
+.                     1  -- ---                LON      E 150:50:25.107         
+.                    19  54 145                HGT               +49.72 m (MSL) 
+.                    22  32  86                                                 
+.                     6  64  71                                                 
+.                    11  47   6                                                 
+.                    29  -- ---                                                 
+.ELEV MASK  5 deg                                                               
+.-------------------------------------------------------------------------------
+.
+Command complete
+UCCM-P >
+
+===== PROBE at 10:14:27 =====
+---- LED:GPSL?
+1
+Command complete
+UCCM-P >
+---- DIAG:LOOP?
+LINK0: [-1.00E+00]
+DAC_LINK    DAC_AVG    DAC_GPS   FREQ_CORR  LINK_OFF   FREQ_DIFF  FREQ_FRAC
++5.91E-08  +5.98E-08  +5.91E-08  +0.00E+00  +6.80E-10  +6.80E-10  +0.00E+00
+Command complete
+UCCM-P >.......(.R.. `.............W..v..`.O........
+---- :ROSC:HOLD:DUR?
+Command error
+UCCM-P >
+---- :GPS:POS:SURV:STAT?
+Undefined header
+UCCM-P >.......(.R.. `.............W..x..`.O.....@..
+---- :GPS:POS:SURV:PROG?
+Undefined header
+UCCM-P >
+---- SYST:STAT?
+
+-------------------------------------------------------------------------------
+.57964-80     serial number  40896646     firmware ver  2.0.1.6-01 LINK    mode 
+.-------------------------------------------------------------------------------
+.Reference Status __________________________   Reference Outputs _______________
+.XX Ref 8KHz 0: [LOS]                                                           
+.XX Ref 8KHz 1: [LOS]                          TFOM     2            FFOM      2
+.XX Ref 8KHz 2: [LOS]                          UCCM A Status[ACTIVE]            
+.XX Ref 8KHz 3: [LOS]                                                           
+.XX GPS: [No Ref]                                                               
+.ACQUISITION ...................................................[GPS 1PPS Valid]
+.Tracking: 0 ____   Not Tracking: 12 _______   Time ____________________________
+.PRN  El  Az  C/N   PRN  El  Az                GPS      00:14:48 (?) 13 Sep 2026
+.                    25  -- ---                                                 
+.                    14  -- ---                ANT DLY  0 ns                    
+.                    17  24 128                Position ________________________
+.                    15  -- ---                MODE     Hold                    
+.                    24  54 267                                                 
+.                     4  -- ---                LAT      S  34:32:39.019         
+.                     9  -- ---                LON      E 150:50:25.107         
+.                    19  54 144                HGT               +49.72 m (MSL) 
+.                    22  31  85                                                 
+.                     6  64  72                                                 
+.                    11  47   6                                                 
+.                    27  -- ---                                                 
+.ELEV MASK  5 deg                                                               
+.-------------------------------------------------------------------------------
+.
+Command complete
+UCCM-P >
+
+===== PROBE at 10:15:27 =====
+---- LED:GPSL?
+1
+Command complete
+UCCM-P >
+---- DIAG:LOOP?
+.......(.R.. `.............W.....`.O.....!..LINK0: [-1.00E+00]
+DAC_LINK    DAC_AVG    DAC_GPS   FREQ_CORR  LINK_OFF   FREQ_DIFF  FREQ_FRAC
++5.91E-08  +5.98E-08  +5.91E-08  +0.00E+00  +6.80E-10  +6.80E-10  +0.00E+00
+Command complete
+UCCM-P >
+---- :ROSC:HOLD:DUR?
+Command error
+UCCM-P >
+---- :GPS:POS:SURV:STAT?
+Undefined header
+UCCM-P >.......(.R.. `.............W.....`.O.....*..
+---- :GPS:POS:SURV:PROG?
+Undefined header
+UCCM-P >
+---- SYST:STAT?
+
+-------------------------------------------------------------------------------
+.57964-80     serial number  40896646     firmware ver  2.0.1.6-01 LINK    mode 
+.-------------------------------------------------------------------------------
+.Reference Status __________________________   Reference Outputs _______________
+.XX Ref 8KHz 0: [LOS]                                                           
+.XX Ref 8KHz 1: [LOS]                          TFOM     2            FFOM      2
+.XX Ref 8KHz 2: [LOS]                          UCCM A Status[ACTIVE]            
+.XX Ref 8KHz 3: [LOS]                                                           
+.XX GPS: [No Ref]                                                               
+.ACQUISITION ...................................................[GPS 1PPS Valid]
+.Tracking: 0 ____   Not Tracking: 12 _______   Time ____________________________
+.PRN  El  Az  C/N   PRN  El  Az                GPS      00:15:48 (?) 13 Sep 2026
+.                     8  -- ---                                                 
+.                    26  -- ---                ANT DLY  0 ns                    
+.                    17  24 128                Position ________________________
+.                    29  -- ---                MODE     Hold                    
+.                    24  54 268                                                 
+.                     5  -- ---                LAT      S  34:32:39.019         
+.                     3  -- ---                LON      E 150:50:25.107         
+.                    19  54 144                HGT               +49.72 m (MSL) 
+.                    22  31  85                                                 
+.                     6  65  73                                                 
+.                    11  48   6                                                 
+.                     1  -- ---                                                 
+.ELEV MASK  5 deg                                                               
+.-------------------------------------------------------------------------------
+.
+Command complete
+UCCM-P >
+
+===== PROBE at 10:16:27 =====
+---- LED:GPSL?
+1
+Command complete
+UCCM-P >.......(.R.. `.............W.....`.O......E.
+---- DIAG:LOOP?
+LINK0: [-1.00E+00]
+DAC_LINK    DAC_AVG    DAC_GPS   FREQ_CORR  LINK_OFF   FREQ_DIFF  FREQ_FRAC
++5.91E-08  +5.98E-08  +5.91E-08  +0.00E+00  +6.80E-10  +6.80E-10  +0.00E+00
+Command complete
+UCCM-P >
+---- :ROSC:HOLD:DUR?
+Command error
+UCCM-P >
+---- :GPS:POS:SURV:STAT?
+Undefined header
+UCCM-P >.......(.R.. `.............W.....`.O........
+---- :GPS:POS:SURV:PROG?
+Undefined header
+UCCM-P >
+---- SYST:STAT?
+
+-------------------------------------------------------------------------------
+.57964-80     serial number  40896646     firmware ver  2.0.1.6-01 LINK    mode 
+.-------------------------------------------------------------------------------
+.Reference Status __________________________   Reference Outputs _______________
+.XX Ref 8KHz 0: [LOS]                                                           
+.XX Ref 8KHz 1: [LOS]                          TFOM     2            FFOM      2
+.XX Ref 8KHz 2: [LOS]                          UCCM A Status[ACTIVE]            
+.XX Ref 8KHz 3: [LOS]                                                           
+.XX GPS: [No Ref]                                                               
+.ACQUISITION ...................................................[GPS 1PPS Valid]
+.Tracking: 0 ____   Not Tracking: 12 _______   Time ____________________________
+.PRN  El  Az  C/N   PRN  El  Az                GPS      00:16:48 (?) 13 Sep 2026
+.                     5  -- ---                                                 
+.                    31  -- ---                ANT DLY  0 ns                    
+.                    17  24 128                Position ________________________
+.                     7  -- ---                MODE     Hold                    
+.                    24  54 269                                                 
+.                    28  -- ---                LAT      S  34:32:39.019         
+.                    15  -- ---                LON      E 150:50:25.107         
+.                    19  53 144                HGT               +49.72 m (MSL) 
+.                    22  31  84                                                 
+.                     6  65  74                                                 
+.                    11  48   6                                                 
+.                     2  -- ---                                                 
+.ELEV MASK  5 deg                                                               
+.-------------------------------------------------------------------------------
+.
+Command complete
+UCCM-P >
+
+===== PROBE at 10:17:27 =====
+---- LED:GPSL?
+1
+Command complete
+UCCM-P >.......(.R.. `.............W..*..`.O........
+---- DIAG:LOOP?
+LINK0: [-1.00E+00]
+DAC_LINK    DAC_AVG    DAC_GPS   FREQ_CORR  LINK_OFF   FREQ_DIFF  FREQ_FRAC
++5.91E-08  +5.98E-08  +5.91E-08  +0.00E+00  +6.80E-10  +6.80E-10  +0.00E+00
+Command complete
+UCCM-P >
+---- :ROSC:HOLD:DUR?
+Command error
+UCCM-P >
+---- :GPS:POS:SURV:STAT?
+Undefined header
+UCCM-P >.......(.R.. `.............W..,..`.O......c.
+---- :GPS:POS:SURV:PROG?
+Undefined header
+UCCM-P >
+---- SYST:STAT?
+
+-------------------------------------------------------------------------------
+.57964-80     serial number  40896646     firmware ver  2.0.1.6-01 LINK    mode 
+.-------------------------------------------------------------------------------
+.Reference Status __________________________   Reference Outputs _______________
+.XX Ref 8KHz 0: [LOS]                                                           
+.XX Ref 8KHz 1: [LOS]                          TFOM     2            FFOM      2
+.XX Ref 8KHz 2: [LOS]                          UCCM A Status[ACTIVE]            
+.XX Ref 8KHz 3: [LOS]                                                           
+.XX GPS: [No Ref]                                                               
+.ACQUISITION ...................................................[GPS 1PPS Valid]
+.Tracking: 0 ____   Not Tracking: 12 _______   Time ____________________________
+.PRN  El  Az  C/N   PRN  El  Az                GPS      00:17:48 (?) 13 Sep 2026
+.                    15  -- ---                                                 
+.                    22  30  84                ANT DLY  0 ns                    
+.                    17  23 127                Position ________________________
+.                     9  -- ---                MODE     Hold                    
+.                    24  54 270                                                 
+.                    28  -- ---                LAT      S  34:32:39.019         
+.                     7  -- ---                LON      E 150:50:25.107         
+.                    19  53 143                HGT               +49.72 m (MSL) 
+.                    31  -- ---                                                 
+.                     6  65  75                                                 
+.                    11  49   6                                                 
+.                     4  -- ---                                                 
+.ELEV MASK  5 deg                                                               
+.-------------------------------------------------------------------------------
+.
+Command complete
+UCCM-P >
+
+===== PROBE at 10:18:27 =====
+---- LED:GPSL?
+1
+Command complete
+UCCM-P >.......(.R.. `.............W..f..`.O......u.
+---- DIAG:LOOP?
+LINK0: [-1.00E+00]
+DAC_LINK    DAC_AVG    DAC_GPS   FREQ_CORR  LINK_OFF   FREQ_DIFF  FREQ_FRAC
++5.91E-08  +5.98E-08  +5.91E-08  +0.00E+00  +6.80E-10  +6.80E-10  +0.00E+00
+Command complete
+UCCM-P >
+---- :ROSC:HOLD:DUR?
+Command error
+UCCM-P >
+---- :GPS:POS:SURV:STAT?
+Undefined header
+UCCM-P >.......(.R.. `.............W..h..`.O.....ey.
+---- :GPS:POS:SURV:PROG?
+Undefined header
+UCCM-P >
+---- SYST:STAT?
+
+-------------------------------------------------------------------------------
+.57964-80     serial number  40896646     firmware ver  2.0.1.6-01 LINK    mode 
+.-------------------------------------------------------------------------------
+.Reference Status __________________________   Reference Outputs _______________
+.XX Ref 8KHz 0: [LOS]                                                           
+.XX Ref 8KHz 1: [LOS]                          TFOM     2            FFOM      2
+.XX Ref 8KHz 2: [LOS]                          UCCM A Status[ACTIVE]            
+.XX Ref 8KHz 3: [LOS]                                                           
+.XX GPS: [No Ref]                                                               
+.ACQUISITION ...................................................[GPS 1PPS Valid]
+.Tracking: 0 ____   Not Tracking: 12 _______   Time ____________________________
+.PRN  El  Az  C/N   PRN  El  Az                GPS      00:18:49 (?) 13 Sep 2026
+.                     7  -- ---                                                 
+.                    22  30  84                ANT DLY  0 ns                    
+.                    17  23 127                Position ________________________
+.                    15  -- ---                MODE     Hold                    
+.                    24  54 271                                                 
+.                    31  -- ---                LAT      S  34:32:39.019         
+.                     9  -- ---                LON      E 150:50:25.107         
+.                    19  52 143                HGT               +49.72 m (MSL) 
+.                     4  -- ---                                                 
+.                     6  65  77                                                 
+.                    11  49   7                                                 
+.                    28  -- ---                                                 
+.ELEV MASK  5 deg                                                               
+.-------------------------------------------------------------------------------
+.
+Command complete
+UCCM-P >.......(.R.. `.............W..j..`.O........
+
+===== PROBE at 10:19:28 =====
+---- LED:GPSL?
+1
+Command complete
+UCCM-P >.......(.R.. `.............W.....`.O........
+---- DIAG:LOOP?
+LINK0: [-1.00E+00]
+DAC_LINK    DAC_AVG    DAC_GPS   FREQ_CORR  LINK_OFF   FREQ_DIFF  FREQ_FRAC
++5.91E-08  +5.98E-08  +5.91E-08  +0.00E+00  +6.80E-10  +6.80E-10  +0.00E+00
+Command complete
+UCCM-P >
+---- :ROSC:HOLD:DUR?
+Command error
+UCCM-P >
+---- :GPS:POS:SURV:STAT?
+Undefined header
+UCCM-P >.......(.R.. `.............W.....`.O......v.
+---- :GPS:POS:SURV:PROG?
+Undefined header
+UCCM-P >
+---- SYST:STAT?
+
+-------------------------------------------------------------------------------
+.57964-80     serial number  40896646     firmware ver  2.0.1.6-01 LINK    mode 
+.-------------------------------------------------------------------------------
+.Reference Status __________________________   Reference Outputs _______________
+.XX Ref 8KHz 0: [LOS]                                                           
+.XX Ref 8KHz 1: [LOS]                          TFOM     2            FFOM      2
+.XX Ref 8KHz 2: [LOS]                          UCCM A Status[ACTIVE]            
+.XX Ref 8KHz 3: [LOS]                                                           
+.XX GPS: [No Ref]                                                               
+.ACQUISITION ...................................................[GPS 1PPS Valid]
+.Tracking: 0 ____   Not Tracking: 12 _______   Time ____________________________
+.PRN  El  Az  C/N   PRN  El  Az                GPS      00:19:49 (?) 13 Sep 2026
+.                     9  -- ---                                                 
+.                    22  30  83                ANT DLY  0 ns                    
+.                    17  23 127                Position ________________________
+.                     7  -- ---                MODE     Hold                    
+.                    24  54 271                                                 
+.                     4  -- ---                LAT      S  34:32:39.019         
+.                    15  -- ---                LON      E 150:50:25.107         
+.                    19  52 143                HGT               +49.72 m (MSL) 
+.                    28  -- ---                                                 
+.                     6  65  78                                                 
+.                    11  50   7                                                 
+.                    31  -- ---                                                 
+.ELEV MASK  5 deg                                                               
+.-------------------------------------------------------------------------------
+.
+Command complete
+UCCM-P >.......(.R.. `.............W.....`.O........
+
+===== PROBE at 10:20:28 =====
+---- LED:GPSL?
+1
+Command complete
+UCCM-P >.......(.R.. `.............W.....`.O.....bX.
+---- DIAG:LOOP?
+LINK0: [-1.00E+00]
+DAC_LINK    DAC_AVG    DAC_GPS   FREQ_CORR  LINK_OFF   FREQ_DIFF  FREQ_FRAC
++5.91E-08  +5.98E-08  +5.91E-08  +0.00E+00  +6.80E-10  +6.80E-10  +0.00E+00
+Command complete
+UCCM-P >
+---- :ROSC:HOLD:DUR?
+Command error
+UCCM-P >
+---- :GPS:POS:SURV:STAT?
+Undefined header
+UCCM-P >.......(.R.. `.............W.....`.O......l.
+---- :GPS:POS:SURV:PROG?
+Undefined header
+UCCM-P >
+---- SYST:STAT?
+
+-------------------------------------------------------------------------------
+.57964-80     serial number  40896646     firmware ver  2.0.1.6-01 LINK    mode 
+.-------------------------------------------------------------------------------
+.Reference Status __________________________   Reference Outputs _______________
+.XX Ref 8KHz 0: [LOS]                                                           
+.XX Ref 8KHz 1: [LOS]                          TFOM     2            FFOM      2
+.XX Ref 8KHz 2: [LOS]                          UCCM A Status[ACTIVE]            
+.XX Ref 8KHz 3: [LOS]                                                           
+.XX GPS: [No Ref]                                                               
+.ACQUISITION ...................................................[GPS 1PPS Valid]
+.Tracking: 0 ____   Not Tracking: 12 _______   Time ____________________________
+.PRN  El  Az  C/N   PRN  El  Az                GPS      00:20:49 (?) 13 Sep 2026
+.                    15  -- ---                                                 
+.                    22  29  83                ANT DLY  0 ns                    
+.                    17  22 127                Position ________________________
+.                     9  -- ---                MODE     Hold                    
+.                    24  54 272                                                 
+.                     7  -- ---                LAT      S  34:32:39.019         
+.                    28  -- ---                LON      E 150:50:25.107         
+.                    19  52 142                HGT               +49.72 m (MSL) 
+.                    31  -- ---                                                 
+.                     6  65  79                                                 
+.                    11  50   7                                                 
+.                     4  -- ---                                                 
+.ELEV MASK  5 deg                                                               
+.-------------------------------------------------------------------------------
+.
+Command complete
+UCCM-P >.......(.R.. `.............W.....`.O...../..
+
+===== PROBE at 10:21:28 =====
+---- LED:GPSL?
+1
+Command complete
+UCCM-P >.......(.R.. `.............W.....`.O.....M..
+---- DIAG:LOOP?
+LINK0: [-1.00E+00]
+DAC_LINK    DAC_AVG    DAC_GPS   FREQ_CORR  LINK_OFF   FREQ_DIFF  FREQ_FRAC
++5.91E-08  +5.98E-08  +5.91E-08  +0.00E+00  +6.80E-10  +6.80E-10  +0.00E+00
+Command complete
+UCCM-P >
+---- :ROSC:HOLD:DUR?
+Command error
+UCCM-P >.......(.R.. `.............W.....`.O.....F..
+---- :GPS:POS:SURV:STAT?
+Undefined header
+UCCM-P >
+---- :GPS:POS:SURV:PROG?
+Undefined header
+UCCM-P >
+---- SYST:STAT?
+
+-------------------------------------------------------------------------------
+.57964-80     serial number  40896646     firmware ver  2.0.1.6-01 LINK    mode 
+.-------------------------------------------------------------------------------
+.Reference Status __________________________   Reference Outputs _______________
+.XX Ref 8KHz 0: [LOS]                                                           
+.XX Ref 8KHz 1: [LOS]                          TFOM     2            FFOM      2
+.XX Ref 8KHz 2: [LOS]                          UCCM A Status[ACTIVE]            
+.XX Ref 8KHz 3: [LOS]                                                           
+.XX GPS: [No Ref]                                                               
+.ACQUISITION ...................................................[GPS 1PPS Valid]
+.Tracking: 0 ____   Not Tracking: 12 _______   Time ____________________________
+.PRN  El  Az  C/N   PRN  El  Az                GPS      00:21:49 (?) 13 Sep 2026
+.                     7  -- ---                                                 
+.                    22  29  82                ANT DLY  0 ns                    
+.                    17  22 126                Position ________________________
+.                    15  -- ---                MODE     Hold                    
+.                    24  54 273                                                 
+.                     2  -- ---                LAT      S  34:32:39.019         
+.                    31  -- ---                LON      E 150:50:25.107         
+.                    19  51 142                HGT               +49.72 m (MSL) 
+.                     4  -- ---                                                 
+.                     6  65  80                                                 
+.                    11  51   7                                                 
+.                    28  -- ---                                                 
+.ELEV MASK  5 deg                                                               
+.-------------------------------------------------------------------------------
+.
+Command complete
+UCCM-P >.......(.R.. `.............W.....`.O......e.
+
+===== PROBE at 10:22:28 =====
+---- LED:GPSL?
+1
+Command complete
+UCCM-P >.......(.R.. `.............W..V..`.O.....p..
+---- DIAG:LOOP?
+LINK0: [-1.00E+00]
+DAC_LINK    DAC_AVG    DAC_GPS   FREQ_CORR  LINK_OFF   FREQ_DIFF  FREQ_FRAC
++5.91E-08  +5.98E-08  +5.91E-08  +0.00E+00  +6.80E-10  +6.80E-10  +0.00E+00
+Command complete
+UCCM-P >
+---- :ROSC:HOLD:DUR?
+Command error
+UCCM-P >.......(.R.. `.............W..X..`.O........
+---- :GPS:POS:SURV:STAT?
+Undefined header
+UCCM-P >
+---- :GPS:POS:SURV:PROG?
+Undefined header
+UCCM-P >
+---- SYST:STAT?
+
+-------------------------------------------------------------------------------
+.57964-80     serial number  40896646     firmware ver  2.0.1.6-01 LINK    mode 
+.-------------------------------------------------------------------------------
+.Reference Status __________________________   Reference Outputs _______________
+.XX Ref 8KHz 0: [LOS]                                                           
+.XX Ref 8KHz 1: [LOS]                          TFOM     2            FFOM      2
+.XX Ref 8KHz 2: [LOS]                          UCCM A Status[ACTIVE]            
+.XX Ref 8KHz 3: [LOS]                                                           
+.XX GPS: [No Ref]                                                               
+.ACQUISITION ...................................................[GPS 1PPS Valid]
+.Tracking: 0 ____   Not Tracking: 12 _______   Time ____________________________
+.PRN  El  Az  C/N   PRN  El  Az                GPS      00:22:49 (?) 13 Sep 2026
+.                     2  -- ---                                                 
+.                    22  29  82                ANT DLY  0 ns                    
+.                    17  21 126                Position ________________________
+.                     7  -- ---                MODE     Hold                    
+.                    24  54 274                                                 
+.                    15  -- ---                LAT      S  34:32:39.019         
+.                     4  -- ---                LON      E 150:50:25.107         
+.                    19  51 142                HGT               +49.72 m (MSL) 
+.                    28  -- ---                                                 
+.                     6  65  81                                                 
+.                    11  51   7                                                 
+.                    31  -- ---                                                 
+.ELEV MASK  5 deg                                                               
+.-------------------------------------------------------------------------------
+.
+Command complete
+UCCM-P >.......(.R.. `.............W..Z..`.O.....f..
+
+===== PROBE at 10:23:28 =====
+---- LED:GPSL?
+1
+Command complete
+UCCM-P >.......(.R.. `.............W.....`.O........
+---- DIAG:LOOP?
+LINK0: [-1.00E+00]
+DAC_LINK    DAC_AVG    DAC_GPS   FREQ_CORR  LINK_OFF   FREQ_DIFF  FREQ_FRAC
++5.91E-08  +5.98E-08  +5.91E-08  +0.00E+00  +6.80E-10  +6.80E-10  +0.00E+00
+Command complete
+UCCM-P >
+---- :ROSC:HOLD:DUR?
+Command error
+UCCM-P >.......(.R.. `.............W.....`.O........
+---- :GPS:POS:SURV:STAT?
+Undefined header
+UCCM-P >
+---- :GPS:POS:SURV:PROG?
+Undefined header
+UCCM-P >
+---- SYST:STAT?
+
+-------------------------------------------------------------------------------
+.57964-80     serial number  40896646     firmware ver  2.0.1.6-01 LINK    mode 
+.-------------------------------------------------------------------------------
+.Reference Status __________________________   Reference Outputs _______________
+.XX Ref 8KHz 0: [LOS]                                                           
+.XX Ref 8KHz 1: [LOS]                          TFOM     2            FFOM      2
+.XX Ref 8KHz 2: [LOS]                          UCCM A Status[ACTIVE]            
+.XX Ref 8KHz 3: [LOS]                                                           
+.XX GPS: [No Ref]                                                               
+.ACQUISITION ...................................................[GPS 1PPS Valid]
+.Tracking: 0 ____   Not Tracking: 12 _______   Time ____________________________
+.PRN  El  Az  C/N   PRN  El  Az                GPS      00:23:49 (?) 13 Sep 2026
+.                    15  -- ---                                                 
+.                    22  28  81                ANT DLY  0 ns                    
+.                    17  21 126                Position ________________________
+.                     2  -- ---                MODE     Hold                    
+.                    24  54 275                                                 
+.                     7  -- ---                LAT      S  34:32:39.019         
+.                    28  -- ---                LON      E 150:50:25.107         
+.                    19  50 141                HGT               +49.72 m (MSL) 
+.                    31  -- ---                                                 
+.                     6  65  83                                                 
+.                    11  52   7                                                 
+.                     4  -- ---                                                 
+.ELEV MASK  5 deg                                                               
+.-------------------------------------------------------------------------------
+.
+Command complete
+UCCM-P >.......(.R.. `.............W.....`.O......p.
+
+===== PROBE at 10:24:28 =====
+---- LED:GPSL?
+.......(.R.. `.............W.....`.O.....
+S.1
+Command complete
+UCCM-P >
+---- DIAG:LOOP?
+LINK0: [-1.00E+00]
+DAC_LINK    DAC_AVG    DAC_GPS   FREQ_CORR  LINK_OFF   FREQ_DIFF  FREQ_FRAC
++5.91E-08  +5.98E-08  +5.91E-08  +0.00E+00  +6.80E-10  +6.80E-10  +0.00E+00
+Command complete
+UCCM-P >
+---- :ROSC:HOLD:DUR?
+Command error
+UCCM-P >.......(.R.. `.............W.....`.O.....,..
+---- :GPS:POS:SURV:STAT?
+Undefined header
+UCCM-P >
+---- :GPS:POS:SURV:PROG?
+Undefined header
+UCCM-P >
+---- SYST:STAT?
+
+-------------------------------------------------------------------------------
+.57964-80     serial number  40896646     firmware ver  2.0.1.6-01 LINK    mode 
+.-------------------------------------------------------------------------------
+.Reference Status __________________________   Reference Outputs _______________
+.XX Ref 8KHz 0: [LOS]                                                           
+.XX Ref 8KHz 1: [LOS]                          TFOM     2            FFOM      2
+.XX Ref 8KHz 2: [LOS]                          UCCM A Status[ACTIVE]            
+.XX Ref 8KHz 3: [LOS]                                                           
+.XX GPS: [No Ref]                                                               
+.ACQUISITION ...................................................[GPS 1PPS Valid]
+.Tracking: 0 ____   Not Tracking: 12 _______   Time ____________________________
+.PRN  El  Az  C/N   PRN  El  Az                GPS      00:24:49 (?) 13 Sep 2026
+.                     7  -- ---                                                 
+.                    22  28  81                ANT DLY  0 ns                    
+.                    17  21 126                Position ________________________
+.                    15  -- ---                MODE     Hold                    
+.                    24  54 276                                                 
+.                     2  -- ---                LAT      S  34:32:39.019         
+.                    31  -- ---                LON      E 150:50:25.107         
+.                    19  50 141                HGT               +49.72 m (MSL) 
+.                     4  -- ---                                                 
+.                     6  65  84                                                 
+.                    11  52   7                                                 
+.                    28  -- ---                                                 
+.ELEV MASK  5 deg                                                               
+.-------------------------------------------------------------------------------
+.
+Command complete
+UCCM-P >.......(.R.. `.............W.....`.O......j.
+
+===== PROBE at 10:25:28 =====
+---- LED:GPSL?
+1
+Command complete
+UCCM-P >
+---- DIAG:LOOP?
+LINK0: [-1.00E+00]
+DAC_LINK    DAC_AVG    DAC_GPS   FREQ_CORR  LINK_OFF   FREQ_DIFF  FREQ_FRAC
++5.91E-08  +5.98E-08  +5.91E-08  +0.00E+00  +6.80E-10  +6.80E-10  +0.00E+00
+Command complete
+UCCM-P >
+---- :ROSC:HOLD:DUR?
+Command error
+UCCM-P >.......(.R.. `.............W.....`.O........
+---- :GPS:POS:SURV:STAT?
+Undefined header
+UCCM-P >
+---- :GPS:POS:SURV:PROG?
+Undefined header
+UCCM-P >
+---- SYST:STAT?
+
+-------------------------------------------------------------------------------
+.57964-80     serial number  40896646     firmware ver  2.0.1.6-01 LINK    mode 
+.-------------------------------------------------------------------------------
+.Reference Status __________________________   Reference Outputs _______________
+.XX Ref 8KHz 0: [LOS]                                                           
+.XX Ref 8KHz 1: [LOS]                          TFOM     2            FFOM      2
+.XX Ref 8KHz 2: [LOS]                          UCCM A Status[ACTIVE]            
+.XX Ref 8KHz 3: [LOS]                                                           
+.XX GPS: [No Ref]                                                               
+.ACQUISITION ...................................................[GPS 1PPS Valid]
+.Tracking: 0 ____   Not Tracking: 12 _______   Time ____________________________
+.PRN  El  Az  C/N   PRN  El  Az                GPS      00:25:49 (?) 13 Sep 2026
+.                     2  -- ---                                                 
+.                    22  28  81                ANT DLY  0 ns                    
+.                    17  20 125                Position ________________________
+.                     7  -- ---                MODE     Hold                    
+.                    24  54 276                                                 
+.                    15  -- ---                LAT      S  34:32:39.019         
+.                     4  -- ---                LON      E 150:50:25.107         
+.                    19  50 141                HGT               +49.72 m (MSL) 
+.                    28  -- ---                                                 
+.                     6  65  85                                                 
+.                    11  53   8                                                 
+.                    31  -- ---                                                 
+.ELEV MASK  5 deg                                                               
+.-------------------------------------------------------------------------------
+.
+Command complete
+UCCM-P >.......(.R.. `.............W.....`.O.....g..
+
+===== PROBE at 10:26:28 =====
+---- LED:GPSL?
+1
+Command complete
+UCCM-P >
+---- DIAG:LOOP?
+LINK0: [-1.00E+00]
+DAC_LINK    DAC_AVG    DAC_GPS   FREQ_CORR  LINK_OFF   FREQ_DIFF  FREQ_FRAC
++5.91E-08  +5.98E-08  +5.91E-08  +0.00E+00  +6.80E-10  +6.80E-10  +0.00E+00
+Command complete
+UCCM-P >
+---- :ROSC:HOLD:DUR?
+Command error
+UCCM-P >.......(.R.. `.............W..H..`.O.....G..
+---- :GPS:POS:SURV:STAT?
+Undefined header
+UCCM-P >
+---- :GPS:POS:SURV:PROG?
+Undefined header
+UCCM-P >
+---- SYST:STAT?
+
+-------------------------------------------------------------------------------
+.57964-80     serial number  40896646     firmware ver  2.0.1.6-01 LINK    mode 
+.-------------------------------------------------------------------------------
+.Reference Status __________________________   Reference Outputs _______________
+.XX Ref 8KHz 0: [LOS]                                                           
+.XX Ref 8KHz 1: [LOS]                          TFOM     2            FFOM      2
+.XX Ref 8KHz 2: [LOS]                          UCCM A Status[ACTIVE]            
+.XX Ref 8KHz 3: [LOS]                                                           
+.XX GPS: [No Ref]                                                               
+.ACQUISITION ...................................................[GPS 1PPS Valid]
+.Tracking: 0 ____   Not Tracking: 12 _______   Time ____________________________
+.PRN  El  Az  C/N   PRN  El  Az                GPS      00:26:49 (?) 13 Sep 2026
+.                    15  -- ---                                                 
+.                    22  28  80                ANT DLY  0 ns                    
+.                    17  20 125                Position ________________________
+.                     2  -- ---                MODE     Hold                    
+.                    24  54 277                                                 
+.                     7  -- ---                LAT      S  34:32:39.019         
+.                    28  -- ---                LON      E 150:50:25.107         
+.                    19  49 141                HGT               +49.72 m (MSL) 
+.                    31  -- ---                                                 
+.                     6  65  86                                                 
+.                    11  53   8                                                 
+.                     4  -- ---                                                 
+.ELEV MASK  5 deg                                                               
+.-------------------------------------------------------------------------------
+.
+Command complete
+UCCM-P >.......(.R.. `.............W..J..`.O........
+
+===== PROBE at 10:27:28 =====
+---- LED:GPSL?
+1
+Command complete
+UCCM-P >
+---- DIAG:LOOP?
+LINK0: [-1.00E+00]
+DAC_LINK    DAC_AVG    DAC_GPS   FREQ_CORR  LINK_OFF   FREQ_DIFF  FREQ_FRAC
++5.91E-08  +5.98E-08  +5.91E-08  +0.00E+00  +6.80E-10  +6.80E-10  +0.00E+00
+Command complete
+UCCM-P >
+---- :ROSC:HOLD:DUR?
+Command error
+UCCM-P >.......(.R.. `.............W.....`.O.....-..
+---- :GPS:POS:SURV:STAT?
+Undefined header
+UCCM-P >
+---- :GPS:POS:SURV:PROG?
+Undefined header
+UCCM-P >
+---- SYST:STAT?
+
+-------------------------------------------------------------------------------
+.57964-80     serial number  40896646     firmware ver  2.0.1.6-01 LINK    mode 
+.-------------------------------------------------------------------------------
+.Reference Status __________________________   Reference Outputs _______________
+.XX Ref 8KHz 0: [LOS]                                                           
+.XX Ref 8KHz 1: [LOS]                          TFOM     2            FFOM      2
+.XX Ref 8KHz 2: [LOS]                          UCCM A Status[ACTIVE]            
+.XX Ref 8KHz 3: [LOS]                                                           
+.XX GPS: [No Ref]                                                               
+.ACQUISITION ...................................................[GPS 1PPS Valid]
+.Tracking: 0 ____   Not Tracking: 12 _______   Time ____________________________
+.PRN  El  Az  C/N   PRN  El  Az                GPS      00:27:49 (?) 13 Sep 2026
+.                     7  -- ---                                                 
+.                    22  27  80                ANT DLY  0 ns                    
+.                    17  20 125                Position ________________________
+.                    15  -- ---                MODE     Hold                    
+.                    24  54 278                                                 
+.                    31  -- ---                LAT      S  34:32:39.019         
+.                     2  -- ---                LON      E 150:50:25.107         
+.                    19  49 140                HGT               +49.72 m (MSL) 
+.                     4  -- ---                                                 
+.                     6  65  87                                                 
+.                    11  54   8                                                 
+.                    28  -- ---                                                 
+.ELEV MASK  5 deg                                                               
+.-------------------------------------------------------------------------------
+.
+Command complete
+UCCM-P >.......(.R.. `.............W.....`.O........
+
+===== PROBE at 10:28:28 =====
+---- LED:GPSL?
+1
+Command complete
+UCCM-P >
+---- DIAG:LOOP?
+LINK0: [-1.00E+00]
+DAC_LINK    DAC_AVG    DAC_GPS   FREQ_CORR  LINK_OFF   FREQ_DIFF  FREQ_FRAC
++5.91E-08  +5.98E-08  +5.91E-08  +0.00E+00  +6.80E-10  +6.80E-10  +0.00E+00
+Command complete
+UCCM-P >
+---- :ROSC:HOLD:DUR?
+Command error
+UCCM-P >.......(.R.. `.............W.....`.E.....c`.
+---- :GPS:POS:SURV:STAT?
+Undefined header
+UCCM-P >
+---- :GPS:POS:SURV:PROG?
+Undefined header
+UCCM-P >.......(.R.. `.............W.....`.E........
+---- SYST:STAT?
+
+-------------------------------------------------------------------------------
+.57964-80     serial number  40896646     firmware ver  2.0.1.6-01 LINK    mode 
+.-------------------------------------------------------------------------------
+.Reference Status __________________________   Reference Outputs _______________
+.XX Ref 8KHz 0: [LOS]                                                           
+.XX Ref 8KHz 1: [LOS]                          TFOM     3            FFOM      1
+.XX Ref 8KHz 2: [LOS]                          UCCM A Status[ACTIVE]            
+.XX Ref 8KHz 3: [LOS]                                                           
+.>> GPS: [phase:-6.5E-06, settling]                                             
+.ACQUISITION ...................................................[GPS 1PPS Valid]
+.Tracking: 4 ____   Not Tracking: 8 ________   Time ____________________________
+.PRN  El  Az  C/N   PRN  El  Az                GPS      00:28:49     13 Sep 2026
+. 24  54 279   40     2  -- ---                                                 
+. 19  49 140   40    22  27  79                ANT DLY  0 ns                    
+.  6  65  89   42    17  19 125                Position ________________________
+. 11  54   8   42     7  -- ---                MODE     Hold                    
+.                     5  -- ---                                                 
+.                    15  -- ---                LAT      S  34:32:39.019         
+.                    28  -- ---                LON      E 150:50:25.107         
+.                    31  -- ---                HGT               +49.72 m (MSL) 
+.                                                                               
+.                                                                               
+.                                                                               
+.                                                                               
+.ELEV MASK  5 deg                                                               
+.-------------------------------------------------------------------------------
+.
+Command complete
+UCCM-P >
