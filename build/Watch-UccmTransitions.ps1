@@ -215,8 +215,16 @@ try {
             # The GPS seconds counter, offsets 27-30, confirmed against hardware.
             $seconds = ([uint32]$frame[27] -shl 24) -bor ([uint32]$frame[28] -shl 16) -bor
                        ([uint32]$frame[29] -shl 8) -bor [uint32]$frame[30]
+            # THE EPOCH MUST NOT BE PARSED AS A LOCAL TIME. This read
+            # `[datetime]'1980-01-06T00:00:00Z'` until 13 Sep 2026, and PowerShell converts that
+            # to local: 6 January falls inside Australian daylight saving, so the epoch was taken
+            # as UTC+11 and every annotation below came out 11 hours late. The committed
+            # .events.txt still carries the wrong ones. Only this convenience line was ever
+            # affected - the seconds count, and every byte in .frames.txt, came off the wire.
+            #
+            # It is invisible on a machine whose local time IS UTC, which is most build agents.
             if (-not $previous.ContainsKey('epoch')) {
-                $utc = ([datetime]'1980-01-06T00:00:00Z').AddSeconds($seconds)
+                $utc = [DateTimeOffset]::new(1980, 1, 6, 0, 0, 0, [TimeSpan]::Zero).AddSeconds($seconds)
                 Write-Event ('first frame: GPS seconds {0} = {1:yyyy-MM-dd HH:mm:ss} GPS' -f $seconds, $utc)
                 $previous['epoch'] = $true
             }
