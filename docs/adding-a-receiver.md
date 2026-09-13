@@ -91,7 +91,8 @@ exercise every member — and a third, fictional and test-only, is
 | Member | What it decides | Authority |
 |---|---|---|
 | `Family` | A short name for logs and diagnostics — `"SmartClock"`, `"NMEA 0183"` | — |
-| `Link` | Whether this family answers what it is asked (`QueryResponse`, the default) or talks unprompted and is never written to (`Broadcast`) | §12, #310 |
+| `Link` | Whether this family answers what it is asked (`QueryResponse`, the default) or talks unprompted (`Broadcast`) | §12, #310 |
+| `OutgoingTextFor(mnemonic)` | For a broadcast family, the one piece of text it may transmit for a plan entry, or `null`. **Defaults to `null`, and that default is the design**: a family that has not thought about transmitting cannot acquire a send path by inheritance, so returning non-null here is a claim about your family's character rather than a detail. Whatever you return is passed to `IsBlocked` before it goes out — §8.1's guarantee is that *every* command sent passes the allowlist, and a driver whose two methods disagree is caught rather than trusted | §12, #508; and **read [#543](https://github.com/TGoodhew/WinZ3805A/issues/543) first** — §7.1 still says a broadcast family is never written to, and that conflict is open |
 | `Recognises(identity)` | Whether this driver serves the receiver whose identity was read — by `*IDN?`, or by `Overhear` | §12 |
 | `Overhear(lines)` | Whether the lines the receiver sent *before being asked anything* are this family's, and who it is. Defaults to "no"; a talker is recognised here and `*IDN?` is never sent to it | §12, #310 |
 | `ClassifyLine(line)` | For a broadcast family, which plan key a heard line belongs to; `null` for a line that is not yours. Defaults to `null` | §12, #310 |
@@ -225,7 +226,9 @@ making the probe belong to no driver:
    for the family already shipped. At each candidate setting the session first
    **listens** for the probe timeout (§7.2's synchronise step, which absorbs
    the SmartClock's banner) and hands whatever it heard to every driver's
-   `Overhear`; a family that talks is claimed here, and nothing is sent to it.
+   `Overhear`; a family that talks is claimed here, and nothing is sent to it
+   *to recognise it* — whether it is written to afterwards is
+   `OutgoingTextFor`'s business, which defaults to never.
    Only when nobody claims the lines does the session send a neutral `*IDN?`
    on its own timeout and apply IEEE 488.2's four-field shape test to the
    answer (#310).
