@@ -14,18 +14,20 @@ namespace WinZ3805A.Device.Drivers.Nmea;
 /// <para>
 /// <b>Read it beside <c>docs/tutorial-nmea-driver.md</c></b>, which walks the eleven steps of
 /// <c>docs/adding-a-receiver.md</c> with this file as the result. This folder is the whole
-/// driver: the sentence codec, the cycle parser and this class. Nothing in it depends on the
-/// simulator under <c>tools/</c>; the simulator depends on the codec. The family is proven against
-/// that simulator, <c>tools/NmeaSimulator</c>, and — since 7 Sep 2026 — against real receivers:
-/// eight captures under <c>tests/WinZ3805A.Tests/Nmea/Captures/</c>, replayed cycle by cycle by
-/// <c>NmeaCaptureReplayTests</c> (#420). A second constellation is no longer the simulator's alone —
+/// driver: the sentence codec, the cycle parser, the one poll and this class. Nothing in it depends
+/// on the simulator under <c>tools/</c>; the simulator depends on the codec. The family is proven
+/// against that simulator, <c>tools/NmeaSimulator</c>, and — since 7 Sep 2026 — against real
+/// receivers: ten captures under <c>tests/WinZ3805A.Tests/Nmea/Captures/</c>, replayed cycle by
+/// cycle by <c>NmeaCaptureReplayTests</c> (#420, #516). A second constellation is no longer the simulator's alone —
 /// the VK-162's GLONASS was only ever switched off, and the forM8N tracks BeiDou outdoors — but
 /// <b>an outage still is</b>: no configuration makes a working receiver lose its fix on demand.
 /// </para>
 /// <para>
 /// <b>The family is the opposite shape to the SmartClock</b>, which is why it was chosen. A talker
-/// speaks unprompted, once a second, and is never written to; it has no status screen, no error
-/// queue and no commands. Everything the seam assumed about a receiver that answers questions had
+/// speaks unprompted, once a second, and is written to at most once per sweep — see
+/// <see cref="NmeaPoll"/>, which is the whole of what #508 permits and is asked only of a module
+/// that said it is u-blox; it has no status screen, no error
+/// queue and no command set to speak of. Everything the seam assumed about a receiver that answers questions had
 /// to be made explicit for one that does not: <see cref="Link"/> says which kind this is,
 /// <see cref="Overhear"/> recognises it by what it says, and <see cref="ClassifyLine"/> tells the
 /// session's listener which sentence answers which plan entry.
@@ -232,9 +234,10 @@ public sealed class NmeaDriver(TimeProvider timeProvider) : IReceiverDriver
     /// listed rather than assumed.</b> <see cref="ReceiverReading.LeapSecond"/> is carried by
     /// u-blox's proprietary <c>$PUBX,04</c> — measured on the bench unit as 18 s, decoded from the
     /// satellites rather than a firmware default — and the same sentence carries a clock bias and
-    /// drift that stand in for the 1 PPS interval. It is a <i>poll</i>, though, and this driver
-    /// sends nothing at all (see <see cref="IsBlocked"/>), so consuming it is a decision about the
-    /// family's character rather than a parsing change. #435 holds the argument.
+    /// drift that stand in for the 1 PPS interval. <b>That argument was settled in favour of asking,
+    /// and <see cref="ReceiverReading.LeapSecond"/> below is now <see langword="true"/></b> — see the
+    /// comment on it. The clock bias and drift are still not consumed: standing in for a 1 PPS
+    /// interval is a different claim from reporting one, and #435 holds that argument.
     /// </para>
     /// </remarks>
     public bool Reports(ReceiverReading reading) => reading switch

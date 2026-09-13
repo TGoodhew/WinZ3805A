@@ -481,10 +481,13 @@ public partial class App : Application
             provider => new NmeaDriver(provider.GetRequiredService<TimeProvider>()));
 
         // #416: the third family — Symmetricom and Trimble UCCM telecom modules. Registered last,
-        // and it claims only an identity whose model names a UCCM, because THIS DRIVER HAS NEVER
-        // MET A RECEIVER: it is written from Lady Heather's source rather than from a capture, and
-        // a driver that over-claims applies unmeasured timeouts to hardware they were not taken on.
-        // See the remarks on UccmDriver before trusting anything it reports.
+        // and it claims only an identity whose model names a UCCM, because MOST OF THIS DRIVER HAS
+        // NEVER MET A RECEIVER: it was written from Lady Heather's source rather than from a
+        // capture, and a driver that over-claims applies unmeasured timeouts to hardware they were
+        // not taken on. One Trimble UCCM-P has sat seven times since 10 Sep 2026 and settled a
+        // part of it; a plain UCCM and any Symmetricom module have not been seen at all, which is
+        // exactly why the narrow claim stays. See the remarks on UccmDriver before trusting
+        // anything it reports.
         services.AddSingleton<IReceiverDriver>(
             provider => new UccmDriver(provider.GetRequiredService<TimeProvider>()));
 
