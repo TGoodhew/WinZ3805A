@@ -273,9 +273,11 @@ try {
     }
 
     if (Wanted 'main-compact') {
-        # A double-click on the medallion, not Ctrl+Shift+M: the keys sent through winapp on
-        # 29 Sep 2026 did not reach the accelerator, and the standard window was photographed
-        # under the compact name. So the result is checked before it is saved.
+        # A double-click on the medallion, not Ctrl+Shift+M. winapp's send-keys posts messages by
+        # default, and WinUI's keyboard accelerators ignore posted messages - they fire only with
+        # --via send-input, which found out on #568. The first run sent the keys the default way,
+        # and the standard window was photographed under the compact name, so the result is checked
+        # before it is saved.
         Quiet { winapp ui click Medallion -w $main --double }
         Start-Sleep -Seconds 1.5
         $pane = (Get-Elements $main)[(Get-RootPane (Get-Elements $main))]

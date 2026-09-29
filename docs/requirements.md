@@ -1539,7 +1539,7 @@ Rules:
 | Title bar (Details) | Refresh full status (`F5`), Export current view (`Ctrl+E`), Settings (`Ctrl+,`) |
 | Card header, inline | Commands scoped to that card: *Run test*, *Manage…*, *Clear*, *Apply* |
 | Inline with the field it affects | All *Apply* buttons — never in a page-level bar, so the affected values are always adjacent |
-| Right-click only | Copy value, copy as CSV on tables. Nothing unique lives here. **Built** 30 Aug 2026 (#320); see the note below |
+| Right-click only | Copy value, copy as CSV on tables. Nothing unique lives here. **Built** 30 Aug 2026 (#320); see the note below. The main window's own menu (#568) holds *Keep this window above others* and *Compact mode* — both also on `Ctrl+Shift+T` and `Ctrl+Shift+M`, so the rule holds |
 | Menu bar | **None.** Two-level hierarchy does not need one. |
 
 No page-level `CommandBar`. The commands are card-scoped and a page-level bar would separate them from their context.
@@ -1587,6 +1587,7 @@ of data rather than data.
 | `Ctrl+E` | Export current view |
 | `Ctrl+,` | Settings |
 | `Ctrl+Shift+M` | Toggle main window compact mode |
+| `Ctrl+Shift+T` | Toggle main window always-on-top — *added 29 Sep 2026 (#568)*: compact mode collapses the footer and with it the pin, so a compact window could be neither pinned nor unpinned |
 | `F1` | Help — opens the user's guide (`docs/how-to-use.md`, carried in the package and laid out natively) in its own window, from either window. *Amended 29 Aug 2026 (#312): the row said About, nothing registered it, and there was no About surface; what a person pressing F1 wants is the guide, and the version line an About would have carried sits at the guide's foot.* |
 | `Esc` | Cancel dialog, close flyout, exit compact mode |
 
@@ -2079,7 +2080,7 @@ Two behavioural principles remain here because they are functional rather than v
   The sweep's time of day is preferred to the screen's time even when a screen has just arrived. The screen's time is stamped as the receiver starts sending it, up to three and a half seconds before it arrives, and anchoring on it put the clock back two seconds at every screen on the bench. Past §9.11's 15 s the clock **stops** rather than inventing seconds. It changes on this computer's one-second redraw, so it can turn up to a second after the receiver's own second does. Pacing on the time code, as Lady Heather does, was #560's option 4 and is tracked by #562.
 - A second badge sits on the same clock line while the device time is **provisional** (#245; added 29 Aug 2026 from the code, #316): a caution-coloured glyph in a 32 px hit target (`MainPage.xaml`, `ProvisionalBadge`) whose tooltip explains that this is power-up time the receiver has not yet corrected from GPS. It is caution rather than info because a rollover correction is a known quantity already applied, while a provisional reading may be wrong by any amount and nothing on the screen says by how much. §11.2's amendment records why there are two badges; §10.14 carries the same fact as a card.
 - Footer staleness per §9.11: `WzTextTertiaryBrush` normally, `WzCautionBrush` past 15 s, `WzCriticalBrush` past 60 s, with the elapsed time in words **once the readings are overdue**. *Amended 29 Sep 2026 (#547, Tony's decision):* this said "always". Every ten seconds, while the status screen held the link, the line counted "updated just now", then "2 … 4 seconds ago": a pause the application schedules itself (§7.3), announced as though something were late. The line now says **"updating…"** while the screen is read, and **nothing** about age while the readings are fresh, which is §9.11's rule that a fresh reading has nothing to say, already followed by the pill. Past 15 s it gives the age as before, beside the pill, and a long screen read does not hide it (`Staleness.FooterText`). The Details window's per-page footers keep the age in words.
-- Always-on-top toggle; size, position, and compact state persist across launches — and so does the standard layout's size while the window is compact, so a launch straight into compact still knows what to leave to (#307). **The window never opens off screen**: a stored placement is checked against the displays attached at launch (`WindowPlacementPolicy.Restore`), and, since 29 Sep 2026 (#553), the window is checked again every time it is reopened from the notification area or by a second launch (`Reopen`). It can sit hidden for weeks while the display it was on is unplugged or undocked, and before #553 it reopened where that display had been. A window with nothing left on any display is centred on the primary one.
+- Always-on-top toggle, reachable four ways: the footer pin, `Ctrl+Shift+T`, the window's right-click menu and the notification-area menu. They are one setting, and a pushpin shows in the title bar while it is on. *Amended 29 Sep 2026 (#568)*: the footer pin was the only way, and compact mode collapses the footer, so a compact window could be neither pinned nor unpinned, and a pinned one looked exactly like an unpinned one. Size, position, compact state and the pin persist across launches — and so does the standard layout's size while the window is compact, so a launch straight into compact still knows what to leave to (#307). **The window never opens off screen**: a stored placement is checked against the displays attached at launch (`WindowPlacementPolicy.Restore`), and, since 29 Sep 2026 (#553), the window is checked again every time it is reopened from the notification area or by a second launch (`Reopen`). It can sit hidden for weeks while the display it was on is unplugged or undocked, and before #553 it reopened where that display had been. A window with nothing left on any display is centred on the primary one.
 - Compact mode toggles on double-click of the medallion or `Ctrl+Shift+M`. Type sizes, targets, and focus visuals are unchanged (§9.6.3). **Entering compact resizes the window to §9.6.2's compact minimum, and leaving it restores the standard-layout size the window had** *(amended 29 Aug 2026, #307: the toggle changed the content and left the frame, so compact arrived without the smallness that is its point)*.
 - Opening Details runs no `ConnectedAnimation` into the Overview page medallion — amended 29 Aug 2026 (#316) to the code: the two are separate top-level windows and `ConnectedAnimationService` is per-view, so §9.8.2's reduced-motion fallback is the only achievable path (`Views/OverviewPage.xaml` records why). **Kept — confirmed by Tony 30 Aug 2026 (#320).**
 
@@ -2137,9 +2138,11 @@ scheduled task would outlive an uninstall, and neither suits an MSIX. Two decisi
 there is nothing to lose by stopping. A prompt would be the second interruption in a job whose first
 one already asked a question.
 
-**The tray menu holds *Open* and *Exit* and nothing else.** Anything that touches the receiver
-reaches it through §8's tiers with §8.3's consequence text, and a shell context menu is not a place
-any of that can be shown.
+**The tray menu holds *Open*, *Keep above other windows* and *Exit*, and nothing else.** Anything
+that touches the receiver reaches it through §8's tiers with §8.3's consequence text, and a shell
+context menu is not a place any of that can be shown. *Keep above other windows* was added 29 Sep
+2026 (#568): it touches only the window, and it is the one window setting worth reaching while the
+window is hidden or compact. It carries a check mark while the window is pinned.
 
 ### 10.4 Receiver Details — Overview page
 
