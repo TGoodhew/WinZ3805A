@@ -96,7 +96,7 @@ Users currently either screen-scrape `:SYST:STAT?` in a terminal emulator or run
 | Serial I/O | `System.IO.Ports` (NuGet) | Works in a full-trust packaged desktop app. |
 | Charts (P1) | Hand-drawn `Controls/TrendChart.cs` | **Corrected 29 Aug 2026 (#316).** This row named `LiveChartsCore.SkiaSharpView.WinUI` with a hand-drawn `Canvas` renderer as the fallback. OQ-5 (#38, closed 19 Aug 2026) rejected LiveCharts on the §12 point budget — it has no downsampling and materialised 1.65 GB when handed the raw series — so the "fallback" is the design: `TrendChart` with `Controls/TrendDecimation.cs`. No charting package is referenced. |
 | Sky plot | Hand-drawn `Canvas` / `Path` geometry | No extra dependency. Win2D acceptable if antialiasing quality demands it. |
-| Help rendering | `Markdig` 1.3.2 | (added 29 Aug 2026 from the code, #316) The one third-party runtime dependency beyond the platform packages. `Services/HelpDocument.cs` parses `docs/how-to-use.md` into blocks that `Views/HelpWindow.xaml` lays out natively (#312); the guide is shipped as content, not as HTML. Listed in `THIRD-PARTY-NOTICES.md`. |
+| Help rendering | `Markdig` 1.3.2 | (added 29 Aug 2026 from the code, #316) One of two third-party runtime dependencies beyond the platform packages, the other being `CommunityToolkit.WinUI.Controls.SettingsControls`, which builds the Settings page (§9.10.1; corrected 29 Sep 2026, #556). `Services/HelpDocument.cs` parses `docs/how-to-use.md` into blocks that `Views/HelpWindow.xaml` lays out natively (#312); the guide is shipped as content, not as HTML. Listed in `THIRD-PARTY-NOTICES.md`. |
 | Tests | xUnit for parser and command-catalog logic | Parser and safety classifier must be in a UI-independent library so they are testable headlessly. |
 
 > **⚠ Amended 29 Aug 2026.** The Architectures row above kept ARM64 alive as a deferred
@@ -140,7 +140,7 @@ C:\Users\Tony\source\WinZ3805A\
 ├── README.md                          With LICENSE (MIT) and THIRD-PARTY-NOTICES.md beside it
 ├── Directory.Build.props              Nullable + warnings-as-errors (§6.4), shared by every project
 ├── global.json                        Pins the .NET SDK
-├── .github/workflows/ci.yml           Runs every build/ gate first, then builds and tests
+├── .github/workflows/ci.yml           Runs the build/ gates, the builds and the tests side by side
 ├── build/                             Test-*.ps1 — eighteen gates: fifteen over the source
 │   │                                  (§8.4, §9.12, §9.13), two over the documents and one over
 │   │                                  the pull request; Capture-Fixtures.ps1 (the §11.1 harness)
@@ -291,7 +291,7 @@ The device is plain RS-232 with no vendor driver SDK, no COM interop, and no P/I
 | Handshake | None | None only |
 | DTR / RTS | Assert both on open | — |
 
-*(added 29 Aug 2026 from the code, #316)* The DTR / RTS row is not a per-device parameter but the transport's unconditional policy: `Transport/SerialTransport.cs` asserts both lines on every open, before any driver has been selected, because the SmartClock's line driver will not transmit to a dead DTR on some cable assemblies. That is right for the SmartClock family and was found to be wrong for at least one other receiver — the BG7TBL unit went silent with DTR asserted (#309) — so #304 item 4 asks for the modem-line policy to become driver-supplied.
+*(added 29 Aug 2026 from the code, #316)* The DTR / RTS row is not a per-device parameter but the transport's unconditional policy: `Transport/SerialTransport.cs` asserts both lines on every open, before any driver has been selected, because the SmartClock's line driver will not transmit to a dead DTR on some cable assemblies. That is right for the SmartClock family and was found to be wrong for at least one other receiver — the BG7TBL unit went silent with DTR asserted (#309) — so the modem-line policy should become driver-supplied. That was listed as #304's item 4, but #304 closed without it, the attribution having been #309's, and no open issue tracks it (corrected 29 Sep 2026, #556).
 
 Z3805A ships 9600-8-N-1. Sibling units differ — **the Z3801A leaves the factory at 19200-7-O-1** — so all parameters must be user-settable, and the connection dialog must offer an **Auto-detect** that walks the union of every registered driver's most likely combinations — eleven today: the SmartClock family's eight, listed in order in §10.12, plus 4800-8-N-1 and 38400-8-N-1 for an NMEA talker (#310) and 57600-8-N-1 for a UCCM (#416, measured #470) — listening first at each, and sending `*IDN?` only when nothing claims what it hears, until a valid identity returns (corrected 29 Aug 2026, #316: this said *eight* and *sending `*IDN?`*, which described one family and no listen).
 
@@ -461,7 +461,7 @@ the screen stays, as the freshest reading after the gap.
 
 The other two remedies raised on #547 were:
 
-- pacing each sweep on `:PTIM:TCOD?`, as Lady Heather does;
+- pacing each sweep on `:PTIM:TCOD?`, as Lady Heather does (tracked by #562);
 - fetching the screen less often.
 
 Both would change this section, and neither was needed to remove the burst.
@@ -577,6 +577,7 @@ All queries plus non-disruptive actions.
 :PTIM:LEAP:ACC?      :PTIM:LEAP:DATE?        :PTIM:LEAP:DUR?    :PTIM:LEAP:STAT?
 :LED:ALAR?           :LED:GPSL?              :LED:HOLD?         :LED:ACT?
 :LED:ACTive <ON|OFF>
+:LED:ENAB?           :LED:ENABled <ON|OFF>
 :DIAG:ROSC:EFC:REL?  :DIAG:LIF:COUN?         :DIAG:QUER:RESP?
 :DIAG:LOG:COUN?      :DIAG:LOG:READ?         :DIAG:LOG:READ? <n>
 :DIAG:LOG:READ:ALL?  :DIAG:TEST:RES?         :DIAG:IDEN:GPS?
@@ -596,7 +597,7 @@ All queries plus non-disruptive actions.
 
 `:SYNC:HOLD:REC:INIT` and `:SYNC:HOLD:REC:LIM:IGN` are classed Safe: they move the unit *toward* lock, which is the desired state, and cannot damage anything.
 
-**`:LED:ACTive` is the third Safe non-query, and the only Safe command that takes a value** (added 7 Sep 2026, #440). It drives the front-panel Active lamp, **one of the two indicators under software control** (corrected 9 Sep 2026 — this sentence read "the one indicator", and `z3801.pdf`'s *Front Panel at a Glance* item 2 says otherwise: *"User-definable indicators labeled Enabled and Active"*. `:LED:ENABled` drives the second, confirmed on the bench by eye; what to do with it is #462), and it is documented — `z3801.pdf` Table 4-2, *"Sets or queries Active LED"* — so §8.4's permanent block on undocumented set forms does not reach it. It is Safe because it changes no receiver behaviour: no timing, no discipline, nothing that outlives the lamp, so a §8.3 confirmation would be asking permission to change nothing. **§9.11's other half follows from the same ruling** — a Safe setter gets no success toast, so the §10.9 control is a toggle whose own position is the feedback. Both spellings are confirmed on the bench: `1`/`0` and `ON`/`OFF`.
+**`:LED:ACTive` is the third Safe non-query, and the only Safe command that takes a value** (added 7 Sep 2026, #440). It drives the front-panel Active lamp, **one of the two indicators under software control** (corrected 9 Sep 2026 — this sentence read "the one indicator", and `z3801.pdf`'s *Front Panel at a Glance* item 2 says otherwise: *"User-definable indicators labeled Enabled and Active"*. `:LED:ENABled` drives the second, confirmed on the bench by eye; what to do with it was #462, which shipped 11 Sep 2026 and catalogued `:LED:ENAB?` and `:LED:ENABled` as Safe entries too, so this is no longer the only Safe command that takes a value — corrected 29 Sep 2026, #556), and it is documented — `z3801.pdf` Table 4-2, *"Sets or queries Active LED"* — so §8.4's permanent block on undocumented set forms does not reach it. It is Safe because it changes no receiver behaviour: no timing, no discipline, nothing that outlives the lamp, so a §8.3 confirmation would be asking permission to change nothing. **§9.11's other half follows from the same ruling** — a Safe setter gets no success toast, so the §10.9 control is a toggle whose own position is the feedback. Both spellings are confirmed on the bench: `1`/`0` and `ON`/`OFF`.
 
 ### 8.3 Tier C — Confirm (modal confirmation with explicit consequence text)
 
@@ -1612,7 +1613,7 @@ Declared as `KeyboardAccelerator` on the command, with `KeyboardAcceleratorPlace
 | `WzEaseDecelerate` | `0.1,0.9 0.2,1` | Entrances |
 | `WzEaseAccelerate` | `0.7,0 1,0.5` | Exits |
 
-`WzStaggerIntervalMilliseconds` (30) is the card-enter stagger below, held as a token in `Themes/Motion.xaml` for a row that is not yet built (added 29 Aug 2026 from the code, #316).
+`WzStaggerIntervalMilliseconds` (30) is the card-enter stagger below, held as a token in `Themes/Motion.xaml` (added 29 Aug 2026 from the code, #316). The row it serves is built (§9.8.2, #320), but `Controls/CardEntrance.cs` writes the 30 ms as a literal rather than reading the token — so the token documents the value without controlling it (corrected 29 Sep 2026, #556).
 
 #### 9.8.2 Motion spec
 
@@ -1743,7 +1744,7 @@ What it replaced was a card per *group* holding a stack of switch-then-caption p
 control and the paragraph explaining it were **siblings rather than parent and child**: nothing in
 the markup said which caption belonged to which control, and the answer was proximity. The group is
 now a heading with rows under it. *Running in the background* became a `SettingsExpander` because its
-three settings are not peers — starting hidden and quitting outright mean nothing until the
+settings are not peers — starting hidden and quitting outright mean nothing until the
 application keeps running, and the expander says so structurally rather than by listing order.
 
 Two findings worth not rediscovering. **The toolkit's dictionaries must be merged in `App.xaml`** —
@@ -1929,7 +1930,7 @@ Testable statements. Each is verified by the stated method, not by inspection al
 >
 > *Moved below the table on 29 Aug 2026 (#316): it sat between the A11Y-7 and A11Y-8 rows, and a blockquote inside a table ends it, so A11Y-8 to A11Y-13 did not render.*
 
-**Six criteria have CI gates** — A11Y-2, A11Y-3, A11Y-4, A11Y-5, A11Y-8 and A11Y-12 — through the eleven `build/Test-*.ps1` scripts `.github/workflows/ci.yml` runs before any build (this said "A11Y-3 and A11Y-4 run in CI" — corrected 29 Aug 2026, #316). No gate discharges its criterion entirely; the manual half of each, and the rest, are a release checklist item, in [`docs/manual-qa.md`](manual-qa.md) section 4.
+**Six criteria have CI gates** — A11Y-2, A11Y-3, A11Y-4, A11Y-5, A11Y-8 and A11Y-12 — through the `build/Test-*.ps1` scripts `.github/workflows/ci.yml` runs alongside the build — eighteen today (this said eleven, run before any build: nothing in the workflow waits on anything else; corrected 29 Sep 2026, #556) (this said "A11Y-3 and A11Y-4 run in CI" — corrected 29 Aug 2026, #316). No gate discharges its criterion entirely; the manual half of each, and the rest, are a release checklist item, in [`docs/manual-qa.md`](manual-qa.md) section 4.
 
 ### 9.13 Anti-patterns
 
@@ -1955,7 +1956,7 @@ The implementation must avoid these. Each is reviewable.
 | **OQ-D3** | Should the medallion ring show 1 PPS TI, or EFC? TI is the more diagnostic signal for loop behaviour; EFC is the better long-term ageing indicator but barely moves minute to minute. | **Resolved 12 Aug 2026 (#44): TI.** The medallion was built on the 60-sample 1 PPS TI window (P0-18); EFC has the Overview trend chart (§10.4). | Product | No |
 | **OQ-D4** | Does the brand teal read as "medical device" to any reviewer? It was chosen for distance from Windows blue and from all four semantic hues. | **Resolved 28 Aug 2026: keep `#0E7C86`.** The ≥ 60° separation is measured in **CIE LCH**, which §9.4.2 now states — it was unmeasurable as written. | Product | No |
 | **OQ-D5** | Should the main window support Windows 11 Snap layouts and multi-instance for users with several receivers? | **Resolved 28 Aug 2026: single instance, and now *enforced* (#46).** A second launch redirects to the running one instead of opening a window that can never hold the port. §12 is untouched — this is about windows, not architecture. | Product | No |
-| **OQ-D6** | Does `SkyPlotControl` need a printable/exportable form for calibration records? | **Resolved 28 Aug 2026: yes — image export ships in v1 (#47).** This *overturns* the recorded assumption. A CSV of azimuth and elevation is not a record of what the sky looked like, and an obstruction argument is made with a picture. See §10.4. | Product | No |
+| **OQ-D6** | Does `SkyPlotControl` need a printable/exportable form for calibration records? | **Resolved 28 Aug 2026: yes — image export ships in v1 (#47).** This *overturns* the recorded assumption. A CSV of azimuth and elevation is not a record of what the sky looked like, and an obstruction argument is made with a picture. See §10.5. | Product | No |
 | **OQ-D7** | High-contrast rendering of the medallion ring loses the severity colour channel, leaving glyph and label to carry state. Is that sufficient, or should the ring change stroke *pattern* (solid / dashed / dotted) by severity in HC? | **Resolved 28 Aug 2026 (#48, PR #228): yes — once the glyph is the size §10.3 states.** #48 measured the high-contrast glyph at 31 ink pixels inside a 186 px circle, 2.3 % of what the medallion draws in Light, so the glyph was carrying state and nobody could see it; the fix was size (`MedallionRingMath.GlyphSize`, diameter × 56⁄160), not pattern-coding. | Design | No |
 
 ---
@@ -2031,7 +2032,7 @@ Two behavioural principles remain here because they are functional rather than v
 │    ● TFOM 3     ● FFOM 0                       │  ← SeverityPill ×2
 │                                                │  WzSpaceXl (24)
 │    01:02:35 UTC · 27 Dec 2026 ⓘ                │  ← WzMonoTextStyle, tabular
-│    COM3 · 9600-8-N-1 · updated 1 s ago         │  ← WzCaptionTextStyle /
+│    COM3 · 9600-8-N-1                           │  ← WzCaptionTextStyle /
 │                                                │    WzTextTertiaryBrush
 │  ┌──────────────┐              ┌────────────┐  │
 │  │  Details  ▸  │              │  Connect   │  │  WzControlCornerRadius (4)
@@ -2067,7 +2068,7 @@ Two behavioural principles remain here because they are functional rather than v
 
   Severity is always the triple colour + shape + text (§9.4.3). The medallion changes all three at once; it never pulses or animates (§9.8.2, §9.13 item 7).
 
-- When mode is `HOLD`, the sub-line carries the reason from `:SYNC:HOLD:WAIT?`. The query is **Not built** — nothing sends it, the §7.3 sweep being six commands and this not one of them; what the sub-line shows is the status screen's own mode detail (`MainViewModel.ModeDetail`; `HoldoverViewModel.WaitingReasonText` on §10.8), which carries the same sentence when the receiver prints one. **Amended to the code 30 Aug 2026 (#320):** the mode detail is the source. The query arrives with no extra wire time, and adding a seventh fast-tier command for a field that is usually blank would spend a query a second on a rare state.
+- When mode is `HOLD`, the sub-line carries the reason from `:SYNC:HOLD:WAIT?`. The query is **Not built** — nothing sends it, the §7.3 sweep being seven commands (six until #560) and this not one of them; what the sub-line shows is the status screen's own mode detail (`MainViewModel.ModeDetail`; `HoldoverViewModel.WaitingReasonText` on §10.8), which carries the same sentence when the receiver prints one. **Amended to the code 30 Aug 2026 (#320):** the mode detail is the source. The query arrives with no extra wire time, and adding another fast-tier command for a field that is usually blank would spend a query a second on a rare state.
 - **Locked with zero satellites** renders a `WzCautionBrush` `SeverityPill` beside the count reading "coasting", with tooltip *"Locked but tracking no satellites. The receiver is coasting on a 1 PPS it can no longer verify."* This condition appears in real units with antenna or bias-tee faults and is the single most useful diagnostic the app surfaces — it is the reason the satellite count shares top billing with the mode.
 - Date shows the rollover-corrected value with a trailing `\uE946` Info glyph when `WeekRolloverEpochs != 0`; the raw device date is in the tooltip (§7.4).
 - **The clock line ticks every second (#560, 29 Sep 2026).** It showed the time printed on the status screen, which arrives every ten seconds, so it held one time for ten seconds and then jumped. Lady Heather's ticks every second because half its poll is the receiver's time code. Now (`ViewModels/ReceiverClock.cs`):
@@ -2075,7 +2076,7 @@ Two behavioural principles remain here because they are functional rather than v
   - **the time of day** comes from the one-second sweep's `:PTIM:TIME?` (§7.3), put on that date and rolled over at midnight;
   - **between readings** the clock counts forward on the PC's clock, so it keeps ticking through the pause while the screen is read.
 
-  The sweep's time of day is preferred to the screen's time even when a screen has just arrived. The screen's time is stamped as the receiver starts sending it, up to three and a half seconds before it arrives, and anchoring on it put the clock back two seconds at every screen on the bench. Past §9.11's 15 s the clock **stops** rather than inventing seconds. It changes on this computer's one-second redraw, so it can turn up to a second after the receiver's own second does. Pacing on the time code, as Lady Heather does, is #560's option 4 and remains open.
+  The sweep's time of day is preferred to the screen's time even when a screen has just arrived. The screen's time is stamped as the receiver starts sending it, up to three and a half seconds before it arrives, and anchoring on it put the clock back two seconds at every screen on the bench. Past §9.11's 15 s the clock **stops** rather than inventing seconds. It changes on this computer's one-second redraw, so it can turn up to a second after the receiver's own second does. Pacing on the time code, as Lady Heather does, was #560's option 4 and is tracked by #562.
 - A second badge sits on the same clock line while the device time is **provisional** (#245; added 29 Aug 2026 from the code, #316): a caution-coloured glyph in a 32 px hit target (`MainPage.xaml`, `ProvisionalBadge`) whose tooltip explains that this is power-up time the receiver has not yet corrected from GPS. It is caution rather than info because a rollover correction is a known quantity already applied, while a provisional reading may be wrong by any amount and nothing on the screen says by how much. §11.2's amendment records why there are two badges; §10.14 carries the same fact as a card.
 - Footer staleness per §9.11: `WzTextTertiaryBrush` normally, `WzCautionBrush` past 15 s, `WzCriticalBrush` past 60 s, with the elapsed time in words **once the readings are overdue**. *Amended 29 Sep 2026 (#547, Tony's decision):* this said "always". Every ten seconds, while the status screen held the link, the line counted "updated just now", then "2 … 4 seconds ago": a pause the application schedules itself (§7.3), announced as though something were late. The line now says **"updating…"** while the screen is read, and **nothing** about age while the readings are fresh, which is §9.11's rule that a fresh reading has nothing to say, already followed by the pill. Past 15 s it gives the age as before, beside the pill, and a long screen read does not hide it (`Staleness.FooterText`). The Details window's per-page footers keep the age in words.
 - Always-on-top toggle; size, position, and compact state persist across launches — and so does the standard layout's size while the window is compact, so a launch straight into compact still knows what to leave to (#307). **The window never opens off screen**: a stored placement is checked against the displays attached at launch (`WindowPlacementPolicy.Restore`), and, since 29 Sep 2026 (#553), the window is checked again every time it is reopened from the notification area or by a second launch (`Reopen`). It can sit hidden for weeks while the display it was on is unplugged or undocked, and before #553 it reopened where that display had been. A window with nothing left on any display is centred on the primary one.
@@ -2198,7 +2199,7 @@ It sits **last on the page** deliberately. §9.1's premise is that the medallion
 
 A receiver whose answer is not four comma-separated fields shows **the raw answer instead**, rather than four dashes: four dashes say "nothing is connected", which is a different statement from "a model this build has not seen". §11.1 keeps the evidence. The card is re-read on every connection change, because a reconnect can find a different receiver on the port — the same reason §12 re-selects the driver.
 
-The Holdover Uncertainty card's *Duration* row shows `ReceiverStatus.HoldoverDuration` — the elapsed time the screen prints, parsed since 28 Aug 2026 — while in holdover, and *Not in holdover* otherwise. **The code disagrees with itself**: `OverviewViewModel.HoldoverDuration` still prints the present-uncertainty figure under that label, and says so in a comment; that is a code defect rather than a specification question, #319 item 8 (noted 29 Aug 2026, #316).
+The Holdover Uncertainty card's *Duration* row shows `ReceiverStatus.HoldoverDuration` — the elapsed time the screen prints, parsed since 28 Aug 2026 — while in holdover, and *Not in holdover* otherwise. The code disagreed with itself until #319 item 8 fixed it: `OverviewViewModel.HoldoverDuration` printed the present-uncertainty figure under that label (noted 29 Aug 2026, #316; fixed under #319, recorded 29 Sep 2026, #556).
 
 Health items come from the parsed HEALTH MONITOR block of `:SYST:STAT?`, in the order the receiver prints them and however many it prints — the wireframe names six, the screen decides (`OverviewViewModel.Health`). The `:STAT:OPER:HARD:COND?` bit meanings this sentence once deferred to OQ-1 for are now known (#34, answered 14 Aug 2026 from Command Reference 5-36 to 5-39; `Models/StatusRegisterMap.cs`) and drive the Status Registers page (§10.10), not this card (corrected 29 Aug 2026, #316).
 
@@ -2725,6 +2726,14 @@ Worth the card on an instrument whose oscillator ages with running time — §10
 
 > **⚠ Superseded 9 Sep 2026 by #462 — the lamp is now flashed per command, on Tony's instruction.** The setting drives `:LED:ACTive` **on before each command and off once the reply is in**, which is what #440 originally asked for and what the paragraph above declined on cost. **Every number above still stands**: a `:LED:` write was re-measured the same day at 810 ms and 903 ms against ~30 ms for a query, so each command now carries about **1.8 s of lamp** and a poll sweep of several commands takes many seconds rather than one. That was put to Tony explicitly and he confirmed it twice — *"I understand it is slow — Just implement it anyway"* — so the cost is **accepted, not overlooked**, and this note exists so nobody later reads the arithmetic above and “fixes” the behaviour back. It remains **off by default** and the §10.9 caption states the slowdown in the user's own terms. The borrow rules are unchanged: the baseline is read at connect and put back at disconnect, the lamp's own `:LED:` commands are never flashed around, and a lamp that will not write never fails the command it wraps.
 
+> **⚠ Superseded again 11 Sep 2026 by #462's split (recorded 29 Sep 2026, #556).** The panel has two
+> user-definable lamps, and they now mean different things. **Enabled is the application's**: lit
+> while it holds the link and flashed around every command (`Services/ActivityLamp.cs`), so the
+> per-command cost above now lands on `:LED:ENABled`. **Active is the receiver's**: it follows lock,
+> lit while locked to GPS and written only when that changes (`Services/LockLamp.cs`). The
+> *Front panel* card therefore carries two toggles, **Enabled lamp** and **Active lamp**, and the
+> Settings switch is *Front-panel lamps*. The paragraphs above are the history of how it got here.
+
 **The receiver owns the lamp.** The baseline is read before the lamp is lit and put back verbatim on disconnect, so a user who left it on gets it back on. Nothing is retained between sessions or across a reconnect — a remembered value is wrong the moment a missed reply or a person changes it. **An unexpected disconnect leaves the lamp lit and that is accepted, not overlooked:** there is no wire left to restore over, and because nothing is retained the next connect adopts the lit lamp as the value to restore. The application cannot tell *the user wanted it on* from *we left it on*, which is exactly why the manual toggle above exists.
 
 **A third card, *GPS receiver*, reads `:DIAG:IDEN:GPS?`** (added 7 Sep 2026, #443). A SmartClock is a disciplining chassis wrapped around somebody else's GPS engine, and the two revise on separate schedules: the footer's revision is the instrument's, and this is the module's. The command is **documented** — Z3801A User's Guide, Table 4-2, `:DIAGnostic:IDENtification:GPSystem?`, "returns a sequence of quoted strings", described as "the model number, serial number, and revision of the internal GPS receiver" — so it is an ordinary tier A query in §8.2 and not one of §8.5's undocumented six. Read with *Refresh* beside the lifetime hours, never polled: the module inside cannot change while the instrument is powered.
@@ -2819,7 +2828,7 @@ If a future version adds free-text entry, it must run every submission through a
 │                                              │
 │  ● Auto-detect settings                      │  ← fresh-install default
 │  ○ Manual                                    │
-│      Baud     [ 9600  ▾ ]                    │  six rates, §7.1
+│      Baud     [ 9600  ▾ ]                    │  seven rates, §7.1
 │      Data     [ 8     ▾ ]                    │
 │      Parity   [ None  ▾ ]                    │
 │      Stop     [ 1     ▾ ]                    │
@@ -2831,7 +2840,7 @@ If a future version adds free-text entry, it must run every submission through a
 └──────────────────────────────────────────────┘
 ```
 
-Auto-detect walks the **union of every registered driver's sequence, in registration order, first appearance winning** — ten combinations today. The SmartClock's eight, in order: 9600-8-N-1, **19200-7-O-1**, 19200-7-E-1, 9600-7-E-1, 19200-8-N-1, 2400-8-N-1, 1200-8-N-1, 9600-7-O-1 (`SerialSettings.AutoDetectSequence`); then the NMEA driver's 4800-8-N-1 and 38400-8-N-1 (its 9600-8-N-1 is already first). At each combination the session **listens first** — a talker is claimed by a driver's `Overhear` before any question is asked — and sends `*IDN?` only when nothing claims what it heard; every transaction of the walk has a 2 s timeout (§7.2), so a combination at the wrong rate costs about 8 s. Show progress and allow cancel. The dialog opens on Auto-detect on a fresh install (`ConnectionPreferences.AutoDetect = true`), and the manual baud picker offers §7.1's six rates. (Order corrected 28 Aug 2026 — see §7.1. The union, the listen and the default restated 29 Aug 2026, #316: this said eight combinations each sending `*IDN?`, and drew Manual selected.)
+Auto-detect walks the **union of every registered driver's sequence, in registration order, first appearance winning** — eleven combinations today. The SmartClock's eight, in order: 9600-8-N-1, **19200-7-O-1**, 19200-7-E-1, 9600-7-E-1, 19200-8-N-1, 2400-8-N-1, 1200-8-N-1, 9600-7-O-1 (`SerialSettings.AutoDetectSequence`); then the NMEA driver's 4800-8-N-1 and 38400-8-N-1 (its 9600-8-N-1 is already first); then the UCCM's 57600-8-N-1, measured on the Trimble UCCM-P (#470). *(This said ten combinations and six rates, before the UCCM driver; corrected 29 Sep 2026, #556.)* At each combination the session **listens first** — a talker is claimed by a driver's `Overhear` before any question is asked — and sends `*IDN?` only when nothing claims what it heard; every transaction of the walk has a 2 s timeout (§7.2), so a combination at the wrong rate costs about 8 s. Show progress and allow cancel. The dialog opens on Auto-detect on a fresh install (`ConnectionPreferences.AutoDetect = true`), and the manual baud picker offers §7.1's six rates. (Order corrected 28 Aug 2026 — see §7.1. The union, the listen and the default restated 29 Aug 2026, #316: this said eight combinations each sending `*IDN?`, and drew Manual selected.)
 
 ### 10.13 Settings page
 
@@ -2892,6 +2901,7 @@ Auto-detect walks the **union of every registered driver's sequence, in registra
 |---|---|---|---|
 | Advanced | Advanced Console (§10.11) | Off | Reveals a surface a user has to go looking for |
 | Advanced | Undocumented read-only queries (§8.5, P1-8 #56) | Off | The same; and it can never reach a set form, which §8.4 excludes permanently |
+| Advanced | Front-panel lamps (#440, #462) | Off (*Left alone*) | The only setting that makes the application write to the receiver unasked: it lights the Enabled lamp while connected and flashes it around each command, and makes Active follow lock. That is a decision for whoever owns the instrument, and each lamp write costs about a second (§10.9) |
 | Appearance | Use the Windows accent colour (§9.4.2, P1-11) | Off | The brand accent is chosen for hue separation from the severity colours; a default that abandoned that would make the guarantee depend on a control-panel setting nobody thinks of as safety-critical |
 | Alerts | Tell me when the receiver loses GPS lock (P1-9) | **On** | Exists precisely for the user who is *not* looking; safe to default on only because `LockWatch` stays quiet through the flapping a real receiver's log is full of |
 | Running in the background | Keep running when I close the window (§10.3.1, #280) | **On** | §9.1's user leaves this docked for weeks; a close that stopped polling would stop it exactly when the window was being got out of the way |
@@ -2966,7 +2976,7 @@ poller sole ownership of both. A settings page that offered to change them would
 sections rather than implement one, so making them user-visible is an amendment to §7.3 and §12 and
 must be argued there first.
 
-The other two rows (this said three until #56 shipped; corrected 29 Aug 2026, #316) are unbuilt rather than refused. The page states plainly on screen that they are
+The one remaining row, Units, is unbuilt rather than refused (this said three rows until #56 shipped, and two until the display time zone shipped with #95; corrected 29 Sep 2026, #556). The page states plainly on screen that they are
 not there yet; §9.11's rule against a control that looks like it works and does nothing applies to a
 settings page more than to most.
 
@@ -3260,7 +3270,7 @@ something might later branch on.
 
 - `DeviceSessionService` is a singleton owning the transport, the command channel, and connection state. It exposes `IObservable`-style events (or `INotifyPropertyChanged` on an observable state object) rather than letting view models touch the port.
 - `PollingService` owns the two cadences and writes into a `ReceiverStateStore`. View models bind to the store, never to the poller.
-- Trend data (EFC, 1 PPS TI, TFOM) lands in two places: a **60-sample in-memory ring** in `ReceiverStateStore` (`TimeIntervalWindow`), which feeds the medallion's sparkline (§9.10.2); and the SQLite **`TrendStore`**, which keeps **24 h at full resolution**, thins to one sample per **10 s** beyond that, and retains **eight weeks (56 days)** — long enough for #137's drift slope to mean something, and a few megabytes once compaction has run (`Services/TrendStore.cs`). **Code disagrees** with this bullet as originally written — noted 29 Aug 2026 (#316): it specified a ring buffer sized for 7 days at 1 s (604 800 samples × ~16 bytes ≈ 10 MB, downsampled to 10 s beyond 24 h); the coarsening matches, the 7-day horizon and the in-memory ring do not, and nothing records why 56 days was chosen over 7 beyond `TrendStore`'s remark on the drift slope. The 604 800-point budget still binds `TrendChart` (§9.10.2). **Amended to the code 30 Aug 2026 (#320):** the shipped store is the design — weeks of history is what makes an ageing slope readable, which is the point of keeping it at all.
+- Trend data lands in two places (this listed TFOM, which is stored in neither; corrected 29 Sep 2026, #556): a **60-sample in-memory ring** of the 1 PPS time interval in `ReceiverStateStore` (`TimeIntervalWindow`), which feeds the medallion's sparkline (§9.10.2); and the SQLite **`TrendStore`** — EFC, time interval, sync state, satellites tracked and, since #512, the oscillator's frequency offset — which keeps **24 h at full resolution**, thins to one sample per **10 s** beyond that, and retains **eight weeks (56 days)** — long enough for #137's drift slope to mean something, and a few megabytes once compaction has run (`Services/TrendStore.cs`). **Code disagrees** with this bullet as originally written — noted 29 Aug 2026 (#316): it specified a ring buffer sized for 7 days at 1 s (604 800 samples × ~16 bytes ≈ 10 MB, downsampled to 10 s beyond 24 h); the coarsening matches, the 7-day horizon and the in-memory ring do not, and nothing records why 56 days was chosen over 7 beyond `TrendStore`'s remark on the drift slope. The 604 800-point budget still binds `TrendChart` (§9.10.2). **Amended to the code 30 Aug 2026 (#320):** the shipped store is the design — weeks of history is what makes an ageing slope readable, which is the point of keeping it at all.
 - Persist trends to a SQLite file under `LocalApplicationData` so restarts do not lose history. `Microsoft.Data.Sqlite` is packaged-app safe. **The reference was removed on 15 Aug 2026** and P1-2 (#50) restored it (`WinZ3805A.csproj`; tense corrected 29 Aug 2026, #316): it had been carrying 1.89 MB of native `e_sqlite3.dll` into every package for a feature no code path could reach, and `TrendStore` is that code path. Note the folder — not `ApplicationData.Current.LocalFolder`, for the reason given against §6.1's logging row.
 - **The survey writes its own history to the log** (P0-12, #12; added 29 Aug 2026 from the code, #316). `Services/SurveyLog.cs` subscribes to the store and `SurveyWatch` — pure, and tested against a replayed two-hour run — decides what is worth a line, at Information because that is the level the application ships at. A survey takes two hours and nobody watches it; before this, a run made with the Position page closed left no record of whether it advanced steadily or stalled for forty minutes at the two-thirds mark, which are very different outcomes.
 - **Multi-device readiness:** `DeviceSessionService` must be instantiable per device and resolved from a keyed DI registration, even though v1 creates exactly one. Do not use static state for connection or device identity.
@@ -3310,7 +3320,7 @@ something might later branch on.
 | P0-12 | Position survey start/monitor/adopt | Survey progress updates on each full poll; adopt is tier C |
 | P0-13 | Diagnostic log read, filter, export, clear | Clear is tier C; export writes UTF-8 CSV |
 | P0-14 | Graceful disconnect and auto-reconnect | Given the USB adapter is unplugged, then the app shows Disconnected within 10 s and reconnects within **45 s** of replug. **⚠ Amended 28 Aug 2026 (#14).** Was 30 s, which §7.2's own backoff makes unreachable: the cap *is* 30 s, so an adapter returning just after a failed attempt waits the full interval and then needs ~2.2 s to open the port and finish auto-detect — ≈32 s, measured. The two clauses could not both hold. 45 s leaves headroom over the 30 s cap without weakening the requirement to nothing, and the reconnect stays event-driven within a poll of the adapter reappearing. Reaching ~2 s regardless of backoff needs arrival detection (`WM_DEVICECHANGE` / `DBT_DEVICEARRIVAL`) rather than a timer, which is not required here. Found by the 28 Aug manual QA run, which passed every other clause. |
-| ~~P0-15~~ | ~~MSIX package passing WACK~~ | **Deferred 21 Aug 2026 (#15, #39).** Store submission is not the goal for this version; the goal is that a **non-developer can install the package**, which is a different problem and shipped as #164. WACK is a submission gate rather than a quality gate, and tests little this project’s five CI gates do not already cover. The MSIX itself is unaffected — a sideloaded install uses the same package — so the single-project MSIX, the framework-dependent deployment, the lone `runFullTrust` capability, the 53 generated assets and the third-party notices all stand. `build/Invoke-Wack.ps1` still works if the Store returns. |
+| ~~P0-15~~ | ~~MSIX package passing WACK~~ | **Deferred 21 Aug 2026 (#15, #39).** Store submission is not the goal for this version; the goal is that a **non-developer can install the package**, which is a different problem and shipped as #164. WACK is a submission gate rather than a quality gate, and tests little this project’s CI gates do not already cover (five on 21 Aug 2026; eighteen by 29 Sep). The MSIX itself is unaffected — a sideloaded install uses the same package — so the single-project MSIX, the framework-dependent deployment, the lone `runFullTrust` capability, the 53 generated assets and the third-party notices all stand. `build/Invoke-Wack.ps1` still works if the Store returns. |
 | P0-16 | Accessibility criteria A11Y-1 through A11Y-13 (§9.12) | Each by its stated verification method; six gate CI — A11Y-2, 3, 4, 5, 8 and 12, as §9.12 lists them (this said "A11Y-3 and A11Y-4" — corrected 29 Aug 2026, #316) |
 | P0-17 | The §9 token set is implemented in `Themes/` with Light, Dark, and HighContrast dictionaries for every token | `build/Test-NoHexLiterals.ps1` scans every `*.xaml` under `src/` except `Themes/Colors.xaml`, plus `*.cs` under any `Views/` or `Controls/` folder, and fails on any hex colour literal (§9.13 item 2; the gate's scope restated 29 Aug 2026, #316 — this said "greps `Views/` and `Controls/`"). `build/Test-ThemeDictionaryParity.ps1` checks the three-dictionary half |
 | P0-18 | `StatusMedallion` renders the 60-second radial TI sparkline, updating with no animation | Given a fast poll delivers a new TI value, then the ring redraws within one frame and no `Storyboard` targets the geometry (§9.8.2) |
