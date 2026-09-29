@@ -38,6 +38,20 @@ public static class DisplayWorkAreas
         return areas;
     }
 
+    /// <summary>The primary display's work area, or <see langword="null"/> if it cannot be read.</summary>
+    /// <remarks>
+    /// Where <see cref="WindowPlacementPolicy.Reopen"/> centres a window that has nothing left on
+    /// any display (#553). Primary rather than the first of <see cref="Current"/>, because
+    /// <c>FindAll</c> promises no order, and the primary display is the one a user who has just lost a
+    /// monitor is looking at.
+    /// </remarks>
+    public static WindowRect? Primary()
+    {
+        RectInt32? work = DisplayArea.Primary?.WorkArea;
+
+        return work is RectInt32 area ? new WindowRect(area.X, area.Y, area.Width, area.Height) : null;
+    }
+
     /// <summary>
     /// The work area of the display <paramref name="window"/> is on, or <see langword="null"/> if
     /// no display could be identified.

@@ -251,7 +251,11 @@ public partial class App : Application
             // The one thing a user expects of a tray icon. Not a menu: there is nothing to put on
             // one that the window does not already do, and every command worth reaching goes
             // through §8's tiers rather than a shell context menu.
-            _tray.Activated += (_, _) => _window?.Activate();
+            //
+            // BringToFront rather than Activate, so the tray and a second launch are one route back
+            // to the window - the one that restores it from minimised and puts it back on a display
+            // (#553). Activate alone reopened it wherever it had been hidden, on a display or not.
+            _tray.Activated += (_, _) => (_window as MainWindow)?.BringToFront();
 
             // #280's only way out, once the close button no longer exits.
             _tray.ExitRequested += (_, _) => _window?.DispatcherQueue.TryEnqueue(RequestExit);

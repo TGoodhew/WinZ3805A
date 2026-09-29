@@ -39,6 +39,7 @@ public sealed partial class MainWindow : Window
 
     private readonly IWindowPlacementStore _placements;
     private readonly IServiceProvider _services;
+    private readonly ILogger? _log;
 
     /// <summary>
     /// Coalesces the burst of <c>AppWindow.Changed</c> events a single drag produces into one write.
@@ -97,6 +98,7 @@ public sealed partial class MainWindow : Window
 
         _services = services;
         _placements = services.GetRequiredKeyedService<IWindowPlacementStore>(PlacementKey);
+        _log = services.GetService<ILoggerFactory>()?.CreateLogger("Window");
 
         InitializeComponent();
 
@@ -193,6 +195,12 @@ public sealed partial class MainWindow : Window
     /// <c>Restore</c> is asked for only when the window is actually minimised, so a second launch
     /// while the window is maximised does not quietly un-maximise it.
     /// </para>
+    /// <para>
+    /// <b>The one route back to this window (#553)</b> — the tray's click and its <i>Open</i> come
+    /// here too — and it puts the window back on a display before showing it. The window can sit
+    /// hidden for weeks while the display it was on is unplugged or undocked; see
+    /// <see cref="WindowPlacementPolicy.Reopen"/>.
+    /// </para>
     /// </remarks>
     public void BringToFront()
     {
@@ -202,7 +210,58 @@ public sealed partial class MainWindow : Window
             presenter.Restore();
         }
 
+        EnsureOnScreen();
+
         Activate();
+    }
+
+    /// <summary>Moves the window back onto a display if it is not on one (#553).</summary>
+    /// <remarks>
+    /// A maximised window is judged by the bounds it un-maximises to, since those say which display
+    /// it belongs to; it is un-maximised to be moved and maximised again on the display it lands
+    /// on. The move raises <c>AppWindow.Changed</c>, so the corrected bounds are saved by the
+    /// ordinary debounce and the next launch agrees with what the user sees.
+    /// </remarks>
+    private void EnsureOnScreen()
+    {
+        bool maximised = Presenter?.State == OverlappedPresenterState.Maximized;
+
+        WindowRect current = maximised && _restoredBounds is WindowRect restored
+            ? restored
+            : new WindowRect(AppWindow.Position.X, AppWindow.Position.Y, AppWindow.Size.Width, AppWindow.Size.Height);
+
+        if (WindowPlacementPolicy.Reopen(
+                current,
+                DisplayWorkAreas.Current(),
+                DisplayWorkAreas.Primary(),
+                _minimum.Width,
+                _minimum.Height) is not WindowRect moved)
+        {
+            return;
+        }
+
+        // Logged because nothing else records it: a window that came back somewhere else and one
+        // that was never away look the same once they are on screen.
+        _log?.LogInformation(
+            "The window was not on a display; moved from {FromLeft},{FromTop} to {ToLeft},{ToTop}, {Width} x {Height}.",
+            current.Left,
+            current.Top,
+            moved.Left,
+            moved.Top,
+            moved.Width,
+            moved.Height);
+
+        if (maximised)
+        {
+            Presenter?.Restore();
+        }
+
+        AppWindow.MoveAndResize(new RectInt32(moved.Left, moved.Top, moved.Width, moved.Height));
+
+        if (maximised)
+        {
+            Presenter?.Maximize();
+        }
     }
 
     /// <summary>Opens the §10.4 Details window, or brings the open one forward.</summary>
