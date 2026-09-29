@@ -63,6 +63,7 @@
             <controls:StatusMedallion x:Name="Medallion"
                                       Grid.Column="0"
                                       Size="Large"
+                                      VerticalAlignment="Center"
                                       DoubleTapped="OnMedallionDoubleTapped" />
             <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="{StaticResource WzSpaceXxs}">
                 <TextBlock x:Name="ModeText"
@@ -458,12 +459,25 @@
                     count was shown nowhere at that size: #279 had bound the centre to compact and
                     this state collapsed the only other place it appeared.
                 -->
+                <!--
+                    THE MERIT ROW IS NOT HERE, AND NEITHER ARE THE DETAIL LINE OR THE COASTING PILL
+                    BELOW (#565). Their visibility also depends on the receiver, so MainPage sets it
+                    from code on every reading. A setter here lost to the next reading, and compact
+                    mode drew the TFOM and FFOM pills clipped under the medallion. The code is their
+                    one owner and reads the layout too: see RenderLayoutVisibility.
+
+                    The header spans every row and centres itself vertically, so what is left of the
+                    window sits in the middle of it rather than at the top of an empty page. At
+                    compact's 144 px minimum the two are the same place; at any other height -
+                    compact resized taller, larger text, or this state's 240 to 472 - they are not.
+                -->
                 <VisualState x:Name="ShortLayout">
                     <VisualState.Setters>
                         <Setter Target="RootGrid.RowSpacing" Value="0" />
+                        <Setter Target="HeaderRow.(Grid.RowSpan)" Value="5" />
+                        <Setter Target="HeaderRow.VerticalAlignment" Value="Center" />
                         <Setter Target="Medallion.CentreShowsCount" Value="True" />
                         <Setter Target="ReadoutRow.Visibility" Value="Collapsed" />
-                        <Setter Target="MeritRow.Visibility" Value="Collapsed" />
                         <Setter Target="ClockRow.Visibility" Value="Collapsed" />
                         <Setter Target="FooterRow.Visibility" Value="Collapsed" />
                     </VisualState.Setters>
@@ -478,6 +492,8 @@
                 <VisualState x:Name="CompactDensity">
                     <VisualState.Setters>
                         <Setter Target="RootGrid.RowSpacing" Value="0" />
+                        <Setter Target="HeaderRow.(Grid.RowSpan)" Value="5" />
+                        <Setter Target="HeaderRow.VerticalAlignment" Value="Center" />
                         <Setter Target="Medallion.Size" Value="Compact" />
                         <Setter Target="Medallion.CentreShowsCount" Value="True" />
                         <!--
@@ -490,12 +506,12 @@
 
                             The mode text still says which state the receiver is in. The detail line
                             qualifies that, and qualifying is what a reduced CONTENT mode gives up.
+
+                            Collapsed from code with the coasting pill and the merit row, not here -
+                            see the note above ShortLayout (#565).
                         -->
-                        <Setter Target="ModeDetailText.Visibility" Value="Collapsed" />
                         <Setter Target="ReadoutRow.Visibility" Value="Collapsed" />
-                        <Setter Target="MeritRow.Visibility" Value="Collapsed" />
                         <Setter Target="ClockRow.Visibility" Value="Collapsed" />
-                        <Setter Target="CoastingPill.Visibility" Value="Collapsed" />
                         <Setter Target="FooterRow.Visibility" Value="Collapsed" />
                     </VisualState.Setters>
                 </VisualState>
