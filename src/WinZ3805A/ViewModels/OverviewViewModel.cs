@@ -380,9 +380,11 @@ public sealed class OverviewViewModel : INotifyPropertyChanged, IDisposable
             // The duration, not the present uncertainty. This showed the uncertainty until #319 —
             // a time error in microseconds under a label reading "Duration", which is a different
             // quantity in a different unit, and the Holdover page beside it showed the real one.
-            // Described the way the Holdover page describes it, so the two agree.
+            // Described the way the Holdover page describes it, so the two agree - as an elapsed
+            // time. Both pages used the status line's age wording until #563, so eleven minutes of
+            // holdover read "updated 11 minutes ago" on each.
             return Status?.HoldoverDuration is TimeSpan duration
-                ? Staleness.Describe(duration)
+                ? Staleness.DescribeDuration(duration)
                 : ReadoutFormatter.NoValue;
         }
     }

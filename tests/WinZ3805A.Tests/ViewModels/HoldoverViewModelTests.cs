@@ -24,7 +24,21 @@ public sealed class HoldoverViewModelTests
         double? threshold = 1.0e-6,
         double? present = null,
         string? modeDetail = null,
-        PowerUpGuard? powerUp = null)
+        PowerUpGuard? powerUp = null,
+        TimeSpan? duration = null) =>
+        new(Store(syncState, predicted, threshold, present, modeDetail, duration), SmartClock())
+        {
+            Connection = ConnectionStatus.Connected,
+            PowerUp = powerUp,
+        };
+
+    private static ReceiverStateStore Store(
+        string syncState = "LOCK",
+        double? predicted = 2.0e-6,
+        double? threshold = 1.0e-6,
+        double? present = null,
+        string? modeDetail = null,
+        TimeSpan? duration = null)
     {
         FakeTimeProvider clock = new(Captured);
         ReceiverStateStore store = new(clock);
@@ -34,13 +48,14 @@ public sealed class HoldoverViewModelTests
             HoldoverPredictedSeconds = predicted,
             HoldThresholdSeconds = threshold,
             HoldoverPresentSeconds = present,
+            HoldoverDuration = duration,
             ModeDetail = modeDetail,
             CapturedAt = Captured,
         });
 
         store.UpdateFast(syncState, 3, 0, -10.0, 1.0, 6);
 
-        return new HoldoverViewModel(store, SmartClock()) { Connection = ConnectionStatus.Connected, PowerUp = powerUp };
+        return store;
     }
 
     /// <remarks>
@@ -141,6 +156,34 @@ public sealed class HoldoverViewModelTests
     [Fact]
     public void AnUnparsedDurationIsADashAndNotAZero() =>
         Assert.Equal(ReadoutFormatter.NoValue, Connected("HOLD").DurationText);
+
+    /// <remarks>
+    /// #563: both pages wrote the holdover duration with the status line's age wording, so eleven
+    /// minutes of holdover read "updated 11 minutes ago" - a sentence about a reading, under a
+    /// label that names how long the receiver has been without GPS. 694 s is the backyard capture's
+    /// <c>Holdover Duration: 11m 34s</c>.
+    /// <para>
+    /// Both pages are built over ONE store and held to the same literal. Comparing either against
+    /// a call to a formatter is how the defect passed before: the Overview test asserted
+    /// <c>Staleness.Describe</c> and so restated it.
+    /// </para>
+    /// </remarks>
+    [Theory]
+    [InlineData(45, "45 s")]
+    [InlineData(694, "11 min")]
+    [InlineData(7500, "2 h 5 min")]
+    [InlineData(284400, "3 d 7 h")]
+    public void BothPagesGiveTheDurationAsAnElapsedTime(int seconds, string expected)
+    {
+        ReceiverStateStore store = Store("HOLD", duration: TimeSpan.FromSeconds(seconds));
+
+        HoldoverViewModel holdover = new(store, SmartClock()) { Connection = ConnectionStatus.Connected };
+        OverviewViewModel overview = new(store, SmartClock()) { Connection = ConnectionStatus.Connected };
+
+        Assert.Equal(expected, holdover.DurationText);
+        Assert.Equal(expected, overview.HoldoverDuration);
+        Assert.DoesNotContain("ago", holdover.DurationText, StringComparison.Ordinal);
+    }
 
     [Fact]
     public void DisconnectedEmptiesEverything()

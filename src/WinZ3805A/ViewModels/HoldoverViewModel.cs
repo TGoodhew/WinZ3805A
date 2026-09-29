@@ -151,9 +151,16 @@ public sealed class HoldoverViewModel : INotifyPropertyChanged, IDisposable
     /// which gave the field the screen label it had been waiting for (the remark here said
     /// "unparsed pending #4" until #319). A receiver that does not print it still shows the §11.1
     /// dash rather than a zero, because a zero would read as "no time has passed".
+    /// <para>
+    /// <b>An elapsed time, not an age (#563).</b> This was written with <c>Staleness.Describe</c>,
+    /// the status line's wording, so eleven minutes of holdover read "updated 11 minutes ago", which
+    /// is a statement about a reading rather than about the receiver. <c>DescribeDuration</c> is
+    /// the form the time since power-up already uses on this page, and the Overview page's Duration
+    /// row uses the same one.
+    /// </para>
     /// </remarks>
     public string DurationText => Status?.HoldoverDuration is TimeSpan duration
-        ? Staleness.Describe(duration)
+        ? Staleness.DescribeDuration(duration)
         : ReadoutFormatter.NoValue;
 
     /// <summary>
