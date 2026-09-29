@@ -240,6 +240,7 @@
     <Compile Include="..\..\src\WinZ3805A\Services\SurveyWatch.cs" Link="Services\SurveyWatch.cs" />
     <Compile Include="..\..\src\WinZ3805A\Services\AdvancedPreferences.cs" Link="Services\AdvancedPreferences.cs" />
     <Compile Include="..\..\src\WinZ3805A\Services\SignInStart.cs" Link="Services\SignInStart.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Services\SignInConnect.cs" Link="Services\SignInConnect.cs" />
     <Compile Include="..\..\src\WinZ3805A\ViewModels\AdvancedConsole.cs" Link="ViewModels\AdvancedConsole.cs" />
     <Compile Include="..\..\src\WinZ3805A\ViewModels\LeapSecondReading.cs" Link="ViewModels\LeapSecondReading.cs" />
     <Compile Include="..\..\src\WinZ3805A\ViewModels\TimeCodeReading.cs" Link="ViewModels\TimeCodeReading.cs" />
