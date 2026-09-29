@@ -108,6 +108,28 @@ public class ScalarParsersTests
     /// silently produce the wrong number rather than failing, which is the worst kind of bug for a
     /// timing instrument.
     /// </summary>
+    /// <summary><c>:PTIM:TIME?</c> as the bench Z3805A answers it, and the shapes it must refuse (#560).</summary>
+    [Theory]
+    [InlineData("+19,+40,+16", 19, 40, 16)]
+    [InlineData(" +0,+0,+0", 0, 0, 0)]
+    [InlineData("+23,+59,+59", 23, 59, 59)]
+    [InlineData("+23,+59,+60", 23, 59, 59)]   // a leap second holds 59 rather than becoming tomorrow
+    public void ATimeOfDayIsRead(string response, int hours, int minutes, int seconds) =>
+        Assert.Equal(new TimeSpan(hours, minutes, seconds), ScalarParsers.ParseTimeOfDay(response));
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("+19,+40")]
+    [InlineData("+19,+40,+16,+1")]
+    [InlineData("+24,+00,+00")]
+    [InlineData("+19,+60,+00")]
+    [InlineData("+19,+40,+61")]
+    [InlineData("-1,+40,+16")]
+    [InlineData("\"19:40:16\"")]
+    public void AnythingElseIsNotATimeOfDay(string? response) =>
+        Assert.Null(ScalarParsers.ParseTimeOfDay(response));
+
     [Fact]
     public void ParsingDoesNotFollowTheCurrentCulture()
     {

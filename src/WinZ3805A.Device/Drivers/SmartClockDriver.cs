@@ -176,7 +176,11 @@ public sealed class SmartClockDriver(TimeProvider timeProvider) : IReceiverDrive
             Ffom: ScalarParsers.ParseInteger(At(answers, 2)),
             TimeIntervalNanoseconds: ScalarParsers.ParseSecondsAsNanoseconds(At(answers, 3)),
             EfcPercent: ScalarParsers.ParseDecimal(At(answers, 4)),
-            SatellitesTracked: ScalarParsers.ParseInteger(At(answers, 5)));
+            SatellitesTracked: ScalarParsers.ParseInteger(At(answers, 5)))
+        {
+            // #560: the time of day every second, so the clock ticks between screens.
+            TimeOfDay = ScalarParsers.ParseTimeOfDay(At(answers, 6)),
+        };
 
         // One source for "is this a state?" and "which state is it?" (#304): a token the mapping
         // does not know is exactly a token the sweep must reject, and keeping two lists is how the
@@ -197,6 +201,10 @@ public sealed class SmartClockDriver(TimeProvider timeProvider) : IReceiverDrive
         ":SYNC:TINT?",
         ":DIAG:ROSC:EFC:REL?",
         ":GPS:SAT:TRAC:COUN?",
+
+        // Last, so the six §7.3 readings keep their places, and the time is as fresh as the sweep
+        // allows (#560). About 40 ms on the bench Z3805A.
+        ":PTIM:TIME?",
     ];
 
     /// <summary>The answer at <paramref name="index"/>, or null when the sweep was shorter.</summary>

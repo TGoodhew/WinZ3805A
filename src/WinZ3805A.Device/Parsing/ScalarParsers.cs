@@ -37,6 +37,47 @@ public static class ScalarParsers
             : null;
     }
 
+    /// <summary>
+    /// Parses <c>:PTIM:TIME?</c>'s answer, <c>+19,+40,+16</c>, as a time of day (#560).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Hours, minutes and seconds as three signed integers, confirmed on the bench Z3805A on
+    /// 29 Sep 2026: it answered in 37–54 ms and agreed with the PC's UTC to the second. The time is
+    /// on the receiver's selected time scale, the same one its status screen prints.
+    /// </para>
+    /// <para>
+    /// <b>A leap second reads as second 59.</b> The receiver can say <c>+23,+59,+60</c>, and a
+    /// <see cref="TimeSpan"/> of 23:59:60 is the next midnight - a day ahead for one second. Holding
+    /// 23:59:59 for two seconds is the smaller lie, and the next second's answer corrects it.
+    /// </para>
+    /// <para>
+    /// Anything that is not three fields in range is null, never a guess (§11.1).
+    /// </para>
+    /// </remarks>
+    public static TimeSpan? ParseTimeOfDay(string? response)
+    {
+        string? text = Clean(response);
+        if (text is null)
+        {
+            return null;
+        }
+
+        string[] fields = text.Split(',');
+        if (fields.Length != 3
+            || !int.TryParse(fields[0].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int hours)
+            || !int.TryParse(fields[1].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int minutes)
+            || !int.TryParse(fields[2].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int seconds)
+            || hours is < 0 or > 23
+            || minutes is < 0 or > 59
+            || seconds is < 0 or > 60)
+        {
+            return null;
+        }
+
+        return new TimeSpan(hours, minutes, Math.Min(seconds, 59));
+    }
+
     /// <summary>Parses a real answer such as <c>-5.4E-009</c>.</summary>
     public static double? ParseDecimal(string? response)
     {
