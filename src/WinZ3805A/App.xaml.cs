@@ -9,6 +9,7 @@ using Microsoft.UI.Xaml.Controls;
 // type, which does not redirect.
 using AppActivationArguments = Microsoft.Windows.AppLifecycle.AppActivationArguments;
 using AppInstance = Microsoft.Windows.AppLifecycle.AppInstance;
+using ExtendedActivationKind = Microsoft.Windows.AppLifecycle.ExtendedActivationKind;
 
 using Windows.ApplicationModel;
 
@@ -112,7 +113,11 @@ public partial class App : Application
             return;
         }
 
-        _services = Compose();
+        // Read before anything else looks at it: whether Windows started this at sign-in (#548)
+        // decides whether the window opens and whether the remembered receiver is retried.
+        LaunchContext launch = DetectLaunch();
+
+        _services = Compose(launch);
 
         // Before this, a crash left no trace anywhere the developer could reach. app.log simply
         // stopped mid-session, and the only artefact was a WER minidump taken after the stack had
@@ -122,10 +127,17 @@ public partial class App : Application
         // reproduce it with a debugger attached to a packaged app.
         HookUnhandledExceptions();
 
+        if (launch.IsSignInStart)
+        {
+            _services.GetService<ILoggerFactory>()?.CreateLogger("Launch")
+                .LogInformation("Started by Windows at sign-in; hidden: {Hidden}.", StartsMinimised());
+        }
+
         _window = new MainWindow(_services);
         _window.Closed += OnMainWindowClosed;
 
-        // #280's start-minimised. Activate() is still called first: a window that has never been
+        // #280's start-minimised, and #548's start at sign-in, which has its own setting - see
+        // SignInStartPolicy.StartsHidden. Activate() is still called first: a window that has never been
         // activated has no AppWindow to hide, and skipping activation leaves it in a state where a
         // later show does not reliably present it.
         _window.Activate();
@@ -445,11 +457,15 @@ public partial class App : Application
     /// enumerator walks the registry, and the placement store writes to the user's profile.
     /// </para>
     /// </remarks>
-    private static ServiceProvider Compose()
+    private static ServiceProvider Compose(LaunchContext launch)
     {
         ServiceCollection services = new();
 
         services.AddSingleton(TimeProvider.System);
+
+        // #548: how this run began, for the window (start hidden?) and the main page (retry the
+        // remembered receiver?). A fact about the process, fixed at launch.
+        services.AddSingleton(launch);
 
         // #127. ILogger has been injected into the transport, the session and the poller since
         // §15 step 1, and nothing has ever registered a provider - so ILoggerFactory resolved to
@@ -671,11 +687,31 @@ public partial class App : Application
     {
         try
         {
-            return _services?.GetService<IAdvancedPreferenceStore>()?.Load().StartMinimised ?? false;
+            return _services?.GetService<IAdvancedPreferenceStore>()?.Load() is AdvancedPreferences stored
+                && SignInStartPolicy.StartsHidden(_services.GetService<LaunchContext>() ?? LaunchContext.ByHand, stored);
         }
         catch (Exception)
         {
             return false;
+        }
+    }
+
+    /// <summary>Whether Windows started this run at sign-in, through the package's startup task (#548).</summary>
+    /// <remarks>
+    /// A redirected second launch never reaches here - it exits in <c>OnLaunched</c> first - so this
+    /// describes the process that stays. Any failure reads as a launch by hand, which is what every
+    /// launch was before #548 and the one that shows a window.
+    /// </remarks>
+    private static LaunchContext DetectLaunch()
+    {
+        try
+        {
+            return new LaunchContext(
+                AppInstance.GetCurrent().GetActivatedEventArgs().Kind == ExtendedActivationKind.StartupTask);
+        }
+        catch (Exception)
+        {
+            return LaunchContext.ByHand;
         }
     }
 

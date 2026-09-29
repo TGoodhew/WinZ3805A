@@ -5,7 +5,8 @@
   xmlns:mp="http://schemas.microsoft.com/appx/2014/phone/manifest"
   xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
-  IgnorableNamespaces="uap rescap">
+  xmlns:uap5="http://schemas.microsoft.com/appx/manifest/uap/windows10/5"
+  IgnorableNamespaces="uap rescap uap5">
 
   <!--
     TODO (blocked by OQ-6, issue #39): three values here and one below come from
@@ -57,7 +58,9 @@
   <Properties>
     <!-- TODO (OQ-8): decide whether this survives Store certification as-is, or
          becomes descriptive (e.g. "GPSDO Monitor for Z3805A"). Read at runtime
-         via Package.Current.DisplayName; never hard-coded in XAML or tests. -->
+         via Package.Current.DisplayName; never hard-coded in XAML or tests.
+         Also named by VisualElements/@DisplayName and uap5:StartupTask/@DisplayName
+         below - change all three together. -->
     <DisplayName>WinZ3805A</DisplayName>
     <!--
       The publisher as a person reads it. This is display only, unlike the
@@ -127,6 +130,22 @@
         buttons or arguments: activation is the only thing an activator provides, and nothing here
         can be activated. Do not add one back without a reason that survives that rule.
       -->
+      <!--
+        START AT SIGN-IN (#548). Enabled="false": the application never enrols itself; the user
+        turns it on from Settings -> Running in the background, which calls
+        StartupTask.RequestEnableAsync with this TaskId (Services/SignInTask.cs - keep the two
+        equal). Windows lists the task in Task Manager's Startup apps under DisplayName, and the
+        user can switch it off there without opening the application.
+
+        DisplayName is the third place this file names the application, beside
+        Properties/DisplayName and VisualElements/@DisplayName above. A rename (OQ-8) changes all
+        three; the code reads none of them as a literal (§6.3).
+      -->
+      <Extensions>
+        <uap5:Extension Category="windows.startupTask">
+          <uap5:StartupTask TaskId="WinZ3805AStartAtSignIn" Enabled="false" DisplayName="WinZ3805A" />
+        </uap5:Extension>
+      </Extensions>
     </Application>
   </Applications>
 
