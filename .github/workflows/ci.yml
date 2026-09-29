@@ -238,6 +238,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # #564. The notices rule once skipped two of twelve packages and passed, so passing on the
+      # repository says nothing on its own: the fixtures hold both faults as deliberate violations.
+      - name: The notices rule still judges the known cases
+        shell: pwsh
+        run: ./build/Test-DocumentReferences.ps1 -SelfTest
+
       - name: Links, section references, cited issues and the notices table
         shell: pwsh
         env:
