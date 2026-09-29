@@ -35,9 +35,66 @@
         </Grid.RowDefinitions>
 
         <TitleBar x:Name="AppTitleBar">
+            <!--
+                #568. Two of the control's own theme resources, overridden for this title bar only.
+
+                Giving a TitleBar any header content moves it to its ExpandedHeight state, which is
+                TitleBarExpandedHeight - 48 px. The pushpin below made this bar 16 px thicker, and
+                compact mode's 144 px (§9.6.2: a 32 px title bar over a 112 px page) lost those 16 from
+                the page, clipping the bottom of the medallion. Aliasing the expanded height to the
+                compact one keeps the bar the 32 px the wireframes are built from.
+
+                The right header is followed by a column of TitleBarMinDragRegionWidth, a strip of
+                guaranteed drag area beside the caption buttons - which stood the pushpin 48 px short
+                of them, in the middle of the bar. WzSpaceXs instead puts it against them, and the rest
+                of the bar still drags.
+            -->
+            <TitleBar.Resources>
+                <StaticResource x:Key="TitleBarExpandedHeight" ResourceKey="TitleBarCompactHeight" />
+                <StaticResource x:Key="TitleBarMinDragRegionWidth" ResourceKey="WzSpaceXs" />
+            </TitleBar.Resources>
+
             <TitleBar.IconSource>
                 <ImageIconSource ImageSource="ms-appx:///Assets/AppIcon.ico" />
             </TitleBar.IconSource>
+
+            <!--
+                #568. Says the window is pinned, in both layouts. A pinned window and an unpinned
+                one otherwise look identical, and in compact mode - where the footer's pin, the
+                only other place the state showed, is collapsed - there was nothing at all to
+                tell them apart.
+
+                In the RIGHT HEADER, not laid over the bar, because the control makes its header
+                content reachable by the pointer. Anything else in this band is the window's drag
+                region, where the pointer goes to the frame and a tooltip never opens.
+
+                An indicator and not a button: every route that changes the state is a deliberate
+                act elsewhere (the footer, Ctrl+Shift+T, the right-click menu, the notification
+                area), and a click target at the end of the band a user drags the window by would
+                be a way to unpin it by accident. The tooltip names the key, as §9.7.5's amendment
+                requires of every tooltip here.
+
+                A11Y-5: the tooltip makes it a pointer target, so the Border carries the 32 px floor
+                with a Transparent background - unset would be null and not hit-testable, and the
+                glyph alone would be about 12 px square. 32 is also exactly the bar's height.
+            -->
+            <TitleBar.RightHeader>
+                <Border x:Name="PinnedIndicator"
+                        Background="Transparent"
+                        MinWidth="32"
+                        MinHeight="32"
+                        VerticalAlignment="Center"
+                        Visibility="Collapsed"
+                        AutomationProperties.Name="Kept above other windows"
+                        ToolTipService.ToolTip="Kept above other windows. Ctrl+Shift+T, or right-click the window, to change it">
+                    <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                              FontSize="12"
+                              HorizontalAlignment="Center"
+                              VerticalAlignment="Center"
+                              Foreground="{ThemeResource WzTextSecondaryBrush}"
+                              Glyph="&#xE840;" />
+                </Border>
+            </TitleBar.RightHeader>
         </TitleBar>
 
         <!--

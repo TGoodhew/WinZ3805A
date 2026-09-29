@@ -418,8 +418,51 @@ public sealed partial class MainPage : Page
     /// <summary>Raised when the user toggles always-on-top.</summary>
     public event EventHandler? AlwaysOnTopChanged;
 
+    /// <summary>Pins the window or unpins it, from whichever route asked (#568).</summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Four routes, one state.</b> The footer pin was the only way to pin until #568, and compact
+    /// mode collapses the footer (§9.6.2) - so a compact window, which is the one that most wants to
+    /// sit above the others, could be neither pinned nor unpinned. The shortcut
+    /// (<c>Ctrl+Shift+T</c>), the window's right-click menu and the notification-area menu all
+    /// come here, and so does the button, so the saved state, the presenter and the title-bar
+    /// glyph cannot disagree about which way it went.
+    /// </para>
+    /// <para>
+    /// The button's check state is the state itself (see <see cref="IsAlwaysOnTop"/>), so flipping
+    /// it is the toggle even while the footer is collapsed and nobody can see it.
+    /// </para>
+    /// </remarks>
+    public void ToggleAlwaysOnTop()
+    {
+        IsAlwaysOnTop = !IsAlwaysOnTop;
+        AlwaysOnTopChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    // The button has already flipped its own check state by the time Click arrives, so this only
+    // reports it - calling ToggleAlwaysOnTop here would flip it straight back.
     private void OnAlwaysOnTopClicked(object sender, RoutedEventArgs e) =>
         AlwaysOnTopChanged?.Invoke(this, EventArgs.Empty);
+
+    /// <summary>
+    /// Sets the right-click menu's check marks from the state as it is now (#568).
+    /// </summary>
+    /// <remarks>
+    /// Read at opening rather than kept in step. The same two states change from the keyboard, the
+    /// footer, a double-click and the notification area, and a menu that tracked each of them
+    /// would be one more copy to get wrong. Nothing reads these items while the menu is closed.
+    /// </remarks>
+    private void OnWindowMenuOpening(object? sender, object e)
+    {
+        KeepAboveMenuItem.IsChecked = IsAlwaysOnTop;
+        CompactMenuItem.IsChecked = IsCompact;
+    }
+
+    // A ToggleMenuFlyoutItem flips its own IsChecked before Click. That is ignored rather than
+    // trusted: the toggle works from the state, and the next opening sets the mark from the result.
+    private void OnKeepAboveMenuClicked(object sender, RoutedEventArgs e) => ToggleAlwaysOnTop();
+
+    private void OnCompactMenuClicked(object sender, RoutedEventArgs e) => ToggleCompact();
 
     private void OnMedallionDoubleTapped(object sender, DoubleTappedRoutedEventArgs e) => ToggleCompact();
 

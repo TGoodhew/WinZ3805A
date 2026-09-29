@@ -260,9 +260,9 @@ public partial class App : Application
                 Package.Current.DisplayName,
                 _services.GetService<ILoggerFactory>()?.CreateLogger("Tray"));
 
-            // The one thing a user expects of a tray icon. Not a menu: there is nothing to put on
-            // one that the window does not already do, and every command worth reaching goes
-            // through §8's tiers rather than a shell context menu.
+            // The one thing a user expects of a tray icon. Its right-click menu carries only what
+            // touches the window - Open, the pin and Exit (#280, #568) - because every command that
+            // reaches the receiver goes through §8's tiers rather than a shell context menu.
             //
             // BringToFront rather than Activate, so the tray and a second launch are one route back
             // to the window - the one that restores it from minimised and puts it back on a display
@@ -271,6 +271,11 @@ public partial class App : Application
 
             // #280's only way out, once the close button no longer exits.
             _tray.ExitRequested += (_, _) => _window?.DispatcherQueue.TryEnqueue(RequestExit);
+
+            // #568: the pin, reachable while the window is hidden or compact. The menu's command
+            // arrives through the icon's own window, which the UI thread pumps, so no hop is needed.
+            _tray.IsKeptAbove = () => _window is MainWindow { IsAlwaysOnTop: true };
+            _tray.KeepAboveToggled += (_, _) => (_window as MainWindow)?.ToggleAlwaysOnTop();
 
             _services.GetService<ILoggerFactory>()?.CreateLogger("Tray")
                 .LogInformation("Tray icon started.");

@@ -83,6 +83,20 @@ public sealed class TrayIconService : IDisposable
         remove => _icon.ExitRequested -= value;
     }
 
+    /// <summary>Raised when <i>Keep above other windows</i> is chosen from the tray menu (#568).</summary>
+    public event EventHandler? KeepAboveToggled
+    {
+        add => _icon.KeepAboveToggled += value;
+        remove => _icon.KeepAboveToggled -= value;
+    }
+
+    /// <summary>Asked as the tray menu opens whether the window is pinned (#568).</summary>
+    public Func<bool>? IsKeptAbove
+    {
+        get => _icon.IsKeptAbove;
+        set => _icon.IsKeptAbove = value;
+    }
+
     /// <summary>
     /// The mode the tray should be showing.
     /// </summary>

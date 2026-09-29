@@ -18,6 +18,33 @@
         Every colour, size, radius and gap is a §9 token. Severity is never carried by colour alone:
         each one goes through SeverityPill, which adds shape and text (§9.13 item 10).
     -->
+
+    <!--
+        #568. The window's own commands, on a right-click anywhere that is not a copyable readout
+        (those carry CopyMenu's flyout, which is nearer and wins) - and on Shift+F10 or the menu
+        key, since a context request bubbles from the focused element to here.
+
+        It exists for compact mode, which collapses the footer and with it the only pin there was,
+        but it is not compact's alone: the same two items are just as true in the standard layout,
+        and a menu that appeared in one layout only would be one more thing to learn.
+
+        The key text is written by hand, like every tooltip here (§9.7.5's amendment): the
+        accelerators are registered on the window's content root rather than on these items, so
+        there is nothing for an automatic placement to render from.
+    -->
+    <Page.ContextFlyout>
+        <MenuFlyout Opening="OnWindowMenuOpening">
+            <ToggleMenuFlyoutItem x:Name="KeepAboveMenuItem"
+                                  Text="Keep this window above others"
+                                  KeyboardAcceleratorTextOverride="Ctrl+Shift+T"
+                                  Click="OnKeepAboveMenuClicked" />
+            <ToggleMenuFlyoutItem x:Name="CompactMenuItem"
+                                  Text="Compact mode"
+                                  KeyboardAcceleratorTextOverride="Ctrl+Shift+M"
+                                  Click="OnCompactMenuClicked" />
+        </MenuFlyout>
+    </Page.ContextFlyout>
+
     <Grid x:Name="RootGrid"
           Padding="{StaticResource WzPageMarginThickness}"
           RowSpacing="{StaticResource WzSpaceXl}">
@@ -325,7 +352,7 @@
                               MinWidth="40"
                               MinHeight="32"
                               AutomationProperties.Name="Keep this window above others"
-                              ToolTipService.ToolTip="Keep this window above others"
+                              ToolTipService.ToolTip="Keep this window above others (Ctrl+Shift+T)"
                               Click="OnAlwaysOnTopClicked">
                     <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
                               FontSize="16"
