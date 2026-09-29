@@ -167,7 +167,8 @@ in practice rather than theoretically.
 The commands below are copied from the README's *Building from source*, which owns
 them — change there first; what this file adds is the reasoning. MSBuild is not on
 `PATH`, and its location depends on the Visual Studio edition installed — this
-machine's is Build Tools, under `Program Files (x86)`, not Enterprise. Ask
+machine's is Visual Studio Enterprise 2026, under `Program Files` (it was Build Tools, under
+`Program Files (x86)`, until the machine changed; corrected 29 Sep 2026, #556). Ask
 `vswhere` rather than writing a path down:
 
 ```powershell
@@ -187,8 +188,11 @@ project: do not add a platform, a publish profile or a matrix row for it.
 # Tests (UI-independent, so the plain SDK is fine here)
 dotnet test tests\WinZ3805A.Tests\WinZ3805A.Tests.csproj
 
-# Run the packaged app: build first, then point winapp at the output folder
-winapp run src\WinZ3805A\bin\x64\Debug\net10.0-windows10.0.26100.0\win-x64 --detach
+# Run the packaged app: point winapp at the PROJECT, not a build-output folder. The output
+# folder has no Assets, so a package registered from it has no icons (#556). Given the
+# project, winapp builds it and registers a complete layout under bin\Debug\...\AppX,
+# keeping app data. winapp: winget install Microsoft.WinAppCli
+winapp run src\WinZ3805A\WinZ3805A.csproj --arch x64 --detach
 ```
 
 `TreatWarningsAsErrors` and `EnforceCodeStyleInBuild` are both on, so **the build
@@ -418,11 +422,11 @@ as a local time, which is right wherever local time is UTC — the CI runner inc
 value-only check would have been green on the fault. Nine deliberate violations were tried against
 it and all nine fail.
 
-`.github/workflows/ci.yml` runs every one of them in its own dependency-free job, alongside the
-build rather than ahead of it — they need no restore, so a token, accessibility, or safety
-regression fails in seconds rather than after a full build. A separate matrix job builds both
+`.github/workflows/ci.yml` runs them in dependency-free jobs of their own — grouped, fifteen
+of the eighteen sharing one — alongside the build rather than ahead of it — they need no restore, so a token, accessibility, or safety
+regression fails in seconds rather than after a full build. A matrix job builds both
 Configuration × Platform combinations — Debug and Release against x64, the only platform
-§6.1 has — and runs the tests.
+§6.1 has — and a separate job runs the tests. Nothing waits on anything else.
 
 **Why a build script is in CI at all.** `Capture-Fixtures.ps1` collects §11.1's
 fixtures, and the states it exists to catch — power-up, acquiring, holdover, a failing health
@@ -680,8 +684,9 @@ tests/WinZ3805A.Tests/        xUnit, with Fixtures/ for captured status screens 
 tools/NmeaSimulator/          the NMEA 0183 talker the tests and the tutorial run against
 tools/UccmSimulator/          the UCCM shapes the driver was written against, before hardware
 build/                        the gate scripts, the five capture, transitions and soak harnesses,
-                              the sideload packager, the palette derivation
-.github/workflows/ci.yml      the gates in their own jobs, then the Debug and Release builds and the tests
+                              the two guide-image capture scripts, the sideload packager, the
+                              palette derivation
+.github/workflows/ci.yml      the gates in their own jobs, alongside the Debug and Release builds and the tests
 ```
 
 **§15 is an ordering constraint, not a suggestion.** In particular: the `Themes/`

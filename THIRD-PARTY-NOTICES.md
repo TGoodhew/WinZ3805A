@@ -8,7 +8,7 @@ application package, and what the sideload zip adds to it. Packages used only to
 build are listed as such; packages used only by the tests — xunit, coverlet,
 Microsoft.NET.Test.Sdk, Microsoft.Extensions.TimeProvider.Testing — ship nothing
 and are not the subject of a notice. To regenerate it: every `<PackageReference>`
-in the three project files with its version, each package's `<license>` from its
+in the project files under `src/` with its version, each package's `<license>` from its
 `.nuspec` in the NuGet cache, and a listing of the built package to see which of
 them actually land in it.
 
@@ -29,7 +29,7 @@ below.
 | Cascadia Mono (font) | 2407.24 | SIL Open Font License 1.1 | `Assets/Fonts/CascadiaMono.ttf` in the package, with the licence text beside it |
 | Windows App SDK / WinUI 3 (`Microsoft.WindowsAppSDK`) | 2.3.1 | Microsoft Software License Terms (redistribution permitted by its §3) | `Microsoft.WinUI.dll`, the projection assemblies and the bootstrapper in the package; the native runtime as a framework package — carried in the sideload zip as `Runtime\Microsoft.WindowsAppRuntime.2.msix`, and resolved by the Store at install if that channel is ever used |
 | Microsoft.Web.WebView2 (via the Windows App SDK) | 1.0.3719.77 | Microsoft's BSD-style licence (`LICENSE.txt` in the package) | `Microsoft.Web.WebView2.Core.dll` and `WebView2Loader.dll` in the package; nothing in the application uses them |
-| CommunityToolkit.WinUI.Controls.SettingsControls, with CommunityToolkit.Common and CommunityToolkit.WinUI.Extensions / Helpers / Triggers | 8.2.251219 (Common 8.2.1) | MIT | Assemblies in the package (referenced; no control from it is used today) |
+| CommunityToolkit.WinUI.Controls.SettingsControls, with CommunityToolkit.Common and CommunityToolkit.WinUI.Extensions / Helpers / Triggers | 8.2.251219 (Common 8.2.1) | MIT | Assemblies in the package; `SettingsCard` and `SettingsExpander` build the Settings page |
 | Markdig | 1.3.2 | BSD 2-Clause | Assembly in the package |
 | Microsoft.Data.Sqlite | 10.0.11 | MIT | Assembly in the package |
 | SQLitePCLRaw (core, provider.e_sqlite3, bundle_e_sqlite3, lib.e_sqlite3) | 2.1.12 | Apache-2.0 | Assemblies and the native `e_sqlite3.dll` in the package; SQLite itself is public domain |
@@ -39,6 +39,7 @@ below.
 | System.Numerics.Tensors (transitive) | 9.0.0 | MIT | Assembly in the package |
 | Microsoft.Windows.SDK.BuildTools | 10.0.28000.2526 | Microsoft Windows SDK licence | Build-time only; not redistributed |
 | Microsoft.Windows.SDK.BuildTools.WinApp | 0.5.0 | MIT | Build-time only; not redistributed |
+| Microsoft.CodeAnalysis.BannedApiAnalyzers | 5.6.0 | MIT | Build-time only (an analyzer, `PrivateAssets="all"`); not redistributed |
 | Microsoft.Windows.AI.MachineLearning, Microsoft.WindowsAppSDK.Widgets | 2.1.74, 2.0.5 | Microsoft Software License Terms | Referenced with their runtime and native assets excluded — the csproj says why — so nothing of theirs ships |
 
 The Windows App SDK packages carry their terms as `license.txt` inside each
@@ -67,8 +68,8 @@ engaged. The acknowledgement is here anyway, because the distinction is a
 judgement and the work was genuinely useful — and because a reader of that driver
 should be able to find where its claims came from. Each file cites it, and the
 driver states plainly which of its claims have since been checked against a
-receiver and which have not — one Trimble UCCM-P has been on the bench since
-10 September 2026, and it refuted two of the protocol conventions listed above
+receiver and which have not — one Trimble UCCM-P sat on the bench seven times
+between 10 and 13 September 2026, and it refuted two of the protocol conventions listed above
 for that module while leaving the rest standing as citations.
 
 ## Trademarks

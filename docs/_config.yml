@@ -33,3 +33,6 @@ exclude:
   - lady-heather-comparison.md
   - manual-qa.md
   - store-listing.md
+  - nmea-against-lady-heather.md
+  - porting-to-python-qt.md
+  - review/

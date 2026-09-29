@@ -35,9 +35,9 @@ Feature-complete against the specification's P0 set and in daily use against a
 bench Z3805A; **it is sideloaded rather than published to the Store**
 ([latest release](https://github.com/TGoodhew/WinZ3805A/releases/latest)). The transport, parser, command
 model, design system and every view are implemented, with the test suite and
-every CI gate green, and the
-[issue backlog](https://github.com/TGoodhew/WinZ3805A/issues) — whose `§`
-references resolve against the specification — is currently empty. Three
+every CI gate green. The
+[issue list](https://github.com/TGoodhew/WinZ3805A/issues) — whose `§`
+references resolve against the specification — says what is open. Three
 receiver families are driven, and at least one member of each has now answered
 on the bench — though for the UCCM that is a single module of one variant, and
 the caveat below still stands.
@@ -228,6 +228,11 @@ attaches the zip as an artifact without publishing anything.
   rather than installed separately.
 - A machine meeting the floors in [Supported platforms](#supported-platforms) above.
   For building specifically, the app project needs the **10.0.26100** Windows SDK.
+- **The Windows App Development CLI** (`winapp`), to run the packaged app, sign the
+  sideload package and photograph the guide:
+  `winget install Microsoft.WinAppCli` (0.7.0 on the bench machine, 29 Sep 2026).
+- **Developer Mode** on (Windows Settings → System → For developers), which
+  registering a development package needs.
 
 ### Build
 
@@ -272,11 +277,20 @@ drives, and uninstalls the package.
 ### Run
 
 The app is a single-project MSIX and needs package identity to launch, so run it
-from the build output rather than by starting the `.exe` directly:
+through `winapp` rather than by starting the `.exe` directly. **Point it at the
+project, not at a build-output folder:**
 
 ```powershell
-winapp run src\WinZ3805A\bin\x64\Debug\net10.0-windows10.0.26100.0\win-x64 --detach
+winapp run src\WinZ3805A\WinZ3805A.csproj --arch x64 --detach
 ```
+
+Given the project, `winapp` builds it and registers a complete package layout
+under `bin\Debug\…\win-x64\AppX`, assets and fonts included, then launches it.
+The application's data is kept between runs (`--clean` removes it). Given a
+build-output folder instead, which this section said until 29 Sep 2026 (#556),
+it builds the layout from that folder alone, and the build output carries no
+`Assets`. The package then registers without its icons or its monospaced font,
+and the taskbar shows a grey placeholder. Exit a running copy first.
 
 ### Tests
 
@@ -308,8 +322,8 @@ Three more gates check things the source is not: two read the **documents**
 interface is named in the user's guide) and one reads the **pull request** (that
 no closing keyword closes an issue nobody meant to close). All are
 dependency-free and answer in seconds, which makes them the fastest local check
-available; [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs every one
-in its own dependency-free job alongside the build, so a regression fails in
+available; [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs them in
+dependency-free jobs of their own alongside the build, so a regression fails in
 seconds instead of after a full build. Five further scripts there self-test the
 **tooling** — the fixture, talker, UCCM and UCCM-transitions capture harnesses
 and the soak's arithmetic — rather than gating the source. The full list, with what each guards
@@ -333,7 +347,7 @@ src/WinZ3805A.Device/         class library — no UI references
 tests/WinZ3805A.Tests/        xUnit, with Fixtures/ for captured SmartClock status screens, Nmea/Captures/ for captured talker cycles and Uccm/Captures/ for captured UCCM sittings
 tools/NmeaSimulator/          the NMEA 0183 talker the tests and the tutorial run against
 tools/UccmSimulator/          a UCCM module that is not one — the shapes the driver was written against, before hardware
-build/                        the CI gate scripts and their inputs (palette/, fluent-stock-colours.txt), the three capture harnesses and the soak watcher, the asset generator, and the sideload, signing and WACK packaging scripts
+build/                        the CI gate scripts and their inputs (palette/, fluent-stock-colours.txt), the three capture harnesses, the UCCM transitions watcher, the soak watcher, the two guide-image capture scripts, the asset generator, and the sideload, signing and WACK packaging scripts
 .github/workflows/ci.yml      the gates in their own jobs, alongside the Debug and Release x64 builds and the tests
 ```
 
