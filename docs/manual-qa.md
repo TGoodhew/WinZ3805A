@@ -825,9 +825,9 @@ thickened the bar by 16 px and clipped the compact medallion.
 - A drag on the title moved the window.
 - The right-click menu showed both items with the right ticks.
 
-**Two things are still owed:**
-- **The tray menu.** It is a shell popup that the automation could not read, so a person must right-click the icon once.
-- **Hover testing is only real with real input.** `SetCursorPos` moves the pointer without a pointer event, so no tooltip opens, even on the globe button. Only `SendInput` or `mouse_event` movement proves a tooltip.
+**The tray menu and the tooltips were then confirmed by hand (Tony), on the published v1.3.0, recorded in #573.** The tray menu is a shell popup the automation could not read.
+
+**Hover testing is only real with real input.** `SetCursorPos` moves the pointer without a pointer event, so no tooltip opens, even on the globe button. Only `SendInput` or `mouse_event` movement proves a tooltip.
 
 ## Before a release
 
