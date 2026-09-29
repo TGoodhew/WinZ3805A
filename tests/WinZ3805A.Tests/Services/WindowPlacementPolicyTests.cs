@@ -160,4 +160,57 @@ public sealed class WindowPlacementPolicyTests
         Assert.True(restored?.IsMaximized);
         Assert.True(restored?.IsCompact);
     }
+
+    // ------------------------------------------------------------ reopening a hidden window (#553)
+
+    private static WindowRect? Reopen(WindowRect current, WindowRect? primary, params WindowRect[] displays) =>
+        WindowPlacementPolicy.Reopen(current, displays, primary, MinimumWidth, MinimumHeight);
+
+    /// <remarks>
+    /// The common case by far, and the one that must cost nothing: a window reopened where it was
+    /// hidden, on a display that is still there, is not moved by a single pixel.
+    /// </remarks>
+    [Fact]
+    public void AReopenedWindowOnADisplayIsLeftWhereItIs() =>
+        Assert.Null(Reopen(new WindowRect(300, 200, 420, 300), Primary, Primary));
+
+    [Fact]
+    public void AReopenedWindowSpanningTwoDisplaysIsLeftWhereItIs() =>
+        Assert.Null(Reopen(new WindowRect(1700, 300, 440, 300), Primary, Primary, Secondary));
+
+    [Fact]
+    public void AReopenedWindowHangingOffTheEdgeIsPulledBackOn() =>
+        Assert.Equal(new WindowRect(1500, 740, 420, 300), Reopen(new WindowRect(1700, 900, 420, 300), Primary, Primary));
+
+    /// <remarks>
+    /// The case #553 was filed for, with the numbers it was reproduced with: hidden to the tray on a
+    /// display that has since gone, then shown from the tray on the 5120 x 1440 bench monitor. A
+    /// launch would decline this placement and let Windows choose; a window that already exists
+    /// has no such option, so it is centred where the user is looking.
+    /// </remarks>
+    [Fact]
+    public void AReopenedWindowWhoseDisplayHasGoneIsCentredOnThePrimary()
+    {
+        WindowRect bench = new(0, 0, 5120, 1392);
+
+        Assert.Equal(new WindowRect(1760, 246, 1600, 900), Reopen(new WindowRect(6000, 300, 1600, 900), bench, bench));
+    }
+
+    /// <summary>Primary means primary, not whichever display <c>FindAll</c> happened to list first.</summary>
+    [Fact]
+    public void ThePrimaryIsUsedWhereverItIsListed() =>
+        Assert.Equal(new WindowRect(750, 370, 420, 300), Reopen(new WindowRect(9000, 300, 420, 300), Primary, Secondary, Primary));
+
+    [Fact]
+    public void WithoutAPrimaryTheFirstDisplayIsUsed() =>
+        Assert.Equal(new WindowRect(2670, 370, 420, 300), Reopen(new WindowRect(9000, 300, 420, 300), null, Secondary, Primary));
+
+    /// <remarks>Centring a window larger than the display would put its title bar above the top.</remarks>
+    [Fact]
+    public void AReopenedWindowTooLargeForThePrimaryIsShrunkToFit() =>
+        Assert.Equal(new WindowRect(0, 0, 1920, 1040), Reopen(new WindowRect(9000, 300, 2560, 1400), Primary, Primary));
+
+    [Fact]
+    public void NoDisplaysLeavesAReopenedWindowAlone() =>
+        Assert.Null(Reopen(new WindowRect(9000, 300, 420, 300), Primary));
 }
