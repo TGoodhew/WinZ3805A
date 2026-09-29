@@ -131,6 +131,25 @@ public sealed class TrayIcon : IDisposable
         bool adding = !_added;
         bool ok = Shell_NotifyIcon(adding ? NimAdd : NimModify, ref data);
 
+        if (!ok && !adding)
+        {
+            // #549's second half. A refused modify usually means the shell has forgotten the icon -
+            // Explorer restarted and the broadcast saying so did not arrive - and a modify addressed
+            // to a forgotten icon fails every time, so without this the icon stays gone. The
+            // broadcast is the main route back; this catches whatever it does not reach, on the
+            // next change of mode.
+            //
+            // If the add is refused as well, the icon most likely still exists and the modify merely
+            // timed out, which Shell_NotifyIcon does while Explorer is busy. _added is left true
+            // then, so the next change tries a modify again rather than an add that cannot succeed.
+            ok = Shell_NotifyIcon(NimAdd, ref data);
+
+            if (ok)
+            {
+                _logger.LogInformation("The shell had lost the tray icon; it has been added again.");
+            }
+        }
+
         if (ok)
         {
             _added = true;
