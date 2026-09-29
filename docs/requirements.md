@@ -2838,10 +2838,15 @@ Auto-detect walks the **union of every registered driver's sequence, in registra
 │  │  Start in the notification area              [ ━━○ Off ]           │  │
 │  │                                                     [ Exit ]       │  │
 │  └────────────────────────────────────────────────────────────────────┘  │
+│                                                                          │
+│  ┌─ History ──────────────────────────────────────────────────────────┐  │
+│  │  Export history                         [ Export history… ]        │  │
+│  │  Import history                         [ Import history… ]        │  │
+│  └────────────────────────────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Four cards, and their defaults** (added 29 Aug 2026 from the code, #316 — the wireframe had shown the Advanced card alone; `Views/SettingsPage.xaml`, `Services/AdvancedPreferences.cs`, `Services/AppearancePreferences.cs`):
+**Five cards, and their defaults** (the fifth, *History*, added 29 Sep 2026 for #551; the rest added 29 Aug 2026 from the code, #316 — the wireframe had shown the Advanced card alone; `Views/SettingsPage.xaml`, `Services/AdvancedPreferences.cs`, `Services/AppearancePreferences.cs`):
 
 | Card | Switch | Default | Why that default |
 |---|---|---|---|
@@ -2853,6 +2858,8 @@ Auto-detect walks the **union of every registered driver's sequence, in registra
 | Running in the background | Start when I sign in to Windows (#548) | Off | The application never enrols itself in the user's sign-in; the manifest declares the task disabled. The choice is *Off*, *In the notification area* or *With the window open*, read from Windows each time (§10.3.1) |
 | Running in the background | Start in the notification area (#280) | Off | An application that starts with no window is indistinguishable from one that failed to start. Since #548 it applies to a start by hand only |
 | Running in the background | Exit | — | A button, so the application is quittable without the tray (§10.3.1) |
+| History | Export history… (#551) | — | A button. Removing the package deletes `trend.db`, so this is the only way the history survives a reinstall, a new PC or a change of build |
+| History | Import history… (#551) | — | A button. It merges and never replaces, and it says what the file holds and whose it is before changing anything |
 
 **Advanced Console (§10.11).** Off on a fresh install. The switch adds and removes the destination
 from the pane; it does not merely hide it, so a disabled console is not an item a keyboard user can
@@ -2864,6 +2871,40 @@ same §8.1 allowlist every other page uses, so enabling it adds no command the a
 already send. The §8.4 exclusions are absent from the catalog and therefore absent from the console,
 opted in or not. **No setting on this page may ever change that**, and none may relax a §8.3
 confirmation.
+
+**History is exported and imported, never copied (#551, added 29 Sep 2026).** `trend.db` lives in
+the package's own data, which Windows deletes with the package. An in-place upgrade keeps it, but an
+uninstall, a new PC, or a switch between the sideloaded and Store builds (a different publisher is a
+different package family) does not. The export is **one SQLite file**: a consistent snapshot taken
+by `VACUUM INTO` on the store's own connection, so rows still in the WAL are included and the poll
+loop waits a moment instead of racing a copy. A `history_manifest` table records the format, the app
+version, the time and the connected receiver's `*IDN?`. The import works on a private copy of the
+chosen file and does the following:
+
+- **checks it first** — SQLite's integrity check, a `sample` table, which columns — and refuses
+  in words anything it cannot read;
+- **says what will happen** before changing anything: the span, how many samples are too old to
+  keep, which columns a newer version wrote that this one will leave out, and whose history it is;
+- **merges in one transaction** with `INSERT OR IGNORE`, so nothing already here changes and a second
+  import of the same file adds nothing.
+
+A `trend.db` copied by hand imports too, as a file with no manifest. Four decisions, all Tony's,
+29 Sep 2026:
+
+- **A different receiver warns and asks.** Samples carry no receiver identity, so two receivers'
+  histories merged together cannot be separated afterwards. The confirmation names both, by model
+  and serial number rather than the whole `*IDN?` answer, so a firmware update is not a different
+  receiver. When the two differ, Cancel is the default button, and an unknown on either side is said
+  to be unknown.
+- **History only.** Preferences are cheap to set again, and exporting them would be a second format
+  to keep compatible for ever.
+- **A newer file's unknown columns are named and left out**, before the import, so the user can
+  cancel and update instead.
+- **No CSV export here.** CSV cannot round-trip types and nulls, so it cannot be the import format;
+  if it is wanted, it is a separate button and a separate issue.
+
+**Unlike a preference, history fails loud.** A failed export or import is always reported, because it
+is the user's only copy of data that cannot be gathered again.
 
 **Preferences fail safe and fail silent.** A preference file that is missing, truncated or unreadable
 reads as the default, and the default for anything advanced is *off* — a store that failed open would

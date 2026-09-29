@@ -570,7 +570,9 @@ this setting, not the application: see *Starting when you sign in*, below.
 ![The bottom of the Settings page: the Alerts and Running in the background sections, an Exit button, and an Elsewhere for now note](images/how-to-use/page-settings-2.png)
 
 ![The Exit button](images/how-to-use/settings-exitbutton.png) **Exit** quits the application
-outright — the exit that needs no notification-area icon. Poll cadences, the display time zone
+outright — the exit that needs no notification-area icon. **Export history…** and **Import
+history…**, under *History*, keep the trend when the application is reinstalled or moved — see
+*Keeping the history*, below. Poll cadences, the display time zone
 and units are not on this page; the time zone is chosen from the main window's clock line, and the
 poll cadences are fixed.
 
@@ -639,6 +641,36 @@ reply, so instead of trying once it tries the remembered port every 30 seconds f
 takes — a receiver switched on an hour later is picked up too. This needs *Connect to this device on
 launch* ticked in the connection dialog, which is the default. Connecting or disconnecting yourself
 stops the retrying. When you open the application yourself it tries once, as it always has.
+
+---
+
+## Keeping the history
+
+The trend charts draw on up to eight weeks of readings, and those readings are kept inside the
+application's own data. **Windows deletes that data when the application is uninstalled**, and a
+new PC or a switch between the sideloaded and Store versions starts with none. An ordinary update
+keeps it. To take it with you, use the two buttons under *History* on the Settings page.
+
+**Export history…** saves every reading kept to one file, with a name you choose. It includes the
+readings from the last few seconds, and the receiver is polled throughout. The file also records
+when it was made, by which version, and which receiver was connected.
+
+**Import history…** adds the readings in such a file to this history. Before it changes anything it
+tells you:
+
+- how many readings the file holds, and over which dates;
+- how many are older than the eight weeks kept here, which it will leave out;
+- if it came from a newer version of the application, which readings this version doesn't
+  understand, so you can update first instead;
+- **whose history it is.** A receiver's readings are not labelled with the receiver they came from,
+  so if you import another receiver's history into this one, the two cannot be separated again.
+  If the file came from a different receiver than the one connected now, it names both and
+  **Cancel** is the default. If it can't tell — nothing connected, or an older file — it says so.
+
+Nothing already here is changed or removed; only readings that are missing are added, so importing
+the same file twice does no harm. A `trend.db` file copied by hand from the application's data
+folder can be imported the same way. If an export or import fails, you are told why, and an import
+that fails leaves the history as it was.
 
 ---
 

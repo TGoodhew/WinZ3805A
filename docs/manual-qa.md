@@ -350,7 +350,7 @@ a picture.
 > | `page-position.png` | **Position uncertainty**, a seventh row under the coordinates (#516) |
 > | `page-timing-2.png` | The **Disciplining loop** card — three rows from `DIAG:LOOP?` (#512). It shows only on a UCCM, so a Z3805A screenshot is still correct for a Z3805A; the guide says which receiver has it |
 > | `page-overview.png` | The **Antenna** and **Integrity** pills on the Health monitor card (#515, #516) |
-> | `page-settings-2.png` | **Start when I sign in to Windows**, a card between *Keep running…* and *Start in the notification area* (#548, 29 Sep 2026). Not re-taken because `Capture-GuideImages.ps1` drives the app through `winapp`, which the bench machine did not have |
+> | `page-settings-2.png` | **Start when I sign in to Windows**, a card between *Keep running…* and *Start in the notification area* (#548), and the **History** section with *Export history…* and *Import history…* (#551), both 29 Sep 2026. Not re-taken because `Capture-GuideImages.ps1` drives the app through `winapp`, which the bench machine did not have (#556) |
 >
 > Re-taking needs a connected receiver, so it waits for a sitting. Three of the four want a Z3805A,
 > which is what every other image in the guide was taken against; the disciplining-loop card cannot
@@ -752,6 +752,31 @@ stored *hidden* preference followed. Enabling asked for no consent. With the tas
 the user, as Task Manager records it, the page showed *Off*, disabled, with the note, and the log
 read *DisabledByUser*. **No real sign-in has been done yet**, so the first two tables are still owed.
 
+## 21. The history survives a reinstall (#551)
+
+**Why.** The history lives in the package's data, and removing the package deletes it; export and
+import are the only way across. `HistoryFileTests` cover the round trip, the merge rules and every
+refusal against real files, but not the pickers, the confirmation as a person reads it, or an
+uninstall. An uninstall is the point, and it is also the one step here that destroys data if the
+export did not work, so **check the exported file before uninstalling**.
+
+| | |
+|---|---|
+| **Do** | With a receiver connected and some hours of history, Settings → *Export history…*, and save it. Open the file in any SQLite tool, or import it straight back: the confirmation must name this receiver. Cancel. Then uninstall, reinstall, reconnect the same receiver, and *Import history…* the file. |
+| **Pass** | The status line says how many readings were exported, over which dates. The confirmation names the receiver connected now and warns about nothing. After the import the Overview trend at 7 d shows the history from before the uninstall, joined to what the reinstalled application has recorded since. Importing the same file again reports 0 added, the rest already here. |
+
+| | |
+|---|---|
+| **Do** | Import a file exported while a *different* receiver was connected, or while none was. |
+| **Pass** | The confirmation names both receivers, or says one is unknown, and says the histories can't be separated afterwards. **Cancel** is the default button. Cancelling changes nothing. |
+
+**Last run:** 29 Sep 2026, against the packaged Debug build connected to the Z3805A on COM3, without
+an uninstall. The export was 1,875 readings in one file (`journal_mode` delete, no companions). It
+passed SQLite's integrity check, had all six columns, and its manifest named
+`SYMMETRICOM,Z3805A,3625A02931,1.01.03-A`. Importing it straight back through the pickers (Tony)
+showed the confirmation naming this receiver, and the log read *0 samples added, 1875 already present;
+receiver Same*. **The uninstall-and-restore half and the different-receiver table are still owed.**
+
 ## Before a release
 
 Sections 1–4, 8, 9, 11 and 13 in full, then **12 on the published artifact** — which means the release
@@ -767,7 +792,9 @@ broadcasting receiver is to hand and anything on the transport's byte path has c
 one glance at one readout, and the failure it catches is a value quietly not arriving, which no
 other check in this list would notice; **section 18 if the tray icon's code has changed** — it
 costs half a minute; **section 19 if window placement has changed and a second display is to hand**; **section 20 if
-anything on the launch or connect-on-launch path has changed**, since only a real sign-in reaches it. Section 15 is not a release
+anything on the launch or connect-on-launch path has changed**, since only a real sign-in reaches it;
+**section 21 whenever `trend.db`'s schema or the history export has changed**, since an export that
+a later version cannot import loses the history of everyone who relied on it. Section 15 is not a release
 gate at all: run it when a talker is to hand, because the captures it produces are permanent and the
 opportunity is not.
 
