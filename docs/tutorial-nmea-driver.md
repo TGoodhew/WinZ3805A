@@ -89,8 +89,18 @@ maps:
 
 What does not map is left exactly as the contract says — null, or the enum's `Unknown`: TFOM,
 FFOM, the 1 PPS time interval, holdover, EFC, the antenna delay, the health monitor, position
-mode and survey, the SmartClock mode. The Overview page shows *"No health data"*, the Timing page
-shows dashes, and that is correct. **No new field was needed**, which was not obvious going in.
+mode and survey, the SmartClock mode. **No new field was needed**, which was not obvious going in.
+
+What a user sees for those fields is no longer a dash (corrected 29 Sep 2026, #556). This paragraph
+said the Overview page showed *"No health data"* and the Timing page dashes; since #435 and #456 a
+reading the family can never supply is *said* to be absent rather than left blank, because §9.11's
+em dash means "not arrived yet" and for a talker it never arrives. The driver says so twice:
+`Plan.Supplies` names the only two fast fields it has — the sync state and the satellite count — so
+the main window hides TFOM, FFOM and the 1 PPS readout altogether, and `Reports` answers `false` for
+every disciplined-oscillator reading, so Overview replaces the figures of merit, the holdover card,
+the health card and the oscillator card with one sentence each (*"This receiver does not report
+holdover. The NMEA 0183 protocol does not carry it."*), and the Details pane dims Timing, Holdover
+and Status Registers with *"Not supported on a NMEA 0183 receiver."*
 
 The two judgements are the only places the parser says something the sentences do not say
 outright, and both are stated in
@@ -147,12 +157,23 @@ picking one shows the latest of what was heard.
 
 ## Step 5 — the exclusions
 
-There are none, and `IsBlocked` returns false for everything. That is not a shortcut around
-§8.4; it is §8.4 applied to a family with no setters. A u-blox has proprietary configuration
-sentences (`$PUBX`), a MediaTek has `$PMTK`, and a talker connected to this application is
-protected from both by their *absence* from a reads-only catalog — the console cannot type, and
-nothing outside the catalog can be sent. `pwsh build/Test-NoBlockedCommands.ps1` passes over the
-new files because there is nothing in them to name.
+When the driver was built there were none, and `IsBlocked` returned false for everything. That was
+not a shortcut around §8.4; it was §8.4 applied to a family with no setters. A u-blox has
+proprietary configuration sentences (`$PUBX`), a MediaTek has `$PMTK`, and a talker connected to
+this application was protected from both by their *absence* from a reads-only catalog — a
+structural guarantee, because there was no send path to exclude anything from.
+
+**#508 added a send path, so the guarantee became a policy** (corrected 29 Sep 2026, #556).
+`IsBlocked` now refuses every *proprietary* sentence — any header beginning `$P`, the prefix the
+standard reserves for vendors — except the driver's own time poll, `$PUBX,04`; a standard sentence
+is not its business, since nothing ever sends one. Refusing by prefix rather than by name is the
+point: the dangerous vendor sentences are not knowable, and a rule listing them would be a list of
+whatever somebody happened to think of, so the allowance is the exception and everything else is
+refused — the same shape as the catalog being an allowlist (§8.1). `OutgoingTextFor` builds its one
+text from the same `NmeaPoll` constant the exception names, and the session puts it through
+`IsBlocked` before it goes out, so the two cannot drift apart unnoticed. The console still cannot
+type, and nothing outside the catalog can be sent. `pwsh build/Test-NoBlockedCommands.ps1` passes
+over the files because the rule names a prefix, not a command.
 
 ## Step 6 — timeouts and cadence
 
@@ -218,7 +239,10 @@ style*, and serves any broadcast family.
 
 ## Step 10 — test it
 
-Five files under [`tests/WinZ3805A.Tests/Nmea/`](../tests/WinZ3805A.Tests/Nmea/):
+Five files under [`tests/WinZ3805A.Tests/Nmea/`](../tests/WinZ3805A.Tests/Nmea/) when the driver
+was written. The folder holds thirteen as of 29 Sep 2026, the other eight added since by the real
+captures, the fix-quality and mixed-constellation work and #508's poll — these five are the ones the
+driver was built against:
 
 - `NmeaSentenceTests` — the codec, against the published examples.
 - `NmeaTalkerSimulatorTests` — the receiver on the bench: checksums, sentence order, GSV paging,
@@ -283,7 +307,8 @@ concrete, and **both shipped on 30 Aug 2026**; the other three are recorded only
 - ~~**The pages assume their commands exist.**~~ **Closed by #304.** Position, Timing, Holdover and
   the rest still find nothing and show dashes — that part is honest — but their tier C controls are
   now disabled with a sentence naming the family, rather than resolving to a command the catalog
-  does not have.
+  does not have. (Since #435 the dashes are gone too where the family can never fill them: Timing
+  and Holdover are not reachable on a talker at all — see step 2.)
 - **The console says *"Will send"* over a link that mostly sends nothing.** Picking `$--GGA` shows
   the latest GGA, which is right; the label is a query/response word. It became literally true of
   exactly one entry at #508, which makes the label more confusing rather than less: two entries in
@@ -314,11 +339,16 @@ and the application connected to the other with *Auto-detect settings*. What to 
 - The log: *"The NMEA 0183 driver overheard GP talker on COM8 in N line(s); the identity probe is
   skipped"*, then *"Session COM8 is now Connected. NMEA 0183,GP talker,,"*.
 - The main window: **Power-up** with the satellite count climbing, then **Locked to GPS** at the
-  first fix. TFOM, FFOM and 1 PPS TI read as dashes.
+  first fix. TFOM, FFOM and the 1 PPS readout are not shown at all — the driver's `Plan.Supplies`
+  says the family can never report them (#456).
 - Satellites: the sky plot fills, with the two below the mask never tracked.
 - Position: latitude, longitude and, from the 3D fix, height. No survey.
 - Time: the receiver's UTC, marked provisional until the fix. No leap second, no time code.
-- Overview: *"No health data"*. Holdover: dashes. Diagnostics: no receiver log, no error queue.
+- Overview: one sentence apiece in place of the figures of merit and the holdover, health and
+  oscillator cards — *"This receiver does not report … The NMEA 0183 protocol does not carry it."*
+  Timing, Holdover and Status Registers are dimmed in the pane, and selecting one shows *"Not
+  supported on a NMEA 0183 receiver."* Diagnostics: the log and error-queue cards say, the same way,
+  that the receiver keeps neither (#435).
 - Advanced Console: `$--RMC` and its siblings as reads; nothing to send.
 
 ---
@@ -326,9 +356,11 @@ and the application connected to the other with *Auto-detect settings*. What to 
 ## What the real talker turned out to say
 
 **A receiver reached the bench on 7 September 2026** — a VK-162 USB puck, u-blox `UBX-G70xx`,
-PROTVER 14.00, at 9600 baud. Three captures are under
+PROTVER 14.00, at 9600 baud. Three captures were taken that day and are under
 [`tests/WinZ3805A.Tests/Nmea/Captures/`](../tests/WinZ3805A.Tests/Nmea/Captures/) with a provenance
 note each: 30 minutes of steady state, a power-on, and six minutes of heavily attenuated signal.
+(The folder holds ten as of 29 Sep 2026 — five from the VK-162, 7–8 Sep, and five from a u-blox
+forM8N, 9–12 Sep; the three are the ones this section is about.)
 The driver read all three without a single parse warning, which is the headline and also the least
 interesting part of this section.
 
@@ -347,9 +379,13 @@ been exercised only by input written to exercise it:
    `GSA` lists of satellites used in the fix. Anything assuming a PRN fits in the GPS 1–32 range
    breaks here, and the simulator's constellation is GPS-numbered throughout.
 4. **Sentences beyond the plan.** The receiver sends `VTG` and `GLL`, which the driver claims into
-   the cycle and never reads, and `TXT`, which it does not claim at all — seven of them at power-on,
-   carrying the boot banner and `ANTSTATUS=OK`. They are the corpus's only supply of lines the
-   listener must hear and discard without complaint.
+   the cycle and never reads, and `TXT` — seven of them at power-on, carrying the boot banner and
+   `ANTSTATUS=OK` — which, when this was written, it did not claim at all. It does now (corrected
+   29 Sep 2026, #556): #515 put `TXT` in the driver's kept set, and the catalog has an entry for
+   it, because the banner says what the module is — the evidence #508's poll waits for — and a
+   power-on burst arrives before the first `RMC`, so a driver that dropped it discarded exactly
+   that. It is still not *evidence* for `Overhear`: free text is a device's say-so, so it is kept
+   and read but never claims a receiver.
 5. **The page count moves within a sitting.** 3 `GSV` pages while 12 satellites were in view, 4
    while 13 were — 1,339 cycles and 461 cycles of the same capture. That is the per-constellation
    page accounting from #417 being exercised by a *single*-constellation talker.
@@ -368,12 +404,18 @@ generator produces on demand what an afternoon with hardware may simply decline 
 >
 > That strengthens the paragraph's conclusion rather than weakening it. What the receiver still
 > genuinely refused was the **outage** — the one case no configuration reaches, and the one the
-> simulator supplies on demand. And a second constellation *concurrently* is still beyond this
+> simulator supplies on demand. (*Qualified 29 Sep 2026, #556:* no configuration, but a command
+> did. A `UBX-CFG-RST` cold start throws the ephemeris away and forces a reacquisition — proven on
+> this VK-162 first, and committed as `form8n-fix-lost`, taken on the forM8N on 11 Sep with 65 cycles
+> without a fix between two runs with one. Attenuation was the wrong approach; asking was the right
+> one, which is this paragraph's own lesson once more.) And a second constellation *concurrently* is still beyond this
 > module: GPS and GLONASS together are NAKed. **Ask the hardware what it can do before writing down
 > what it cannot.**
 
 **The earlier attempt is worth recording too.**
 [#309](https://github.com/TGoodhew/WinZ3805A/issues/309) set out to capture a BG7TBL GPSDO and found
 its DB9 carries a ~10 kHz square wave gated by DTR and no NMEA at all, so it was closed as deferred
-with the bench evidence on it. Control-line policy on open is still #304's item 4, and still
-unresolved: the VK-162 is a USB device and never exercised it.
+with the bench evidence on it. Control-line policy on open was that attempt's finding, and it is
+still unresolved and on **no open issue** — #304 closed without it (corrected 29 Sep 2026, #556;
+this sentence called it #304's item 4). Raise one if a receiver needs a line deasserted. The VK-162
+and the forM8N are USB devices and never exercised it.

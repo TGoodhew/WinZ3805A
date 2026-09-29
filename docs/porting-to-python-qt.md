@@ -60,25 +60,30 @@ for other reasons, and is enforced by the build. `WinZ3805A.Device` may not refe
 large amount of view-model and service logic is compiled into the test project by explicit
 `<Compile Include>` links precisely *because* it does not touch the UI.
 
-Measured on the tree as it stands:
+Measured on the tree as it stands — first when this plan was written on 31 Aug 2026, and again
+on 29 Sep 2026 for #556, which is where every figure below comes from. Files and lines exclude
+`bin/` and `obj/`; the test count is what `dotnet test` reports.
 
 | Layer | Files | Lines | What the port does with it |
 |---|---:|---:|---|
-| `src/WinZ3805A.Device` | 43 | 8,173 | Translate. No UI references by rule. |
-| App C# with no UI or Win32 reference | 90 | 17,373 | Translate. |
-| App C# touching WinUI, WinRT or Win32 | 48 | 14,326 | Rewrite. |
-| XAML | 26 | 7,134 | Rewrite. |
-| `tests/WinZ3805A.Tests` | 100 | 23,888 | Translate. 1,317 test cases, **zero** references to `Microsoft.UI`. |
-| `build/palette/*.py` | 6 | 562 | **Already Python. Use as-is.** |
+| `src/WinZ3805A.Device` | 60 | 14,176 | Translate. No UI references by rule. |
+| App C# with no UI or Win32 reference | 102 | 21,012 | Translate. |
+| App C# touching WinUI, WinRT or Win32 | 50 | 17,824 | Rewrite. |
+| XAML | 26 | 7,671 | Rewrite. |
+| `tests/WinZ3805A.Tests` | 151 | 35,622 | Translate. 3,028 test cases, **zero** references to `Microsoft.UI`. |
+| `build/palette/*.py` | 8 | 1,234 | **Already Python. Use as-is.** |
 
-Of those 90 UI-free app files, **86 are already listed in
+Of those 102 UI-free app files, **96 are already listed in
 [`WinZ3805A.Tests.csproj`](../tests/WinZ3805A.Tests/WinZ3805A.Tests.csproj)** as linked
-compilation units. That list is the single most useful artefact in this repository for a
-porter: it is a machine-checked statement of which logic is free of the UI, and it includes
-every view model, `DeviceSessionService`, `PollingService`, `TrendStore` and `HelpDocument`.
+compilation units. The list has 98 entries; the other two, `HighContrast` and `TrayIconWindow`,
+make Win32 calls that a Windows test host can run and a port cannot translate. That list is the
+single most useful artefact in this repository for a porter: it is a machine-checked statement
+of which logic is free of the UI, and it includes `DeviceSessionService`, `PollingService`,
+`TrendStore`, `HelpDocument` and every view model but two — `StatusRegistersViewModel` and
+`DetailsUnavailable` are UI-free and not linked, so they have no test behind them to port.
 
-So roughly 25,500 lines of behaviour can be ported as a translation exercise with an
-existing pass/fail oracle behind it, and roughly 21,500 lines of presentation have to be
+So roughly 35,000 lines of behaviour can be ported as a translation exercise with an
+existing pass/fail oracle behind it, and roughly 25,500 lines of presentation have to be
 rebuilt. Plan the effort as two projects with that shape, not as one uniform rewrite.
 
 ### The oracle
@@ -105,7 +110,7 @@ field for field, including the nulls.
 | Storage | **`sqlite3`** (stdlib) | Direct swap for `Microsoft.Data.Sqlite`; `TrendStore`'s schema ports unchanged. |
 | Help rendering | **`markdown-it-py`** | Replaces Markdig. `HelpDocument` parses the guide into blocks that the UI lays out natively — keep that design, do not render HTML. |
 | Types | **frozen dataclasses**, `typing.Optional` everywhere | Replaces C# records with `required` members. |
-| Test runner | **pytest** | 1,317 cases to carry across. |
+| Test runner | **pytest** | 3,028 cases to carry across. |
 | Static analysis | **`mypy --strict`** and **`ruff`** | Not optional. See part 6.2. |
 | Packaging | **Flatpak** (Linux), **PyInstaller/MSI** (Windows) | See part 10. |
 
@@ -176,7 +181,7 @@ it with a test that walks the package's imports — it costs twenty lines and it
 reason the current port is possible at all.
 
 Keep `viewmodels/` Qt-free too, wherever a view model does not need to be a `QObject`. The
-86-file link list in the test project is the evidence that this is achievable; losing it
+98-file link list in the test project is the evidence that this is achievable; losing it
 would make the next port impossible and the tests slow.
 
 ---
@@ -203,7 +208,7 @@ the one piece of this repository that needs no porting at all.
 
 ### Phase 1 — Models and the parser
 
-Port `src/WinZ3805A.Device/Models/` (16 files) and `Parsing/` (4 files). This is the single
+Port `src/WinZ3805A.Device/Models/` (18 files) and `Parsing/` (5 files). This is the single
 biggest translation unit: `StatusScreenParser.cs` alone is 1,375 lines.
 
 Work fixture-first. For each of the ten captured screens, write the assertion before the
@@ -222,7 +227,7 @@ fuzz test that feeds the parser truncated and corrupted screens raises nothing.
 
 ### Phase 2 — Transport and the line protocol
 
-Port `Transport/` (11 files, ~1,900 lines). See part 6.1 below for the hard part.
+Port `Transport/` (15 files, ~3,400 lines). See part 6.1 below for the hard part.
 
 `FakeTransport.cs` ports early and matters more than it looks: most transport tests run
 against it rather than against a port. Note the lazy-initialisation defect its history
@@ -300,9 +305,9 @@ or 4 and let these files do nothing but draw.
 
 | Control | Lines | Notes |
 |---|---:|---|
-| `SkyPlotControl` | 639 | Markers are **real focusable child objects**, not painted geometry, so the accessibility tree is correct by construction (§9.10.2). Reproduce that with `QAccessible` child items — do not paint dots and bolt on a hand-written peer. |
-| `TrendChart` | 580 | Draws decimated columns, min-to-max per column. No charting library: §6.1 records that one was measured at 1.65 GB for this series length. Do not reintroduce one. |
-| `StatusMedallion` | 509 | The §9.10.2 signature control. |
+| `SkyPlotControl` | 652 | Markers are **real focusable child objects**, not painted geometry, so the accessibility tree is correct by construction (§9.10.2). Reproduce that with `QAccessible` child items — do not paint dots and bolt on a hand-written peer. |
+| `TrendChart` | 613 | Draws decimated columns, min-to-max per column. No charting library: §6.1 records that one was measured at 1.65 GB for this series length. Do not reintroduce one. |
+| `StatusMedallion` | 650 | The §9.10.2 signature control. |
 | `AllanDeviation` | 319 | Maths already separated and tested. |
 
 **Done when:** each widget renders the fixture data correctly in both themes, and the sky
@@ -358,7 +363,7 @@ is the Windows script that took them; the Linux equivalent has to be written.
 
 ### 6.1 The line protocol
 
-`LineProtocol.cs` (697 lines) is the piece §15 puts first, and its docstring explains why in
+`LineProtocol.cs` (873 lines) is the piece §15 puts first, and its docstring explains why in
 detail. Three properties have to survive the port:
 
 1. **Echo is detected, never assumed.** The manual's default echoes every character; the
@@ -473,15 +478,19 @@ settled by whoever writes the theme file first.
 
 ## 8. The CI gates
 
-Fourteen scripts run in CI today. They are the accumulated record of defects that review
-missed, and losing them silently would be the worst outcome of this port. Triage:
+Twenty-three scripts run in CI today — eighteen `Test-*.ps1` gates and the self-tests of five
+capture, transition and soak harnesses (counted 29 Sep 2026; there were fourteen when this plan
+was written). They are the accumulated record of defects that review missed, and losing them
+silently would be the worst outcome of this port. Triage:
 
 | Gate | Fate |
 |---|---|
 | `Test-NoBlockedCommands.ps1` | **Ports nearly unchanged.** Reads its tokens from the one file that holds them and scans the tree. Highest-value gate in the set; port it in Phase 3. |
 | `Test-DocumentReferences.ps1` | **Ports unchanged.** It checks documents, not source. Keep it running against `docs/` from day one. |
+| `Test-NoClosingKeywords.ps1` | **Ports unchanged.** It reads the pull request — title, body and every commit message in the branch — not the source, so the port's language never touches it, and `pwsh` runs on Linux. Keep it from the first pull request. |
 | `Test-GuideCoverage.ps1` | **Ports, with one rewrite.** Its "interactive control carrying a literal label" rule currently parses XAML; against Python it becomes an AST walk for `setText`/`setTitle` on interactive widgets. The allowlist mechanism — a redirection whose target phrasing is itself required to be present — should be kept exactly as it is. |
 | `Test-NoHexLiterals.ps1` | **Ports.** Scan `.py` and generated QSS instead of XAML. |
+| `Test-ResourceKeysResolve.ps1` | **Ports.** The other half of the parity gate: every token *referenced* must be *defined*. Scan `.py` and the QSS templates against the token file. Keep the reason it exists — a misspelt key compiled, threw while the page loaded, and read exactly like a click that had missed — because a `KeyError` raised inside a Qt slot is printed to stderr and swallowed, which to a user is just as quiet. |
 | `Test-SpacingScale.ps1` | **Ports.** Same idea against layout margins in Python. |
 | `Test-ContrastFloor.ps1` | **Ports, after the baseline is re-derived** (part 7). The maths is reusable; the input table is not. |
 | `Test-SeriesSeparation.ps1` | **Already Python.** `build/palette/` holds the derivation and `validate.py` checks it. Copy across; drop only its high-contrast arm. |
@@ -491,13 +500,20 @@ missed, and losing them silently would be the worst outcome of this port. Triage
 | `Test-FocusVisualCoverage.ps1` | **Rewrite or drop.** Its trick — two strokes spanning the luminance range, so no accent colour can hide the ring — still applies if the port keeps a custom focus visual. |
 | `Test-ThemeDictionaryParity.ps1` | **Depends on part 7's choice.** Meaningless with two themes that are both exercised daily. |
 | `Test-HighContrastLegibility.ps1` | **Depends on part 7's choice.** |
+| `Test-PageTeardown.ps1` | **Rewrite.** The chain it breaks — an application-lifetime store holding a view model holding a page — is a property of the design, not of XAML, and a Qt signal connected to a closure keeps its page alive just as firmly. Keep both rules against the port's navigation hooks: a page that connects on arrival disconnects on leaving, and never connects a lambda it has no way to disconnect. |
+| `Test-NoCachedDispatcherHandlers.ps1` | **Drop.** The growth it guards is a CsWinRT interop table that records a wrapper on every `TryEnqueue` call; a queued Qt signal crosses no such boundary. What survives is the lesson that the careful-looking form can be the defect, and the soak that finds it. |
+| `Test-NoPushedAutomationNames.ps1` | **Drop, for the same reason.** It guards the same CsWinRT table by a second route, `AutomationProperties.SetName`; `setAccessibleName` on a `QWidget` mints no wrapper. |
 | `Capture-Fixtures.ps1 -SelfTest` | **Ports.** The fixture-capture harness matters more than it looks: the states it captures happen only while the hardware is being moved, so the half that needs no serial port is checked on every push. |
+| `Capture-Talker.ps1 -SelfTest` | **Ports with the NMEA driver** (Phase 3). The self-test pins the checksum accounting — what tells a real cycle from the plausible rubbish a wrong baud rate produces — which is language-neutral; the serial half becomes `pyserial`. It writes bytes, never lines, and a rewrite must not start decoding them. |
+| `Capture-Uccm.ps1 -SelfTest` | **Ports with the UCCM driver, or not at all** — the same deferral Phase 3 gives the driver. The self-test pins a reply's anatomy, above all the difference between a time code arriving *inside* a reply and one arriving *after* it; conflating the two makes every sitting appear to confirm the hypothesis the script exists to test. |
+| `Watch-UccmTransitions.ps1 -SelfTest` | **Ports with the UCCM driver.** The self-test replays the committed 13 Sep 2026 capture through the framing and requires the events file recorded beside it — a check any language can run, provided both files are copied across verbatim. Keep the framing anchored on a frame's length, not its terminator byte, which also occurs inside a frame. |
+| `Watch-Soak.ps1 -SelfTest` | **Rewrite.** Its instruments are .NET's — `dotnet-counters` for the heap, `dotnet-gcdump` for the type — and CPython needs its own, such as `tracemalloc` and a process sampler reading `/proc`. Two of the three traps the self-test pins are those tools' output formats and go with them; the third, that growth measured from the first sample reads launch as trend, is arithmetic and survives. So does the rule that a soak is read against another soak, never against a threshold. |
 
 ---
 
 ## 9. Testing
 
-Port the tests **with** the code they cover, phase by phase, not afterwards. 1,317 cases is
+Port the tests **with** the code they cover, phase by phase, not afterwards. 3,028 cases is
 a lot to carry, but they are mostly small and table-driven, and `pytest.mark.parametrize`
 maps onto `[Theory]` cleanly.
 
@@ -554,7 +570,7 @@ currently exist for Linux.
 
 If the goal is **Linux** rather than **Python**, price **Avalonia UI** before starting this
 plan. `WinZ3805A.Device` is already `net10.0` with no UI references, so it compiles
-unchanged; the 100-file test project runs unchanged; the 90 UI-free app files compile
+unchanged; the 151-file test project runs unchanged; the 102 UI-free app files compile
 unchanged; and XAML translates rather than being rewritten. That keeps roughly 40% of the
 repository and 100% of the test oracle.
 

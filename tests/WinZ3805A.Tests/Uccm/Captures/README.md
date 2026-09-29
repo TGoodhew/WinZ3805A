@@ -85,9 +85,15 @@ directly to the prompt. The script had been matching the *characters* `C5` again
 read 0 whatever the module did**, and the self-test passed because it fed the analysis a time code
 written as hex text — a shape no module produces. Both are fixed; the search now runs over bytes.
 
-**The count is still 0 mid-reply, across both sittings, and that still refutes nothing** — four
-packets have now been seen and every one arrived *after* its reply, appended to the prompt, which
-is an ordinary broadcast. Whether one lands mid-reply depends on timing and wants a longer sitting.
+**The count stayed 0 mid-reply, and the sitting it wanted has since been taken.** After the first
+two sittings four packets had been seen, every one *after* its reply and appended to the prompt —
+an ordinary broadcast, and a zero that refuted nothing because nothing had made a collision likely.
+`hypothesis2-12sep2026` made one likely: fifty status reads kept a reply on the wire 38 % of the
+time, so ~9 of its 25 packets should have landed mid-reply by chance, and **none did**, with every
+packet that was due accounted for. That is a measurement against this module rather than a quiet
+sitting, and it still says nothing about the Symmetricom units the claim names. *(Corrected 29 Sep
+2026, #556: this paragraph ended by asking for a longer sitting, which `hypothesis2-12sep2026`
+already was.)*
 
 **The 11 Sep sitting was taken with the blind harness, and its figures were re-measured afterwards**
 from the `---- BYTES` sections it had recorded faithfully; its note shows the working. That is the
@@ -149,7 +155,10 @@ every reply — and the terminator summary is how you would notice.
 Neither of the others can do this, and the reasons are the design:
 
 - **`Capture-Fixtures.ps1`** is built for the SmartClock. It sends a mnemonic and **strips** the
-  echoed command and the `scpi > ` prompt to leave a status screen. A UCCM has no such prompt, and
-  its echo is the evidence rather than noise.
+  echoed command and the `scpi > ` prompt to leave a status screen. A UCCM-P prompts differently,
+  `UCCM-P >`, and does not echo at all — and whether it echoed was hypothesis 1, which a script that
+  strips the echo could never have counted. Here the prompt, and the echo's absence, are the
+  evidence rather than noise. *(Corrected 29 Sep 2026, #556: this said a UCCM had no prompt and that
+  its echo was the evidence, both written before the first sitting refuted them.)*
 - **`Capture-Talker.ps1`** is built for a broadcast talker, which answers nothing and is never
   asked. A UCCM is query/response.

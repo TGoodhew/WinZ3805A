@@ -55,6 +55,10 @@ its tests.
 | `GLL` | no | yes | |
 | `VTG` | no | yes | |
 | `GNS` | yes | yes | read since #429 — see below |
+| `GST` | no | yes | position error statistics; rows added 29 Sep 2026 (#556), checked against Heather's whole source tree |
+| `GBS` | no | yes | satellite fault detection |
+| `TXT` | no | yes | the module's own text, where a u-blox names itself |
+| `$PUBX,04` | no | yes | a **poll** we send, only to a module whose banner says u-blox (#508); Heather sends `PUBX,41`, which *configures* the port, and we never do |
 
 ## 1. Talker handling — our design is the more robust, measurably
 
@@ -104,7 +108,12 @@ check is the easy wrong answer.
 **The satellite list itself was always right**, and deliberately: a user wants every satellite in
 view regardless of which constellation it belongs to.
 
-## 3. Satellite numbering collisions — a real limitation, not fixed
+## 3. Satellite numbering collisions — a real limitation, since fixed
+
+> **Fixed under #424, after this was written.** The dedupe is now keyed by constellation and number
+> (`SatelliteId`, `NmeaStatusParser.cs`). It had dropped the second claimant of a number in 1,217 of
+> 1,800 cycles of `form8n-gps-beidou-outdoors.nmea`, where GPS 4 and BeiDou 4 are in view together.
+> The section below is the reasoning as it stood (noted 29 Sep 2026, #556).
 
 NMEA 4.10 gives each constellation its own satellite-number range (GPS 1–32, SBAS 33–64, GLONASS
 65–96) and a conforming receiver never collides. **Receivers exist that number per constellation and
@@ -128,6 +137,10 @@ receiver is perfectly happy". **It does not.** The fix quality falls back to RMC
 ```csharp
 int quality = ParseInt(gga?.Field(5)) ?? (rmc?.Field(1) == "A" ? 1 : 0);
 ```
+
+*(The form before #429. The code now reads GGA, then `GNS`'s mode, then RMC:
+`ParseInt(gga?.Field(5)) ?? GnsQuality(gnsMode) ?? (rmc?.Field(1) == "A" ? 1 : 0)`. Noted 29 Sep 2026,
+#556.)*
 
 and RMC also carries the position. A cycle of RMC + GNS + GSV yields a valid fix, a position, and a
 non-provisional time. A test asserts it.

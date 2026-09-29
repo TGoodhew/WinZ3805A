@@ -15,9 +15,9 @@ It is what made #424 answerable, though not on the first attempt: see the table'
 | Capture | Duration | Bytes | What it is for |
 |---|---|---|---|
 | `vk162-steady-state` | 30 min | 927 KB | The boring case at length. A differential 3D fix in all 1,800 cycles, and **exactly 1,800 of each per-second sentence** — so a gap in any other capture is the receiver's doing, not the harness's. |
-| `vk162-cold-start` | 5.6 min | 186 KB | Power-on. The **only no-fix cycle** anywhere in the corpus, then all three GGA qualities and all three RMC mode indicators in order. |
-| `vk162-microwave` | — | — | The same receiver at the edge of its sensitivity, ~10 dB down, with a fifth of its satellites in view but untracked. |
-| `vk162-glonass-only` | 14 min | 352 KB | The only non-`GP` talker. **152 consecutive no-fix cycles** — the corpus's longest — then acquisition, and the fix ladder without SBAS. |
+| `vk162-cold-start` | 5.6 min | 186 KB | Power-on. **One no-fix cycle**, its first (the corpus has more since: 152 in `vk162-glonass-only`, 65 in `form8n-fix-lost`), then all three GGA qualities and all three RMC mode indicators in order. |
+| `vk162-microwave` | 6.5 min | 210 KB | The same receiver at the edge of its sensitivity, ~10 dB down, with a fifth of its satellites in view but untracked. |
+| `vk162-glonass-only` | 14 min | 352 KB | The only GLONASS (`GL`) talker; the forM8N captures talk `GN` and `GB`. **152 consecutive no-fix cycles** — the corpus's longest — then acquisition, and the fix ladder without SBAS. |
 | `vk162-gns-no-gga` | 12 min | 353 KB | **720 `GNS` and not one `GGA`** — #429's configuration, made with `UBX-CFG-MSG`. Proves the fix survives `GGA`'s absence, and that the altitude and the per-constellation mode string are what its absence costs. |
 | `form8n-gps-beidou-first-light` | 6.7 min | 202 KB | The forM8N as it arrived, on a GPS **timing** antenna. BeiDou is enabled, reports every cycle and **tracks nothing** — `$GBGSV,1,1,00` and a `GSA` row with only its system id. A talker advertising a constellation it cannot see. |
 | `form8n-gns-without-gga` | 2.2 min | 77 KB | The same module's `GNS` configuration, where the mode indicator is **four** characters (`ANNN`) against the VK-162's two — the field is one character per constellation, not a fixed code. |
@@ -62,13 +62,13 @@ gap somebody later assumes is covered.
   BeiDou together, numbers BeiDou per constellation — 6, 20, 23, 24, 25, all inside the GPS range —
   and carries GPS 4 and BeiDou 4 in the same cycle 1,217 times out of 1,800. So the corpus now holds
   one receiver of each kind: the VK-162, which cannot collide because its GLONASS PRNs are 67–85, and
-  the forM8N, which collides in 68% of its cycles. What remains open on #424 is the model change,
-  not the evidence for it.
+  the forM8N, which collides in 68% of its cycles. The model change followed, and #424 is closed:
+  satellites are now keyed by constellation and number.
 - ~~**`GNS`.** Never emitted, so #429 is likewise unanswerable here.~~ **Answered 8 Sep 2026.** It is
   not emitted *by default*, but two `UBX-CFG-MSG` frames turn `GNS` on and `GGA` off, and
   `vk162-gns-no-gga` is twelve minutes of the result. #429 said the reachability of that
-  configuration "is unknown"; it is two frames. What remains open on that issue is the decision of
-  whether to read `GNS`, not the evidence for it.
+  configuration "is unknown"; it is two frames. `GNS` is now read, between `GGA` and `RMC`, and #429
+  is closed.
 - ~~**Pseudorange error statistics and RAIM integrity.** `GST` and `GBS` are emitted by nothing on
   the bench, so #435 filed both as waiting for hardware that sends them.~~ **Answered 12 September
   2026, and it did not need hardware.** It needed two `UBX-CFG-MSG` frames, the same technique
