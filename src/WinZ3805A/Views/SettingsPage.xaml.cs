@@ -50,7 +50,22 @@ public sealed partial class SettingsPage : Page
         // narrow enough for SettingsCard to stack the control under its header.
         ExitCard.Header = $"Exit {Package.Current.DisplayName}";
         ExitButton.Content = $"Exit {Package.Current.DisplayName}";
+
+        _signInDescription = SignInStartNote.Text;
     }
+
+    /// <summary>The start-at-sign-in card's own description, shown when there is no note instead.</summary>
+    private readonly string _signInDescription;
+
+    /// <summary>
+    /// False while the start-at-sign-in choice is being set from Windows' answer (#548).
+    /// </summary>
+    /// <remarks>
+    /// Separate from <see cref="_ready"/> because the state arrives asynchronously, after the
+    /// switches, and because setting the selection raises <c>SelectionChanged</c> - which would
+    /// otherwise ask Windows to change the very state it had just reported.
+    /// </remarks>
+    private bool _signInReady;
 
     /// <summary>
     /// False until the stored value has been restored.
@@ -81,7 +96,67 @@ public sealed partial class SettingsPage : Page
         SystemAccentSwitch.IsOn = Appearance.UseSystemAccent;
 
         _ready = true;
+
+        // Read from Windows every time, never remembered: the user can switch it off in Task Manager
+        // while this page is closed (#548).
+        _ = ShowSignInStartAsync(SignInTask.GetStateAsync(SignInLog()));
     }
+
+    /// <summary>Shows the start-at-sign-in choice for the state Windows reports (#548).</summary>
+    /// <param name="reading">The call that returns the state: a read, an enable or a disable.</param>
+    /// <remarks>
+    /// Whatever was asked for, what is shown is what Windows then says, so a request it refused
+    /// shows as refused - with the reason, from <see cref="SignInStartPolicy"/> - rather than as the
+    /// option the user picked. Never throws: <see cref="SignInTask"/> answers
+    /// <see cref="SignInTaskState.Unavailable"/> instead.
+    /// </remarks>
+    private async Task ShowSignInStartAsync(Task<SignInTaskState> reading)
+    {
+        _signInReady = false;
+        SignInStartBox.IsEnabled = false;
+
+        SignInTaskState state = await reading;
+        bool hidden = (_preferences?.Load() ?? AdvancedPreferences.Default).StartAtSignInHidden;
+        SignInStartView view = SignInStartPolicy.For(state, hidden);
+
+        SignInStartBox.SelectedIndex = (int)view.Choice;
+        SignInStartBox.IsEnabled = view.CanChange;
+        SignInStartNote.Text = view.Note ?? _signInDescription;
+
+        _signInReady = true;
+    }
+
+    /// <summary>Turns start at sign-in on or off, or changes how it starts (#548).</summary>
+    /// <remarks>
+    /// How it starts is saved before Windows is asked to turn it on, so that a sign-in straight
+    /// after already starts the way the control says.
+    /// </remarks>
+    private async void OnSignInStartChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_signInReady || SignInStartBox.SelectedIndex < 0)
+        {
+            return;
+        }
+
+        SignInStartChoice choice = (SignInStartChoice)SignInStartBox.SelectedIndex;
+
+        if (choice == SignInStartChoice.Off)
+        {
+            await ShowSignInStartAsync(SignInTask.DisableAsync(SignInLog()));
+            return;
+        }
+
+        _preferences?.Save(_preferences.Load() with
+        {
+            StartAtSignInHidden = choice == SignInStartChoice.NotificationArea,
+        });
+
+        await ShowSignInStartAsync(SignInTask.EnableAsync(SignInLog()));
+    }
+
+    /// <summary>Where the startup task's answers are recorded (#548).</summary>
+    private static ILogger? SignInLog() =>
+        App.Services?.GetService<ILoggerFactory>()?.CreateLogger("SignIn");
 
     /// <summary>The stored appearance preferences, or the defaults.</summary>
     private AppearancePreferences Appearance =>

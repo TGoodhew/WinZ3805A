@@ -47,6 +47,21 @@ public sealed partial class MainPage : Page
     private bool _compact;
     private bool _launchAttempted;
 
+    /// <summary>How this run began: a start at sign-in retries the remembered receiver (#548).</summary>
+    private readonly LaunchContext _launch;
+
+    /// <summary>The clock the sign-in retry waits on.</summary>
+    private readonly TimeProvider _time;
+
+    /// <summary>Stops the sign-in retry, while one is running (#548).</summary>
+    private CancellationTokenSource? _signInRetry;
+
+    /// <summary>The sign-in retry, so stopping it can wait for it to let go of the port.</summary>
+    private Task? _signInRetryTask;
+
+    /// <summary>The attempt in flight, so stopping the retry can cancel it mid-walk.</summary>
+    private ConnectionViewModel? _signInAttempt;
+
     /// <summary>
     /// False until the constructor has finished building the view model.
     /// </summary>
@@ -107,6 +122,8 @@ public sealed partial class MainPage : Page
         _ports = services.GetRequiredService<SerialPortEnumerator>();
         _preferences = services.GetRequiredService<IConnectionPreferenceStore>();
         _logger = services.GetService<ILoggerFactory>()?.CreateLogger("Connection");
+        _launch = services.GetService<LaunchContext>() ?? LaunchContext.ByHand;
+        _time = services.GetRequiredService<TimeProvider>();
 
         _model = new MainViewModel(
             _device.Store, services.GetRequiredService<TimeProvider>(), _device.Driver);
@@ -285,6 +302,10 @@ public sealed partial class MainPage : Page
 
     public async Task ShowConnectionDialogAsync()
     {
+        // The user has taken over; a sign-in retry still trying the port would race the dialog
+        // for it (#548).
+        await StopSignInRetryAsync();
+
         ConnectionDialog dialog = new(NewConnectionViewModel()) { XamlRoot = XamlRoot, Log = _logger };
 
         // Before ShowAsync, which is when the template is applied and the cap taken (#506).
@@ -448,6 +469,9 @@ public sealed partial class MainPage : Page
         ConnectButton.IsEnabled = false;
         try
         {
+            // Either branch is the user taking the connection into their own hands (#548).
+            await StopSignInRetryAsync();
+
             if (!_model.CanConnect)
             {
                 await _device.Poller.StopAsync();
@@ -486,11 +510,106 @@ public sealed partial class MainPage : Page
         }
 
         _launchAttempted = true;
+
+        // #548: a start at sign-in keeps trying a remembered receiver until it answers. The one
+        // attempt below is the one most likely to fail at sign-in, and nobody is there to press
+        // Connect. See SignInConnect for why a launch by hand does not do the same.
+        if (_launch.IsSignInStart && _preferences.Load() is { ConnectOnLaunch: true } saved
+            && !string.IsNullOrWhiteSpace(saved.PortName))
+        {
+            _signInRetry = new CancellationTokenSource();
+            _signInRetryTask = RetryAtSignInAsync(saved.PortName, _signInRetry.Token);
+            await _signInRetryTask;
+            return;
+        }
+
         if (!await NewConnectionViewModel().ConnectOnLaunchAsync())
         {
             // §9.11 keeps "Disconnected" and "Connection lost" apart, and the session reports a
             // failed attempt as a fault. A remembered port that did not answer at start-up has lost
             // nothing — the window must not open claiming it has.
+            await _device.Session.DisconnectAsync();
+        }
+    }
+
+    /// <summary>Tries the remembered receiver until it answers or the user takes over (#548).</summary>
+    /// <remarks>
+    /// Logged on the first failure and on the eventual success, not on every attempt: a receiver
+    /// switched off for a weekend would otherwise write a line every thirty seconds, and the two lines
+    /// kept are the two anyone reading the log afterwards needs.
+    /// </remarks>
+    private async Task RetryAtSignInAsync(string portName, CancellationToken cancellationToken)
+    {
+        int failures = 0;
+
+        bool connected = await SignInConnect.RunAsync(
+            async token =>
+            {
+                _signInAttempt = NewConnectionViewModel();
+                return await _signInAttempt.ConnectOnLaunchAsync(token);
+            },
+            async attempts =>
+            {
+                failures = attempts;
+
+                // As after the single launch attempt: a port that has not answered yet has lost
+                // nothing, so it reads Disconnected rather than as a fault.
+                await _device.Session.DisconnectAsync();
+
+                if (attempts == 1)
+                {
+                    _logger?.LogInformation(
+                        "Started at sign-in and {Port} did not answer; trying again every {Seconds} s until it does.",
+                        portName,
+                        SignInConnect.RetryInterval.TotalSeconds);
+                }
+            },
+            _time,
+            cancellationToken);
+
+        _signInAttempt = null;
+
+        if (connected && failures > 0)
+        {
+            _logger?.LogInformation("Connected to {Port} after {Attempts} attempts since sign-in.", portName, failures + 1);
+        }
+    }
+
+    /// <summary>Stops the sign-in retry and waits until it has let go of the port (#548).</summary>
+    /// <remarks>
+    /// Waited for rather than merely signalled: an auto-detect walk can hold the port for over a
+    /// minute, and the dialog the user is about to open wants the same port. Does nothing when no
+    /// retry is running, which is every launch by hand.
+    /// </remarks>
+    private async Task StopSignInRetryAsync()
+    {
+        if (_signInRetry is not CancellationTokenSource retry)
+        {
+            return;
+        }
+
+        _signInRetry = null;
+        retry.Cancel();
+        _signInAttempt?.Cancel();
+
+        try
+        {
+            if (_signInRetryTask is Task running)
+            {
+                await running;
+            }
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
+            _logger?.LogWarning(exception, "The sign-in retry did not stop cleanly.");
+        }
+        finally
+        {
+            retry.Dispose();
+        }
+
+        if (_device.Session.Status != ConnectionStatus.Connected)
+        {
             await _device.Session.DisconnectAsync();
         }
     }

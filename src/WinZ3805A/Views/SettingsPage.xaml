@@ -266,13 +266,41 @@
                         </tk:SettingsExpander.Content>
 
                         <tk:SettingsExpander.Items>
+                            <!--
+                                Start at sign-in (#548). Three options in one control rather than a
+                                switch beside the one below, so that a quiet start at sign-in never
+                                also makes a start by hand windowless - which looks exactly like a
+                                failed start, the reason the switch below defaults off (§10.13).
+
+                                Windows owns whether it is on: the choice is read from the package's
+                                startup task every time this page is shown, and the user can switch it
+                                off in Task Manager without coming here. Only "which of the two ways
+                                on" is stored (AdvancedPreferences.StartAtSignInHidden).
+                            -->
+                            <tk:SettingsCard Header="Start when I sign in to Windows">
+                                <tk:SettingsCard.Description>
+                                    <TextBlock x:Name="SignInStartNote"
+                                               MaxWidth="{ThemeResource WzProseMaxWidth}"
+                                               HorizontalAlignment="Left"
+                                               TextWrapping="Wrap"
+                                               Text="Starts by itself each time you sign in, and keeps trying the remembered receiver until it answers." />
+                                </tk:SettingsCard.Description>
+                                <ComboBox x:Name="SignInStartBox"
+                                          AutomationProperties.Name="Start when I sign in to Windows"
+                                          SelectionChanged="OnSignInStartChanged">
+                                    <ComboBoxItem Content="Off" />
+                                    <ComboBoxItem Content="In the notification area" />
+                                    <ComboBoxItem Content="With the window open" />
+                                </ComboBox>
+                            </tk:SettingsCard>
+
                             <tk:SettingsCard Header="Start in the notification area">
                                 <tk:SettingsCard.Description>
                                     <TextBlock x:Name="StartMinimisedNote"
                                                MaxWidth="{ThemeResource WzProseMaxWidth}"
                                                HorizontalAlignment="Left"
                                                TextWrapping="Wrap"
-                                               Text="Starts with no window, monitoring from the notification area." />
+                                               Text="When you open it yourself, starts with no window, monitoring from the notification area." />
                                 </tk:SettingsCard.Description>
                                 <ToggleSwitch x:Name="StartMinimisedSwitch"
                                               OnContent="On"
