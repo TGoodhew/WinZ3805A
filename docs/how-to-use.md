@@ -12,7 +12,7 @@ scaling, with a Z3805A connected, so the numbers are real ones.
 
 ## The main window
 
-![The main window: a large circular medallion with a green tick and a ring of small green marks, "Locked to GPS" beside it, then a satellites readout of 8, a 1 PPS TI readout of −0.3 ns, TFOM 3 and FFOM 0 pills, the receiver's time and date with a small badge and a globe button, and a footer with the version, port and serial settings, Details, a pin and Disconnect](images/how-to-use/main-window.png)
+![The main window: a large circular medallion with a green tick and a ring of small green marks, "Locked to GPS" beside it, then a satellites readout of 7, a 1 PPS TI readout of 2.5 ns, TFOM 3 and FFOM 0 pills, the receiver's time and date with a small badge and a globe button, and a footer with the version, port and serial settings, Details, a pin and Disconnect](images/how-to-use/main-window.png)
 
 The main window is meant to be left open — on a second monitor, in a corner, for weeks. Everything
 on it answers one of two questions: *what state is the receiver in*, and *how well is it doing*.
@@ -46,7 +46,7 @@ state; in the compact layout (below) the ring is uniform and the centre shows th
 
 ### The readouts
 
-![Two readouts side by side: "satellites 8" and "1 PPS TI −1.6 ns"](images/how-to-use/main-readouts.png)
+![Two readouts side by side: "satellites 7" and "1 PPS TI 2.5 ns"](images/how-to-use/main-readouts.png)
 
 - **satellites** — how many satellites the receiver is tracking right now. If the receiver is locked
   but tracking **none**, an amber **coasting** pill appears under the words beside the medallion:
@@ -77,7 +77,7 @@ caution, red hexagon for critical.
 
 ### The clock line
 
-![The receiver's time, "13:29:49 Pacific Daylight Time · 29 Sep 2026", followed by a small circled-i badge and a globe button](images/how-to-use/main-clock-line.png)
+![The receiver's time, "13:52:06 Pacific Daylight Time · 29 Sep 2026", followed by a small circled-i badge and a globe button](images/how-to-use/main-clock-line.png)
 
 The time and date the receiver is reporting, shown in the time zone you have chosen (see the globe
 button below). On a SmartClock receiver the time is read every second and the clock ticks with it,
@@ -112,7 +112,7 @@ Three things can sit after the time:
 
 ### The footer
 
-![The footer: "1.2.0.0 · COM3 · 9600-8-N-1" on the left; Details, a pin button and a blue Disconnect button on the right](images/how-to-use/main-footer.png)
+![The footer: "1.2.0.0 · COM3 · 9600-8-N-1 · updating…" on the left, taken while a status read was under way; Details, a pin button and a blue Disconnect button on the right](images/how-to-use/main-footer.png)
 
 - **The version** comes first, and it is the version of WinZ3805A you have installed — the one
   to quote in a bug report. It is read from the package itself, so it is never out of step with
@@ -521,7 +521,7 @@ changes**. This page is for finding out why a summary bit is set; most people ne
 
 #### Diagnostics — `Ctrl+8`
 
-![The Diagnostics page: a Refresh button at the top, then a Self test card with a Subsystem picker, a Run all tests button and one row per subsystem, and the start of the receiver's log with a Filter box and Export and Clear log buttons](images/how-to-use/page-diagnostics.png)
+![The Diagnostics page: a Refresh button at the top, then a Self test card with a Subsystem picker, a Run all tests button, a note that no test has been run in this session, and one row per subsystem](images/how-to-use/page-diagnostics.png)
 
 - **Self test** — pick one **subsystem** or all of them and press the button, which names what it
   is about to do (**Run all tests**, or **Test** followed by the subsystem) because the receiver
@@ -539,9 +539,6 @@ changes**. This page is for finding out why a summary bit is set; most people ne
   card** rather than stretching the page, so a receiver with hundreds of entries does not bury
   everything below it. Timestamps are on the receiver's own time scale and are subject to the week
   rollover.
-
-![The lower half of the Diagnostics page: the end of the GPS receiver card, an Error queue card with Read errors, and an Undocumented queries card listing six queries each with a Run button](images/how-to-use/page-diagnostics-2.png)
-
 - **Application log** — what the application saw: the port opening, the settings auto-detect settled
   on, every connection change, and the receiver's mode and satellite count whenever they move.
   **Show log folder** opens it in Explorer. This is the place to look for a fault that comes and
@@ -551,6 +548,9 @@ changes**. This page is for finding out why a summary bit is set; most people ne
   where it says so, naming the line it could not parse. It is the first place to look if a reading
   is dashed when it should not be — usually a firmware revision printing something slightly
   different.
+
+![The lower half of the Diagnostics page: a Lifetime card with 36,991 power-on hours, a Front panel card with Enabled lamp and Active lamp switches, a GPS receiver card quoting the module's part number, software version 005 and model FURUNO GT-80, and an Error queue card with Read errors and No errors](images/how-to-use/page-diagnostics-2.png)
+
 - **Lifetime** — **power-on hours**, how long the receiver has run in total. An oven-controlled
   oscillator ages with running time, so this is the figure behind the drift the Timing page reports.
 - **Front panel** — a switch for each of the receiver's two software-controlled indicators, the
