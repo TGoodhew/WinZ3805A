@@ -98,6 +98,77 @@ public static class WindowPlacementPolicy
     }
 
     /// <summary>
+    /// Returns where a window that is about to be shown again should go, or <see langword="null"/>
+    /// to leave it where it is (#553).
+    /// </summary>
+    /// <param name="current">The window's restored bounds now.</param>
+    /// <param name="workAreas">The work area of every attached display, as for <see cref="Restore"/>.</param>
+    /// <param name="primary">
+    /// The primary display's work area, where a window with nothing reachable is centred; or
+    /// <see langword="null"/> if it could not be read, in which case the first display is used.
+    /// </param>
+    /// <param name="minimumWidth">The §10.3 floor for the layout being shown.</param>
+    /// <param name="minimumHeight">The §10.3 floor for the layout being shown.</param>
+    /// <remarks>
+    /// <para>
+    /// <see cref="Restore"/> runs once, when the window is created at launch. After that the window
+    /// is hidden to the tray and shown again, for weeks at a time, and the display it was hidden on
+    /// can be unplugged, undocked or handed to a remote session meanwhile. Reopening it where that
+    /// display used to be is the same failure <see cref="Restore"/> exists to prevent, arriving by a
+    /// path that never reached it.
+    /// </para>
+    /// <para>
+    /// The same judgement as a launch, with one difference: a launch can decline a placement and
+    /// let Windows put a new window where it puts new windows, but this window already exists and
+    /// is exactly where it was left. So a window with nothing reachable is centred on the primary
+    /// display instead, keeping its size if that fits.
+    /// </para>
+    /// </remarks>
+    public static WindowRect? Reopen(
+        WindowRect current,
+        IReadOnlyList<WindowRect> workAreas,
+        WindowRect? primary,
+        int minimumWidth,
+        int minimumHeight)
+    {
+        ArgumentNullException.ThrowIfNull(workAreas);
+
+        if (workAreas.Count == 0)
+        {
+            // Nothing to judge against - see NoDisplaysMeansTheSystemPlacesIt - so leave it be.
+            return null;
+        }
+
+        WindowPlacement asFound = new()
+        {
+            Left = current.Left,
+            Top = current.Top,
+            Width = current.Width,
+            Height = current.Height,
+        };
+
+        WindowRect wanted;
+
+        if (Restore(asFound, workAreas, minimumWidth, minimumHeight) is WindowPlacement kept)
+        {
+            wanted = kept.Bounds;
+        }
+        else
+        {
+            WindowRect area = primary ?? workAreas[0];
+            WindowRect centred = current with
+            {
+                Left = area.Left + ((area.Width - current.Width) / 2),
+                Top = area.Top + ((area.Height - current.Height) / 2),
+            };
+
+            wanted = ClampInto(centred, area, minimumWidth, minimumHeight);
+        }
+
+        return wanted == current ? null : wanted;
+    }
+
+    /// <summary>
     /// Pulls <paramref name="window"/> wholly inside <paramref name="area"/>, shrinking it first if
     /// it does not fit, but never below the §10.3 minimum.
     /// </summary>
