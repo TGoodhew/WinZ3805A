@@ -104,6 +104,10 @@ record a result against each number.
 - **A11Y-2 Focus visual.** At each focus stop, in all three themes, the ring is visible against both
   adjacent surfaces, accent-filled buttons included. The gate proves the two strokes cover the
   luminance range; a person confirms a ring is actually drawn at every stop.
+- **A11Y-3 Icon-only controls.** Hover each icon-only control — among them the Details title bar's
+  four icons and the globe and the pin on the main window — and confirm a tooltip appears; with Narrator on, confirm each is read by name. The gate reads XAML, so
+  a control built in code is this check's alone (added 29 Sep 2026, #556: this list went from A11Y-2
+  to A11Y-4).
 - **A11Y-4 Contrast, where the gate cannot read.** Accessibility Insights colour-contrast pass under
   a contrast theme (its colours are the user's own `SystemColor*`), and over Mica, where the backdrop
   is a live blur of the wallpaper.
@@ -142,7 +146,7 @@ pwsh build\Capture-Fixtures.ps1 [-Port COM3]  # then leave it running; Ctrl+C wh
 ```
 
 It needs the port to itself, so **exit the application first** — closing its window only hides it
-and keeps the port open; exit from Settings → Advanced → Exit or the notification-area icon. The
+and keeps the port open; exit from Settings → Running in the background → Exit or the notification-area icon. The
 harness writes only states it has not seen, seeding what it already has from disk, so leaving it
 running across a whole session is safe, and it appends a provenance line to `capture-log.md` for
 every file it writes — commit the two together.
@@ -317,7 +321,7 @@ non-developer can act on. This is expected to fail; the check is that it fails *
 
 ## 13. The guide's screenshots still show the application
 
-**Why.** `docs\how-to-use.md` is also the F1 help, and its 17 page screenshots are the part of it
+**Why.** `docs\how-to-use.md` is also the F1 help, and its 18 page screenshots are the part of it
 nothing can check. **A wrong screenshot is worse than a missing one**: drifted prose reads as prose,
 but a picture is read as evidence, and a reader who sees a control in the guide that is not in the
 application concludes they have the wrong version.
@@ -330,32 +334,32 @@ a picture.
 | **Do** | Open each page the guide illustrates beside the guide, at the width the images were taken at, and compare. |
 | **Pass** | Every control visible in the image is on the page, with the same label; nothing on the page that the surrounding text names is missing from the image. |
 
-> **Re-taken 30 Aug 2026, and there is a script for it now.** `build\Capture-GuideImages.ps1`
-> drives a running, connected application and photographs each page's content pane as an *element*,
-> so no cropping arithmetic can be wrong about where the page is. Run it, then **look at every
-> image**: it will photograph a page that failed to load just as willingly as one that worked, and
-> two of the first run's images were of a page still reading from the receiver.
+> **Two scripts take every image, and both were last run on 29 Sep 2026** against the bench Z3805A,
+> locked, with winapp 0.7.0. Both drive a running, connected application, so the Do row above still
+> applies afterwards: **look at every image**. A page that has not finished reading photographs just
+> as willingly as one that has — the first run's Diagnostics pictures had the spinner turning and
+> Lifetime and GPS receiver dashed, which is why the page script now waits for the page's Refresh
+> button to come back before it shoots.
 >
-> **Its `-ContentWidth` is load-bearing.** #351 flows the cards into as many columns as fit, and the
-> threshold is 864 px. The guide's prose and its "upper half" / "lower half" pairs are written
-> around a single column, so the default of 860 is what keeps the pictures matching the words.
-
-> **Four pages are known stale: three as of 13 Sep 2026, found by the documentation audit rather than
-> by looking at them, and one since 29 Sep 2026 (#548).** The prose describes all four additions
-> and the pictures predate them, which is the exact failure this section exists to catch — so they
-> are named here rather than left for whoever next compares 17 images to 17 pages:
+> - `build\Capture-GuideImages.ps1` takes the `page-*.png` pictures. It photographs each page's
+>   content pane as an *element*, so no cropping arithmetic can be wrong about where the page is.
+>   **Its `-ContentWidth` is load-bearing.** #351 flows the cards into as many columns as fit, and
+>   the threshold is 864 px. The guide's prose and its "upper half" / "lower half" pairs are written
+>   around a single column, so the default of 860 is what keeps the pictures matching the words.
+> - `build\Capture-GuideCloseups.ps1` takes everything else: the main window and its parts, the
+>   time-zone flyout, compact mode, the connection dialog, the Details title bar and its icons, the
+>   navigation pane, and single controls. Each is a crop of the window's root pane to the reported
+>   bounds of the controls that make it up. Photographing each part by its own name was tried first:
+>   most of those names are grids, which UI Automation does not expose, and winapp quietly fell back
+>   to the whole window.
 >
-> | Image | What the page gained since 30 Aug |
+> **Three things the 29 Sep 2026 run left alone, on purpose:**
+>
+> | Image | Why it was kept |
 > |---|---|
-> | `page-position.png` | **Position uncertainty**, a seventh row under the coordinates (#516) |
-> | `page-timing-2.png` | The **Disciplining loop** card — three rows from `DIAG:LOOP?` (#512). It shows only on a UCCM, so a Z3805A screenshot is still correct for a Z3805A; the guide says which receiver has it |
-> | `page-overview.png` | The **Antenna** and **Integrity** pills on the Health monitor card (#515, #516) |
-> | `page-settings-2.png` | **Start when I sign in to Windows**, a card between *Keep running…* and *Start in the notification area* (#548), and the **History** section with *Export history…* and *Import history…* (#551), both 29 Sep 2026. Not re-taken because `Capture-GuideImages.ps1` drives the app through `winapp`, which the bench machine did not have (#556) |
->
-> Re-taking needs a connected receiver, so it waits for a sitting. Three of the four want a Z3805A,
-> which is what every other image in the guide was taken against; the disciplining-loop card cannot
-> be photographed on one at all, and wants a separate decision about whether the guide illustrates a
-> receiver it was not written about.
+> | `main-compact.png` | Compact mode was drawing the TFOM and FFOM pills clipped under the medallion (#565). A picture of the defect would illustrate the wrong thing. Re-take it with `-Only main-compact` once that is fixed |
+> | `page-advanced-console.png` | The console was turned off in Settings, so the page did not exist to photograph |
+> | Receiver-specific cards | The Z3805A has no **Disciplining loop** card (a UCCM's, #512), no **Antenna** or **Integrity** pill (#515, #516) and no **Position uncertainty** row (#516), so the pictures correctly show none. The guide's prose says which receivers have them |
 
 ---
 
@@ -435,7 +439,8 @@ stated as unproven. A trace would have named the caller in five minutes.
 
 **Why.** The NMEA family was written against `tools/NmeaSimulator` and shipped having never heard a
 receiver (#310). A simulator only emits what its author thought of, so until 7 Sep 2026 the whole
-family rested on one person's idea of what a talker says. Three VK-162 captures now sit in
+family rested on one person's idea of what a talker says. Ten captures — five from the VK-162 and
+five from a forM8N — now sit in
 `tests/WinZ3805A.Tests/Nmea/Captures/` and are replayed in CI for ever — but a capture cannot be
 re-taken without the hardware in front of you, which is why this is a procedure rather than a note.
 
@@ -465,14 +470,15 @@ deliberately.
 | Power-on, acquisition | Unplug, wait several minutes, plug in. Start the capture on the port *appearing*, or the boot banner is missed. | Easy, but yielded **one** no-fix cycle: a hot start with signal reacquires in a second. |
 | Fix quality ladder | Nothing. It walks `0` → `1` → `2` on its own as SBAS corrections arrive. | Free, and it is the whole `ModeDetail` ladder. |
 | Weak signal | Any partial obstruction. | Easy, and more useful than it sounds — see below. |
-| **Fix lost while powered** | **Needs a real enclosure. See the warning.** | **Not achieved.** |
+| **Fix lost while powered** | **Needs a real enclosure — or a cold start. See the warning.** | Not by shielding. **Achieved on 11 Sep 2026 on the forM8N** with a `UBX-CFG-RST` cold start (`form8n-fix-lost`). |
 
 > **Do not repeat the improvised shielding.** Two attempts failed and the measurements are worth
 > having: an inverted metal cover gave about **5 dB** of attenuation (mean C/N 31.1 against 36.6 in
 > the open) and a **microwave oven with the door shut** about **10 dB** (27.4). The oven still held
 > a fix on 7 to 11 satellites in every one of 387 cycles. Adding a saucepan inside the oven changed
 > nothing measurable. A GPS receiver is far more sensitive than household metalwork, so budget for a
-> proper screened enclosure — or accept that this state stays uncaptured.
+> proper screened enclosure — or do what `form8n-fix-lost` did on 11 Sep 2026 and cold-start the
+> module with `UBX-CFG-RST`, which loses the fix without touching the signal.
 >
 > The failure was still worth keeping: at 17% of satellites in view but untracked, against 6.6% in
 > the open, that capture is the corpus's best source of weak-signal input and of satellites crossing
@@ -511,8 +517,9 @@ with SBAS off the fix ladder stops at quality `1`, which is the **standalone** b
 
 **What is still genuinely out of reach here.** #424 needs two constellations *in one cycle* and this
 receiver cannot produce them at all; it also numbers GLONASS in 65–96 exactly as NMEA 4.10 says, so
-it would not collide even if it could. #429's `GNS` likewise. Both still need different hardware —
-but that is now a measurement rather than an assumption.
+it would not collide even if it could. #429's `GNS` likewise. Both needed different hardware, and
+the forM8N supplied it: `form8n-gps-beidou-*.nmea` for #424 and `form8n-gns-without-gga.nmea` for
+#429. Both issues are closed (noted 29 Sep 2026, #556).
 
 ### The stationary dynamic model, and why no capture came of it
 
@@ -533,7 +540,13 @@ it.
 
 ---
 
-## 16. The front-panel Active lamp (#440)
+## 16. The front-panel lamps (#440, #462)
+
+> **Rewritten 29 Sep 2026 (#556) for #462's two lamps**, shipped 11 Sep. The panel has two lamps the
+> host may drive, and they now mean different things. **Enabled is the application's**: lit while it
+> holds the link, flashed around every command. **Active is the receiver's**: lit while it is locked
+> to GPS, written only when that changes. The Settings switch is *Front-panel lamps*, and Diagnostics
+> has a toggle for each lamp.
 
 **Why.** This is the one feature in the application whose entire output is a light on a piece of
 metal. Nothing in CI can see it, no UI Automation assertion can see it, and the receiver's own
@@ -543,9 +556,11 @@ watched the panel while the application drove it.**
 
 Two claims therefore stand unverified, and both are one look away:
 
-- That `:LED:ACTive` drives the lamp **labelled Active** and not some other indicator.
-- That the per-session behaviour is what a person actually sees: lit on connect, restored on
-  disconnect.
+- That `:LED:ACTive` drives the lamp **labelled Active** and not some other indicator. (Enabled
+  was answered by eye on 9 Sep 2026 — see the end of this section.)
+- That what a person sees is what #462 designed: with the switch on, **Enabled** lit while connected
+  and flickering with each command, **Active** lit while locked, and both put back as they were
+  found on disconnect.
 
 **You need to be in front of the unit.** Everything below is two minutes.
 
@@ -553,7 +568,8 @@ Two claims therefore stand unverified, and both are one look away:
 
 1. Note which lamps are lit on the front panel before starting. Write it down; the whole feature is
    about putting the panel back as it was found.
-2. Details → Diagnostics → **Front panel** → toggle **Active lamp** on.
+2. Details → Diagnostics → **Front panel** → toggle **Active lamp** on. (The card's **Enabled lamp**
+   toggle does the same for the other lamp; repeat steps 2–4 with it.)
    **It takes about a second to answer** — the receiver services this node on its own 1 Hz tick
    (§10.9), so a pause is correct behaviour, not a hang.
 3. **Look at the panel.** The *Active* lamp should be lit and nothing else should have changed.
@@ -561,14 +577,15 @@ Two claims therefore stand unverified, and both are one look away:
 
 ### The per-session behaviour (Settings)
 
-5. Settings → Advanced → **Front-panel Active lamp** → on. The lamp should light **immediately**,
-   not at the next connect.
-6. Disconnect. The lamp returns to whatever step 1 recorded.
-7. Now the case the design turns on: **set the lamp on by hand** (step 2), then connect and
-   disconnect with the switch still on. The lamp must still be **on** at the end — the application
-   borrows the lamp and gives back what it found, so a user's *on* survives a session. If it comes
-   back off, the borrowing logic is wrong and that is the defect to file.
-8. Turn the setting off. The lamp returns to what it was.
+5. Settings → Advanced → **Front-panel lamps** → *Used*. **Enabled** should light **immediately**,
+   not at the next connect, and flicker with each command — readings arrive far less often while it
+   is on, which is expected (§10.9). **Active** should be lit if the receiver is locked.
+6. Disconnect. Both lamps return to whatever step 1 recorded.
+7. Now the case the design turns on: **set a lamp on by hand** (step 2), then connect and disconnect
+   with the switch still on. That lamp must still be **on** at the end — the application borrows
+   the lamps and gives back what it found, so a user's *on* survives a session. If it comes back
+   off, the borrowing logic is wrong and that is the defect to file.
+8. Turn the setting off (*Left alone*). Both lamps return to what they were.
 
 ### Kill the application while the lamp is lit
 
@@ -593,7 +610,9 @@ Lock and Holdover are the receiver's own, query-only.
 
 So "connected" and "talking" are separable after all — but **the cost that killed the per-sweep idea
 is unchanged**, a write still costing about a second against ~30 ms queries, so a second lamp buys
-semantics rather than activity. What to do with it is a design call and is **#462**, not a defect.
+semantics rather than activity. What to do with it was a design call, **#462**, and it was made on
+11 Sep 2026: Enabled became the application's lamp and Active follows lock (see the note at the top
+of this section).
 
 **Keep the do-nothing baseline in any repeat of this.** The unit had been powered up minutes
 earlier, so "a lamp changed on its own while acquiring" was a live alternative explanation, and the
@@ -768,7 +787,7 @@ export did not work, so **check the exported file before uninstalling**.
 | | |
 |---|---|
 | **Do** | Import a file exported while a *different* receiver was connected, or while none was. |
-| **Pass** | The confirmation names both receivers, or says one is unknown, and says the histories can't be separated afterwards. **Cancel** is the default button. Cancelling changes nothing. |
+| **Pass** | The confirmation names both receivers, or says one is unknown, and says the histories can't be separated afterwards. For a **different** receiver, **Cancel** is the default button; when either side is unknown, Import is. Cancelling changes nothing. |
 
 **Last run:** 29 Sep 2026, against the packaged Debug build connected to the Z3805A on COM3, without
 an uninstall. The export was 1,875 readings in one file (`journal_mode` delete, no companions). It
