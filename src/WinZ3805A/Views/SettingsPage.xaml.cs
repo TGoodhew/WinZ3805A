@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.DependencyInjection;
 
 using Microsoft.Extensions.Logging;
 
@@ -6,7 +7,13 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
 
+using Microsoft.UI;
+
 using Windows.ApplicationModel;
+using Windows.Storage;
+using Windows.Storage.Pickers;
+
+using WinRT.Interop;
 
 using WinZ3805A.Controls;
 using WinZ3805A.Services;
@@ -153,6 +160,250 @@ public sealed partial class SettingsPage : Page
 
         await ShowSignInStartAsync(SignInTask.EnableAsync(SignInLog()));
     }
+
+    /// <summary>Saves the whole history to a file the user chooses (#551).</summary>
+    /// <remarks>
+    /// Written to a private file first and then copied into the chosen one, through the
+    /// <c>StorageFile</c> the picker returned: SQLite writes by path and will not overwrite, while
+    /// the picker has already created the file, and a cloud-backed folder wants its updates
+    /// deferred rather than synced half-written - the same reason the CSV export works this way.
+    /// </remarks>
+    private async void OnExportHistoryClicked(object sender, RoutedEventArgs e)
+    {
+        if (App.Services?.GetService<TrendStore>() is not TrendStore store || XamlRoot is null)
+        {
+            return;
+        }
+
+        TimeProvider time = App.Services.GetRequiredService<TimeProvider>();
+
+        FileSavePicker picker = new()
+        {
+            SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
+            SuggestedFileName = $"receiver-history-{time.GetLocalNow():yyyy-MM-dd}",
+        };
+
+        picker.FileTypeChoices.Add("Receiver history", [HistoryFile.Extension]);
+        InitializeWithWindow.Initialize(picker, OwnerWindow());
+
+        StorageFile? file = await picker.PickSaveFileAsync();
+        if (file is null)
+        {
+            return;
+        }
+
+        string scratch = ScratchFile();
+        ExportHistoryButton.IsEnabled = false;
+
+        try
+        {
+            // Read after the picker, not before: the user can leave it open, and the manifest's
+            // export time must not be older than the newest sample in the file.
+            DateTimeOffset now = time.GetUtcNow();
+            string? receiver = ConnectedReceiver();
+            string version = AppVersion();
+            HistoryManifest manifest = await Task.Run(() => store.ExportTo(scratch, receiver, version, now));
+
+            CachedFileManager.DeferUpdates(file);
+
+            using (Stream target = await file.OpenStreamForWriteAsync())
+            {
+                target.SetLength(0);
+
+                await using FileStream source = File.OpenRead(scratch);
+                await source.CopyToAsync(target);
+            }
+
+            await CachedFileManager.CompleteUpdatesAsync(file);
+
+            ShowHistoryStatus(HistoryText.Exported(manifest, file.Name, TimeZoneInfo.Local));
+            HistoryLog()?.LogInformation("History exported: {Rows} samples to {File}.", manifest.Rows, file.Path);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SqliteException or ObjectDisposedException)
+        {
+            HistoryLog()?.LogWarning(exception, "History export to {File} failed.", file.Path);
+            await ShowHistoryProblemAsync("Couldn't export the history", $"{file.Name} could not be written. {exception.Message}");
+        }
+        finally
+        {
+            DeleteScratch(scratch);
+            ExportHistoryButton.IsEnabled = true;
+        }
+    }
+
+    /// <summary>Adds the readings in an exported file to this history, after saying what that will do (#551).</summary>
+    /// <remarks>
+    /// <para>
+    /// <b>A private copy is inspected and imported, never the chosen file itself.</b> The original
+    /// may be in a cloud-backed folder, open elsewhere, or a <c>trend.db</c> in WAL mode that needs
+    /// companion files created beside it just to be read.
+    /// </para>
+    /// <para>
+    /// <b>Nothing changes until the user has read the confirmation</b>, because an import cannot be
+    /// undone. When the file came from a different receiver, Cancel is the default button: the
+    /// safe choice is the one Enter makes.
+    /// </para>
+    /// </remarks>
+    private async void OnImportHistoryClicked(object sender, RoutedEventArgs e)
+    {
+        if (App.Services?.GetService<TrendStore>() is not TrendStore store || XamlRoot is null)
+        {
+            return;
+        }
+
+        FileOpenPicker picker = new() { SuggestedStartLocation = PickerLocationId.DocumentsLibrary };
+        picker.FileTypeFilter.Add(HistoryFile.Extension);
+        picker.FileTypeFilter.Add(".db");
+        InitializeWithWindow.Initialize(picker, OwnerWindow());
+
+        StorageFile? file = await picker.PickSingleFileAsync();
+        if (file is null)
+        {
+            return;
+        }
+
+        string scratch = ScratchFile();
+        ImportHistoryButton.IsEnabled = false;
+
+        try
+        {
+            using (Stream source = await file.OpenStreamForReadAsync())
+            {
+                await using FileStream copy = File.Create(scratch);
+                await source.CopyToAsync(copy);
+            }
+
+            long now = App.Services.GetRequiredService<TimeProvider>().GetUtcNow().UtcTicks;
+            HistoryInspection inspection = await Task.Run(() => HistoryFile.Inspect(scratch, now - store.Retention.Ticks));
+
+            if (!inspection.IsValid)
+            {
+                await ShowHistoryProblemAsync("Couldn't import the history", $"{file.Name}: {inspection.Problem}");
+                return;
+            }
+
+            if (inspection.RowsInRetention == 0)
+            {
+                await ShowHistoryProblemAsync(
+                    "Nothing to import",
+                    $"Every reading in {file.Name} is older than the {store.Retention.TotalDays:0} days this history keeps, so none of it would stay.");
+                return;
+            }
+
+            string? receiver = ConnectedReceiver();
+            ReceiverMatch match = HistoryFile.Compare(inspection.Manifest?.ReceiverIdentity, receiver);
+
+            ContentDialog confirm = new()
+            {
+                XamlRoot = XamlRoot,
+                Title = "Import this history?",
+                Content = new ScrollViewer
+                {
+                    Content = new TextBlock
+                    {
+                        Text = HistoryText.Describe(inspection, receiver, store.Retention, TimeZoneInfo.Local),
+                        TextWrapping = TextWrapping.Wrap,
+                    },
+                },
+                PrimaryButtonText = "Import",
+                CloseButtonText = "Cancel",
+                DefaultButton = match == ReceiverMatch.Different ? ContentDialogButton.Close : ContentDialogButton.Primary,
+            };
+
+            if (await confirm.ShowAsync() != ContentDialogResult.Primary)
+            {
+                return;
+            }
+
+            HistoryImportResult result = await Task.Run(() => store.Import(scratch, now));
+
+            ShowHistoryStatus(HistoryText.Imported(result, file.Name));
+            HistoryLog()?.LogInformation(
+                "History imported from {File}: {Added} samples added, {Present} already present; receiver {Match}.",
+                file.Path,
+                result.Added,
+                result.AlreadyPresent,
+                match);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SqliteException or ObjectDisposedException)
+        {
+            HistoryLog()?.LogWarning(exception, "History import from {File} failed.", file.Path);
+            await ShowHistoryProblemAsync(
+                "Couldn't import the history",
+                $"{file.Name} could not be imported, and nothing in this history was changed. {exception.Message}");
+        }
+        finally
+        {
+            DeleteScratch(scratch);
+            ImportHistoryButton.IsEnabled = true;
+        }
+    }
+
+    /// <summary>The window this page is in, which owns the pickers.</summary>
+    /// <remarks>From the XamlRoot, as the CSV export does: a page cannot see its own Window.</remarks>
+    private nint OwnerWindow() =>
+        Win32Interop.GetWindowFromWindowId(XamlRoot.ContentIslandEnvironment.AppWindowId);
+
+    /// <summary>The connected receiver's <c>*IDN?</c> answer, or null when nothing is connected.</summary>
+    private static string? ConnectedReceiver() =>
+        App.Services?.GetKeyedService<DeviceContext>(DeviceKeys.Primary)?.Session is { Status: ConnectionStatus.Connected } session
+            ? session.Identity
+            : null;
+
+    private static string AppVersion()
+    {
+        PackageVersion version = Package.Current.Id.Version;
+        return $"{version.Major}.{version.Minor}.{version.Build}.{version.Revision}";
+    }
+
+    /// <summary>A file of the application's own, in its temporary folder, that does not exist yet.</summary>
+    private static string ScratchFile() =>
+        Path.Combine(Path.GetTempPath(), $"wz-history-{Guid.NewGuid():N}{HistoryFile.Extension}");
+
+    /// <summary>Removes a scratch file and any journal SQLite left beside it.</summary>
+    private static void DeleteScratch(string path)
+    {
+        foreach (string file in new[] { path, path + "-wal", path + "-shm", path + "-journal" })
+        {
+            try
+            {
+                File.Delete(file);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                // A temporary file Windows will clear eventually is not worth an error.
+            }
+        }
+    }
+
+    private void ShowHistoryStatus(string text)
+    {
+        HistoryStatus.Text = text;
+        HistoryStatus.Visibility = Visibility.Visible;
+    }
+
+    /// <summary>
+    /// Reports a failed export or import.
+    /// </summary>
+    /// <remarks>
+    /// Loud where a preference failure is silent (§10.13): this is the user's only copy of history
+    /// that cannot be gathered again, and a picker that closes on nothing reads as success.
+    /// </remarks>
+    private async Task ShowHistoryProblemAsync(string title, string message)
+    {
+        HistoryStatus.Visibility = Visibility.Collapsed;
+
+        await new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = title,
+            Content = message,
+            CloseButtonText = "Close",
+        }.ShowAsync();
+    }
+
+    private static ILogger? HistoryLog() =>
+        App.Services?.GetService<ILoggerFactory>()?.CreateLogger("History");
 
     /// <summary>Where the startup task's answers are recorded (#548).</summary>
     private static ILogger? SignInLog() =>

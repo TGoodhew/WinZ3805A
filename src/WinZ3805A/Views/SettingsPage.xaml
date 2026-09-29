@@ -342,6 +342,47 @@
                     </tk:SettingsExpander>
                 </StackPanel>
 
+                <!--
+                    ================================ History ================================
+                    #551. The trend history lives inside the package's own data, and removing the
+                    package deletes it - uninstalling, moving to another PC, or switching between the
+                    sideloaded and Store builds all lose weeks of readings that cannot be gathered
+                    again. These two buttons are the way to keep them.
+
+                    Its own group, not rows under Running in the background: this is about the data,
+                    and a user looking for a backup looks for the word history, not for a startup
+                    setting. Import asks before it changes anything, and says what it did afterwards;
+                    unlike a preference, a failure here is always reported, because it is the user's
+                    only copy.
+                -->
+                <StackPanel Spacing="{ThemeResource WzSpaceXs}">
+                    <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="History" />
+
+                    <tk:SettingsCard Style="{ThemeResource WzSettingsCardStyle}"
+                                     Header="Export history"
+                                     Description="Saves every reading kept - up to eight weeks - to one file, so the history survives reinstalling the application, moving to another PC or changing between builds.">
+                        <Button x:Name="ExportHistoryButton"
+                                Content="Export history…"
+                                Click="OnExportHistoryClicked" />
+                    </tk:SettingsCard>
+
+                    <tk:SettingsCard Style="{ThemeResource WzSettingsCardStyle}"
+                                     Header="Import history"
+                                     Description="Adds the readings in an exported file to this history. Nothing already here is changed or removed, and you are shown what the file holds before anything is added.">
+                        <Button x:Name="ImportHistoryButton"
+                                Content="Import history…"
+                                Click="OnImportHistoryClicked" />
+                    </tk:SettingsCard>
+
+                    <TextBlock x:Name="HistoryStatus"
+                               Style="{ThemeResource WzBodyTextStyle}"
+                               Foreground="{ThemeResource WzTextSecondaryBrush}"
+                               HorizontalAlignment="Left"
+                               MaxWidth="{ThemeResource WzProseMaxWidth}"
+                               TextWrapping="Wrap"
+                               Visibility="Collapsed" />
+                </StackPanel>
+
                 <!-- ============================== Not built yet ============================ -->
                 <StackPanel Spacing="{ThemeResource WzSpaceXs}">
                     <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Elsewhere for now" />
