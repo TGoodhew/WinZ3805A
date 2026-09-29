@@ -180,7 +180,9 @@ public sealed class OverviewViewModelTests
             syncState: "HOLD");
 
         Assert.Equal(ReceiverMode.Holdover, model.Mode);
-        Assert.Equal(Staleness.Describe(TimeSpan.FromSeconds(694)), model.HoldoverDuration);
+        // A literal, not a call to the formatter. This compared against Staleness.Describe until
+        // #563, so it restated the defect - "updated 11 minutes ago" under Duration - and passed.
+        Assert.Equal("11 min", model.HoldoverDuration);
 
         // Emphatically not the uncertainty, which is what it used to show.
         Assert.DoesNotContain("4.2", model.HoldoverDuration, StringComparison.Ordinal);
