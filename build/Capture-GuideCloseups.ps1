@@ -43,7 +43,12 @@
 
     main-compact.png is in the set but was NOT re-taken on 29 Sep 2026: compact mode
     was drawing the figures-of-merit pills clipped under the medallion (#565), and a
-    picture of a defect is not an illustration of the feature.
+    picture of a defect is not an illustration of the feature. Its step works - it
+    was run into a scratch folder and photographed exactly that defect.
+
+    -Only takes a list, so call the script with & from PowerShell. Through
+    `pwsh -File` a comma list arrives as ONE name and nothing matches it, which
+    is why a run that takes no pictures says so.
 #>
 [CmdletBinding()]
 param(
@@ -121,6 +126,7 @@ function Save-Bitmap([System.Drawing.Bitmap]$src, [int]$x, [int]$y, [int]$w, [in
     try { $cut.Save((Join-Path $OutputDirectory "$name.png"), [System.Drawing.Imaging.ImageFormat]::Png) }
     finally { $cut.Dispose() }
     Write-Host ('{0,-36} {1}x{2}' -f "$name.png", $w, $h)
+    $script:taken++
 }
 
 # Photographs the window's root pane and cuts out the union of the parts' bounds, plus a margin.
@@ -161,6 +167,7 @@ function Save-Element([long]$window, [string]$name, [string]$selector) {
     $b = [System.Drawing.Bitmap]::FromFile($out)
     Write-Host ('{0,-36} {1}x{2}' -f "$name.png", $b.Width, $b.Height)
     $b.Dispose()
+    $script:taken++
 }
 
 function Save-RootPane([long]$window, [string]$name) {
@@ -209,6 +216,7 @@ foreach ($handle in $windows) {
 if (-not $main) { throw 'No main window found. Bring it back from the notification area first.' }
 if (-not $details) { throw 'No Details window found. Open it from the main window (Ctrl+D) first.' }
 
+$taken = 0
 $original = Get-Rect $main
 Resize $main $original.Left $original.Top $MainWidth $MainHeight
 
@@ -255,15 +263,31 @@ try {
 
         Quiet { winapp ui send-keys escape -w $main }
         Start-Sleep -Milliseconds 600
+
+        # Escape was a key, and after a key WinUI draws focus rings: the next picture would carry
+        # one on the globe button, and the connection dialog one on its port picker. A mouse click
+        # puts it back in pointer mode.
+        Quiet { winapp ui click ModeText -w $main }
+        Start-Sleep -Milliseconds 500
     }
 
     if (Wanted 'main-compact') {
-        Quiet { winapp ui send-keys 'ctrl+shift+m' -w $main }
-        Start-Sleep -Seconds 1
-        Save-RootPane $main 'main-compact'
-        Quiet { winapp ui send-keys 'ctrl+shift+m' -w $main }
-        Start-Sleep -Seconds 1
+        # A double-click on the medallion, not Ctrl+Shift+M: the keys sent through winapp on
+        # 29 Sep 2026 did not reach the accelerator, and the standard window was photographed
+        # under the compact name. So the result is checked before it is saved.
+        Quiet { winapp ui click Medallion -w $main --double }
+        Start-Sleep -Seconds 1.5
+        $pane = (Get-Elements $main)[(Get-RootPane (Get-Elements $main))]
+        if ($pane.W -gt 450) {
+            Write-Warning "main-compact: the window is still $($pane.W) px wide, so compact mode did not start; not saved."
+        }
+        else {
+            Save-RootPane $main 'main-compact'
+            Quiet { winapp ui click Medallion -w $main --double }
+            Start-Sleep -Seconds 1.5
+        }
         Resize $main $original.Left $original.Top $MainWidth $MainHeight
+        Quiet { winapp ui click ModeText -w $main }
     }
 
     if (Wanted 'connection-dialog') {
@@ -274,7 +298,8 @@ try {
         Resize $main $original.Left $top $MainWidth 800
         Quiet { winapp ui invoke StatusPill -w $details }
         Start-Sleep -Seconds 1
-        Save-Crop $main 'connection-dialog' @('Title', 'ContentScrollViewer', 'PrimaryButton', 'CloseButton') 24
+        # The dialog's title is not exposed as an element of its own; the top margin takes it in.
+        Save-Crop $main 'connection-dialog' @('ContentScrollViewer', 'PrimaryButton', 'CloseButton') 24
         Quiet { winapp ui invoke CloseButton -w $main }
         Start-Sleep -Milliseconds 600
         Resize $main $original.Left $original.Top $MainWidth $MainHeight
@@ -328,6 +353,11 @@ try {
 }
 finally {
     Resize $main $original.Left $original.Top ($original.Right - $original.Left) ($original.Bottom - $original.Top)
+}
+
+if ($taken -eq 0) {
+    Write-Warning ("No image was taken. -Only was '$($Only -join "', '")': through pwsh -File a comma " +
+                   'list arrives as one name - call the script with & instead.')
 }
 
 Write-Host ''
