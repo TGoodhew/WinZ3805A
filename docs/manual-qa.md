@@ -685,13 +685,19 @@ Explorer restart proves the icon comes back.
 **The icon may come back in the overflow** even if it had been dragged onto the taskbar. That is
 Windows' decision about a re-added icon and not a failure of this check.
 
-**Last run:** 29 Sep 2026, and **not against the packaged app**. The production `TrayIcon` class was
-run in a scratch harness, because registering a development build would have meant removing the
-installed release and its data. Two harnesses ran side by side through one Explorer restart, each
-asking the shell once a second whether its icon existed (`Shell_NotifyIconGetRect`). The one built
-from `main`'s message-only window lost its icon and never got it back in the 44 seconds that
-followed. The one built from #549's window logged the re-add line and had its icon back 1.4 s after
-the new Explorer process appeared. The first run against the packaged app is still owed.
+**Last run:** 29 Sep 2026, against the packaged Debug build of `main` at `25358fa`, registered as a
+development package. Explorer was restarted at 10:38:54.9. The application logged the re-add line at
+10:38:56.1, the shell then reported its icon present (`Shell_NotifyIconGetRect` on the tray window's
+handle), the log held no tray warning, and clicking and right-click → *Open* both opened the window.
+**One deviation:** the window was open rather than closed, because this was the first launch after a
+fresh install. The icon's window does not depend on the main window, so this does not weaken the
+result, but the next run should follow the procedure as written.
+
+Earlier the same day, before a development build could be registered, the production `TrayIcon`
+class was run in a scratch harness instead. Two harnesses ran side by side through one Explorer
+restart. The one built from the old message-only window lost its icon and never got it back in the
+44 seconds that followed. The one built from #549's window had its icon back 1.4 s after the new
+Explorer process appeared.
 
 ## Before a release
 
