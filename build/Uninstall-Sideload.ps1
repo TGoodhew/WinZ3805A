@@ -68,6 +68,11 @@ Write-Host ''
 # ---------------------------------------------------------------------------
 $installed = Get-AppxPackage -Name 'WinZ3805A' -ErrorAction SilentlyContinue
 
+# Read before the packages go: each one knows the publisher it was signed as, and that is how the
+# certificate step below finds a certificate from a FORMER publisher. The name matches every
+# WinZ3805A whatever its publisher, so a copy from before a publisher change is removed here too.
+$installedPublishers = @($installed | ForEach-Object { $_.Publisher })
+
 if ($installed) {
     foreach ($package in $installed) {
         # No -PreserveApplicationData. The point of this script is a machine
@@ -90,8 +95,15 @@ else {
 [xml]$manifest = Get-Content (Join-Path $repo 'src\WinZ3805A\Package.appxmanifest')
 $publisher = $manifest.Package.Identity.Publisher
 
+# And the publisher of every copy that was installed. The manifest's CURRENT publisher alone left
+# the old certificate behind whenever the publisher changed - at v1.0.1, and again at v1.3.1, when
+# the company's name was corrected - because a machine that installed an earlier release trusts a
+# certificate under the earlier name. Taken from the packages themselves rather than listed here,
+# so no former name has to be written down and none can be forgotten.
+$subjects = @(@($publisher) + $installedPublishers | Select-Object -Unique)
+
 $trusted = @(Get-ChildItem Cert:\LocalMachine\TrustedPeople -ErrorAction SilentlyContinue |
-    Where-Object { $_.Subject -eq $publisher })
+    Where-Object { $subjects -contains $_.Subject })
 
 if ($trusted.Count -gt 0) {
     foreach ($certificate in $trusted) {
@@ -107,12 +119,12 @@ if ($trusted.Count -gt 0) {
             Write-Warning "The certificate was not removed. It is $($certificate.Thumbprint) under Trusted People."
         }
         else {
-            Write-Did "certificate $($certificate.Thumbprint.Substring(0, 8))..., $publisher"
+            Write-Did "certificate $($certificate.Thumbprint.Substring(0, 8))..., $($certificate.Subject)"
         }
     }
 }
 else {
-    Write-Skip "no certificate for $publisher in Trusted People"
+    Write-Skip "no certificate for $publisher, or for any installed copy's publisher, in Trusted People"
 }
 
 # ---------------------------------------------------------------------------
