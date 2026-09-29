@@ -36,10 +36,19 @@
          and must keep passing. That is why the word list is the trigger rather than the
          '#NNN' itself.
 
-      4. THE NOTICES TABLE MATCHES THE PROJECT FILES. Every <PackageReference> in a SHIPPING project has a
-         row in THIRD-PARTY-NOTICES.md carrying the same version, and every row naming a package is
-         referenced by something. The audit found two packages removed on 15 August still
-         listed fourteen days later, and two referenced packages missing.
+      4. THE NOTICES TABLE MATCHES THE PROJECT FILES. Every <PackageReference> in a SHIPPING project has
+         its OWN row in THIRD-PARTY-NOTICES.md, and that row's Version column carries the same
+         version. The audit found two packages removed on 15 August still listed fourteen days
+         later, and two referenced packages missing.
+
+         The project files are read as XML and each version is looked for on its package's own
+         row (#564). Until 29 Sep 2026 a regex skipped any reference with an attribute after
+         Version - two of twelve - and a version was accepted anywhere in the file. -SelfTest
+         holds both as deliberate violations.
+
+         THE REVERSE IS NOT CHECKED: a row naming a package nothing references any more passes.
+         This description once said otherwise. The 15 August rows above were exactly that
+         case, so removing a package still needs its row removed by hand.
 
     RULE 3 NEEDS THE NETWORK AND THE OTHER THREE DO NOT. It degrades to a warning when 'gh'
     is missing or unauthenticated rather than failing the gate: a documentation check that
@@ -54,6 +63,9 @@
 param(
     [switch] $SkipIssueCheck,
 
+    # Runs rule 4 against fixtures and nothing else (#564).
+    [switch] $SelfTest,
+
     # How near a trigger word has to be to a '#NNN' before the citation counts as a claim
     # about live work. See rule 3 below for why this is a window and not the whole line.
     [int] $ProximityWindow = 40
@@ -67,10 +79,6 @@ $specRelative = 'docs/requirements.md'
 $specPath = Join-Path $repoRoot $specRelative
 $noticesRelative = 'THIRD-PARTY-NOTICES.md'
 
-if (-not (Test-Path $specPath)) {
-    Write-Host "FAIL: $specRelative not found; the gate has nothing to resolve against." -ForegroundColor Red
-    exit 1
-}
 
 # ---------------------------------------------------------------------------------------
 # Which documents are checked
@@ -88,6 +96,215 @@ $hits = [System.Collections.Generic.List[object]]::new()
 function Add-Hit {
     param($File, $Line, $Text, $Why)
     $hits.Add([pscustomobject]@{ File = $File; Line = $Line; Text = $Text; Why = $Why })
+}
+
+# ---------------------------------------------------------------------------------------
+# Rule 4's two readers, as functions so -SelfTest can hand them fixtures (#564)
+# ---------------------------------------------------------------------------------------
+
+# A PackageReference setting, written either as an attribute or as a child element: this
+# repository writes PrivateAssets as a child ('<PrivateAssets>all</PrivateAssets>') and other
+# projects write it as an attribute. $null when it is neither.
+function Read-Setting {
+    param([System.Xml.XmlElement] $Reference, [string] $Setting)
+
+    if ($Reference.HasAttribute($Setting)) { return $Reference.GetAttribute($Setting) }
+    $child = $Reference.SelectSingleNode("*[local-name()='$Setting']")
+    if ($child) { return $child.InnerText }
+    return $null
+}
+# Every <PackageReference> in one project file that ships something, as id -> version.
+#
+# READ AS XML, NOT MATCHED AS TEXT (#564). The regex this replaced wanted Include, then
+# Version, then the end of the element - so a reference with any attribute after Version was
+# not a match at all, and was skipped without a word. Two of the twelve were, on 29 Sep 2026:
+# both carry ExcludeAssets after Version. A parser does not care about attribute order or
+# whether a setting is an attribute or a child element.
+function Get-ShippedPackages {
+    param([string] $ProjectXml, [string] $Name)
+
+    $packages = [ordered]@{}
+    try {
+        $doc = [xml]$ProjectXml
+    }
+    catch {
+        Add-Hit $Name 0 $Name 'a project file that is not well-formed XML, so its packages could not be read'
+        return $packages
+    }
+
+    foreach ($ref in $doc.SelectNodes('//*[local-name()="PackageReference"]')) {
+        $id = $ref.GetAttribute('Include')
+        if (-not $id) { continue }
+
+
+        # An analyzer with PrivateAssets all produces no assembly and is not distributed, so it is
+        # not a third-party notice. CLAUDE.md draws the same line for the Device library's
+        # dependency set.
+        if ((Read-Setting $ref 'PrivateAssets') -match '^\s*all\s*$') { continue }
+
+        $version = Read-Setting $ref 'Version'
+        if (-not $version) {
+            Add-Hit $Name 0 $id 'a package reference with no version for the notices to carry'
+            continue
+        }
+
+        $packages[$id] = $version.Trim()
+    }
+
+    return $packages
+}
+
+# The notices table's rows, each as its component cell and its version cell.
+function Get-NoticeRows {
+    param([string] $Notices)
+
+    foreach ($line in ($Notices -split '\r?\n')) {
+        if ($line -notmatch '^\s*\|') { continue }
+
+        $cells = $line.Trim().Trim('|') -split '\|'
+        if ($cells.Count -lt 2) { continue }
+
+        $component = $cells[0].Trim()
+        $version = $cells[1].Trim()
+
+        # The header row and the |---| rule under it.
+        if ($component -eq 'Component' -or $component -match '^:?-+:?$') { continue }
+
+        [pscustomobject]@{ Component = $component; Version = $version; Text = $line.Trim() }
+    }
+}
+
+# A name or a version as a whole token, not as the start or end of a longer one.
+#
+# 'Microsoft.Windows.SDK.BuildTools' is the start of 'Microsoft.Windows.SDK.BuildTools.WinApp',
+# and version '2.0.5' is the start of '2.0.51'. Either as a plain substring would find its
+# neighbour's row and pass. A trailing full stop is allowed, since a name can end a sentence.
+function Test-Token {
+    param([string] $Text, [string] $Token)
+    return $Text -match ('(?<![\w.])' + [regex]::Escape($Token) + '(?!\.?\w)')
+}
+
+# Rule 4 over one set of project files and one notices document. Returns how many packages it
+# read; the defects go to Add-Hit.
+function Test-NoticesTable {
+    param([hashtable] $Projects, [string] $Notices, [string] $NoticesName)
+
+    $referenced = [ordered]@{}
+    foreach ($name in ($Projects.Keys | Sort-Object)) {
+        $shipped = Get-ShippedPackages -ProjectXml $Projects[$name] -Name $name
+        foreach ($id in $shipped.Keys) { $referenced[$id] = $shipped[$id] }
+    }
+
+    $rows = @(Get-NoticeRows $Notices)
+
+    foreach ($id in $referenced.Keys) {
+        $version = $referenced[$id]
+
+        # THE PACKAGE'S OWN ROW, NOT THE WHOLE FILE (#564). The version used to be looked for
+        # anywhere in the document, so a stale row passed whenever the new version number
+        # happened to be written somewhere else - and every Microsoft.Extensions package shares
+        # one, so for those it always did.
+        #
+        # THE TABLE CONTRACTS ITS NAMES, AND THAT IS THE DOCUMENT'S CHOICE RATHER THAN A DEFECT:
+        # it writes 'Microsoft.Extensions.Logging, .Abstractions' for two packages on one row, so
+        # no exact-id matcher can read it without the notices being rewritten to suit a gate. A
+        # legal document does not get reformatted for a script's convenience. So a package's row
+        # is the one naming its id in the Component column, or failing any such row, the one
+        # naming its family - the id with its last segment dropped. That follows the contraction
+        # without inventing one.
+        $own = @($rows | Where-Object { Test-Token $_.Component $id })
+        if ($own.Count -eq 0) {
+            $family = $id -replace '\.[^.]+$', ''
+            if ($family -ne $id) {
+                $own = @($rows | Where-Object { Test-Token $_.Component $family })
+            }
+        }
+
+        if ($own.Count -eq 0) {
+            Add-Hit $NoticesName 0 $id 'a package this project ships with no row in the notices'
+        }
+        elseif (-not ($own | Where-Object { Test-Token $_.Version $version })) {
+            Add-Hit $NoticesName 0 "$id $version" "a package whose notices row does not carry the referenced version (the row says '$($own[0].Version)')"
+        }
+    }
+
+    return $referenced.Count
+}
+
+# ---------------------------------------------------------------------------------------
+# -SelfTest: rule 4 against fixtures, including both of #564's defects as deliberate violations
+#
+# Each case is a project, a notices table, and the number of defects the rule must report. A
+# rule that finds nothing in the real repository today proves nothing about whether it would -
+# the old one found nothing too, while skipping two packages.
+# ---------------------------------------------------------------------------------------
+function Invoke-SelfTest {
+    $table = @'
+| Component | Version | Licence | Redistributed as |
+|---|---|---|---|
+| Markdig | 1.3.2 | BSD 2-Clause | Assembly in the package |
+| Microsoft.Extensions.Logging, .Abstractions | 10.0.11 | MIT | Assemblies in the package |
+| Microsoft.Windows.SDK.BuildTools | 10.0.28000.2526 | Microsoft | Build-time only |
+| Microsoft.Windows.SDK.BuildTools.WinApp | 0.5.0 | MIT | Build-time only |
+| Microsoft.Windows.AI.MachineLearning, Microsoft.WindowsAppSDK.Widgets | 2.1.74, 2.0.5 | Microsoft | Nothing ships |
+'@
+
+    function Project([string] $refs) { "<Project Sdk=`"Microsoft.NET.Sdk`"><ItemGroup>$refs</ItemGroup></Project>" }
+
+    $cases = @(
+        @{ Name = 'a plain reference on its own row'; Want = 0
+           Refs = '<PackageReference Include="Markdig" Version="1.3.2" />' }
+        @{ Name = 'attributes after Version, current'; Want = 0
+           Refs = '<PackageReference Include="Microsoft.WindowsAppSDK.Widgets" Version="2.0.5" ExcludeAssets="runtime;native" />' }
+        @{ Name = '#564: attributes after Version, and a version the row does not carry'; Want = 1
+           Refs = '<PackageReference Include="Microsoft.WindowsAppSDK.Widgets" Version="2.0.6" ExcludeAssets="runtime;native" />' }
+        @{ Name = '#564: attributes before Version as well as after'; Want = 1
+           Refs = '<PackageReference ExcludeAssets="runtime" Include="Microsoft.Windows.AI.MachineLearning" Version="2.1.75" GeneratePathProperty="true" />' }
+        @{ Name = 'Version as a child element'; Want = 1
+           Refs = '<PackageReference Include="Markdig"><Version>1.3.3</Version></PackageReference>' }
+        @{ Name = '#564: the new version is on another row, not this one'; Want = 1
+           Refs = '<PackageReference Include="Markdig" Version="10.0.11" />' }
+        @{ Name = 'a version that is the start of a longer one on the row'; Want = 1
+           Refs = '<PackageReference Include="Microsoft.WindowsAppSDK.Widgets" Version="2.0" ExcludeAssets="runtime;native" />' }
+        @{ Name = 'a name that is the start of a neighbour row''s name, whose version it matches'; Want = 1
+           Refs = '<PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="0.5.0" />' }
+        @{ Name = 'a contracted family row'; Want = 0
+           Refs = '<PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.11" />' }
+        @{ Name = 'a package with no row at all'; Want = 1
+           Refs = '<PackageReference Include="Newtonsoft.Json" Version="13.0.3" />' }
+        @{ Name = 'PrivateAssets all as a child element is not shipped'; Want = 0
+           Refs = '<PackageReference Include="Some.Analyzer" Version="1.0.0"><PrivateAssets>all</PrivateAssets></PackageReference>' }
+        @{ Name = 'PrivateAssets all as an attribute is not shipped'; Want = 0
+           Refs = '<PackageReference Include="Some.Analyzer" Version="1.0.0" PrivateAssets="all" />' }
+        @{ Name = 'a reference with no version'; Want = 1
+           Refs = '<PackageReference Include="Markdig" />' }
+    )
+
+    $failed = 0
+    foreach ($case in $cases) {
+        $hits.Clear()
+        $null = Test-NoticesTable -Projects @{ 'fixture.csproj' = (Project $case.Refs) } -Notices $table -NoticesName 'fixture notices'
+        $ok = $hits.Count -eq $case.Want
+        if (-not $ok) { $failed++ }
+        Write-Host ('  {0}  {1} (reported {2}, expected {3})' -f ($(if ($ok) { 'ok  ' } else { 'FAIL' })), $case.Name, $hits.Count, $case.Want) `
+            -ForegroundColor $(if ($ok) { 'Gray' } else { 'Red' })
+    }
+
+    if ($failed -gt 0) {
+        Write-Host "FAIL: $failed of $($cases.Count) self-test case(s) judged wrongly." -ForegroundColor Red
+        exit 1
+    }
+
+    Write-Host "Self-test passed: $($cases.Count) cases, $(@($cases | Where-Object { $_.Want -gt 0 }).Count) of them deliberate violations." -ForegroundColor Green
+    exit 0
+}
+
+# Before anything that reads the repository: the self-test needs none of it.
+if ($SelfTest) { Invoke-SelfTest }
+
+if (-not (Test-Path $specPath)) {
+    Write-Host "FAIL: $specRelative not found; the gate has nothing to resolve against." -ForegroundColor Red
+    exit 1
 }
 
 # ---------------------------------------------------------------------------------------
@@ -241,68 +458,21 @@ Write-Host "Scanned $($documents.Count) tracked document(s) for links and sectio
 $noticesPath = Join-Path $repoRoot $noticesRelative
 
 if (Test-Path $noticesPath) {
-    $notices = Get-Content -LiteralPath $noticesPath -Raw
-
     # SHIPPING PROJECTS ONLY. The notices document sets its own scope in its second
     # paragraph - "packages used only by the tests ship nothing and are not the subject of a
     # notice" - and naming xunit there would be wrong, not merely noisy. So the gate reads
     # the same set the document promises to cover.
-    $referenced = @{}
-    $projects = git -C $repoRoot ls-files '*.csproj' |
-        Where-Object { $_ -match '^(src|tools)/' }
-
-    foreach ($proj in $projects) {
-        $text = Get-Content -LiteralPath (Join-Path $repoRoot $proj) -Raw
-
-        # The whole element, not just its opening tag: PrivateAssets is written as a child
-        # element in this repository ('<PrivateAssets>all</PrivateAssets>') and as an
-        # attribute elsewhere, and a self-closing form has neither.
-        foreach ($m in [regex]::Matches($text, '<PackageReference\s+Include="(?<id>[^"]+)"\s+Version="(?<v>[^"]+)"(?<rest>\s*/>|.*?</PackageReference>)', 'Singleline')) {
-            # An analyzer with PrivateAssets all produces no assembly and is not distributed,
-            # so it is not a third-party notice. CLAUDE.md draws the same line for the Device
-            # library's dependency set.
-            if ($m.Value -match 'PrivateAssets\s*=\s*"all"' -or $m.Value -match '<PrivateAssets>\s*all\s*</PrivateAssets>') {
-                continue
-            }
-
-            $referenced[$m.Groups['id'].Value] = $m.Groups['v'].Value
-        }
+    $projects = @{}
+    foreach ($proj in (git -C $repoRoot ls-files '*.csproj' | Where-Object { $_ -match '^(src|tools)/' })) {
+        $projects[$proj] = Get-Content -LiteralPath (Join-Path $repoRoot $proj) -Raw
     }
 
-    foreach ($id in $referenced.Keys) {
-        # THE TABLE CONTRACTS ITS NAMES, AND THAT IS THE DOCUMENT'S CHOICE RATHER THAN A
-        # DEFECT: it writes 'Microsoft.Extensions.Logging, .Abstractions' for two packages on
-        # one row, so no exact-id matcher can read it without the notices being rewritten to
-        # suit a gate. A legal document does not get reformatted for a script's convenience.
-        #
-        # So a package counts as covered if its own id appears, or if its family does - the id
-        # with its last segment dropped. That follows the contraction without inventing one.
-        $family = $id -replace '\.[^.]+$', ''
-
-        if ($notices -match [regex]::Escape($id)) {
-            $covered = $true
-        }
-        elseif ($family -ne $id -and $notices -match [regex]::Escape($family)) {
-            $covered = $true
-        }
-        else {
-            $covered = $false
-        }
-
-        if (-not $covered) {
-            Add-Hit $noticesRelative 0 $id 'a package this project ships with no row in the notices'
-        }
-        elseif ($notices -notmatch [regex]::Escape($referenced[$id])) {
-            Add-Hit $noticesRelative 0 "$id $($referenced[$id])" 'a package whose notices row does not carry the referenced version'
-        }
-    }
-
-    Write-Host "Checked $($referenced.Count) shipped package reference(s) against $noticesRelative."
+    $count = Test-NoticesTable -Projects $projects -Notices (Get-Content -LiteralPath $noticesPath -Raw) -NoticesName $noticesRelative
+    Write-Host "Checked $count shipped package reference(s) against their own rows in $noticesRelative."
 }
 else {
     Write-Host "Skipped the notices check: $noticesRelative not found." -ForegroundColor Yellow
 }
-
 # ---------------------------------------------------------------------------------------
 # Rule 3: issues cited as live must be open
 # ---------------------------------------------------------------------------------------
