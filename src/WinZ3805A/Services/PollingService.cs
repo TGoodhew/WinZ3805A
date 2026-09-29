@@ -467,7 +467,8 @@ public sealed class PollingService : IAsyncDisposable
             plan.FastTierCarries,
             readings.OscillatorOffsetPpb,
             readings.OscillatorTemperature,
-            readings.Disciplining);
+            readings.Disciplining,
+            readings.TimeOfDay);
 
         FastSweeps++;
     }

@@ -206,6 +206,8 @@ public sealed class ReceiverStateStore : INotifyPropertyChanged
         TrackedCount = null;
         LastFastPoll = null;
         LastFullPoll = null;
+        ReceiverTimeOfDay = null;
+        ReceiverTimeOfDayReadAt = null;
         OnPropertyChanged(nameof(LastDisplayedPoll));
 
         // Back to the optimistic default: the next driver's shape arrives with its first update,
@@ -361,6 +363,19 @@ public sealed class ReceiverStateStore : INotifyPropertyChanged
     }
 
     /// <summary>
+    /// The receiver's time of day from the latest fast sweep that read one, or null (#560).
+    /// </summary>
+    /// <remarks>
+    /// Kept, not cleared, when a sweep does not answer it: <c>ReceiverClock</c> stops counting
+    /// forward once the reading is overdue, so an old time is shown as old rather than advanced or
+    /// blanked.
+    /// </remarks>
+    public TimeSpan? ReceiverTimeOfDay { get; private set; }
+
+    /// <summary>When <see cref="ReceiverTimeOfDay"/> was read, on this store's clock (#560).</summary>
+    public DateTimeOffset? ReceiverTimeOfDayReadAt { get; private set; }
+
+    /// <summary>
     /// The poll a page of mixed readings should be aged against: the older of the tiers that
     /// actually contribute to it (#479).
     /// </summary>
@@ -478,9 +493,18 @@ public sealed class ReceiverStateStore : INotifyPropertyChanged
         FastFields carries,
         double? oscillatorOffsetPpb = null,
         double? oscillatorTemperature = null,
-        bool? disciplining = null)
+        bool? disciplining = null,
+        TimeSpan? timeOfDay = null)
     {
         _fastTierCarries = carries;
+
+        // #560. Only a time that was answered moves the anchor; a sweep that did not read one leaves
+        // the last, which ReceiverClock ages like any other reading.
+        if (timeOfDay is TimeSpan time)
+        {
+            ReceiverTimeOfDay = time;
+            ReceiverTimeOfDayReadAt = _timeProvider.GetUtcNow();
+        }
 
         if (carries.HasFlag(FastFields.SyncState)) { SyncState = syncState; }
         if (carries.HasFlag(FastFields.Tfom)) { Tfom = tfom; }
