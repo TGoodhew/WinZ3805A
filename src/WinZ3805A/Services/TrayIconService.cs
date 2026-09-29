@@ -18,7 +18,7 @@ namespace WinZ3805A.Services;
 /// cannot disagree — which they would within a week if the mapping were restated here.
 /// </para>
 /// <para>
-/// <b>Everything is marshalled to the dispatcher.</b> The message-only window is created on the UI
+/// <b>Everything is marshalled to the dispatcher.</b> The icon's hidden window is created on the UI
 /// thread, so its <c>WndProc</c> is pumped by the UI message loop; calling
 /// <c>Shell_NotifyIcon</c> for it from the poll thread would be sending to a window whose thread
 /// affinity we had just violated.
