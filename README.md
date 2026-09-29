@@ -185,9 +185,17 @@ certificate to *Trusted People* and nothing wider — and the
 not grant before asking. Every release publishes the certificate thumbprint and
 the zip's SHA-256 so both can be checked against what Windows shows you.
 
+**Coming from 1.3.0 or earlier?** Those releases were signed under a misspelling
+of the company's name, corrected to **The Schnauzer Group LLC** in 1.3.1. The
+publisher is part of the package's identity, so 1.3.1 installs *alongside* the old
+copy instead of upgrading it. Export the history from the old copy first
+(Settings → Export history…), exit it, install, import, then uninstall the old
+one. The release notes give the steps. This happens once.
+
 Uninstall from *Settings › Apps*, or with
 [`build/Uninstall-Sideload.ps1`](build/Uninstall-Sideload.ps1), which also
-removes the certificate and is what puts a test machine back to clean.
+removes the certificate, including any left by a former publisher name. It is
+what puts a test machine back to clean.
 
 To build the installer yourself instead,
 [`build/New-SideloadPackage.ps1`](build/New-SideloadPackage.ps1) produces the

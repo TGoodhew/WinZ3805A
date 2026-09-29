@@ -314,8 +314,12 @@ non-developer can act on. This is expected to fail; the check is that it fails *
 > `Identity/@Publisher` together form the package family name, so a build signed by a different
 > publisher installs *alongside* the old one instead of upgrading it, and `Uninstall-Sideload.ps1`
 > — which finds the certificate by the manifest's *current* publisher — will not remove the old
-> certificate. It happened once, at v1.0.1, when the placeholder `CN=AppPublisher` was replaced.
-> Uninstall the older build by hand first.
+> certificate. It happened at v1.0.1, when the placeholder `CN=AppPublisher` was replaced, and
+> again at v1.3.1, when a misspelling of the company's name was corrected to
+> `CN=The Schnauzer Group LLC`. Since then `Uninstall-Sideload.ps1` also removes the certificate
+> of every installed copy's publisher, whatever that publisher was. **At v1.3.1, also check the release notes' upgrade steps
+> against a machine that has 1.3.0 installed**: export, exit, install alongside, import, then
+> uninstall the old copy.
 
 ---
 
