@@ -431,6 +431,21 @@ public class ReceiverDriverTests
     }
 
     /// <summary>
+    /// #560: the seventh answer, <c>:PTIM:TIME?</c>, is the time of day the main window's clock ticks
+    /// on. The bench Z3805A's own answer, 29 Sep 2026.
+    /// </summary>
+    [Fact]
+    public void TheSmartClockSweepReadsTheTimeOfDay()
+    {
+        SweepInterpretation sweep = Driver().InterpretSweep(
+            [" LOCK", " +3", " 0", " -5.4E-009", " +1.2", " 7", "+19,+40,+16"]);
+
+        Assert.Null(sweep.Rejection);
+        Assert.Equal(new TimeSpan(19, 40, 16), sweep.Readings.TimeOfDay);
+        Assert.Contains(":PTIM:TIME?", Driver().Plan.FastTier);
+    }
+
+    /// <summary>
     /// A short sweep leaves the unanswered fields absent rather than zero.
     /// </summary>
     [Fact]

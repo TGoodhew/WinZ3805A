@@ -224,6 +224,24 @@ public sealed record FastReadings(
     /// Whatever renders this must have somewhere to put "unknown" that is not "off".
     /// </remarks>
     public bool? Disciplining { get; init; }
+
+    /// <summary>
+    /// The receiver's time of day, on its selected time scale, or null (#560).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Only the time, never the date.</b> The date needs §7.4's week-rollover correction, which
+    /// only the full status is corrected by: the bench Z3805A's own <c>:PTIM:DATE?</c> answers
+    /// 13 Feb 2007, one 1024-week epoch behind. So the date stays with the screen, and this puts a
+    /// fresh time of day within it every second, so the main window's clock ticks rather than
+    /// holding the screen's time for ten seconds.
+    /// </para>
+    /// <para>
+    /// Optional, like #512's fields: a family whose sweep does not read the time leaves it null, and
+    /// the clock keeps using the screen's time as before.
+    /// </para>
+    /// </remarks>
+    public TimeSpan? TimeOfDay { get; init; }
 }
 
 /// <summary>
