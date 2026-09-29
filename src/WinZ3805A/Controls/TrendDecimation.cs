@@ -283,9 +283,14 @@ public static class TrendDecimation
     /// The smallest total range to show, in the value's own units. Below it the bounds widen about
     /// the data's own midpoint rather than magnifying it.
     /// </param>
+    /// <param name="labelResolution">
+    /// The smallest difference the axis labels can show - 0.01 for a chart labelled to 2 dp - or 0
+    /// to snap without regard to the labels. See <see cref="SnapOutward"/> (#546).
+    /// </param>
     public static (double Minimum, double Maximum) AutoBounds(
         IReadOnlyList<TrendColumn> columns,
-        double minimumSpan)
+        double minimumSpan,
+        double labelResolution = 0)
     {
         ArgumentNullException.ThrowIfNull(columns);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(minimumSpan);
@@ -296,13 +301,15 @@ public static class TrendDecimation
         // whose labels are infinities.
         if (double.IsInfinity(lowest) || double.IsInfinity(highest))
         {
-            return (-minimumSpan / 2, minimumSpan / 2);
+            return labelResolution > 0
+                ? SnapOutward(-minimumSpan / 2, minimumSpan / 2, labelResolution)
+                : (-minimumSpan / 2, minimumSpan / 2);
         }
 
         double middle = (lowest + highest) / 2;
         double half = Math.Max(highest - lowest, minimumSpan) / 2;
 
-        return SnapOutward(middle - half, middle + half);
+        return SnapOutward(middle - half, middle + half, labelResolution);
     }
 
     /// <summary>
@@ -537,11 +544,31 @@ public static class TrendDecimation
 
     /// <summary>Widens a range to the next round step outside it, on both sides.</summary>
     /// <remarks>
+    /// <para>
     /// 1, 2, 2.5 or 5 times a power of ten, chosen so the range holds about four steps. That is the
     /// usual nice-number rule and it is here for one reason: the axis carries three labels, and
     /// <c>−16.8557</c> is not a label.
+    /// </para>
+    /// <para>
+    /// <b>Given a label resolution, the step is one the labels can show (#546).</b> §9.5.3 item 6
+    /// fixes each quantity's decimals, so the labels cannot gain a place when the data is quiet - the
+    /// grid has to come to them instead. Without this, EFC at its 0.01 % minimum span snapped to a
+    /// step of 0.0025 %, and three labels at 2 dp read <c>−16.70</c>, <c>−16.70</c>, <c>−16.71</c>: two
+    /// the same, and a third rounded from a value the axis was not at. So with a resolution:
+    /// </para>
+    /// <list type="bullet">
+    /// <item>the step is a whole multiple of it, and never finer - 2.5 × 0.01 is passed over for 5 ×
+    /// 0.01, because <c>−16.725</c> at 2 dp is a number the axis is not at;</item>
+    /// <item>the range holds an even number of steps, so the midpoint label is on the grid too. An odd
+    /// count is widened by one step on the side with less room to spare.</item>
+    /// </list>
+    /// <para>
+    /// The price is at the narrowest: the axis is at least two label steps wide, 0.02 % for EFC,
+    /// where the minimum span alone asked for 0.01 %. Two labels that say the same thing were the
+    /// dearer of the two.
+    /// </para>
     /// </remarks>
-    private static (double Minimum, double Maximum) SnapOutward(double lower, double upper)
+    private static (double Minimum, double Maximum) SnapOutward(double lower, double upper, double resolution = 0)
     {
         double span = upper - lower;
 
@@ -550,18 +577,61 @@ public static class TrendDecimation
             return (lower, upper);
         }
 
-        double rough = span / 4;
-        double magnitude = Math.Pow(10, Math.Floor(Math.Log10(rough)));
-        double step = (rough / magnitude) switch
-        {
-            <= 1 => 1,
-            <= 2 => 2,
-            <= 2.5 => 2.5,
-            <= 5 => 5,
-            _ => 10,
-        } * magnitude;
+        double step = NiceStep(span / 4, resolution);
 
-        return (Math.Floor(lower / step) * step, Math.Ceiling(upper / step) * step);
+        // With a label grid, a hair of tolerance each way: -16.71 / 0.01 is -1671.0000000000002 in
+        // binary, and flooring that pushes a bound a whole step further out than the data asked for -
+        // which at the minimum span doubles the axis. Without one, none: the bounds must contain the
+        // data exactly, and nothing is counting steps.
+        double tolerance = resolution > 0 ? 1e-9 : 0;
+        double minimum = Math.Floor((lower / step) + tolerance) * step;
+        double maximum = Math.Ceiling((upper / step) - tolerance) * step;
+
+        if (resolution > 0 && Math.Round((maximum - minimum) / step) % 2 == 1)
+        {
+            if (lower - minimum <= maximum - upper)
+            {
+                minimum -= step;
+            }
+            else
+            {
+                maximum += step;
+            }
+        }
+
+        return (minimum, maximum);
+    }
+
+    /// <summary>The smallest round step at least <paramref name="rough"/> that the labels can show.</summary>
+    private static double NiceStep(double rough, double resolution)
+    {
+        double magnitude = Math.Pow(10, Math.Floor(Math.Log10(rough)));
+
+        for (int decade = 0; decade < 40; decade++, magnitude *= 10)
+        {
+            foreach (double factor in (ReadOnlySpan<double>)[1, 2, 2.5, 5])
+            {
+                double step = factor * magnitude;
+
+                if (step < rough * (1 - 1e-12))
+                {
+                    continue;
+                }
+
+                if (resolution <= 0)
+                {
+                    return step;
+                }
+
+                double multiple = step / resolution;
+                if (multiple >= 1 - 1e-9 && Math.Abs(multiple - Math.Round(multiple)) < 1e-6)
+                {
+                    return step;
+                }
+            }
+        }
+
+        return Math.Max(rough, resolution);
     }
 
     /// <summary>
