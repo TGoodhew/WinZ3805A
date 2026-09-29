@@ -667,6 +667,26 @@ number arriving from the wrong place, which no reading of the screen can disting
 18 of 115 transactions carried a frame, spaced two seconds apart, which is every one the receiver
 sent.
 
+## 18. The tray icon survives an Explorer restart (#549)
+
+**Why.** When Explorer restarts, every notification icon goes with it, and the shell broadcasts
+`TaskbarCreated` so that each application can add its icon again. Until #549 the icon's window was
+message-only, **and a message-only window receives no broadcasts**, so the icon stayed gone until
+the application was restarted too. With close-to-tray on by default (§10.3.1) the icon is often the
+only sign the application is running, so it looked as if it had exited while it went on polling and
+holding the port. `TrayIconWindowTests` proves the window now hears a broadcast; only a real
+Explorer restart proves the icon comes back.
+
+| | |
+|---|---|
+| **Do** | Launch the app and close its window, so it is running in the notification area. Note the icon's shape. Task Manager → *Windows Explorer* → *Restart*. Wait for the taskbar to return. |
+| **Pass** | The icon is back within a few seconds, in the same shape and with the same tooltip, without the app being touched. Clicking it opens the window, and right-clicking it shows *Open* and *Exit*. `app.log` has the line *Explorer restarted; adding the tray icon again.* and no warning about the tray. |
+
+**The icon may come back in the overflow** even if it had been dragged onto the taskbar. That is
+Windows' decision about a re-added icon and not a failure of this check.
+
+**Last run:** not yet.
+
 ## Before a release
 
 Sections 1–4, 8, 9, 11 and 13 in full, then **12 on the published artifact** — which means the release
@@ -680,7 +700,8 @@ rendering or shell-badge path has changed** — it costs an hour of waiting and 
 attention, and both leaks that have shipped would have been caught by it; **section 17 whenever a
 broadcasting receiver is to hand and anything on the transport's byte path has changed** — it costs
 one glance at one readout, and the failure it catches is a value quietly not arriving, which no
-other check in this list would notice. Section 15 is not a release
+other check in this list would notice; **section 18 if the tray icon's code has changed** — it
+costs half a minute. Section 15 is not a release
 gate at all: run it when a talker is to hand, because the captures it produces are permanent and the
 opportunity is not.
 
