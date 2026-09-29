@@ -249,12 +249,24 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// <see cref="DisplayZone"/>.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Correction first, conversion second. §7.4 fixes which 1024-week epoch the reading belongs to,
     /// which is a question about the instant; the zone is a question about how to render it. Doing
     /// them the other way round would convert a date two decades out and then move it.
+    /// </para>
+    /// <para>
+    /// <b>Ticks every second (#560).</b> The date and its correction come from the screen as before;
+    /// the time of day is the one-second sweep's, counted forward between readings - see
+    /// <see cref="ReceiverClock"/>. The main page redraws once a second, which is what makes it tick.
+    /// </para>
     /// </remarks>
     public DisplayTime? ShownTime => DisplayTimeConverter.Convert(
-        _store.Status?.CorrectedDateTime ?? _store.Status?.DeviceDateTime,
+        ReceiverClock.Now(
+            _store.Status?.CorrectedDateTime ?? _store.Status?.DeviceDateTime,
+            _store.LastFullPoll,
+            _store.ReceiverTimeOfDay,
+            _store.ReceiverTimeOfDayReadAt,
+            _timeProvider.GetUtcNow()),
         TimeScale,
         DisplayZone);
 
