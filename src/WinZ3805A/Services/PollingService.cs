@@ -199,10 +199,28 @@ public sealed class PollingService : IAsyncDisposable
     }
 
     /// <remarks>
+    /// <para>
     /// One loop on the fast cadence, with the full screen taken whenever it falls due. Using a
-    /// single <see cref="PeriodicTimer"/> is what makes the no-overlap rule structural: the timer
-    /// does not queue missed ticks, so a sweep that runs long simply causes the next tick to be
-    /// skipped rather than a backlog to accumulate.
+    /// single <see cref="PeriodicTimer"/> is what makes the no-overlap rule structural: a sweep that
+    /// runs long cannot build up a backlog of sweeps behind it.
+    /// </para>
+    /// <para>
+    /// <b>But the timer does remember one tick</b>, and this said it remembered none (#547). Every
+    /// tick that fires while nobody is awaiting collapses into a single pending one, which the next
+    /// <c>WaitForNextTickAsync</c> returns at once. After a full screen - two to three and a half
+    /// seconds on a 9600 baud link - that meant the fast sweep straight after the screen, then a
+    /// second one about 120 ms behind it from the remembered tick, then a third on the next real
+    /// tick: the screen and three fast updates in about 0.6 s, every ten seconds. It read as a
+    /// window catching up, and it wrote two trend rows 0.12 s apart where every other pair is a
+    /// second apart.
+    /// </para>
+    /// <para>
+    /// So a fast sweep never starts less than half a period after the previous one began. The
+    /// remembered tick is waited past when it arrives that soon, and the loop takes the next real
+    /// one. That keeps the sweep straight after a screen - the freshest reading after a gap §7.3
+    /// accepts - and drops only the duplicate. A fast sweep that itself overran the period is still
+    /// followed at once, because by then the loop is genuinely behind.
+    /// </para>
     /// </remarks>
     private async Task RunAsync(CancellationToken cancellationToken)
     {
@@ -261,12 +279,19 @@ public sealed class PollingService : IAsyncDisposable
                     }
                 }
 
+                DateTimeOffset sweepStarted = _timeProvider.GetUtcNow();
                 await PollFastAsync(cancellationToken).ConfigureAwait(false);
 
-                if (!await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
+                // The remembered tick after a long sweep returns at once; one that arrives within
+                // half a period of this sweep's start is that tick, and is waited past (#547).
+                do
                 {
-                    return;
+                    if (!await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
+                    {
+                        return;
+                    }
                 }
+                while (_timeProvider.GetUtcNow() - sweepStarted < fast / 2);
             }
         }
         catch (OperationCanceledException)
