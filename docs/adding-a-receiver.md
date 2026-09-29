@@ -83,9 +83,14 @@ The interface is
 [`src/WinZ3805A.Device/Drivers/IReceiverDriver.cs`](../src/WinZ3805A.Device/Drivers/IReceiverDriver.cs);
 the shipped implementations are
 [`SmartClockDriver.cs`](../src/WinZ3805A.Device/Drivers/SmartClockDriver.cs)
-beside it and [`Nmea/NmeaDriver.cs`](../src/WinZ3805A.Device/Drivers/Nmea/NmeaDriver.cs)
-under it — one that answers questions and one that talks, which between them
-exercise every member — and a third, fictional and test-only, is
+beside it, and [`Nmea/NmeaDriver.cs`](../src/WinZ3805A.Device/Drivers/Nmea/NmeaDriver.cs)
+and [`Uccm/UccmDriver.cs`](../src/WinZ3805A.Device/Drivers/Uccm/UccmDriver.cs)
+under it — one that answers questions, one that talks, and one that answers
+questions behind a prompt of its own while broadcasting binary between replies.
+It takes all three to exercise every member: `Prompt`, `NotePrompt`,
+`BinaryFrames` and `Observe` are overridden only by the UCCM driver (corrected
+29 Sep 2026, #556 — this said the first two sufficed). A fourth, fictional and
+test-only, is
 [`tests/WinZ3805A.Tests/Drivers/FakeReceiverDriver.cs`](../tests/WinZ3805A.Tests/Drivers/FakeReceiverDriver.cs).
 
 | Member | What it decides | Authority |
@@ -97,6 +102,9 @@ exercise every member — and a third, fictional and test-only, is
 | `Overhear(lines)` | Whether the lines the receiver sent *before being asked anything* are this family's, and who it is. Defaults to "no"; a talker is recognised here and `*IDN?` is never sent to it | §12, #310 |
 | `ClassifyLine(line)` | For a broadcast family, which plan key a heard line belongs to; `null` for a line that is not yours. Defaults to `null` | §12, #310 |
 | `Prompt` | What ends a transaction on your link. Defaults to the SmartClock's `scpi > ` / `E-nnn> `. **Override it from a measurement, never from a guess** — a grammar that omits the prompt your receiver actually sends makes every transaction run to its full timeout and reports as "no receiver answered" | §7.2, #470 |
+| `NotePrompt(word)` | Told which word of your `Prompt` grammar the receiver just printed, on every transaction — `null` for an error prompt. Defaults to ignoring it. It exists for a family whose prompt names the *model* rather than the protocol: a UCCM prints `UCCM-P` or `UCCM`, which tells the two variants apart before anything is asked — and asking did not work, a real UCCM-P answering none of the queries said to be its own. Never throws | §7.2, #513 |
+| `BinaryFrames` | The unsolicited binary frames your receiver broadcasts between replies, which the transport lifts out of the byte stream *before* it is split into lines. Defaults to `None`, which leaves the byte path exactly as it was. **Declared, never inferred, and only from a capture**: a frame with no terminator would be glued onto its neighbour, and a grammar with the wrong length swallows the wrong bytes out of a genuine reply, which then comes back subtly short rather than obviously broken | #481 |
+| `Observe(frames)` | Hands you the frames `BinaryFrames` lifted out, between transactions and on the session's single consumer, so you may store what they say without locking. Separate from `Parse` because a broadcast is not an answer to whatever command was in flight. Defaults to ignoring them, and is never called while `BinaryFrames` is `None`. Never throws — a malformed frame is "no reading" | §11.1, #481 |
 | `Commands` | The **allowlist** of everything this receiver may be sent | §8.1 |
 | `Find(mnemonic)` | One command by name, or `null` if this receiver has none | §8.1 |
 | `IsBlocked(header)` | Whether a header is one of this receiver's §8.4 exclusions — a verdict, never a list | §8.4 |
@@ -106,6 +114,8 @@ exercise every member — and a third, fictional and test-only, is
 | `AutoDetectSequence` | Serial configurations to probe, most likely first | §10.12 |
 | `Parse(response)` | The full status response → `ReceiverStatus`. Never throws | §11.1 |
 | `InterpretSweep(answers)` | The fast tier's answers → `FastReadings`, or a rejection with a reason. Never throws | §11.1, #209 |
+| `InterpretSyncState(token)` | Which of the application's seven `ReceiverMode`s your discriminator's token means — the medallion, the tray icon and the taskbar badge all read it. The set is closed: pick the nearest honest member and say why in the remarks. An unrecognised token is `Disconnected`, never a guess. It answers about a bare token rather than the live link, because the trend charts call it on rows stored hours ago. Never throws | §10.3, #304 |
+| `Reports(reading)` | Whether your family can **ever** supply a `ReceiverReading` — TFOM, holdover, an error queue — whatever the receiver is doing now. A `false` replaces the page's readings with one sentence saying the protocol does not carry them, and dims a Details page that needs it. Defaults to `true`, the safe direction: a wrong `false` tells a user their receiver can never report what it reports perfectly well. Answer about the protocol, never about the link | §9.11, #435 |
 
 Notes that do not fit in a table:
 
@@ -145,7 +155,11 @@ Notes that do not fit in a table:
   default.** A null in `FastReadings` means *"asked, and the receiver did not
   answer"*, and the store blanks the display on it — rightly, because a reading
   the receiver has stopped giving must not go on standing. It cannot also mean
-  *"this family never asks here"*. So say which of the six your sweep covers;
+  *"this family never asks here"*. So say which of the nine `FastFields` flags
+  your sweep covers — the original six, which `FastFields.All` still means, and
+  the three #512 added for an oscillator's frequency offset, temperature
+  correction and disciplining state, which `All` deliberately does not include
+  (corrected 29 Sep 2026, #556; this said "the six");
   whatever you leave out is the full screen's to supply, and `UpdateFull` fills
   it from what your `Parse` returned. The obvious default would be
   `FastFields.All` — true of the SmartClock, and exactly the assumption that
@@ -156,6 +170,16 @@ Notes that do not fit in a table:
   the full cadence, while the primary window shows a single page age taken from
   the fast one, so its staleness is understated. Per-reading staleness is a
   §9.11 question and is not answered today.
+- **`Plan.Supplies` is the other question: which fields your family can *ever*
+  report, from any tier** (#456). `FastTierCarries` says which tier answers a
+  field; this says whether the receiver has the thing at all, and it decides
+  whether the primary window shows a readout *at all* — a talker's TFOM, FFOM
+  and 1 PPS readout are hidden rather than left as dashes that will never fill.
+  It defaults to `FastFields.All`, so a driver that says nothing keeps every
+  one of the original six; claim #512's three explicitly if your family has
+  them, as the UCCM driver does. Declare it, never infer it from nulls — a
+  temporarily silent receiver must not lose its readouts. `Reports`, in the
+  table above, is the same question asked by the Details pages.
 - **Set `Constellation` on a satellite only if your receiver says which, and
   leave it `Unknown` if it does not.** A satellite number is unique only
   *within* a constellation, so the identity the application keys on is
@@ -597,6 +621,22 @@ refusable one, if any. Name the full-status query. Everything must be in your
 own catalog.
 
 Then make `InterpretSweep` read the answers positionally into `FastReadings`.
+Its six positional fields are the original common currency; four more are
+optional init-only properties, and a family with nothing to say there says
+nothing by omission. `OscillatorOffsetPpb`, `OscillatorTemperature` and
+`Disciplining` (#512) are ordinary readings: declare them in `FastTierCarries`
+and `Plan.Supplies` if your sweep answers them, and note that `Disciplining` is
+three-state on purpose — null is "cannot tell", which on the one UCCM measured
+it usually is, not "off". `TimeOfDay` (#560) is different in kind: it is the
+receiver's time of day, which `ReceiverStateStore` uses to tick the main
+window's clock between full screens, and it has **no** `FastFields` flag — the
+store moves the clock's anchor only when it is non-null, so leaving it null
+keeps the screen's time exactly as before. **Supply the time, never the
+date.** The date needs §7.4's week-rollover correction, which only the full
+status gets; the SmartClock reads its time from a seventh fast-tier query,
+`:PTIM:TIME?`, placed last so the six §7.3 readings keep their places, and
+leaves the date with the screen.
+
 If your receiver's dialect needs scalar helpers,
 [`ScalarParsers`](../src/WinZ3805A.Device/Parsing/ScalarParsers.cs) has the
 SCPI-flavoured ones the SmartClock uses.

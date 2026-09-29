@@ -35,18 +35,39 @@ UCCM has never been seen either. That is why this simulator's behaviours are lef
 driver's tolerance for them is left in place: the cost of both is nothing, and the evidence against
 them is one module of one variant.
 
-**What it means for anyone reading a green test.** A pass involving the echo or a mid-reply time
-code proves the driver survives something no measured module does. That is a robustness test, not a
-fidelity test, and it must not be read as agreement with hardware — for that, the captures are the
-authority and `UccmStatusParser`'s tests replay them.
+**The transitions sitting found five more, the earlier sittings a sixth, and none of them is one of
+the original four.** Every sitting before 13 Sep 2026 caught the module locked and settled, so the
+simulator's other states had never been checked against anything. `transitions-13sep2026` took the
+module through a cold power-up, acquisition and fourteen minutes of true holdover, and the simulator
+disagrees with it here too; the prompt, in the last row, was in every sitting from the first. None
+of them has been changed in the simulator. *(Added 29 Sep 2026, #556.)*
+
+| What this simulator does | What the module did | Where |
+|---|---|---|
+| `--vendor Trimble --state Holdover` emits state bytes `12 41 04 4F 80` — offsets 32 to 36, leap, PPS, antenna, lock, date — with the antenna connected, which is the only way the command line runs it; `12 41 0C 4F 90` with `AntennaConnected` false | Real holdover read **`12 60 0C 4F 90`**, in 462 frames. The simulator's pattern is what the module read while **acquiring**, with the PPS still settling | `transitions-13sep2026.md`, L62–63 |
+| Answers `LED:GPSL?` with `0`, and the status with `NO REF` and TFOM 9 FFOM 3, in any state but `Locked` | `LED:GPSL?` answered **`1` throughout** the holdover, and TFOM and FFOM never went past 2 | `transitions-13sep2026.md`, L94–96; the probes from 10:13:27 to 10:27:28 in `transitions-13sep2026.replies.txt` |
+| Emits lock byte `0x41` for `--vendor Trimble --state PowerUp`, whichever `--variant` | The very first frame after boot already read `4F`. **`0x41` is a plain-UCCM value this variant never shows** at offset 35 | `transitions-13sep2026.md`, L81–85 |
+| Emits leap byte `0x12` — 18, the current GPS-UTC offset — at offset 32 in every state, `PowerUp` included | A cold module read **`00`** until it had a fix, and became `12` at 10:08:38, about two minutes after the antenna went back on | `transitions-13sep2026.md`, L60–61 and L72–73; `transitions-13sep2026.events.txt`, L24 |
+| With `--variant UccmP`, answers `:ROSC:HOLD:DUR?` (`412,1` in `Holdover`, `0,0` otherwise), `:GPS:POS:SURV:STAT?` (`0`) and `:GPS:POS:SURV:PROG?` (`100`) | **Refused all three in every state**, in all 27 probes: `Command error` for the holdover duration, when cold, when locked and through fourteen minutes of holdover; `Undefined header` for both survey queries | `transitions-13sep2026.md`, L100–103; `transitions-13sep2026.replies.txt` |
+| Ends each reply at `COMMAND COMPLETE`, with **no prompt** | Every reply is followed by `UCCM-P >`, no trailing space — 9 of 9 in the first sitting, 50 of 50 in `hypothesis2-12sep2026` | `trimble-uccm-p-2026-09-10.md`, L49; `trimble-uccm-p-2026-09-11.md`, L87; `hypothesis2-12sep2026.md`, L15 |
+
+**What it means for anyone reading a green test.** A pass involving the echo, a mid-reply time code
+or the absent prompt proves the driver survives something no measured module does; a pass driven
+through the simulator's `Holdover` or `PowerUp` state proves it reads bytes the measured module does
+not emit in that state; and a pass that reads an answer to one of the three UCCM-P-only queries
+proves it handles a reply the measured module has never given. Both are robustness tests, not fidelity tests, and must not be read as
+agreement with hardware — for that, the captures are the authority, and `UccmStatusParser`'s tests and
+`UccmTransitionStateTests` replay them. *(Widened 29 Sep 2026, #556, from the echo and the
+time code alone.)*
 
 ## What it is not
 
 **It reproduces a belief, not a receiver.** Every behaviour here was read out of a third party's
 source rather than seen on a wire. The driver and this simulator were written from the same source,
 so **a shared misreading passes every test silently.** Green here means the two agree with each
-other; it does not mean either is right — and for two behaviours above, both are now known to
-disagree with the one module that has been measured.
+other; it does not mean either is right — and for eight behaviours above, all eight are now known to
+disagree with the one module that has been measured. *(Corrected 29 Sep 2026, #556: this said two,
+before the five from the transitions sitting and the prompt were listed.)*
 
 That was still worth having. Every disagreement between the real module and this one was a specific,
 located finding rather than a vague "the driver doesn't work", which is exactly what #470 and #481

@@ -37,7 +37,7 @@ guessed at.
 | **Auto-detect** | Tries 9600:8:N:1, 115200:8:N:1, 57600:8:N:1, 19200:7:E:1 (per `heather.cfg`'s comment; the source tree's generic list has 19200:7:O:1); uses **19200:7:O:1** for the Z3801A specifically | Eleven — the SmartClock's eight, documented default first (§7.1), plus the NMEA driver's 4800 and 38400 (#310) and the UCCM's 57600, measured (#470). The settings a port answered on last time are tried ahead of the walk (#502) | — |
 | **Deviation statistics** | **ADEV, HDEV, MDEV and TDEV**, adapted from Tom Van Baak's `adev1.c` | **Overlapping ADEV only** (#63, shipped 28 Aug) with gap-aware segmentation and a pair count per τ | MDEV/TDEV/HDEV have **no §13 row** |
 | **Plotting** | Multi-trace on shared axes, keyboard-driven scaling and annotation | Single-series `TrendChart`, EFC and 1 PPS TI on separate axes, min/max decimation that preserves excursions | Multi-series requires §9.4.4's second channel first |
-| **Logging** | Configurable interval (default 1 s), optional comments, signal-level comments, optional timestamp header, tab **or comma** separator, reads its own older formats | CSV export (P0-13, P1-1; §10.7) and image export of the sky plot (OQ-D6), plus a durable SQLite `trend.db` with retention and compaction | No interop with any external log format |
+| **Logging** | Configurable interval (default 1 s), optional comments, signal-level comments, optional timestamp header, tab **or comma** separator, reads its own older formats | CSV export (P0-13, P1-1; §10.7) and image export of the sky plot (OQ-D6), plus a durable SQLite `trend.db` with retention and compaction, which can be exported to one file and imported again, so the history survives a reinstall or a new PC (#551) | No interop with any external log format |
 | **Satellite display** | Sky map, signal levels, constellation views | `SkyPlotControl` with polar plot, mask circle, signal-scaled markers, **plus a non-spatial list alternate carrying the same data** (A11Y-11) | — |
 | **Temperature / environment** | Temperature display to configurable precision, and **PID parameters for temperature control** | No temperature reading — only the opt-in temperature-*coefficient* query (§8.5) | **No §13 row at all** |
 | **Platform** | Windows, Linux, macOS; can reach a receiver over **TCP/IP**, local or internet | Windows 10 1809 and later, x64 (README › Supported platforms); local serial only | Network transport has no row |
@@ -45,7 +45,7 @@ guessed at.
 | **Interface** | Console-derived, keyboard-driven, very large implementation (about 2 MB of C++ across seven source files) | Native Fluent, mouse and keyboard, tokenised design system, the CI gates in `build/` | — |
 | **Accessibility** | Not a stated goal | Thirteen A11Y criteria, high contrast as a first-class theme, colour never the sole channel | — |
 | **Help** | — (not checked) | The user's guide opens in the application on `F1` (#312) | — |
-| **Ambient operation** | — (not checked) | Notification-area icon, lock and holdover notifications, compact mode — §9.1's premise of a window left running for weeks | — |
+| **Ambient operation** | — (not checked) | Notification-area icon, lock and holdover notifications, compact mode, and an optional start at sign-in, in the notification area or with the window open (#548) — §9.1's premise of a window left running for weeks | — |
 
 **One row has since been closed by borrowing from the program in the other column, and that is worth
 stating plainly.** The UCCM driver (#416) exists because Lady Heather's source — MIT licensed —
@@ -98,9 +98,11 @@ Each becomes its own issue if wanted. None is filed by this document.
 ## What this comparison does not recommend
 
 - **Raw hex send, or a free-text command box.** See above; it is the thing §8.1 exists to prevent.
-- **Higher baud rates.** Lady Heather auto-detects 115200 and 57600 for other receiver families;
-  the SmartClock family tops out at 19200 and NMEA 0183 at 38400, both in §7.1, so nothing this
-  application supports needs 57600 or 115200.
+- **Higher baud rates.** Lady Heather auto-detects 115200 and 57600 for other receiver families.
+  The SmartClock family tops out at 19200 and NMEA 0183 at 38400 (§7.1). The UCCM walk does include
+  57600, measured on the Trimble UCCM-P (#470). Nothing this application supports needs 115200.
+  *(This said nothing needed 57600, which stopped being true on 10 Sep 2026; corrected 29 Sep 2026,
+  #556.)*
 - **Reproducing the console layout.** §1's premise is that a native surface beats a reproduction of
   a terminal screen. Having looked at what the terminal screen actually offers, that premise holds —
   the density is real, but it is achieved with a keyboard vocabulary that has to be learned, and
