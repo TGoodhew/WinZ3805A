@@ -59,6 +59,17 @@ public sealed class TrendStore : IDisposable
     /// <summary>The resolution kept beyond <see cref="FullResolutionWindow"/> (§12).</summary>
     public static readonly TimeSpan CoarseInterval = TimeSpan.FromSeconds(10);
 
+    /// <summary>
+    /// The columns of <c>sample</c> this version knows, in order - what an import copies (#551).
+    /// </summary>
+    /// <remarks>
+    /// A column added here must also be added to the <c>CREATE TABLE</c> or
+    /// <see cref="AddColumnIfMissing"/> below, and to <see cref="Append"/>. An exported file from a
+    /// newer version may carry more; <see cref="HistoryFile.Inspect"/> names those, and
+    /// <see cref="Import"/> leaves them out.
+    /// </remarks>
+    public static readonly IReadOnlyList<string> Columns = ["ticks", "efc", "tint", "sync", "tracked", "osc"];
+
     private readonly SqliteConnection _connection;
     private readonly TimeSpan _retention;
     private readonly object _gate = new();
@@ -406,6 +417,136 @@ public sealed class TrendStore : IDisposable
             catch (SqliteException)
             {
                 return 0;
+            }
+        }
+    }
+
+    /// <summary>How far back anything is kept; older samples are pruned by <see cref="Compact"/>.</summary>
+    public TimeSpan Retention => _retention;
+
+    /// <summary>
+    /// Writes a consistent copy of the whole history to <paramref name="path"/>, with a manifest
+    /// (#551).
+    /// </summary>
+    /// <param name="path">A file that must not exist yet; SQLite's <c>VACUUM INTO</c> refuses to overwrite.</param>
+    /// <param name="receiverIdentity">The connected receiver's <c>*IDN?</c> answer, if any.</param>
+    /// <param name="appVersion">The package version doing the export.</param>
+    /// <param name="exportedAt">When, for the manifest.</param>
+    /// <returns>What was written.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>Not a file copy.</b> In WAL mode the most recent samples can still be in
+    /// <c>trend.db-wal</c>, and the file is written every second, so copying <c>trend.db</c> would
+    /// miss the newest rows or catch a page mid-write. <c>VACUUM INTO</c> runs on this store's own
+    /// connection, under its own lock, and writes a single self-contained file. The poll loop waits
+    /// for the copy - a few megabytes, well under a second - rather than being interleaved with it.
+    /// </para>
+    /// <para>
+    /// <b>It throws</b>, unlike the rest of this class. Every other member runs on the poll loop,
+    /// where a failure must be a gap and not an exception. This one runs because a person asked for
+    /// it, and they are owed the reason it failed: it is their only copy of data that cannot be
+    /// gathered again.
+    /// </para>
+    /// </remarks>
+    public HistoryManifest ExportTo(string path, string? receiverIdentity, string appVersion, DateTimeOffset exportedAt)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        ArgumentNullException.ThrowIfNull(appVersion);
+
+        lock (_gate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
+            using SqliteCommand copy = _connection.CreateCommand();
+            copy.CommandText = "VACUUM INTO $path;";
+            copy.Parameters.AddWithValue("$path", path);
+            copy.ExecuteNonQuery();
+        }
+
+        return HistoryFile.WriteManifest(path, receiverIdentity, appVersion, exportedAt);
+    }
+
+    /// <summary>
+    /// Merges an exported history into this one (#551), and returns how many samples were added.
+    /// </summary>
+    /// <param name="path">A file <see cref="HistoryFile.Inspect"/> has already passed.</param>
+    /// <param name="nowTicks">Now, in UTC ticks; samples older than <see cref="Retention"/> are skipped.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>Merged, never replaced.</b> <c>ticks</c> is the primary key, so <c>INSERT OR IGNORE</c>
+    /// adds what is missing and leaves every existing sample exactly as it was: importing the same
+    /// file twice changes nothing, and nothing recorded since this installation started is lost.
+    /// That keeps the store's first rule, that nothing rewrites history.
+    /// </para>
+    /// <para>
+    /// <b>One transaction.</b> A file that fails halfway leaves the store as it was, not half-merged.
+    /// Columns this version does not know are left out, which the caller has already told the user;
+    /// columns the file lacks (it predates them) read back null, as they do for old rows here.
+    /// Samples older than the retention window are not copied, because the next compaction would
+    /// delete them anyway, and the user has been told that too.
+    /// </para>
+    /// <para>
+    /// Throws, for the reason <see cref="ExportTo"/> gives.
+    /// </para>
+    /// </remarks>
+    public HistoryImportResult Import(string path, long nowTicks)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+
+        long cutoff = nowTicks - _retention.Ticks;
+
+        lock (_gate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
+            using (SqliteCommand attach = _connection.CreateCommand())
+            {
+                attach.CommandText = "ATTACH DATABASE $path AS history;";
+                attach.Parameters.AddWithValue("$path", path);
+                attach.ExecuteNonQuery();
+            }
+
+            try
+            {
+                List<string> shared = [];
+                using (SqliteCommand columns = _connection.CreateCommand())
+                {
+                    columns.CommandText = "SELECT name FROM pragma_table_info('sample', 'history');";
+                    using SqliteDataReader reader = columns.ExecuteReader();
+                    HashSet<string> present = new(StringComparer.OrdinalIgnoreCase);
+
+                    while (reader.Read())
+                    {
+                        present.Add(reader.GetString(0));
+                    }
+
+                    shared.AddRange(Columns.Where(present.Contains));
+                }
+
+                string list = string.Join(", ", shared);
+
+                using SqliteTransaction transaction = _connection.BeginTransaction();
+
+                using SqliteCommand eligible = _connection.CreateCommand();
+                eligible.Transaction = transaction;
+                eligible.CommandText = "SELECT COUNT(*) FROM history.sample WHERE ticks >= $cutoff;";
+                eligible.Parameters.AddWithValue("$cutoff", cutoff);
+                long candidates = (long)(eligible.ExecuteScalar() ?? 0L);
+
+                using SqliteCommand merge = _connection.CreateCommand();
+                merge.Transaction = transaction;
+                merge.CommandText =
+                    $"INSERT OR IGNORE INTO main.sample ({list}) SELECT {list} FROM history.sample WHERE ticks >= $cutoff;";
+                merge.Parameters.AddWithValue("$cutoff", cutoff);
+                int added = merge.ExecuteNonQuery();
+
+                transaction.Commit();
+
+                return new HistoryImportResult(added, candidates - added);
+            }
+            finally
+            {
+                Execute("DETACH DATABASE history;");
             }
         }
     }
