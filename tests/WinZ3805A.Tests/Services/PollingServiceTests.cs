@@ -68,10 +68,11 @@ public class PollingServiceTests
     /// <remarks>
     /// <para>
     /// <b>Advancing the clock while a sweep is still running loses ticks.</b>
-    /// <see cref="PollingService"/> drives one <c>PeriodicTimer</c>, and that timer deliberately
-    /// does not queue a tick that fires while nobody is awaiting it — which is what makes the
-    /// no-overlap rule structural rather than a flag. So a wait that advances again before the
-    /// loop has parked on <c>WaitForNextTickAsync</c> silently drops the sweep it just asked for.
+    /// <see cref="PollingService"/> drives one <c>PeriodicTimer</c>, and that timer keeps at most
+    /// one tick that fires while nobody is awaiting it — which is what makes the no-overlap rule
+    /// structural rather than a flag. (It keeps one, not none: see #547 and
+    /// <c>AFullScreenIsFollowedByOneFastSweepNotTwo</c>.) So a wait that advances again before the
+    /// loop has parked on <c>WaitForNextTickAsync</c> collapses the ticks it asked for, and loses a sweep.
     /// </para>
     /// <para>
     /// The loss is not even, which is what makes it worth fixing rather than tolerating: a full
@@ -408,6 +409,74 @@ public class PollingServiceTests
         Assert.True(
             poller.FastSweeps >= poller.FullSweeps * 5,
             $"Expected the fast tier to dominate; saw {poller.FastSweeps} fast to {poller.FullSweeps} full.");
+    }
+
+    /// <summary>
+    /// <b>#547</b>: a full screen is followed by one fast sweep, not two back to back.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The screen here takes 2.4 s of the fake clock, as it did on the bench (8 Sep 2026), so the
+    /// fast ticks that fall during it fire while the loop is busy. A <c>PeriodicTimer</c> keeps one
+    /// of them, and before the fix the loop ran a fast sweep straight after the screen and a second
+    /// on that remembered tick, at the same instant, then a third on the next real tick. That was
+    /// the burst: a screen and three fast updates in about 0.6 s.
+    /// </para>
+    /// <para>
+    /// Each fast sweep is timed at its first query, <c>:SYNC:STAT?</c>, on the fake clock, across
+    /// three screens, and no two may start less than half a period apart.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AFullScreenIsFollowedByOneFastSweepNotTwo()
+    {
+        FakeTimeProvider clock = new();
+        List<DateTimeOffset> sweeps = [];
+        bool recording = false;
+
+        ControllableTransport transport = Receiver(command =>
+        {
+            if (command == ":SYST:STAT?")
+            {
+                // The screen occupies the link for 2.4 s: the ticks inside it fire unawaited.
+                clock.Advance(TimeSpan.FromMilliseconds(2400));
+            }
+            else if (command == ":SYNC:STAT?" && Volatile.Read(ref recording))
+            {
+                lock (sweeps)
+                {
+                    sweeps.Add(clock.GetUtcNow());
+                }
+            }
+
+            return null;
+        });
+
+        (DeviceSessionService session, ReceiverStateStore store) = await ConnectedAsync(transport, clock);
+        await using DeviceSessionService _ = session;
+        await using PollingService poller = new(session, store, clock);
+
+        Volatile.Write(ref recording, true);
+        poller.Start();
+        await WaitFor(clock, () => poller.FullSweeps >= 3, () => poller.FastSweeps + poller.FullSweeps);
+        await SettleAsync(() => poller.FastSweeps + poller.FullSweeps, CancellationToken.None);
+        await poller.StopAsync();
+
+        DateTimeOffset[] starts;
+        lock (sweeps)
+        {
+            starts = [.. sweeps];
+        }
+
+        Assert.True(starts.Length >= 10, $"expected a run of fast sweeps across three screens; saw {starts.Length}");
+
+        for (int i = 1; i < starts.Length; i++)
+        {
+            TimeSpan gap = starts[i] - starts[i - 1];
+            Assert.True(
+                gap >= TimeSpan.FromMilliseconds(500),
+                $"fast sweeps {i - 1} and {i} started {gap.TotalMilliseconds} ms apart; the burst of #547 is back");
+        }
     }
 
     /// <summary>
