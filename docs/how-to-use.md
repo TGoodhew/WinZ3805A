@@ -12,7 +12,7 @@ scaling, with a Z3805A connected, so the numbers are real ones.
 
 ## The main window
 
-![The main window: a large circular medallion with a green tick and a ring of small green marks, "Locked to GPS" beside it, then a satellites readout of 6, a 1 PPS TI readout of 1.5 ns, TFOM 3 and FFOM 0 pills, the receiver's time and date, and a footer with the port, "updated 2 seconds ago", Details, a pin and Disconnect](images/how-to-use/main-window.png)
+![The main window: a large circular medallion with a green tick and a ring of small green marks, "Locked to GPS" beside it, then a satellites readout of 8, a 1 PPS TI readout of −0.3 ns, TFOM 3 and FFOM 0 pills, the receiver's time and date with a small badge and a globe button, and a footer with the version, port and serial settings, Details, a pin and Disconnect](images/how-to-use/main-window.png)
 
 The main window is meant to be left open — on a second monitor, in a corner, for weeks. Everything
 on it answers one of two questions: *what state is the receiver in*, and *how well is it doing*.
@@ -22,7 +22,9 @@ on it answers one of two questions: *what state is the receiver in*, and *how we
 ![A 160 px circle with a green tick in the centre and a dotted green ring, with "Locked to GPS" to its right](images/how-to-use/main-medallion-and-mode.png)
 
 The circle is the one thing to look at. Its **colour**, its **centre symbol** and the **words
-beside it** all say the same thing, so you never have to read the colour alone:
+beside it** all say the same thing, so you never have to read the colour alone. A smaller line
+under the words gives the receiver's own detail about its state, or, while there is no working
+link, says **Connecting**, **Reconnecting** or **Connection lost**:
 
 | Words beside it | Colour | Centre | What it means |
 |---|---|---|---|
@@ -44,10 +46,11 @@ state; in the compact layout (below) the ring is uniform and the centre shows th
 
 ### The readouts
 
-![Two readouts side by side: "satellites 6" and "1 PPS TI 1.3 ns"](images/how-to-use/main-readouts.png)
+![Two readouts side by side: "satellites 8" and "1 PPS TI −1.6 ns"](images/how-to-use/main-readouts.png)
 
 - **satellites** — how many satellites the receiver is tracking right now. If the receiver is locked
-  but tracking **none**, an amber **coasting** pill appears beside it: the receiver is coasting on a
+  but tracking **none**, an amber **coasting** pill appears under the words beside the medallion:
+  the receiver is coasting on a
   1 PPS it can no longer verify. That combination almost always means an antenna or bias-tee
   fault, and it is the single most useful thing this window can tell you.
 - **1 PPS TI** — the time interval between the receiver's pulse and GPS, in nanoseconds. A few
@@ -74,7 +77,7 @@ caution, red hexagon for critical.
 
 ### The clock line
 
-![The receiver's time, "15:54:43 Pacific Daylight Time · 29 Aug 2026", followed by a small circled-i badge and a globe button](images/how-to-use/main-clock-line.png)
+![The receiver's time, "13:29:49 Pacific Daylight Time · 29 Sep 2026", followed by a small circled-i badge and a globe button](images/how-to-use/main-clock-line.png)
 
 The time and date the receiver is reporting, shown in the time zone you have chosen (see the globe
 button below). On a SmartClock receiver the time is read every second and the clock ticks with it,
@@ -98,9 +101,10 @@ Three things can sit after the time:
 - **A caution badge** appears while the time is still the receiver's power-up default, not yet
   corrected from GPS — it may be wrong by any amount until the first satellite is tracked. Hover
   it to read exactly that.
-- **The globe button** opens the time-zone flyout:
+- ![The time-zone button: a small globe](images/how-to-use/main-zone-button.png) **The globe button**
+  opens the time-zone flyout:
 
-  ![A flyout titled "Time zone" with a toggle "Use this computer's time zone" switched on, a time-zone picker, and the note that this changes what is displayed only](images/how-to-use/main-time-zone-flyout.png)
+  ![A flyout titled "Time zone" with a toggle "Use this computer's time zone" switched on, a time-zone picker greyed out while it is on, and the note that this changes what is displayed only](images/how-to-use/main-time-zone-flyout.png)
 
   Leave *Use this computer's time zone* on to see the receiver's time in your local zone, or turn
   it off and pick a zone. This changes what is **displayed** only — the receiver keeps its own
@@ -108,15 +112,16 @@ Three things can sit after the time:
 
 ### The footer
 
-![The footer: "1.0.6.0 · COM3 · 9600-8-N-1 · updated just now" on the left; Details, a pin button and a blue Disconnect button on the right](images/how-to-use/main-footer.png)
+![The footer: "1.2.0.0 · COM3 · 9600-8-N-1" on the left; Details, a pin button and a blue Disconnect button on the right](images/how-to-use/main-footer.png)
 
 - **The version** comes first, and it is the version of WinZ3805A you have installed — the one
   to quote in a bug report. It is read from the package itself, so it is never out of step with
   what is running; the number in the picture above is whichever version that screenshot was
   taken from, and yours will differ.
-- **The status text** then names the port and serial settings in use and how long ago the last
-  reading arrived — *updated just now*, *updated 47 seconds ago* — so an old value is never
-  mistaken for a current one.
+- **The status text** then names the port and serial settings in use. While the receiver's full
+  status is being read — a few seconds, every ten — it adds *updating…*. While the readings are
+  fresh it says nothing more; once they are late it says how late — *updated 47 seconds ago* — so
+  an old value is never mistaken for a current one.
 - **A pill appears beside it when a reading is late**, and it says which of the two it is:
   **overdue** after 15 seconds without one, **stale** after 60. Overdue means the receiver has not
   answered when it should have, which happens briefly and often comes back on its own; stale means
@@ -125,7 +130,8 @@ Three things can sit after the time:
   not. **There is no pill while readings are fresh** — a window meant to sit on a second monitor
   for weeks should not carry a badge that never goes out, so silence here is the good state.
 - **Details** opens the Receiver Details window (`Ctrl+D`).
-- **The pin** keeps this window above every other window. It stays pinned across restarts.
+- ![The pin button: a pushpin](images/how-to-use/main-pin-button.png) **The pin** keeps this window
+  above every other window. It stays pinned across restarts.
 - **Connect / Disconnect** opens the connection dialog, or drops the connection (`Ctrl+Shift+C`).
 
 ### Compact mode
@@ -146,7 +152,7 @@ the medallion's centre there too — the count is always on the screen somewhere
 
 ## Connecting
 
-![The Connect to receiver dialog: a Port picker with Refresh, Auto-detect settings selected over Manual, Reconnect automatically and Connect to this device on launch switched on, and Connect and Cancel buttons](images/how-to-use/connection-dialog.png)
+![The Connect to receiver dialog: a Port picker showing "COM3 — Prolific USB-to-Serial Comm Port" with Refresh, Auto-detect settings selected over Manual with the baud, data bits, parity and stop bits greyed out beneath it, Reconnect automatically and Connect to this device on launch ticked, and Connect and Cancel buttons](images/how-to-use/connection-dialog.png)
 
 The first time the application runs it shows a **Connect your receiver** panel with one button,
 **Choose a port**. Afterwards the dialog is reached from the main window's **Connect** button, from
@@ -229,25 +235,36 @@ how much of a page is missing.
 Open it with the **Details** button or `Ctrl+D`. It is one window; opening it again brings the
 existing one forward.
 
+When the receiver is not connected, a banner across the top of the Details window says so:
+*Not connected. Choose a serial port to connect.* with **Choose a port**. When the link has been
+lost it says *Lost the connection to COM3. Retrying in N seconds.* with **Retry now** and **Stop
+retrying**; once retrying has stopped, only **Retry now** remains.
+
 ### The title bar
 
 ![The Details title bar: a green "Connected · COM3" pill in the centre, and Refresh, Export, Settings and Help icon buttons at the right](images/how-to-use/details-title-bar.png)
 
 - **The status pill** says whether the receiver is connected and on which port. Clicking it opens
   the connection dialog.
-- **Refresh full status** (`F5`) asks the receiver for its complete status now rather than waiting
-  for the next scheduled read.
-- **Export current view** (`Ctrl+E`) saves what the current page is showing as a file. It is
-  disabled on pages that have nothing exportable.
-- **Settings** (`Ctrl+,`) goes to the Settings page.
-- **Help** (`F1`) opens this guide in its own window. `F1` does the same from the main window.
+
+The four icons at the right, left to right:
+
+| Icon | Name | Key | What it does |
+|---|---|---|---|
+| ![A circular arrow](images/how-to-use/details-refresh.png) | **Refresh full status** | `F5` | Asks the receiver for its complete status now rather than waiting for the next scheduled read. |
+| ![An arrow pointing into a bar](images/how-to-use/details-export.png) | **Export current view** | `Ctrl+E` | Saves what the current page is showing as a file. Greyed out on pages that have nothing exportable. |
+| ![A gear](images/how-to-use/details-settings.png) | **Settings** | `Ctrl+,` | Goes to the Settings page. |
+| ![A question mark](images/how-to-use/details-help.png) | **Help** | `F1` | Opens this guide in its own window. `F1` does the same from the main window. |
+
+Hovering over any of them names it, with its key.
 
 ### The pages
 
-![The navigation pane: Overview, Satellites, Position, Timing, Holdover, Time, Status Registers, Diagnostics, with Settings and Advanced Console at the bottom](images/how-to-use/details-nav.png)
+![The navigation pane: Overview, Satellites, Position, Timing, Holdover, Time, Status Registers, Diagnostics, with Settings at the bottom](images/how-to-use/details-nav.png)
 
 The eight pages in the main list are reachable with `Ctrl+1` to `Ctrl+8` in the order shown;
-Settings and the Advanced Console sit in the footer and have no number. In a narrower window the
+Settings sits in the footer and has no number, and so does the Advanced Console, which appears below
+it only when it is turned on in Settings. In a narrower window the
 pane collapses to a rail of icons, and the button at its top opens it.
 
 Every page's cards **flow into as many columns as the width allows** — one in a narrow window, two
@@ -256,7 +273,7 @@ window is therefore worth doing on the busier pages; nothing is hidden at any wi
 
 #### Overview — `Ctrl+1`
 
-![The Overview page: a Synchronization card with a 96 px medallion, Outputs valid, TFOM and FFOM pills with their meanings, and 1 PPS TI; a Holdover uncertainty card; a Health monitor card with six green pills and a Run test button; and an Oscillator control (EFC) card with the current value and a trend](images/how-to-use/page-overview.png)
+![The Overview page: a Synchronization card with a 96 px medallion, Outputs valid, TFOM and FFOM pills with their meanings, and 1 PPS TI; a Holdover uncertainty card; and a Health monitor card with six green pills and a Run test button](images/how-to-use/page-overview.png)
 
 Everything from the main window, with the words behind the numbers:
 
@@ -279,6 +296,8 @@ Everything from the main window, with the words behind the numbers:
   pill at all. A GPS talker has no health monitor otherwise, so on one of those this is the only
   entry on the card — and it is the most useful one a timing receiver has.
 
+  ![The lower half of the Overview page: the end of the Health monitor card, an Oscillator control (EFC) card with the current value, −16.73 %, 1 h, 6 h, 24 h and 7 d choices and a trend, and a Receiver card with the model, manufacturer, serial number and firmware](images/how-to-use/page-overview-2.png)
+
   **Integrity** — a second extra pill appears for a receiver that checks its own solution for a
   satellite that disagrees with the others, reading *Integrity checked — no fault* or naming the
   satellite it suspects. This is about the constellation rather than the receiver's own hardware, so
@@ -288,10 +307,12 @@ Everything from the main window, with the words behind the numbers:
 - **Oscillator control (EFC)** — the voltage the receiver is applying to steer its oscillator, as a
   percentage of its range, with a trend over the last **1 h**, **6 h**, **24 h** or **7 d**. A
   slowly drifting EFC is the oscillator ageing; a sudden change is worth a look.
+- **Receiver** — the **model**, **manufacturer**, **serial number** and **firmware** the receiver
+  reported when it connected. Quote these in a bug report along with the version in the footer.
 
 #### Satellites — `Ctrl+2`
 
-![The Satellites page: "Tracking 6 · not tracking 4", a sky plot with satellites as filled dots at their positions, a Plot / List toggle and Save image, and below it a Tracked table with PRN, elevation, azimuth and signal strength](images/how-to-use/page-satellites.png)
+![The Satellites page: "Tracking 8 · not tracking 1", a sky plot with satellites as filled dots at their positions, a Plot / List toggle and Save image, and below it a Tracked table with PRN, elevation, azimuth and signal strength](images/how-to-use/page-satellites.png)
 
 - **The sky plot** is the sky as the antenna sees it, north up, the horizon at the rim and straight
   up at the centre. Each dot is a satellite at its position; its fill shows signal strength, and a
@@ -333,6 +354,9 @@ Everything from the main window, with the words behind the numbers:
 
 ![The Position page: Latitude, Longitude and Height readouts with a Copy button, and a Survey card with Start survey, Adopt computed position, Cancel survey and Survey on power-up](images/how-to-use/page-position.png)
 
+- **The pill at the top** says whether the receiver is holding a known position (**Position
+  hold**, the normal state for a timing receiver) or **Surveying** one; while it surveys, a progress
+  bar shows how far it has got.
 - **Latitude, longitude, height** — the antenna position the receiver is using for its timing
   solution. **Copy** puts it on the clipboard.
 - **Geoid separation** — how far the geoid sits above the WGS-84 ellipsoid here. It is usually a
@@ -374,7 +398,7 @@ Everything from the main window, with the words behind the numbers:
 
 #### Timing & antenna — `Ctrl+4`
 
-![The Timing & antenna page: an Antenna cable delay card showing the delay in use now, with Enter delay directly and Calculate from cable options and an Apply delay button](images/how-to-use/page-timing.png)
+![The Timing & antenna page: an Antenna cable delay card showing the delay in use now, 60 ns, with Enter delay directly and Calculate from cable options; Calculate from cable is chosen, with LMR-400 cable 20 metres long giving a computed delay of 78.6 ns, and a caution that this is 18.6 ns from what the receiver is using](images/how-to-use/page-timing.png)
 
 - **Antenna cable delay** — the receiver corrects its 1 PPS for the time the signal spends in the
   antenna cable, and it needs to be told how long that is. Either **enter the delay directly** in
@@ -383,7 +407,7 @@ Everything from the main window, with the words behind the numbers:
   receiver may drop into holdover for a moment while it re-establishes lock at the new delay, and
   the *Before applying* note says so.
 
-![The lower half of the Timing page: a 1 PPS time interval trend with 1 h, 6 h, 24 h and 7 d ranges, an Oscillator control (EFC) trend, an Oscillator drift figure, and a Stability (Allan deviation) card with averaging time τ, σy(τ) and the number of differences averaged](images/how-to-use/page-timing-2.png)
+![The lower half of the Timing page: the end of the 1 PPS time interval trend, an Oscillator control (EFC) trend, an Oscillator drift verdict of "Nothing remarkable" with the drift and how many readings it came from, and a Stability (Allan deviation) card with averaging time τ, σy(τ) and the number of differences averaged](images/how-to-use/page-timing-2.png)
 
 - **1 PPS time interval** and **Oscillator control (EFC)** — the same two quantities the main
   window and the Overview show, as trends over the range you choose.
@@ -466,15 +490,17 @@ corrections it had learned, and its time error grows from there.
 
 #### Time — `Ctrl+6`
 
-![The Time page: a Receiver clock card with the time, a Show times in picker, the time scale, the date reported by the receiver, the week rollover correction and the power-up time](images/how-to-use/page-time.png)
+![The Time page: a Receiver clock card with the time, a Show times in picker, the time scale and the date reported by the receiver, a Week rollover correction card saying the date was corrected, and the start of the Leap second card](images/how-to-use/page-time.png)
 
 - **Receiver clock** — the receiver's time in the zone you pick with **Show times in**, the **time
-  scale** it is keeping (UTC, GPS time, or local time derived from either), the date it
-  **reported** as against the corrected one, the
-  **week rollover correction** the application is applying, and when the receiver was **powered
-  up**.
+  scale** it is keeping (UTC, GPS time, or local time derived from either), and the date it
+  **reported** as against the corrected one.
+- **Week rollover correction** — the correction the application is applying to the receiver's date.
+- **Power-up time** — appears only while the receiver's time is still its power-up default, saying
+  it is **not yet corrected from GPS**. How long the receiver has been running is on the Holdover
+  page.
 
-![The lower half of the Time page: a Leap second card with GPS − UTC and Announced for, and a Time code output card with the format](images/how-to-use/page-time-2.png)
+![The lower half of the Time page: a Leap second card saying none is announced, with GPS − UTC, and a Time code output card with the format](images/how-to-use/page-time-2.png)
 
 - **Leap second** — **GPS − UTC** is how far GPS time has run ahead of UTC since 1980 (whole seconds;
   GPS does not take leap seconds). **Announced for** shows a pending leap second, which is a step
@@ -556,7 +582,7 @@ Every setting has its explanation next to it on the page; this is the short vers
 
 | Setting | Off | On |
 |---|---|---|
-| ![Advanced Console switch, Shown](images/how-to-use/settings-consoleswitch.png) **Advanced Console** | The console page is not shown. | Adds the **Advanced Console** page below Settings — see below. It changes what is *reachable*, never what is *permitted*. |
+| ![Advanced Console switch, Hidden](images/how-to-use/settings-consoleswitch.png) **Advanced Console** | The console page is not shown. | Adds the **Advanced Console** page below Settings — see below. It changes what is *reachable*, never what is *permitted*. |
 | ![Undocumented read-only queries switch, Hidden](images/how-to-use/settings-experimentalswitch.png) **Undocumented read-only queries** | The Diagnostics page shows no undocumented queries. | The six read-only queries appear on the Diagnostics page. Nothing can be typed, and no setting can be changed through them. |
 | ![Front-panel lamps switch, Left alone](images/how-to-use/settings-activitylampswitch.png) **Front-panel lamps** | Both lamps are left alone. | The receiver's two user-definable lamps are used. **Enabled** is the application's: lit while you are connected — so you can see which unit in a rack it is talking to without looking at a screen — and flashing around every command. **Active** is the receiver's: lit while it is locked to GPS, written only when that changes. Both are read first and put back exactly as they were found when you disconnect. This is the only setting that makes the application change anything on the receiver by itself, and it changes no timing. The flashing is slow — the receiver looks at a lamp once a second, so each command carries about two seconds of lamp and readings arrive far less often while it is on; following the lock state costs nothing like that, being one write per change. If the application closes unexpectedly a lamp is left as it was — the Diagnostics page can set either back. |
 | ![Use the Windows accent colour switch, This app's own](images/how-to-use/settings-systemaccentswitch.png) **Use the Windows accent colour** | Selected items, buttons and links use the application's own teal. | They follow the accent you chose in Windows. The colours that mean caution and critical never change, so if your Windows accent is close to one of them you will be told. |
@@ -570,7 +596,7 @@ and **With the window open**. It is separate from *Start in the notification are
 start at sign-in never makes the application windowless when you open it yourself. Windows keeps
 this setting, not the application: see *Starting when you sign in*, below.
 
-![The bottom of the Settings page: the Alerts and Running in the background sections, an Exit button, and an Elsewhere for now note](images/how-to-use/page-settings-2.png)
+![The bottom of the Settings page: the lock-notification switch, the Running in the background section with Keep running when I close the window, Start when I sign in to Windows, Start in the notification area and an Exit button, a History section with Export history… and Import history…, and an Elsewhere for now note](images/how-to-use/page-settings-2.png)
 
 ![The Exit button](images/how-to-use/settings-exitbutton.png) **Exit** quits the application
 outright — the exit that needs no notification-area icon. **Export history…** and **Import
@@ -616,6 +642,13 @@ until you move it, and an application is not allowed to move it for you. So:
 3. **To keep the icon visible**, drag it from the flyout onto the taskbar, or go to *Settings ›
    Personalization › Taskbar › Other system tray icons* and turn it on there.
 
+The icon is more than a way back: its **shape and colour follow the receiver's state**, the same
+as the medallion's, and hovering over it names the state. While the window is open, the taskbar
+button carries the same badge.
+
+If the window was left on a display that has since been unplugged or undocked, bringing it back
+puts it on a display that is still there.
+
 To exit, right-click the icon and choose **Exit**, or use the **Exit** button on the Settings
 page, which depends on nothing in the notification area. There is no confirmation: polling is not
 a transaction and the trend is saved as it goes, so there is nothing to lose by stopping.
@@ -642,14 +675,15 @@ turn it on again where you turned it off. Uninstalling the application removes i
 can appear a little after you sign in, and a receiver switched on with the PC can take a while to
 reply, so instead of trying once it tries the remembered port every 30 seconds for as long as it
 takes — a receiver switched on an hour later is picked up too. This needs *Connect to this device on
-launch* ticked in the connection dialog, which is the default. Connecting or disconnecting yourself
-stops the retrying. When you open the application yourself it tries once, as it always has.
+launch* ticked in the connection dialog, which is the default. Opening the connection dialog, or
+pressing Connect or Disconnect, stops the retrying — even if you then cancel the dialog. When you open the application yourself it tries once, as it always has.
 
 ---
 
 ## Keeping the history
 
-The trend charts draw on up to eight weeks of readings, and those readings are kept inside the
+The application keeps up to eight weeks of readings (the trend charts show up to 7 days of them),
+and those readings are kept inside the
 application's own data. **Windows deletes that data when the application is uninstalled**, and a
 new PC or a switch between the sideloaded and Store versions starts with none. An ordinary update
 keeps it. To take it with you, use the two buttons under *History* on the Settings page.
