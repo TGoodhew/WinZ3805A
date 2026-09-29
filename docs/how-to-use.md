@@ -77,7 +77,10 @@ caution, red hexagon for critical.
 ![The receiver's time, "15:54:43 Pacific Daylight Time · 29 Aug 2026", followed by a small circled-i badge and a globe button](images/how-to-use/main-clock-line.png)
 
 The time and date the receiver is reporting, shown in the time zone you have chosen (see the globe
-button below).
+button below). On a SmartClock receiver the time is read every second and the clock ticks with it,
+including during the few seconds each status read takes. If the receiver stops answering for more
+than fifteen seconds the clock stops too, rather than carrying on by itself, and the status line
+says the readings are overdue.
 
 **If the zone name is followed by `(GPS)`, the receiver is reporting GPS time rather than UTC**, and
 GPS time does not take leap seconds — so it currently runs about eighteen seconds ahead of the clock
