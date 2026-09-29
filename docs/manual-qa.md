@@ -685,7 +685,13 @@ Explorer restart proves the icon comes back.
 **The icon may come back in the overflow** even if it had been dragged onto the taskbar. That is
 Windows' decision about a re-added icon and not a failure of this check.
 
-**Last run:** not yet.
+**Last run:** 29 Sep 2026, and **not against the packaged app**. The production `TrayIcon` class was
+run in a scratch harness, because registering a development build would have meant removing the
+installed release and its data. Two harnesses ran side by side through one Explorer restart, each
+asking the shell once a second whether its icon existed (`Shell_NotifyIconGetRect`). The one built
+from `main`'s message-only window lost its icon and never got it back in the 44 seconds that
+followed. The one built from #549's window logged the re-add line and had its icon back 1.4 s after
+the new Explorer process appeared. The first run against the packaged app is still owed.
 
 ## Before a release
 
