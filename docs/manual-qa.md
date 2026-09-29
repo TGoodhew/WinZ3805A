@@ -699,6 +699,30 @@ restart. The one built from the old message-only window lost its icon and never 
 44 seconds that followed. The one built from #549's window had its icon back 1.4 s after the new
 Explorer process appeared.
 
+## 19. A hidden window reopens on a display that is still there (#553)
+
+**Why.** The main window can be hidden to the notification area for weeks, and the display it was
+on can be unplugged, undocked or taken by a remote session in the meantime. Until #553 the window
+was checked against the attached displays only at launch, so reopening it from the tray put it
+back where the lost display had been, entirely off screen. `WindowPlacementPolicyTests` cover the
+arithmetic. Only a real second display shows whether the window actually comes back.
+
+| | |
+|---|---|
+| **Do** | With a second display attached, drag the main window onto it and close the window to the notification area. Unplug or disable that display. Click the tray icon. Repeat, reopening with a second launch from Start instead of the tray. |
+| **Pass** | Both times the window appears on the remaining display, centred if none of it was left there, and `app.log` has *The window was not on a display; moved from …*. With the display still attached, reopening leaves the window exactly where it was and logs nothing. |
+
+**Windows may move a hidden window itself** when a display is removed. If it does, the window comes
+back on screen with no log line, which still passes. The log line only says the application had to
+do it.
+
+**Last run:** not yet with a second display. On 29 Sep 2026 the single-display 5120 × 1440 bench
+stood in for one: the hidden window was moved with `SetWindowPos` to where a lost display would have
+been, then reopened. From x = 6000 via the tray and from x = −4000 via a second launch, it came back
+centred at 1760,246. From x = 4500, hanging off the right, it was pulled back to 3520,300. An
+ordinary close and reopen left it at 400,300, untouched, with nothing logged. Before the fix, the
+same steps reopened it at 6000,300.
+
 ## Before a release
 
 Sections 1–4, 8, 9, 11 and 13 in full, then **12 on the published artifact** — which means the release
@@ -713,7 +737,7 @@ attention, and both leaks that have shipped would have been caught by it; **sect
 broadcasting receiver is to hand and anything on the transport's byte path has changed** — it costs
 one glance at one readout, and the failure it catches is a value quietly not arriving, which no
 other check in this list would notice; **section 18 if the tray icon's code has changed** — it
-costs half a minute. Section 15 is not a release
+costs half a minute; **section 19 if window placement has changed and a second display is to hand**. Section 15 is not a release
 gate at all: run it when a talker is to hand, because the captures it produces are permanent and the
 opportunity is not.
 
