@@ -23,8 +23,8 @@ into `src/WinZ3805A/Package.appxmanifest` verbatim.
 | Partner Center field | Manifest location | In the repository now |
 |---|---|---|
 | Package/Identity/Name | `Identity/@Name` | `WinZ3805A` |
-| Package/Identity/Publisher | `Identity/@Publisher` | `CN=The Schanzuer Group LLC` — the **sideload** identity, set for the first public release (30 Aug 2026) so the trust prompt names a real entity rather than "AppPublisher". Partner Center issues its own and it replaces this |
-| Package/Properties/PublisherDisplayName | `Properties/PublisherDisplayName` | `The Schanzuer Group LLC` — correct for the sideloaded build; Partner Center issues its own and it must match the account |
+| Package/Identity/Publisher | `Identity/@Publisher` | `CN=The Schnauzer Group LLC` — the **sideload** identity, set for the first public release (30 Aug 2026) so the trust prompt names a real entity rather than "AppPublisher". It was misspelled until v1.3.1 (29 Sep 2026), when it was corrected together with the signing certificate. Partner Center issues its own and it replaces this |
+| Package/Properties/PublisherDisplayName | `Properties/PublisherDisplayName` | `The Schnauzer Group LLC` — Schnauzer as in the dog breed, the company behind [schnauzergroup.com](https://schnauzergroup.com/). Correct for the sideloaded build; Partner Center issues its own and it must match the account |
 
 Retyping the publisher distinguished name rather than copying it is the usual
 way a first submission fails: it must match the certificate the Store signs with
