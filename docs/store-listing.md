@@ -8,9 +8,10 @@ rewritten in a web form.
 **Status: not yet submitted, and deferred.** Store submission was deferred by
 decision on 21 Aug 2026 — P0-15 (#15) and OQ-6 (#39) were both closed as
 deferred, and are the issues to reopen if the Store is returned to. Partner
-Center registration has not happened, so two of the three values in
-[Identity](#identity) are still placeholders and the package cannot be
-submitted. Everything else here is ready.
+Center registration has not happened, so the three values in
+[Identity](#identity) — the name, the publisher and the publisher display
+name, all of which Partner Center issues — are placeholders and the package
+cannot be submitted. Everything else here is ready.
 
 ---
 
@@ -34,7 +35,9 @@ exactly.
 > both — so the Store build installs *alongside* a sideloaded one rather than
 > over it. That is not a reason to delay submitting; it is a thing to say in the
 > listing and in the release notes when it happens, so people uninstall the
-> sideloaded copy rather than running two.
+> sideloaded copy rather than running two — **after** exporting its history
+> (Settings → Export history…, #551), because uninstalling deletes it and the
+> Store build starts with none.
 
 `Identity/@Name` is effectively permanent — changing it later is a new app, a new
 listing, and no upgrade path for existing users. `Properties/DisplayName` is
@@ -98,14 +101,20 @@ otherwise — and it deliberately contains no company mark.
 > - The receiver's own diagnostic log, filterable and exportable as CSV
 > - UTC and GPS time, with the GPS week-rollover correction applied
 > - Questionable and operation status registers, decoded bit by bit
+> - Eight weeks of recorded trend — oscillator control, 1 PPS time interval and
+>   frequency offset — which can be exported to one file and imported again
+> - A notification when the receiver loses GPS lock, and when it regains it
+> - Runs in the notification area when its window is closed, and can start
+>   when you sign in to Windows
 >
 > **What it will not do**
 >
-> Commands that erase the receiver's survey or its stored configuration are not
+> Commands that can damage the receiver's calibration or firmware are not
 > implemented. They are not hidden behind a warning or an advanced mode — they
-> are not in the application at all. Everything that does change the instrument
-> asks first, in a dialog that names the command, says what it will do, and reads
-> back the receiver's own error response if it is refused.
+> are not in the application at all. Anything that could disrupt the instrument,
+> such as starting a survey or restoring its factory settings, asks first, in a
+> dialog that names the command, says what it will do, and reads back the
+> receiver's own error response if it is refused.
 >
 > Requires a 64-bit Intel or AMD processor, a serial port and a cable to the
 > receiver. USB-to-serial adapters work.

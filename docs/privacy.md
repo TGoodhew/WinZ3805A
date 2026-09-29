@@ -4,7 +4,7 @@ title: WinZ3805A privacy policy
 
 # Privacy policy
 
-**Last updated: 13 September 2026**
+**Last updated: 29 September 2026**
 
 ## The short version
 
@@ -34,10 +34,10 @@ behaves the way you left it, and so it can show you a trend:
 | `window.json`, `details-window.json` | Where each window was on screen and how big it was |
 | `details-view.json` | Whether the navigation pane was open |
 | `satellites-view.json` | Whether the Satellites page shows the plot or the list |
-| `advanced.json` | The Advanced Console, undocumented-queries, front-panel-lamps, lock-notification, keep-running and start-minimised switches, and whether the "still running" notice has been shown once |
+| `advanced.json` | The Advanced Console, undocumented-queries, front-panel-lamps, lock-notification, keep-running and start-minimised switches, whether a start at sign-in opens the window or not, and whether the "still running" notice has been shown once |
 | `appearance.json` | Whether to use the Windows accent colour |
-| `trend.db` | The recorded trend: samples of the oscillator's control voltage, the 1 PPS time interval, the synchronisation state and the number of satellites tracked, kept for 56 days |
-| `logs\app.log`, and up to four older copies | The application log: the port opened and the settings auto-detect settled on, every connection change, the receiver's synchronisation state, time figure of merit and satellite count as they change, and survey progress. It does not record command traffic and it does not record the receiver's position. |
+| `trend.db` | The recorded trend: samples of the oscillator's control voltage, its measured frequency offset where the receiver reports one, the 1 PPS time interval, the synchronisation state and the number of satellites tracked, kept for 56 days |
+| `logs\app.log`, and up to four older copies | The application log: the port opened and the settings auto-detect settled on, every connection change, the receiver's synchronisation state, time figure of merit and satellite count as they change, survey progress, start-at-sign-in changes, and the full path of any history file you export or import — which, being in your profile, contains your Windows user name. It does not record command traffic and it does not record the receiver's position. |
 
 These are ordinary files in your own profile, under
 `%LOCALAPPDATA%\Packages\<package identity>\LocalCache\Local\WinZ3805A\`, which
@@ -45,7 +45,15 @@ These are ordinary files in your own profile, under
 application, and uninstalling removes them.
 
 If you use the CSV export or save the sky plot as an image, the file goes
-exactly where you tell it to and nowhere else. **Copy** on the Position page
+exactly where you tell it to and nowhere else. The same is true of **Export
+history…**, which writes a copy of `trend.db` with a note of when it was made, by
+which version, and the connected receiver's own identity — its model and
+**serial number**. Keep that in mind before sharing one. **Import history…** reads
+only the file you choose.
+
+If you turn on **Start when I sign in to Windows**, the application asks Windows
+to start it at sign-in through the package's own startup task. Windows lists it
+under Startup apps, where you can turn it off, and uninstalling removes it. **Copy** on the Position page
 places the position on the Windows clipboard, where any application can read it
 until you copy something else.
 
