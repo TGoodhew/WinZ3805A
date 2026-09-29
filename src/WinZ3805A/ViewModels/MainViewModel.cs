@@ -212,8 +212,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// <summary>How old the fast readings are.</summary>
     public TimeSpan? Age => _store.AgeOf(_store.LastDisplayedPoll);
 
-    /// <summary>The footer's age in words (§10.3).</summary>
-    public string AgeDescription => Staleness.Describe(Age);
+    /// <summary>
+    /// What the status line says about the readings: <i>updating…</i>, nothing, or their age once
+    /// overdue (#547; see <see cref="Staleness.FooterText"/>).
+    /// </summary>
+    public string? AgeDescription => Staleness.FooterText(Age, _store.IsReadingFullStatus);
 
     /// <summary>What severity the footer should be drawn in (§9.11).</summary>
     public Severity AgeSeverity => Staleness.SeverityOf(Age);

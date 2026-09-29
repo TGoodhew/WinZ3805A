@@ -63,6 +63,43 @@ public static class Staleness
     };
 
     /// <summary>
+    /// What the main window's status line says about the readings (#547): <i>updating…</i> while the
+    /// status screen is read, nothing while they are fresh, and their age once they are overdue.
+    /// </summary>
+    /// <param name="age">How old the fast readings are, or null if none has arrived.</param>
+    /// <param name="updating">Whether the full status screen is being read right now.</param>
+    /// <returns>The words, or <see langword="null"/> when there is nothing to say.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>Tony's decision, 29 Sep 2026.</b> The line used to count <i>updated just now</i>, then
+    /// <i>2 … 4 seconds ago</i> every ten seconds, while the status screen held the link: a pause
+    /// the application schedules itself (§7.3), announced as though something were late. Now it says
+    /// what is happening while the screen is read, and nothing at all while the readings are fresh.
+    /// §9.11's rule that a fresh reading has nothing to say, which the pill already followed, now
+    /// holds for the words beside it too.
+    /// </para>
+    /// <para>
+    /// <b>Overdue is still said, with the age.</b> Past <see cref="CautionThreshold"/> the readings
+    /// are late, and §9.11 forbids showing stale data without its age, so from there the line reads
+    /// as it always has, beside the pill, and a long screen read does not hide it.
+    /// </para>
+    /// </remarks>
+    public static string? FooterText(TimeSpan? age, bool updating)
+    {
+        if (age is TimeSpan overdue && overdue >= CautionThreshold)
+        {
+            return Describe(overdue);
+        }
+
+        if (updating)
+        {
+            return "updating…";
+        }
+
+        return age is null ? "never updated" : null;
+    }
+
+    /// <summary>
     /// The age in words, as §10.3 puts it in the footer: <em>updated 1 s ago</em>.
     /// </summary>
     /// <remarks>

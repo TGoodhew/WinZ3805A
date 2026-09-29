@@ -252,6 +252,12 @@ public sealed class PollingService : IAsyncDisposable
 
                 if (requested || _timeProvider.GetUtcNow() >= nextFull)
                 {
+                    // The footer says "updating…" from here until the fast sweep after the screen
+                    // has landed (#547) - not merely until the screen ends, or it would show the
+                    // readings' age for the ~130 ms between the two, which is the countdown this
+                    // exists to hide.
+                    _store.SetReadingFullStatus(true);
+
                     await PollFullAsync(cancellationToken).ConfigureAwait(false);
 
                     if (requested)
@@ -281,6 +287,7 @@ public sealed class PollingService : IAsyncDisposable
 
                 DateTimeOffset sweepStarted = _timeProvider.GetUtcNow();
                 await PollFastAsync(cancellationToken).ConfigureAwait(false);
+                _store.SetReadingFullStatus(false);
 
                 // The remembered tick after a long sweep returns at once; one that arrives within
                 // half a period of this sweep's start is that tick, and is waited past (#547).
@@ -297,6 +304,12 @@ public sealed class PollingService : IAsyncDisposable
         catch (OperationCanceledException)
         {
             // Stopping is not a failure.
+        }
+        finally
+        {
+            // However the loop ends - stopped mid-screen, the link lost, or a fault - it must not
+            // leave the window saying "updating…" with nothing updating.
+            _store.SetReadingFullStatus(false);
         }
     }
 

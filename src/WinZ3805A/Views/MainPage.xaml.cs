@@ -735,9 +735,12 @@ public sealed partial class MainPage : Page
 
         RenderClock();
 
-        FooterText.Text = string.IsNullOrEmpty(_model.PortDescription)
-            ? $"{PackageVersionText} · {_model.AgeDescription}"
-            : $"{PackageVersionText} · {_model.PortDescription} · {_model.AgeDescription}";
+        // Only the parts there are: while the readings are fresh the status line says nothing about
+        // them (#547), and a separator with nothing after it would say that nothing loudly.
+        FooterText.Text = string.Join(
+            " · ",
+            new[] { PackageVersionText, _model.PortDescription, _model.AgeDescription }
+                .Where(part => !string.IsNullOrEmpty(part)));
 
         // The word is set here rather than in the visual state, because a Setter can only assign a
         // literal and this one comes from the same place the severity does — one switch in

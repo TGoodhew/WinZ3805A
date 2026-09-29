@@ -588,6 +588,36 @@ public sealed class ReceiverStateStore : INotifyPropertyChanged
         OnPropertyChanged(propertyName);
     }
 
+    /// <summary>
+    /// Whether the full status screen is being read right now.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The screen holds the link for two to three and a half seconds at 9600 baud, and nothing else
+    /// can be read meanwhile (§7.3), so every ten seconds the fast readings stop ageing into
+    /// "updated 1 … 4 seconds ago" for a reason the application itself chose. Tony found the
+    /// countdown reads as something going wrong; while this is set the main window's footer says
+    /// <i>updating…</i> instead (#547).
+    /// </para>
+    /// <para>
+    /// Only the screen, not the one-second fast sweep: that takes about 130 ms, and saying so every
+    /// second would make the footer flicker on a window meant to sit still.
+    /// </para>
+    /// </remarks>
+    public bool IsReadingFullStatus { get; private set; }
+
+    /// <summary>Marks the start or end of a full-screen read, notifying only on a change.</summary>
+    public void SetReadingFullStatus(bool reading)
+    {
+        if (IsReadingFullStatus == reading)
+        {
+            return;
+        }
+
+        IsReadingFullStatus = reading;
+        OnPropertyChanged(nameof(IsReadingFullStatus));
+    }
+
     private void OnPropertyChanged(string? propertyName) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 }

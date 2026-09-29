@@ -480,6 +480,68 @@ public class PollingServiceTests
     }
 
     /// <summary>
+    /// #547: the store says the screen is being read for exactly as long as it is on the wire, which
+    /// is what the footer's <i>updating…</i> hangs on.
+    /// </summary>
+    [Fact]
+    public async Task TheStoreSaysSoWhileTheScreenIsRead()
+    {
+        FakeTimeProvider clock = new();
+        ReceiverStateStore? watched = null;
+        List<bool> duringScreen = [];
+
+        ControllableTransport transport = Receiver(command =>
+        {
+            if (command == ":SYST:STAT?" && watched is not null)
+            {
+                lock (duringScreen)
+                {
+                    duringScreen.Add(watched.IsReadingFullStatus);
+                }
+            }
+
+            return null;
+        });
+
+        (DeviceSessionService session, ReceiverStateStore store) = await ConnectedAsync(transport, clock);
+        watched = store;
+        await using DeviceSessionService _ = session;
+        await using PollingService poller = new(session, store, clock);
+
+        Assert.False(store.IsReadingFullStatus);
+
+        poller.Start();
+        await WaitFor(clock, () => poller.FullSweeps >= 2, () => poller.FastSweeps + poller.FullSweeps);
+        await poller.StopAsync();
+
+        lock (duringScreen)
+        {
+            Assert.NotEmpty(duringScreen);
+            Assert.All(duringScreen, Assert.True);
+        }
+
+        Assert.False(store.IsReadingFullStatus);
+    }
+
+    /// <summary>A screen that fails still clears the flag, or the footer would say "updating…" for ever.</summary>
+    [Fact]
+    public async Task AScreenThatFailsStillStopsSayingUpdating()
+    {
+        FakeTimeProvider clock = new();
+        ControllableTransport transport = Receiver(command => command == ":SYST:STAT?" ? "garbage that parses as nothing" : null);
+
+        (DeviceSessionService session, ReceiverStateStore store) = await ConnectedAsync(transport, clock);
+        await using DeviceSessionService _ = session;
+        await using PollingService poller = new(session, store, clock);
+
+        poller.Start();
+        await WaitFor(clock, () => poller.FastSweeps >= 3, () => poller.FastSweeps + poller.FullSweeps);
+        await poller.StopAsync();
+
+        Assert.False(store.IsReadingFullStatus);
+    }
+
+    /// <summary>
     /// §9.10.2's medallion draws sixty samples, and §9.11 keeps stale readings rather than blanking
     /// them, so the ring has to be bounded and ordered oldest-first.
     /// </summary>
