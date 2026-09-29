@@ -340,18 +340,19 @@ a picture.
 > threshold is 864 px. The guide's prose and its "upper half" / "lower half" pairs are written
 > around a single column, so the default of 860 is what keeps the pictures matching the words.
 
-> **Three pages are known stale as of 13 Sep 2026, found by the documentation audit rather than by
-> looking at them.** The prose describes all three additions and the pictures predate them, which is
-> the exact failure this section exists to catch — so they are named here rather than left for
-> whoever next compares 17 images to 17 pages:
+> **Four pages are known stale: three as of 13 Sep 2026, found by the documentation audit rather than
+> by looking at them, and one since 29 Sep 2026 (#548).** The prose describes all four additions
+> and the pictures predate them, which is the exact failure this section exists to catch — so they
+> are named here rather than left for whoever next compares 17 images to 17 pages:
 >
 > | Image | What the page gained since 30 Aug |
 > |---|---|
 > | `page-position.png` | **Position uncertainty**, a seventh row under the coordinates (#516) |
 > | `page-timing-2.png` | The **Disciplining loop** card — three rows from `DIAG:LOOP?` (#512). It shows only on a UCCM, so a Z3805A screenshot is still correct for a Z3805A; the guide says which receiver has it |
 > | `page-overview.png` | The **Antenna** and **Integrity** pills on the Health monitor card (#515, #516) |
+> | `page-settings-2.png` | **Start when I sign in to Windows**, a card between *Keep running…* and *Start in the notification area* (#548, 29 Sep 2026). Not re-taken because `Capture-GuideImages.ps1` drives the app through `winapp`, which the bench machine did not have |
 >
-> Re-taking needs a connected receiver, so it waits for a sitting. Two of the three want a Z3805A,
+> Re-taking needs a connected receiver, so it waits for a sitting. Three of the four want a Z3805A,
 > which is what every other image in the guide was taken against; the disciplining-loop card cannot
 > be photographed on one at all, and wants a separate decision about whether the guide illustrates a
 > receiver it was not written about.
@@ -723,6 +724,34 @@ centred at 1760,246. From x = 4500, hanging off the right, it was pulled back to
 ordinary close and reopen left it at 400,300, untouched, with nothing logged. Before the fix, the
 same steps reopened it at 6000,300.
 
+## 20. Starting at sign-in (#548)
+
+**Why.** A start at sign-in is Windows launching the package's startup task, and nothing but a real
+sign-in produces one: the activation kind that tells the application it was started this way cannot
+be faked from a test or a script. The tests cover the choice shown for every task state, which
+setting a launch follows, and the retry arithmetic. They cannot cover the launch itself.
+
+| | |
+|---|---|
+| **Do** | In Settings, set *Start when I sign in to Windows* to **In the notification area**. Sign out and back in. Then set it to **With the window open**, and sign out and in again. Then set it to **Off**, and sign out and in once more. |
+| **Pass** | First sign-in: no window appears, the icon is in the notification area, the receiver is polled, and `app.log` has *Started by Windows at sign-in; hidden: True*. Second: the window opens by itself. Third: nothing starts. Opening the application from Start after the first sign-in brings the window forward rather than starting a second copy. |
+
+| | |
+|---|---|
+| **Do** | With it on, unplug the receiver's USB adapter, or switch the receiver off. Sign out and in. Wait a minute, then plug it in or switch it on. |
+| **Pass** | `app.log` has *… did not answer; trying again every 30 s until it does* once, not every 30 s, and within about 30 s of the receiver coming back, *Connected to … after N attempts since sign-in*. The icon reads *Disconnected* until then. Opening the connection dialog while it is still retrying stops the retrying, and the dialog can connect. |
+
+| | |
+|---|---|
+| **Do** | Turn it off in Task Manager → *Startup apps*, then open Settings in the application. |
+| **Pass** | The control shows **Off**, cannot be changed, and says to turn it on in Windows Settings. Turning it back on there and reopening the page shows it on again. |
+
+**Last run:** 29 Sep 2026, the Settings half only, against the packaged Debug build driven by UI
+Automation. Every choice reached Windows: the task's recorded state went 0 → 2 → 2 → 0 → 2, and the
+stored *hidden* preference followed. Enabling asked for no consent. With the task set to disabled by
+the user, as Task Manager records it, the page showed *Off*, disabled, with the note, and the log
+read *DisabledByUser*. **No real sign-in has been done yet**, so the first two tables are still owed.
+
 ## Before a release
 
 Sections 1–4, 8, 9, 11 and 13 in full, then **12 on the published artifact** — which means the release
@@ -737,7 +766,8 @@ attention, and both leaks that have shipped would have been caught by it; **sect
 broadcasting receiver is to hand and anything on the transport's byte path has changed** — it costs
 one glance at one readout, and the failure it catches is a value quietly not arriving, which no
 other check in this list would notice; **section 18 if the tray icon's code has changed** — it
-costs half a minute; **section 19 if window placement has changed and a second display is to hand**. Section 15 is not a release
+costs half a minute; **section 19 if window placement has changed and a second display is to hand**; **section 20 if
+anything on the launch or connect-on-launch path has changed**, since only a real sign-in reaches it. Section 15 is not a release
 gate at all: run it when a talker is to hand, because the captures it produces are permanent and the
 opportunity is not.
 

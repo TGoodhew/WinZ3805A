@@ -2069,6 +2069,7 @@ user who leaves this docked beside a spectrum analyser for weeks.
 |---|---|---|
 | Close hides rather than exits | **On** | Settings → *Running in the background*, *Keep running when I close the window* |
 | Start with no window | Off | Settings → *Running in the background*, *Start in the notification area* |
+| Start at sign-in | Off | Settings → *Running in the background*, *Start when I sign in to Windows* (#548) |
 | Exit | — | Settings → *Running in the background*, and the notification icon's right-click menu |
 
 *(The three lived under "Settings → Advanced" here; `SettingsPage.xaml` gives them a card of their own, titled* Running in the background *— corrected 29 Aug 2026, #316. §10.13 lists the cards.)*
@@ -2086,6 +2087,25 @@ leaves the user just as surprised.
 > invisible icon is quittable in principle and by Task Manager in practice, which is what §13's
 > acceptance forbids. So Settings → *Running in the background* carries an **Exit** button that depends
 > on no shell behaviour.
+
+**Starting at sign-in (#548, added 29 Sep 2026).** The package declares a startup task
+(`uap5:StartupTask`, `Enabled="false"`), and the user turns it on from Settings. A `Run` key or a
+scheduled task would outlive an uninstall, and neither suits an MSIX. Two decisions, both Tony's,
+29 Sep 2026:
+
+- **One three-way choice, not a second switch:** *Off*, *In the notification area*, *With the window
+  open*. A start at sign-in follows this; a start by hand follows *Start in the notification area*.
+  Reusing that switch would also make a start by hand windowless, which is exactly what it defaults
+  off to avoid. **Windows owns whether it is on**: the choice is read from the task each time the page
+  is shown, and the user can switch it off in Task Manager. Once they have, the application cannot
+  switch it back on, so the control is disabled and says where to do it. Only *how* it starts is
+  stored (`StartAtSignInHidden`, default the notification area).
+- **A start at sign-in keeps trying the remembered receiver until it answers**, every 30 s, for as
+  long as it takes (`SignInConnect`). The single attempt of §10.12's *Connect to this device on
+  launch* is the one most likely to fail at sign-in: the adapter may not have enumerated, or the
+  receiver may still be powering up. With no window and the icon in the overflow, one failed attempt
+  would leave an application that runs, shows nothing and polls nothing. Connecting or disconnecting
+  by hand stops it. A start by hand still tries once.
 
 **No confirmation on exit.** Polling is not a transaction and `trend.db` commits as it goes, so
 there is nothing to lose by stopping. A prompt would be the second interruption in a job whose first
@@ -2814,6 +2834,7 @@ Auto-detect walks the **union of every registered driver's sequence, in registra
 │                                                                          │
 │  ┌─ Running in the background ────────────────────────────────────────┐  │
 │  │  Keep running when I close the window        [ ●━━ On ]            │  │
+│  │  Start when I sign in to Windows             [ Off           ▾ ]   │  │
 │  │  Start in the notification area              [ ━━○ Off ]           │  │
 │  │                                                     [ Exit ]       │  │
 │  └────────────────────────────────────────────────────────────────────┘  │
@@ -2829,7 +2850,8 @@ Auto-detect walks the **union of every registered driver's sequence, in registra
 | Appearance | Use the Windows accent colour (§9.4.2, P1-11) | Off | The brand accent is chosen for hue separation from the severity colours; a default that abandoned that would make the guarantee depend on a control-panel setting nobody thinks of as safety-critical |
 | Alerts | Tell me when the receiver loses GPS lock (P1-9) | **On** | Exists precisely for the user who is *not* looking; safe to default on only because `LockWatch` stays quiet through the flapping a real receiver's log is full of |
 | Running in the background | Keep running when I close the window (§10.3.1, #280) | **On** | §9.1's user leaves this docked for weeks; a close that stopped polling would stop it exactly when the window was being got out of the way |
-| Running in the background | Start in the notification area (#280) | Off | An application that starts with no window is indistinguishable from one that failed to start |
+| Running in the background | Start when I sign in to Windows (#548) | Off | The application never enrols itself in the user's sign-in; the manifest declares the task disabled. The choice is *Off*, *In the notification area* or *With the window open*, read from Windows each time (§10.3.1) |
+| Running in the background | Start in the notification area (#280) | Off | An application that starts with no window is indistinguishable from one that failed to start. Since #548 it applies to a start by hand only |
 | Running in the background | Exit | — | A button, so the application is quittable without the tray (§10.3.1) |
 
 **Advanced Console (§10.11).** Off on a fresh install. The switch adds and removes the destination

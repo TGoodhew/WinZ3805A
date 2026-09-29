@@ -559,7 +559,13 @@ Every setting has its explanation next to it on the page; this is the short vers
 | ![Use the Windows accent colour switch, This app's own](images/how-to-use/settings-systemaccentswitch.png) **Use the Windows accent colour** | Selected items, buttons and links use the application's own teal. | They follow the accent you chose in Windows. The colours that mean caution and critical never change, so if your Windows accent is close to one of them you will be told. |
 | ![Tell me when the receiver loses GPS lock switch, On](images/how-to-use/settings-locknotificationsswitch.png) **Tell me when the receiver loses GPS lock** | No notifications. | A Windows notification when the receiver stops disciplining to GPS, and another when it starts again. A loss has to last a minute before it is reported, so a brief drop-out is never mentioned. |
 | ![Keep running when I close the window switch, On](images/how-to-use/settings-keeprunningswitch.png) **Keep running when I close the window** | Closing the window exits, and monitoring stops with it. | Closing the window hides it and the receiver keeps being polled — see *When the window has gone*. This is the default. |
-| ![Start in the notification area switch, Off](images/how-to-use/settings-startminimisedswitch.png) **Start in the notification area** | The window opens at launch. | The application starts with no window, monitoring from the notification area. |
+| ![Start in the notification area switch, Off](images/how-to-use/settings-startminimisedswitch.png) **Start in the notification area** | The window opens at launch. | When you open the application yourself, it starts with no window, monitoring from the notification area. Starting when you sign in has its own setting, below. |
+
+**Start when I sign in to Windows** has three options rather than two: **Off**, **In the
+notification area** — it starts by itself with no window, monitoring from the notification area —
+and **With the window open**. It is separate from *Start in the notification area* so that a quiet
+start at sign-in never makes the application windowless when you open it yourself. Windows keeps
+this setting, not the application: see *Starting when you sign in*, below.
 
 ![The bottom of the Settings page: the Alerts and Running in the background sections, an Exit button, and an Elsewhere for now note](images/how-to-use/page-settings-2.png)
 
@@ -609,13 +615,30 @@ To exit, right-click the icon and choose **Exit**, or use the **Exit** button on
 page, which depends on nothing in the notification area. There is no confirmation: polling is not
 a transaction and the trend is saved as it goes, so there is nothing to lose by stopping.
 
-Two settings control all of this — *Keep running when I close the window* and *Start in the
-notification area* — both on the Settings page.
+Three settings control all of this — *Keep running when I close the window*, *Start in the
+notification area* and *Start when I sign in to Windows* — all on the Settings page.
 
 **Lock notifications** are ordinary Windows notifications. If you have them on and none appear,
 check *Settings › System › Notifications* for the application, and that Do Not Disturb is off; a
 notification that was delivered while the banner was missed is still in the notification centre
 (`Win+N`).
+
+### Starting when you sign in
+
+With *Start when I sign in to Windows* set to **In the notification area** or **With the window
+open**, Windows starts the application each time you sign in. It appears in Task Manager's *Startup
+apps* and in Windows *Settings › Apps › Startup*, like any other program that starts by itself.
+
+**Windows keeps this setting, not the application.** If you switch it off in Task Manager or in
+Windows Settings, the Settings page shows **Off** and cannot turn it back on — it says so, and you
+turn it on again where you turned it off. Uninstalling the application removes it.
+
+**After starting at sign-in, it keeps trying the receiver until it answers.** A USB serial adapter
+can appear a little after you sign in, and a receiver switched on with the PC can take a while to
+reply, so instead of trying once it tries the remembered port every 30 seconds for as long as it
+takes — a receiver switched on an hour later is picked up too. This needs *Connect to this device on
+launch* ticked in the connection dialog, which is the default. Connecting or disconnecting yourself
+stops the retrying. When you open the application yourself it tries once, as it always has.
 
 ---
 
