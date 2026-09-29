@@ -136,7 +136,7 @@ Three things can sit after the time:
 
 ### Compact mode
 
-![A small window, 396 by 152 pixels: a 64 px circle with a uniform dotted green ring and a large green 6 in the centre, and "Locked to GPS" beside it](images/how-to-use/main-compact.png)
+![A small window, its content 380 by 143 pixels: a 64 px circle with a uniform dotted green ring and a large green 7 in the centre, and "Locked to GPS" beside it, the two centred between the title bar and the bottom edge](images/how-to-use/main-compact.png)
 
 Compact mode is for a corner of the screen: the medallion shrinks, the satellite count moves into
 its centre, and everything else goes. **The window itself shrinks to its compact size when you
@@ -146,7 +146,8 @@ application remembers that you were in compact mode and reopens that way.
 
 If you make the standard window very short without entering compact mode, the readouts, figures of
 merit, clock line and footer are removed rather than squashed, and the satellite count moves into
-the medallion's centre there too — the count is always on the screen somewhere.
+the medallion's centre there too — the count is always on the screen somewhere. In both cases what
+is left sits in the middle of the window, however tall you make it.
 
 ---
 

@@ -357,11 +357,14 @@ a picture.
 > the page run and back off afterwards; the switches' own close-ups are then taken with it off,
 > which is the default the guide's table describes.
 >
-> **Two things the 29 Sep 2026 run left alone, on purpose:**
+> **`main-compact.png` was taken last, once #565 was fixed.** Compact mode had been drawing the TFOM
+> and FFOM pills clipped under the medallion, and a picture of the defect would have illustrated the
+> wrong thing.
+>
+> **One thing the run left alone, on purpose:**
 >
 > | Image | Why it was kept |
 > |---|---|
-> | `main-compact.png` | Compact mode was drawing the TFOM and FFOM pills clipped under the medallion (#565). A picture of the defect would illustrate the wrong thing. Re-take it with `-Only main-compact` once that is fixed |
 > | Receiver-specific cards | The Z3805A has no **Disciplining loop** card (a UCCM's, #512), no **Antenna** or **Integrity** pill (#515, #516) and no **Position uncertainty** row (#516), so the pictures correctly show none. The guide's prose says which receivers have them |
 
 ---
