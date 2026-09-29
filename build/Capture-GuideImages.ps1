@@ -144,6 +144,40 @@ function Get-ContentPane([int]$handle, [int]$contentLeft, [int]$expectedWidth) {
     return $null
 }
 
+# A page's own Refresh button is disabled while it reads (Diagnostics and Status registers both
+# bind it to CanRead), so "every button called Refresh is enabled" is what "finished reading"
+# looks like from outside. The title bar's Refresh is named "Refresh full status" and does not
+# match. A fixed sleep is not enough: on 29 Sep 2026 five seconds photographed the Diagnostics
+# page with its ring still turning and Lifetime and GPS receiver dashed (#556).
+function Wait-ForRead([int]$handle, [int]$timeoutSeconds = 30) {
+    $deadline = (Get-Date).AddSeconds($timeoutSeconds)
+    while ((Get-Date) -lt $deadline) {
+        $json = winapp ui inspect -w $handle -d 16 --json 2>$null | Out-String | ConvertFrom-Json
+        $busy = $false
+        $stack = [System.Collections.Generic.Stack[object]]::new()
+        foreach ($w in $json.windows) { foreach ($e in $w.elements) { $stack.Push($e) } }
+        while ($stack.Count -gt 0) {
+            $e = $stack.Pop()
+            if ($e.type -eq 'Button' -and $e.name -eq 'Refresh' -and -not $e.isEnabled) { $busy = $true }
+            foreach ($c in $e.children) { $stack.Push($c) }
+        }
+        if (-not $busy) { return }
+        Start-Sleep -Seconds 1
+    }
+    Write-Warning "The page was still reading after $timeoutSeconds s; look hard at this one."
+}
+
+# Footer items (Settings) are sometimes missing from a single read of the tree, so the lookup is
+# retried rather than the page skipped - which is how page-settings.png was missed on 29 Sep 2026.
+function Find-NavItem([int]$handle, [string]$page) {
+    foreach ($attempt in 1..3) {
+        $item = Get-Tree $handle 14 | Select-String -Pattern "itm-$page-[0-9a-f]+" | Select-Object -First 1
+        if ($item) { return $item.Matches[0].Value }
+        Start-Sleep -Milliseconds 700
+    }
+    return $null
+}
+
 # The Details window is the one carrying a navigation pane. Identified by what it
 # contains rather than by size or z-order, either of which is a coincidence that
 # holds only until someone resizes the main window.
@@ -241,18 +275,20 @@ Write-Host "Page area measured at ${achievedWidth}x${achievedHeight}."
 
 New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
 $fileNames = @{ statusregisters = 'status-registers'; advancedconsole = 'advanced-console' }
+$singleImage = @('statusregisters')
 
 foreach ($page in $Pages) {
-    $item = (Get-Tree $hwnd 12 | Select-String -Pattern "itm-$page-[0-9a-f]+" | Select-Object -First 1)
+    $item = Find-NavItem $hwnd $page
     if (-not $item) { Write-Warning "No navigation item for '$page'; skipped."; continue }
 
-    winapp ui invoke $item.Matches[0].Value -w $hwnd | Out-Null
+    winapp ui invoke $item -w $hwnd | Out-Null
 
     # A page reads from the receiver when it is navigated to, and those reads are
     # round trips. Photographing immediately catches empty fields - which is how
     # an early attempt produced a Holdover page whose duration limit was blank, a
     # picture that would have taught a reader the field does not work.
     Start-Sleep -Seconds 5
+    Wait-ForRead $hwnd
 
     $name = if ($fileNames.ContainsKey($page)) { $fileNames[$page] } else { $page }
 
@@ -275,6 +311,10 @@ foreach ($page in $Pages) {
     foreach ($half in @('', '-2')) {
         if (-not $content -and $half -eq '-2') { break }
         if (-not $content -and -not $viaNav) { Write-Warning "No content pane on '$page'; skipped."; break }
+
+        # The guide shows one picture of Status registers: its lower half is the same table
+        # scrolled by a card's height, and a picture nothing names is only something to delete.
+        if ($half -eq '-2' -and $singleImage -contains $page) { continue }
 
         if ($half -eq '-2') {
             # The lower half exists only where there is one. A page that fits
