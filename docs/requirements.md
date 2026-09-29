@@ -1747,7 +1747,7 @@ started at the card's left edge.
 | **`SkyPlotControl`** | Polar plot per §10.5. North up, 0° elevation at rim, 90° at centre. Dashed elevation-mask circle. Marker area scales with signal strength; fill from the sequential ramp (§9.4.4). Keyboard: arrow keys move a focus ring between markers in PRN order, Enter selects. Exposes each marker as an automation peer with name *"PRN 19, elevation 65 degrees, azimuth 52 degrees, carrier to noise 49, tracked."* Provides a `ListView` alternate view toggle for users who cannot use the spatial form. |
 | **`SatelliteStrengthBar`** | Bar + numeric. **Scale-aware**: reads `SignalStrengthKind` and maps C/N (26–55) or SS (0–255) to its own domain. Must never render the two scales against a shared axis. |
 | **`ConnectionStatusPill`** | Title-bar element. Severity shape + state text + port name. Click opens the connection dialog. Does not dim on window deactivation. |
-| **`TrendChart`** | Hand-drawn — OQ-5 (#38) rejected LiveCharts, so this is the design rather than a fallback (corrected 29 Aug 2026, #316). Line series, time x-axis, range selector. **Two y-axis modes:** zero-anchored with the §9.4.4 diverging fill for TI, and framed on the window's own data with a minimum span and a single categorical stroke for EFC (§10.7.1). Axis carries three labels — the two bounds and the midpoint — snapped to a round step, at a decimal precision fixed per chart (§9.5.3 item 6). Must support 604 800 points via decimation without dropping excursions — decimate by min/max per pixel column, never by sampling, or a 1-second glitch vanishes at the 7-day range. |
+| **`TrendChart`** | Hand-drawn — OQ-5 (#38) rejected LiveCharts, so this is the design rather than a fallback (corrected 29 Aug 2026, #316). Line series, time x-axis, range selector. **Two y-axis modes:** zero-anchored with the §9.4.4 diverging fill for TI, and framed on the window's own data with a minimum span and a single categorical stroke for EFC (§10.7.1). Axis carries three labels — the two bounds and the midpoint — snapped to a round step, at a decimal precision fixed per chart (§9.5.3 item 6); **the step is one that precision can show**, so no two labels read alike and none is rounded from a value the axis is not at (#546, §10.7.1). Must support 604 800 points via decimation without dropping excursions — decimate by min/max per pixel column, never by sampling, or a 1-second glitch vanishes at the 7-day range. |
 | **`FieldErrorText`** | (added 29 Aug 2026 from the code, #316) The §9.11 error line under an invalid field: `WzCaptionTextStyle` in `WzCriticalBrush` preceded by a 16 px glyph, announced as a live region (A11Y-9). A templated control with its style in `Themes/Generic.xaml`, like `SeverityPill` and for the same reason — its brushes must be `{ThemeResource}` so they re-resolve on a theme change. |
 
 `Themes/Controls.xaml` carries the shared styles the rows above name — `WzCardStyle`, `WzFeatureCardStyle`, `WzDestructiveButtonStyle`, `WzDenseListItemStyle`, `WzSkyPlotMarkerStyle` — and A11Y-5's 32 px pointer floor is declared on the `SeverityPill` style in `Themes/Generic.xaml` rather than at any call site, so every pill carries it (added 29 Aug 2026 from the code, #316).
@@ -2473,6 +2473,21 @@ the reading count are unaffected: they are what the user is looking at.
 > Axis labels are fixed at **2 decimal places** for this chart. One is not enough to separate −16.86
 > from −16.80, and §9.5.3 item 6 forbids a precision that varies with the range rather than one that
 > differs between quantities.
+>
+> **Amended 29 Sep 2026 (#546): the grid is one the labels can show, so the narrowest axis is
+> 0.02 %.** The bounds were snapped to about a quarter of the span whatever the labels could show,
+> so at the minimum span the step was 0.0025 %. A quiet 6 h window then drew `−16.70`, `−16.70`,
+> `−16.71`: two labels alike, and one rounded from a value the axis was not at. Adding a decimal
+> would break the rule above, so the snap moves instead
+> (`TrendDecimation.AutoBounds`, `labelResolution`):
+>
+> - the step is a whole multiple of 0.01 %, so 2.5 × 0.01 is passed over for 5 × 0.01;
+> - the axis holds an even number of steps, so the midpoint is on the grid too.
+>
+> The minimum span still frames the data at 0.01 %; the axis around it is at least two label steps,
+> 0.02 %. The cost is a quiet trace drawn half as tall. The alternative was the other remedy §9.5.3
+> offers, a change of unit to a ppm offset. Tony judged the change on the bench on 29 Sep 2026 and
+> kept it.
 
 **The drift advisory reports what the fit can support and refuses what it cannot.** It states the
 secular slope in **ppm of control range per day**, the sample count, the span actually fitted, the
