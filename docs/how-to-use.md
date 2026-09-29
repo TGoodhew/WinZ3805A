@@ -131,7 +131,10 @@ Three things can sit after the time:
   for weeks should not carry a badge that never goes out, so silence here is the good state.
 - **Details** opens the Receiver Details window (`Ctrl+D`).
 - ![The pin button: a pushpin](images/how-to-use/main-pin-button.png) **The pin** keeps this window
-  above every other window. It stays pinned across restarts.
+  above every other window (`Ctrl+Shift+T`). It stays pinned across restarts, and while it is
+  pinned a small pushpin sits in the title bar, so you can tell in any layout. The same setting is
+  on the window's right-click menu and the notification-area icon's menu — see *Keeping the
+  window on top*, below.
 - **Connect / Disconnect** opens the connection dialog, or drops the connection (`Ctrl+Shift+C`).
 
 ### Compact mode
@@ -148,6 +151,24 @@ If you make the standard window very short without entering compact mode, the re
 merit, clock line and footer are removed rather than squashed, and the satellite count moves into
 the medallion's centre there too — the count is always on the screen somewhere. In both cases what
 is left sits in the middle of the window, however tall you make it.
+
+### Keeping the window on top
+
+A compact window in a corner is most useful when nothing can cover it, and compact mode hides the
+footer and the pin with it. So there are three other ways to pin the window, and each one works in
+either layout:
+
+- **`Ctrl+Shift+T`** pins it, and pressing it again unpins it.
+- **Right-click the window** anywhere except a readout and choose **Keep this window above
+  others**. Readouts have their own menu for copying the value. The same menu has **Compact mode**
+  (`Ctrl+Shift+M`), and a check mark beside each item shows which ones are on. `Shift+F10`, or the
+  menu key, opens it from the keyboard.
+- **Right-click the notification-area icon** and choose **Keep above other windows**. This works
+  even while the window is hidden.
+
+While the window is pinned, a small pushpin shows at the right of its title bar, just before the
+minimise button. Hover over it to see how to unpin. All four routes change the same setting, so the
+window stays pinned across restarts whichever one you use.
 
 ---
 
@@ -639,7 +660,8 @@ until you move it, and an application is not allowed to move it for you. So:
    window back rather than starting another copy. This needs no icon at all, and it is the route
    to reach for first.
 2. **Or click the `^` chevron** (*Show hidden icons*) at the right of the taskbar; the icon is in
-   that flyout. Click it to bring the window back, or right-click it for **Open** and **Exit**.
+   that flyout. Click it to bring the window back, or right-click it for **Open**, **Keep above
+   other windows** and **Exit**.
 3. **To keep the icon visible**, drag it from the flyout onto the taskbar, or go to *Settings ›
    Personalization › Taskbar › Other system tray icons* and turn it on there.
 
@@ -722,6 +744,7 @@ has focus.
 | Main window | `Ctrl+D` | Open Receiver Details, or bring it forward |
 | Main window | `Ctrl+Shift+C` | Connect, or disconnect if connected |
 | Main window | `Ctrl+Shift+M` | Enter or leave compact mode (double-clicking the medallion does the same) |
+| Main window | `Ctrl+Shift+T` | Keep the window above others, or stop keeping it there (the pin does the same) |
 | Main window | `Esc` | Leave compact mode |
 | Details | `Ctrl+1` … `Ctrl+8` | Overview, Satellites, Position, Timing & antenna, Holdover, Time, Status registers, Diagnostics |
 | Details | `F5` | Refresh full status now |

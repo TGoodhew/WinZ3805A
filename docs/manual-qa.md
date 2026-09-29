@@ -706,7 +706,7 @@ Explorer restart proves the icon comes back.
 | | |
 |---|---|
 | **Do** | Launch the app and close its window, so it is running in the notification area. Note the icon's shape. Task Manager → *Windows Explorer* → *Restart*. Wait for the taskbar to return. |
-| **Pass** | The icon is back within a few seconds, in the same shape and with the same tooltip, without the app being touched. Clicking it opens the window, and right-clicking it shows *Open* and *Exit*. `app.log` has the line *Explorer restarted; adding the tray icon again.* and no warning about the tray. |
+| **Pass** | The icon is back within a few seconds, in the same shape and with the same tooltip, without the app being touched. Clicking it opens the window, and right-clicking it shows *Open*, *Keep above other windows* and *Exit* (the middle one since #568). `app.log` has the line *Explorer restarted; adding the tray icon again.* and no warning about the tray. |
 
 **The icon may come back in the overflow** even if it had been dragged onto the taskbar. That is
 Windows' decision about a re-added icon and not a failure of this check.
@@ -802,6 +802,33 @@ passed SQLite's integrity check, had all six columns, and its manifest named
 showed the confirmation naming this receiver, and the log read *0 samples added, 1875 already present;
 receiver Same*. **The uninstall-and-restore half and the different-receiver table are still owed.**
 
+## 22. The window can be pinned from compact mode (#568)
+
+**Why.** The footer's pin was the only way to keep the main window on top, and compact mode collapses
+the footer. So the one layout meant for a corner of the screen could not be pinned or unpinned, and a
+pinned compact window looked exactly like an unpinned one. There are now four routes to one setting,
+and a pushpin in the title bar. What no test can reach is whether each route really changes what
+Windows does with the window, and whether the pushpin leaves the title bar and the compact layout
+exactly as they were. The first version put it in the title bar control's header slot, which
+thickened the bar by 16 px and clipped the compact medallion.
+
+| | |
+|---|---|
+| **Do** | In the standard layout, unpinned, enter compact mode. Press `Ctrl+Shift+T`. Put another window over the corner where it sits. Then right-click the compact window and read the menu. Choose *Keep this window above others* to unpin. Right-click the notification-area icon, read its menu, and choose *Keep above other windows*. Restart the application. |
+| **Pass** | After `Ctrl+Shift+T`, the other window cannot cover it and a pushpin shows at the right of its title bar, just before the minimise button, and hovering over it opens a tooltip naming the key. The title bar stays its normal height, and the compact medallion is whole, not clipped at the bottom. Dragging the title bar still moves the window. The right-click menu shows *Keep this window above others* ticked and *Compact mode* ticked, each with its key. Choosing it unpins: the pushpin goes and the other window can cover it. The tray menu shows *Keep above other windows* unticked between *Open* and *Exit*, and choosing it pins again. After the restart the window comes back compact, pinned, and carrying the pushpin. In the standard layout, the footer pin shows the same state as the other three routes. |
+
+**Last run:** 29 Sep 2026, against the packaged Debug build with the Z3805A on COM3. The following all passed:
+- `Ctrl+Shift+T` set and cleared the window's topmost flag in both layouts.
+- The title bar measured 32 px, with the pushpin 8 px from the minimise button.
+- The compact medallion measured 64 × 63.
+- The tooltip opened above the bar.
+- A drag on the title moved the window.
+- The right-click menu showed both items with the right ticks.
+
+**Two things are still owed:**
+- **The tray menu.** It is a shell popup that the automation could not read, so a person must right-click the icon once.
+- **Hover testing is only real with real input.** `SetCursorPos` moves the pointer without a pointer event, so no tooltip opens, even on the globe button. Only `SendInput` or `mouse_event` movement proves a tooltip.
+
 ## Before a release
 
 Sections 1–4, 8, 9, 11 and 13 in full, then **12 on the published artifact** — which means the release
@@ -816,7 +843,8 @@ attention, and both leaks that have shipped would have been caught by it; **sect
 broadcasting receiver is to hand and anything on the transport's byte path has changed** — it costs
 one glance at one readout, and the failure it catches is a value quietly not arriving, which no
 other check in this list would notice; **section 18 if the tray icon's code has changed** — it
-costs half a minute; **section 19 if window placement has changed and a second display is to hand**; **section 20 if
+costs half a minute; **section 22 if the pin, the tray menu or the main window's title bar has
+changed**; **section 19 if window placement has changed and a second display is to hand**; **section 20 if
 anything on the launch or connect-on-launch path has changed**, since only a real sign-in reaches it;
 **section 21 whenever `trend.db`'s schema or the history export has changed**, since an export that
 a later version cannot import loses the history of everyone who relied on it. Section 15 is not a release
