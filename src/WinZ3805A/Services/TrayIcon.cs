@@ -43,6 +43,7 @@ public sealed class TrayIcon : IDisposable
     // Menu item ids. Arbitrary, but must not be 0 - TrackPopupMenu returns 0 for "dismissed".
     private const uint MenuOpen = 1;
     private const uint MenuExit = 2;
+    private const uint MenuKeepAbove = 3;
     private const int SmallIconMetric = 49;
     private const int ColorWindowText = 8;
 
@@ -93,6 +94,19 @@ public sealed class TrayIcon : IDisposable
 
     /// <summary>Raised when the user clicks the icon.</summary>
     public event EventHandler? Activated;
+
+    /// <summary>Raised when <i>Keep above other windows</i> is chosen from the menu (#568).</summary>
+    public event EventHandler? KeepAboveToggled;
+
+    /// <summary>
+    /// Asked, as the menu opens, whether the window is pinned, so the item can carry a check mark.
+    /// </summary>
+    /// <remarks>
+    /// A question rather than a stored flag, for the reason the window's own right-click menu reads
+    /// its state at opening: the pin changes from four places, and a copy here would be a fifth
+    /// that could disagree with them. Unset, the item shows unchecked.
+    /// </remarks>
+    public Func<bool>? IsKeptAbove { get; set; }
 
     /// <summary>
     /// Redraws the icon and retitles it for a mode.
@@ -269,7 +283,7 @@ public sealed class TrayIcon : IDisposable
     }
 
     /// <summary>
-    /// The right-click menu: Open and Exit, and nothing else (#280).
+    /// The right-click menu: Open, Keep above other windows, and Exit (#280, #568).
     /// </summary>
     /// <remarks>
     /// <para>
@@ -285,6 +299,11 @@ public sealed class TrayIcon : IDisposable
     /// <b>Nothing that touches the receiver goes here.</b> Every command reaches the device through
     /// §8's tiers with §8.3's consequence text, and a shell context menu is not a place any of that
     /// can be shown.
+    /// </para>
+    /// <para>
+    /// <b>The pin is here because it touches only the window (#568).</b> It is the one window
+    /// setting that is worth reaching while the window is hidden or compact: compact mode collapses
+    /// the footer pin, and pinning a window before bringing it back is a reasonable thing to want.
     /// </para>
     /// <para>
     /// <b>SetForegroundWindow and the trailing PostMessage are required, not decorative.</b>
@@ -303,6 +322,11 @@ public sealed class TrayIcon : IDisposable
         try
         {
             AppendMenu(menu, MfString, MenuOpen, "&Open");
+            AppendMenu(
+                menu,
+                MfString | (IsKeptAbove?.Invoke() == true ? MfChecked : 0),
+                MenuKeepAbove,
+                "&Keep above other windows");
             AppendMenu(menu, MfSeparator, 0, null);
             AppendMenu(menu, MfString, MenuExit, "E&xit");
 
@@ -342,6 +366,10 @@ public sealed class TrayIcon : IDisposable
 
                 case MenuExit:
                     ExitRequested?.Invoke(this, EventArgs.Empty);
+                    break;
+
+                case MenuKeepAbove:
+                    KeepAboveToggled?.Invoke(this, EventArgs.Empty);
                     break;
 
                 default:
@@ -497,6 +525,7 @@ public sealed class TrayIcon : IDisposable
 
     private const uint MfString = 0x0000;
     private const uint MfSeparator = 0x0800;
+    private const uint MfChecked = 0x0008;
     private const uint TpmRightButton = 0x0002;
     private const uint TpmBottomAlign = 0x0020;
 

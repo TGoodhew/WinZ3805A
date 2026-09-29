@@ -306,7 +306,7 @@ public sealed partial class MainWindow : Window
     }
 
     /// <remarks>
-    /// §9.7.5's <c>Ctrl+D</c>, <c>Ctrl+Shift+C</c>, <c>Ctrl+Shift+M</c> and <c>Esc</c>. On the
+    /// §9.7.5's <c>Ctrl+D</c>, <c>Ctrl+Shift+C</c>, <c>Ctrl+Shift+M</c>, <c>Ctrl+Shift+T</c> and <c>Esc</c>. On the
     /// content root rather than the window, because <c>Window</c> has no accelerator collection of
     /// its own - and, for <c>Ctrl+Shift+C</c>, because §9.6.2's compact mode collapses the footer
     /// that hosts <c>ConnectButton</c>. An accelerator attached to that button would vanish with
@@ -364,6 +364,17 @@ public sealed partial class MainWindow : Window
                 return true;
             });
 
+        // #568: pin and unpin. Here rather than on the footer's pin for the reason Ctrl+Shift+C is:
+        // compact mode collapses the footer, and compact is where a pin is most wanted.
+        Add(
+            Windows.System.VirtualKey.T,
+            Windows.System.VirtualKeyModifiers.Control | Windows.System.VirtualKeyModifiers.Shift,
+            () =>
+            {
+                _page?.ToggleAlwaysOnTop();
+                return _page is not null;
+            });
+
         // §9.7.5 gives Escape three jobs — cancel a dialog, close a flyout, exit compact mode — and
         // the first two belong to the controls that own them. This one reports whether it acted, so
         // the key is left unhandled when the window is not compact rather than being swallowed from
@@ -392,11 +403,25 @@ public sealed partial class MainWindow : Window
     /// </remarks>
     private void ApplyAlwaysOnTop()
     {
-        if (Presenter is OverlappedPresenter presenter && _page is not null)
+        if (_page is null)
+        {
+            return;
+        }
+
+        if (Presenter is OverlappedPresenter presenter)
         {
             presenter.IsAlwaysOnTop = _page.IsAlwaysOnTop;
         }
+
+        // #568: the title bar says so, in both layouts.
+        PinnedIndicator.Visibility = _page.IsAlwaysOnTop ? Visibility.Visible : Visibility.Collapsed;
     }
+
+    /// <summary>Whether the window is pinned above others, for the notification-area menu (#568).</summary>
+    public bool IsAlwaysOnTop => _page?.IsAlwaysOnTop == true;
+
+    /// <summary>Pins or unpins the window from outside it - the notification-area menu (#568).</summary>
+    public void ToggleAlwaysOnTop() => _page?.ToggleAlwaysOnTop();
 
     /// <remarks>
     /// The compact floor grows with the user's text scale (#215). §9.6.2's 144 is a 100 %-text
