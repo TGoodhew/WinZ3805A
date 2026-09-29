@@ -12,6 +12,23 @@ The zip carries everything the install needs — the signed package, its
 certificate, and the x64 Windows App Runtime — so a bench machine with no
 internet connection and no Visual Studio can install from it.
 
+### Upgrading from 1.3.0 or earlier
+
+From **1.3.1** the package is signed as **The Schnauzer Group LLC**. Earlier releases were signed
+under a misspelling of the company's name. The publisher is part of a package's identity, so
+Windows treats this release as a **different application**: it installs **alongside** the old
+one rather than over it, and it starts with no history. To move across:
+
+1. In the old copy, **Settings → Export history…**, and save the file.
+2. Exit the old copy: right-click its notification-area icon → **Exit**. Two copies would compete
+   for the same serial port.
+3. Install this release, then **Settings → Import history…** the file.
+4. Uninstall the old copy in *Settings › Apps*. Both are called WinZ3805A. The old one is the copy
+   whose publisher is **not** The Schnauzer Group LLC. `build/Uninstall-Sideload.ps1` removes both
+   copies and both certificates.
+
+This happens once. Later releases upgrade in place again.
+
 ### About the certificate prompt
 
 The package is signed with a **self-signed certificate**, so `Install.cmd` asks
