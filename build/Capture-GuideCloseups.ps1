@@ -41,10 +41,9 @@
 .NOTES
     Needs the Windows App Development CLI: winget install Microsoft.WinAppCli.
 
-    main-compact.png is in the set but was NOT re-taken on 29 Sep 2026: compact mode
-    was drawing the figures-of-merit pills clipped under the medallion (#565), and a
-    picture of a defect is not an illustration of the feature. Its step works - it
-    was run into a scratch folder and photographed exactly that defect.
+    main-compact.png was re-taken after the rest, on 29 Sep 2026, once #565 was fixed:
+    compact mode had been drawing the figures-of-merit pills clipped under the
+    medallion, and a picture of a defect is not an illustration of the feature.
 
     -Only takes a list, so call the script with & from PowerShell. Through
     `pwsh -File` a comma list arrives as ONE name and nothing matches it, which
@@ -214,7 +213,9 @@ foreach ($handle in $windows) {
 }
 
 if (-not $main) { throw 'No main window found. Bring it back from the notification area first.' }
-if (-not $details) { throw 'No Details window found. Open it from the main window (Ctrl+D) first.' }
+# Only the pictures of the Details window, and the dialog it opens, need it; -Only main-compact does not.
+$needsDetails = -not $Only -or ($Only | Where-Object { $_ -notlike 'main-*' })
+if ($needsDetails -and -not $details) { throw 'No Details window found. Open it from the main window (Ctrl+D) first.' }
 
 $taken = 0
 $original = Get-Rect $main
@@ -308,13 +309,16 @@ try {
     # ---------------------------------------------------------------------------- Details chrome
     # On Overview first: Diagnostics and Status registers have a Refresh button of their own with
     # the same x:Name as the title bar's, and the first one found would be photographed.
-    Open-Page 'overview'
-    Save-Element $details 'details-title-bar' 'AppTitleBar'
-    Save-Element $details 'details-refresh' 'RefreshButton'
-    Save-Element $details 'details-export' 'ExportButton'
-    Save-Element $details 'details-settings' 'SettingsButton'
-    Save-Element $details 'details-help' 'HelpButton'
-    Save-Crop $details 'details-nav' @('TogglePaneButton', 'itm-*') 4
+    # Every block after this one is guarded by the pictures it takes, so only this one needs the check.
+    if ($needsDetails) {
+        Open-Page 'overview'
+        Save-Element $details 'details-title-bar' 'AppTitleBar'
+        Save-Element $details 'details-refresh' 'RefreshButton'
+        Save-Element $details 'details-export' 'ExportButton'
+        Save-Element $details 'details-settings' 'SettingsButton'
+        Save-Element $details 'details-help' 'HelpButton'
+        Save-Crop $details 'details-nav' @('TogglePaneButton', 'itm-*') 4
+    }
 
     # ---------------------------------------------------------------------------- page parts
     if ((Wanted 'satellites-sky-plot') -or (Wanted 'satellites-tracked-table')) {
