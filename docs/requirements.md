@@ -447,6 +447,23 @@ Rationale: the satellite El/Az/(C-N) table has **no individual query** — it ex
 
 At 9600 baud the full screen consumes **3521 ms measured** of the 10 s window (this said ~2 s, which was the wire time alone — corrected 29 Aug 2026, #316). The scheduler must never let the two tiers overlap — they share the same command channel, so the fast tier will naturally stall behind a full-screen fetch. That is acceptable; do not attempt to interleave.
 
+**After the stall, one fast sweep, not a burst (#547, 29 Sep 2026).** A `PeriodicTimer` keeps one
+tick that fired while the loop was busy. After each screen the loop therefore ran a fast sweep at
+once and a second about 120 ms behind it on that remembered tick, then a third on the next real
+tick: the screen and three fast updates in about 0.6 s, every ten seconds. It looked like a window
+catching up, and it wrote trend rows about 0.2 s apart where every other pair is a second apart.
+
+On the bench, the old build left 57 such gaps in 9.6 minutes, and the fixed one leaves none. A fast
+sweep now never starts within half a period of the previous one's start. The sweep straight after
+the screen stays, as the freshest reading after the gap.
+
+The other two remedies raised on #547 were:
+
+- pacing each sweep on `:PTIM:TCOD?`, as Lady Heather does;
+- fetching the screen less often.
+
+Both would change this section, and neither was needed to remove the burst.
+
 #### 7.3.1 A reading the receiver will not give
 
 > **⚠ Added 20 Aug 2026** (#155). The sweep above was a fixed list asked unconditionally. It is now
