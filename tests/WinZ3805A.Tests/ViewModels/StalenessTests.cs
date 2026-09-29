@@ -66,6 +66,25 @@ public class StalenessTests
         Assert.Equal(expected, Staleness.Describe(seconds is int value ? TimeSpan.FromSeconds(value) : null));
 
     /// <summary>
+    /// #547, Tony's decision: the status line says <i>updating…</i> while the screen is read,
+    /// nothing while the readings are fresh, and their age once they are overdue - which a long
+    /// screen read does not hide.
+    /// </summary>
+    [Theory]
+    [InlineData(1, false, null)]
+    [InlineData(4, false, null)]
+    [InlineData(14, false, null)]
+    [InlineData(1, true, "updating…")]
+    [InlineData(4, true, "updating…")]
+    [InlineData(15, false, "updated 15 seconds ago")]
+    [InlineData(15, true, "updated 15 seconds ago")]
+    [InlineData(90, true, "updated a minute ago")]
+    [InlineData(null, false, "never updated")]
+    [InlineData(null, true, "updating…")]
+    public void TheStatusLineSaysUpdatingOrNothingUntilOverdue(int? seconds, bool updating, string? expected) =>
+        Assert.Equal(expected, Staleness.FooterText(seconds is int value ? TimeSpan.FromSeconds(value) : null, updating));
+
+    /// <summary>
     /// §10.3's thresholds: amber past 15 s, critical past 60 s. A fresh reading is neutral rather
     /// than a success — the footer's job is to report going stale, not to congratulate a poll.
     /// </summary>
