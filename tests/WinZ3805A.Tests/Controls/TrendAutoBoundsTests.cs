@@ -162,6 +162,102 @@ public class TrendAutoBoundsTests
     }
 
     // -------------------------------------------------------------------------------------
+    // Labels a reader can tell apart (#546)
+    // -------------------------------------------------------------------------------------
+
+    /// <summary>The three labels the chart draws, at the chart's fixed 2 dp.</summary>
+    private static string[] Labels((double Minimum, double Maximum) bounds) =>
+    [
+        bounds.Maximum.ToString("F2", System.Globalization.CultureInfo.InvariantCulture),
+        ((bounds.Minimum + bounds.Maximum) / 2).ToString("F2", System.Globalization.CultureInfo.InvariantCulture),
+        bounds.Minimum.ToString("F2", System.Globalization.CultureInfo.InvariantCulture),
+    ];
+
+    /// <summary>
+    /// <b>The defect</b>: the 6 h EFC window of #546, a few thousandths of a per cent wide, drew
+    /// <c>−16.70</c>, <c>−16.70</c>, <c>−16.71</c> - two labels alike and one rounded from a value
+    /// the axis was not at. On a grid the 2 dp labels can show, the three are distinct and exact.
+    /// </summary>
+    [Fact]
+    public void TheQuietWindowOf546GetsThreeDistinctLabels()
+    {
+        (double, double) bounds = TrendDecimation.AutoBounds(
+            [new(0, -16.7065, -16.7035, 900)], minimumSpan: 0.01, labelResolution: 0.01);
+
+        Assert.Equal(["-16.69", "-16.70", "-16.71"], Labels(bounds));
+    }
+
+    /// <summary>What the old snapping gave the same window, so the difference is on record.</summary>
+    [Fact]
+    public void WithoutALabelResolutionTheSameWindowRepeatsALabel()
+    {
+        (double, double) bounds = TrendDecimation.AutoBounds([new(0, -16.7065, -16.7035, 900)], minimumSpan: 0.01);
+
+        Assert.NotEqual(3, Labels(bounds).Distinct().Count());
+    }
+
+    /// <summary>
+    /// Across quiet and busy windows, anywhere on the scale: three labels, all different, each exactly
+    /// the value it stands for, and the data between the outer two.
+    /// </summary>
+    [Theory]
+    [InlineData(-16.705, 0.0001)]
+    [InlineData(-16.705, 0.003)]
+    [InlineData(-16.70, 0.009)]
+    [InlineData(-16.7049, 0.011)]
+    [InlineData(-16.83, 0.024)]
+    [InlineData(-16.83, 0.0516)]
+    [InlineData(-16.8, 0.1)]
+    [InlineData(-16.8, 0.37)]
+    [InlineData(0.0, 0.004)]
+    [InlineData(12.345, 2.5)]
+    [InlineData(-99.99, 0.013)]
+    public void EveryWindowGetsThreeDistinctExactLabels(double centre, double span)
+    {
+        double low = centre - (span / 2);
+        double high = centre + (span / 2);
+
+        (double minimum, double maximum) = TrendDecimation.AutoBounds(
+            [new(0, low, high, 900)], minimumSpan: 0.01, labelResolution: 0.01);
+
+        string[] labels = Labels((minimum, maximum));
+        Assert.Equal(3, labels.Distinct().Count());
+
+        foreach (double value in (double[])[minimum, (minimum + maximum) / 2, maximum])
+        {
+            Assert.True(
+                Math.Abs((value * 100) - Math.Round(value * 100)) < 1e-6,
+                $"{value} is not a 2 dp number, so its label would be rounded");
+        }
+
+        Assert.True(minimum <= low + 1e-9 && maximum >= high - 1e-9, $"[{minimum}, {maximum}] should hold [{low}, {high}]");
+    }
+
+    /// <summary>
+    /// A step of 2.5 hundredths is passed over at 2 dp: <c>−16.725</c> would be labelled
+    /// <c>−16.73</c> or <c>−16.72</c>, a number the axis is not at.
+    /// </summary>
+    [Fact]
+    public void AStepTheLabelsCannotShowIsNotUsed()
+    {
+        (double minimum, double maximum) = TrendDecimation.AutoBounds(
+            [new(0, -16.80, -16.71, 900)], minimumSpan: 0.01, labelResolution: 0.01);
+
+        double step = (maximum - minimum) / 2;
+        Assert.Equal(0, Math.Round(step * 100) - (step * 100), 6);
+    }
+
+    /// <summary>The narrowest axis is two label steps, the price of labels that differ.</summary>
+    [Fact]
+    public void TheNarrowestAxisIsTwoLabelSteps()
+    {
+        (double minimum, double maximum) = TrendDecimation.AutoBounds(
+            [new(0, -16.8302, -16.8300, 900)], minimumSpan: 0.01, labelResolution: 0.01);
+
+        Assert.Equal(0.02, maximum - minimum, 9);
+    }
+
+    // -------------------------------------------------------------------------------------
     // Guards
     // -------------------------------------------------------------------------------------
 

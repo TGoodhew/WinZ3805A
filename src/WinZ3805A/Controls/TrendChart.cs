@@ -253,7 +253,7 @@ public sealed class TrendChart : Control
             Samples ?? [], FromTicks, ToTicks, (int)Math.Floor(width));
 
         (double minimum, double maximum) = Anchoring == TrendAnchoring.Data
-            ? TrendDecimation.AutoBounds(probe, MinimumSpan)
+            ? TrendDecimation.AutoBounds(probe, MinimumSpan, labelResolution: Math.Pow(10, -Decimals))
             : TrendDecimation.ZeroAnchoredBounds(probe, Floor);
 
         double gutter = MeasureGutter(minimum, maximum, width);
