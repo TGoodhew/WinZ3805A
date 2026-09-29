@@ -21,10 +21,8 @@ namespace WinZ3805A.Services;
 /// lines of interop, on a project §6.4 keeps deliberately thin.
 /// </para>
 /// <para>
-/// <b>The window is message-only.</b> <c>Shell_NotifyIcon</c> needs an <c>HWND</c> to send clicks
-/// to. Using the main window's would mean subclassing a live WinUI window's <c>WndProc</c>, which is
-/// a good way to break XAML input handling in ways that appear months later. A window created under
-/// <c>HWND_MESSAGE</c> is never shown, never activated, and owns nothing but this.
+/// <b>The icon has a hidden window of its own</b>, <see cref="TrayIconWindow"/>, which says why it
+/// is not the main window's and why it must not be message-only (#549).
 /// </para>
 /// </remarks>
 public sealed class TrayIcon : IDisposable
@@ -48,8 +46,7 @@ public sealed class TrayIcon : IDisposable
     private const int SmallIconMetric = 49;
     private const int ColorWindowText = 8;
 
-    private readonly WndProc _wndProc;
-    private readonly nint _window;
+    private readonly TrayIconWindow _window;
     private readonly uint _taskbarCreated;
     private readonly string _displayName;
     private readonly ILogger _logger;
@@ -72,27 +69,15 @@ public sealed class TrayIcon : IDisposable
         _logger = logger ?? NullLogger.Instance;
 
         _displayName = displayName;
-        _wndProc = HandleMessage;
-
-        // Registered by name so that a second instance of this class - or a second receiver, under
-        // P2-1 - gets its own class rather than failing to register an existing one.
-        WNDCLASSEX klass = new()
-        {
-            cbSize = Marshal.SizeOf<WNDCLASSEX>(),
-            lpfnWndProc = Marshal.GetFunctionPointerForDelegate(_wndProc),
-            hInstance = GetModuleHandle(null),
-            lpszClassName = $"WinZ3805A.TrayIcon.{Environment.ProcessId}",
-        };
-
-        RegisterClassEx(ref klass);
-
-        _window = CreateWindowEx(
-            0, klass.lpszClassName, string.Empty, 0, 0, 0, 0, 0,
-            -3 /* HWND_MESSAGE */, 0, klass.hInstance, 0);
 
         // Explorer can restart. When it does every tray icon is gone and the shell broadcasts this
         // to say so; without it the icon simply never comes back and the user assumes the app died.
+        // Only a window that can receive a broadcast hears it, which is #549 and TrayIconWindow's
+        // whole reason for being top-level. Registered before the window exists, so no message can
+        // arrive while this still reads as zero.
         _taskbarCreated = RegisterWindowMessage("TaskbarCreated");
+
+        _window = new TrayIconWindow(HandleMessage);
 
         Update(ReceiverMode.Disconnected);
     }
@@ -135,7 +120,7 @@ public sealed class TrayIcon : IDisposable
         NOTIFYICONDATA data = new()
         {
             cbSize = Marshal.SizeOf<NOTIFYICONDATA>(),
-            hWnd = _window,
+            hWnd = _window.Handle,
             uID = 1,
             uFlags = NifMessage | NifIcon | NifTip,
             uCallbackMessage = CallbackMessage,
@@ -307,9 +292,10 @@ public sealed class TrayIcon : IDisposable
                 return;
             }
 
-            SetForegroundWindow(_window);
-            TrackPopupMenu(menu, TpmRightButton | TpmBottomAlign, cursor.X, cursor.Y, 0, _window, 0);
-            PostMessage(_window, 0, 0, 0);
+            SetForegroundWindow(_window.Handle);
+            TrackPopupMenu(
+                menu, TpmRightButton | TpmBottomAlign, cursor.X, cursor.Y, 0, _window.Handle, 0);
+            PostMessage(_window.Handle, 0, 0, 0);
         }
         finally
         {
@@ -317,7 +303,7 @@ public sealed class TrayIcon : IDisposable
         }
     }
 
-    private nint HandleMessage(nint window, uint message, nint wParam, nint lParam)
+    private void HandleMessage(uint message, nint wParam, nint lParam)
     {
         if (message == CallbackMessage && (uint)lParam == WmLeftButtonUp)
         {
@@ -347,13 +333,14 @@ public sealed class TrayIcon : IDisposable
         {
             // Explorer restarted, so the icon we added is gone with it. Re-adding means starting
             // from "not added" - a modify would be addressed to an icon the shell has forgotten.
+            // Logged because this branch never ran before #549, and nothing on screen says whether
+            // it has: an icon that came back and one that was never lost look the same.
+            _logger.LogInformation("Explorer restarted; adding the tray icon again.");
             _added = false;
             ReceiverMode mode = _mode;
             _mode = ReceiverMode.Disconnected;
             Update(mode);
         }
-
-        return DefWindowProc(window, message, wParam, lParam);
     }
 
     /// <summary>Removes the icon and releases the window.</summary>
@@ -375,7 +362,7 @@ public sealed class TrayIcon : IDisposable
             NOTIFYICONDATA data = new()
             {
                 cbSize = Marshal.SizeOf<NOTIFYICONDATA>(),
-                hWnd = _window,
+                hWnd = _window.Handle,
                 uID = 1,
             };
 
@@ -388,10 +375,7 @@ public sealed class TrayIcon : IDisposable
             _icon = 0;
         }
 
-        if (_window != 0)
-        {
-            DestroyWindow(_window);
-        }
+        _window.Dispose();
     }
 
     /// <summary>The system window text colour, which is legible on whatever the taskbar is.</summary>
@@ -405,25 +389,6 @@ public sealed class TrayIcon : IDisposable
     }
 
     // ------------------------------------------------------------------------------- interop
-
-    private delegate nint WndProc(nint window, uint message, nint wParam, nint lParam);
-
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct WNDCLASSEX
-    {
-        public int cbSize;
-        public uint style;
-        public nint lpfnWndProc;
-        public int cbClsExtra;
-        public int cbWndExtra;
-        public nint hInstance;
-        public nint hIcon;
-        public nint hCursor;
-        public nint hbrBackground;
-        [MarshalAs(UnmanagedType.LPWStr)] public string? lpszMenuName;
-        [MarshalAs(UnmanagedType.LPWStr)] public string lpszClassName;
-        public nint hIconSm;
-    }
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     private struct NOTIFYICONDATA
@@ -483,23 +448,7 @@ public sealed class TrayIcon : IDisposable
     private static extern bool Shell_NotifyIcon(uint message, ref NOTIFYICONDATA data);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern ushort RegisterClassEx(ref WNDCLASSEX klass);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern nint CreateWindowEx(
-        uint exStyle, string klass, string name, uint style,
-        int x, int y, int width, int height,
-        nint parent, nint menu, nint instance, nint param);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    private static extern nint DefWindowProc(nint window, uint message, nint wParam, nint lParam);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern uint RegisterWindowMessage(string name);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool DestroyWindow(nint window);
 
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -568,9 +517,6 @@ public sealed class TrayIcon : IDisposable
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern nint CreateIconIndirect(ref ICONINFO icon);
-
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern nint GetModuleHandle(string? name);
 
     [DllImport("gdi32.dll", SetLastError = true)]
     private static extern nint CreateDIBSection(
