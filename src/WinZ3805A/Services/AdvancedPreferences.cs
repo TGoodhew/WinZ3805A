@@ -68,6 +68,26 @@ public sealed record AdvancedPreferences
     /// </remarks>
     public bool StartMinimised { get; init; }
 
+    /// <summary>
+    /// Whether a start at sign-in goes to the notification area rather than opening the window
+    /// (#548).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Only how it starts, never whether.</b> Whether the application starts at sign-in at all is
+    /// the package's startup task, which Windows owns and the user can switch off in Task Manager
+    /// without coming here. Keeping a copy of that would give two answers that can disagree, so none
+    /// is kept. See <see cref="SignInStartPolicy"/>.
+    /// </para>
+    /// <para>
+    /// <b>On by default</b>, the opposite of <see cref="StartMinimised"/>, and for a reason that
+    /// does not apply to it: a window appearing at every sign-in is the usual reason people switch a
+    /// start-up application off. It only matters once the user has chosen to start at sign-in,
+    /// and the Settings control shows which of the two they have.
+    /// </para>
+    /// </remarks>
+    public bool StartAtSignInHidden { get; init; } = true;
+
     /// <summary>Whether the user has been told once that closing does not exit (#280).</summary>
     /// <remarks>
     /// <b>Not a preference the user sets; a fact the application remembers.</b> It lives here
