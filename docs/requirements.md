@@ -1379,8 +1379,8 @@ See the amendment below the table before implementing one of them.
 
 | Window | Minimum (content) | Behaviour at minimum |
 |---|---|---|
-| Main | 380 × 240 | Medallion 160 px **with the satellite count in its centre** (§9.4.3, #307) and the two mode lines. The readout row, the figures of merit, the clock line and the footer are **collapsed** — not clipped, not scrolled: they are removed from the layout, so nothing is focusable or hit-testable off-screen (A11Y-1, A11Y-6). |
-| Main, compact mode | 380 × 144 | Medallion 64 px **with the satellite count in its centre** (§9.4.3, #279), mode text; readout row and footer hidden |
+| Main | 380 × 240 | Medallion 160 px **with the satellite count in its centre** (§9.4.3, #307) and the two mode lines. The readout row, the figures of merit, the clock line and the footer are **collapsed** — not clipped, not scrolled: they are removed from the layout, so nothing is focusable or hit-testable off-screen (A11Y-1, A11Y-6). The medallion and mode lines are **centred vertically** in the window rather than left at the top of an empty page (#565). |
+| Main, compact mode | 380 × 144 | Medallion 64 px **with the satellite count in its centre** (§9.4.3, #279), mode text; the detail line, the coasting pill, the readout row, the figures of merit, the clock line and the footer hidden. **Centred vertically** at any height, which at the 144 px minimum is also where it fits exactly (#565) |
 | Receiver Details | **1024 × 720** | Medium breakpoint; `NavigationView` in `Left` mode; no horizontal scrolling |
 
 > **⚠ Amends §10.2.** The Details window minimum was previously specified as 1000 × 700. That sits 24 px below the `Left`-mode threshold, so the window would open in `LeftCompact` at its own minimum size — the pane would be an icon rail at the exact width the layout was designed around. Raised to **1024 × 720** so the default state is the Medium breakpoint. Enforced via `AppWindow` `OverlappedPresenter.PreferredMinimumWidth/Height`.

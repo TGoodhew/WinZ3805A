@@ -85,6 +85,9 @@ public sealed partial class MainPage : Page
     /// <summary>The visual state last requested, so an unchanged one is not requested again (#403).</summary>
     private string? _stateShown;
 
+    /// <summary>The §10.3 layout in force; see <see cref="RenderLayoutVisibility"/> for why it is kept.</summary>
+    private Layout _layout;
+
     /// <summary>Collapses a burst of notifications into one render (#399).</summary>
     private readonly RenderCoalescer _renders;
 
@@ -230,9 +233,62 @@ public sealed partial class MainPage : Page
     /// Compact wins, because the user asked for it (§10.3) and the height did not.
     /// </para>
     /// </remarks>
-    private void ApplyLayoutState() =>
-        GoToStateIfChanged(
-            _compact ? "CompactDensity" : ActualHeight < ShortLayoutHeight ? "ShortLayout" : "Normal");
+    private void ApplyLayoutState()
+    {
+        _layout = _compact ? Layout.Compact : ActualHeight < ShortLayoutHeight ? Layout.Short : Layout.Normal;
+        GoToStateIfChanged(_layout switch
+        {
+            Layout.Compact => "CompactDensity",
+            Layout.Short => "ShortLayout",
+            _ => "Normal",
+        });
+        RenderLayoutVisibility();
+    }
+
+    /// <summary>Which of the three §10.3 layouts <see cref="ApplyLayoutState"/> last chose.</summary>
+    private enum Layout
+    {
+        Normal,
+        Short,
+        Compact,
+    }
+
+    /// <summary>
+    /// The three elements whose visibility depends on the receiver <b>and</b> on the layout.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>One owner per property, and it has to be this one (#565).</b> The layout states used to
+    /// collapse these with setters while <see cref="Render"/> set them from the readings, several
+    /// times a second. The code's value is what stays, so in compact mode the TFOM and FFOM pills came
+    /// back on the next reading and were drawn clipped under the medallion. The detail line and the
+    /// coasting pill had the same fault and were only invisible because the bench receiver was locked,
+    /// with nothing to say in either.
+    /// </para>
+    /// <para>
+    /// The states cannot own these, because a <c>Setter</c> assigns a literal and each one
+    /// depends on the receiver. A Z3805A has merits and a talker has none (#456), and the detail line
+    /// and the pill come and go with the receiver's state. So the states keep the rows the code
+    /// never touches, and this decides the rest from both inputs. It runs from both paths: the layout
+    /// can change without a new reading, and a reading can arrive without a layout change.
+    /// </para>
+    /// </remarks>
+    private void RenderLayoutVisibility()
+    {
+        // §9.6.2 gives compact the mode text alone; the short layout keeps the two mode lines.
+        bool modeLinesOnly = _layout == Layout.Compact;
+
+        ModeDetailText.Visibility = !modeLinesOnly && !string.IsNullOrEmpty(_model.ModeDetail)
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+        // §10.3: the coasting pill is the single most useful diagnostic the application surfaces.
+        CoastingPill.Visibility = !modeLinesOnly && _model.IsCoasting ? Visibility.Visible : Visibility.Collapsed;
+
+        MeritRow.Visibility = _layout == Layout.Normal && _model.ShowsAnyMerit
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+    }
 
     /// <summary>
     /// Moves to a visual state, but only when it is not the state already (#403).
@@ -697,12 +753,7 @@ public sealed partial class MainPage : Page
 
         ModeText.Text = _model.ModeText;
         ModeDetailText.Text = _model.ModeDetail ?? string.Empty;
-        ModeDetailText.Visibility = string.IsNullOrEmpty(_model.ModeDetail)
-            ? Visibility.Collapsed
-            : Visibility.Visible;
-
-        // §10.3: the coasting pill is the single most useful diagnostic the application surfaces.
-        CoastingPill.Visibility = _model.IsCoasting ? Visibility.Visible : Visibility.Collapsed;
+        RenderLayoutVisibility();
 
         // An attached property takes its value as object, so the string is boxed into an
         // IInspectable and every set mints a COM wrapper the runtime never lets go of (#399).
@@ -728,7 +779,6 @@ public sealed partial class MainPage : Page
         TimeInterval.Visibility = _model.ShowsTimeInterval ? Visibility.Visible : Visibility.Collapsed;
         TfomPill.Visibility = _model.ShowsTfom ? Visibility.Visible : Visibility.Collapsed;
         FfomPill.Visibility = _model.ShowsFfom ? Visibility.Visible : Visibility.Collapsed;
-        MeritRow.Visibility = _model.ShowsAnyMerit ? Visibility.Visible : Visibility.Collapsed;
 
         RenderMerit(TfomPill, "TFOM", _model.Tfom, ref _tfomShown);
         RenderMerit(FfomPill, "FFOM", _model.Ffom, ref _ffomShown);
