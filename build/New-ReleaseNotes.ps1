@@ -21,7 +21,9 @@
     result to `gh release create --notes-file`.
 
 .PARAMETER ZipPath
-    The release zip. Its SHA-256 goes in the notes.
+    The release zips - the online one and the offline one (#588). Each one's
+    SHA-256 goes in the notes, and so does the version of the .NET installer
+    the offline zip carries, read out of the zip rather than assumed.
 
 .PARAMETER BundlePath
     The signed .msixbundle inside it, read for the signing certificate. Defaults
@@ -35,7 +37,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)]
-    [string]$ZipPath,
+    [string[]]$ZipPath,
 
     [string]$BundlePath,
 
@@ -48,7 +50,7 @@ $repo = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $template = Join-Path $PSScriptRoot 'release-notes.md'
 
 if (-not (Test-Path $template)) { throw "No release-notes template at $template." }
-if (-not (Test-Path $ZipPath)) { throw "No zip at $ZipPath." }
+foreach ($zip in $ZipPath) { if (-not (Test-Path $zip)) { throw "No zip at $zip." } }
 
 if (-not $BundlePath) {
     $BundlePath = (Get-ChildItem (Join-Path $repo 'src\WinZ3805A\AppPackages') `
@@ -73,8 +75,28 @@ if (-not $signature.TimeStamperCertificate) {
            'Rebuild with a reachable timestamp authority.')
 }
 
-$hash = (Get-FileHash $ZipPath -Algorithm SHA256).Hash
-$zipName = [IO.Path]::GetFileName($ZipPath)
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+
+# One row per zip, online first. The offline zip names the .NET installer it carries, so that is
+# read out of the archive itself: the notes then cannot claim a patch the zip does not have.
+$rows = foreach ($zip in ($ZipPath | Sort-Object { $_ -like '*-offline.zip' })) {
+    $zipName = [IO.Path]::GetFileName($zip)
+    $hash = (Get-FileHash $zip -Algorithm SHA256).Hash
+    "| ``$zipName`` SHA-256 | ``$hash`` |"
+
+    $archive = [IO.Compression.ZipFile]::OpenRead((Resolve-Path $zip).Path)
+    try {
+        $installer = $archive.Entries | Where-Object { $_.FullName -like 'Runtime/dotnet-runtime-*-win-x64.exe' } |
+            Select-Object -First 1
+    }
+    finally {
+        $archive.Dispose()
+    }
+
+    if ($installer -and $installer.Name -match '^dotnet-runtime-(.+)-win-x64\.exe$') {
+        "| .NET Runtime in ``$zipName`` | $($Matches[1]), Microsoft's installer, signed by Microsoft |"
+    }
+}
 
 $notes = Get-Content $template -Raw
 
@@ -87,13 +109,13 @@ $verification = @"
 | Signed by | ``$($signer.Subject)`` |
 | Certificate thumbprint (SHA-1) | ``$($signer.Thumbprint)`` |
 | Certificate expires | $($signer.NotAfter.ToString('d MMMM yyyy')) |
-| Zip SHA-256 | ``$hash`` |
+$($rows -join [Environment]::NewLine)
 
 Windows shows you the thumbprint in the trust prompt; it should match the row
-above. To check the download itself:
+above. To check the download itself, with the name of the zip you downloaded:
 
 ``````powershell
-Get-FileHash .\$zipName -Algorithm SHA256
+Get-FileHash .\WinZ3805A-<version>-x64.zip -Algorithm SHA256
 ``````
 
 The signature is **timestamped**, so this release stays installable after the
@@ -108,10 +130,10 @@ if (-not $OutputPath) {
 
 Set-Content -Path $OutputPath -Value ($notes + $verification) -Encoding utf8
 
-Write-Host "Release notes for $zipName"
+Write-Host "Release notes for $(($ZipPath | ForEach-Object { [IO.Path]::GetFileName($_) }) -join ', ')"
 Write-Host "  signed by   $($signer.Subject)"
 Write-Host "  thumbprint  $($signer.Thumbprint)"
 Write-Host "  expires     $($signer.NotAfter.ToString('yyyy-MM-dd'))"
-Write-Host "  sha-256     $hash"
+$rows | ForEach-Object { Write-Host "  $_" }
 
 $OutputPath

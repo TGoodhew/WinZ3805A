@@ -186,12 +186,16 @@ jobs:
       - name: What was built
         shell: pwsh
         run: |
-          $zip = Get-ChildItem 'dist/*.zip' | Select-Object -First 1
+          # Two zips from one build since #588: online, and offline with Microsoft's .NET installer.
+          $zips = @(Get-ChildItem 'dist/*.zip')
+          if ($zips.Count -ne 2) { throw "Expected the online and the offline zip; found $($zips.Count)." }
           $bundle = Get-ChildItem 'src/WinZ3805A/AppPackages' -Recurse -Filter '*.msixbundle' |
             Sort-Object LastWriteTime -Descending | Select-Object -First 1
           $signature = Get-AuthenticodeSignature $bundle.FullName
 
-          Write-Host "zip         $($zip.Name)  ($([math]::Round($zip.Length / 1MB)) MB)"
+          foreach ($zip in $zips) {
+            Write-Host "zip         $($zip.Name)  ($([math]::Round($zip.Length / 1MB)) MB)"
+          }
           Write-Host "signed by   $($signature.SignerCertificate.Subject)"
           Write-Host "timestamped $($signature.TimeStamperCertificate.Subject)"
 
@@ -211,14 +215,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $zip = (Get-ChildItem 'dist/*.zip' | Select-Object -First 1).FullName
+          $zips = @(Get-ChildItem 'dist/*.zip' | ForEach-Object FullName)
 
-          # The certificate thumbprint and the zip's SHA-256 are read off what
+          # The certificate thumbprint and each zip's SHA-256 are read off what
           # actually shipped rather than written into the template, so the notes
           # cannot describe a different file than the one attached.
-          $notes = ./build/New-ReleaseNotes.ps1 -ZipPath $zip | Select-Object -Last 1
+          $notes = ./build/New-ReleaseNotes.ps1 -ZipPath $zips | Select-Object -Last 1
 
-          gh release create $env:GITHUB_REF_NAME $zip `
+          gh release create $env:GITHUB_REF_NAME @zips `
             --title "WinZ3805A $env:GITHUB_REF_NAME" `
             --notes-file $notes `
             --generate-notes `
