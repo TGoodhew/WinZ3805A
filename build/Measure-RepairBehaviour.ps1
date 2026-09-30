@@ -52,6 +52,11 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+
+# powershell.exe -File passes "-Skip C,D" as ONE string, "C,D", not an array - it does not parse
+# arguments as PowerShell would - so a run meant to skip five scenarios skipped none (30 Sep 2026).
+$Skip = @($Skip | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim().ToUpperInvariant() } | Where-Object { $_ })
+
 $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $report = Join-Path ([Environment]::GetFolderPath('Desktop')) "repair-measurements-$stamp.txt"
 
