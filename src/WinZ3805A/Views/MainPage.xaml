@@ -310,9 +310,20 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <StackPanel Orientation="Horizontal"
-                        Spacing="{StaticResource WzSpaceXxs}"
-                        VerticalAlignment="Center">
+            <!--
+                A grid and not a horizontal StackPanel, so that the status line can trim. A
+                horizontal StackPanel measures its children at unbounded width, so the text never
+                learned it was short of room: CharacterEllipsis never fired, and the column clipped
+                it mid-character instead - "COM3 - 960" with nothing to say it had been cut. The
+                pill's gap is its own margin rather than ColumnSpacing, because a Grid spaces its
+                columns apart even while the pill in one of them is collapsed.
+            -->
+            <Grid VerticalAlignment="Center">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
                 <!--
                     A11Y-12's second channel for §10.3's staleness (#32), now through the one
                     renderer §9.13 item 10 allows (#320).
@@ -334,16 +345,18 @@
                     Collapsed when the reading is fresh, because a fresh reading has nothing to say.
                 -->
                 <controls:SeverityPill x:Name="FooterStalenessPill"
+                                       Margin="0,0,4,0"
                                        VerticalAlignment="Center"
                                        Visibility="Collapsed" />
 
                 <TextBlock x:Name="FooterText"
+                           Grid.Column="1"
                            Style="{StaticResource WzCaptionTextStyle}"
                            Foreground="{ThemeResource WzTextTertiaryBrush}"
                            VerticalAlignment="Center"
                            TextWrapping="NoWrap"
                            TextTrimming="CharacterEllipsis" />
-            </StackPanel>
+            </Grid>
 
             <StackPanel x:Name="FooterCommands"
                         Grid.Column="1"

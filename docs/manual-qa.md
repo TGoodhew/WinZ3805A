@@ -853,12 +853,12 @@ scaling. Only a real display at a scaling other than 100 % shows whether the sec
 | | |
 |---|---|
 | **Do** | With a receiver connected, drag the window's left edge in until it stops at its minimum width. Then drag the bottom edge up slowly until the footer disappears, and back down. |
-| **Pass** | At the minimum width the clock line wraps onto two lines, breaking before the date and never inside it, and the badge and globe button stay on screen beside it, centred on both lines (#581). Dragging up, the footer, readouts and clock line disappear together before the clock line is clipped; dragging down, they come back with the clock line whole. Right-click the clock line and copy it: the pasted text is one line with ordinary spaces. |
+| **Pass** | At the minimum width the clock line wraps onto two lines, breaking before the date and never inside it, and the badge and globe button stay on screen beside it, centred on both lines (#581). The status line, where it no longer fits beside Details, the pin and Connect, ends in an ellipsis rather than being cut mid-character. Dragging up, the footer, readouts and clock line disappear together before the clock line is clipped; dragging down, they come back with the clock line whole. Right-click the clock line and copy it: the pasted text is one line with ordinary spaces. |
 
 **Last run:** 30 Sep 2026, 100 % only, against the packaged Debug build with the Z3805A on COM3 in
 Pacific time.
 - **First launch:** it opened at 553 × 504, with 537 × 495 of content. The clock line (336 px), badge and globe button were all on screen, the text centred on the controls, and the status line whole beside the three buttons.
-- **Minimum width, 380 of content:** at 495 to 498 of height the short layout showed; from 499 the full layout, with the clock at 244 × 36 on two lines (`09:18:54 Pacific Daylight Time ·` then `30 Sep 2026`), and both controls on screen at y 686–718 against the text's 684–720. The copy was not tried.
+- **Minimum width, 380 of content:** at 495 to 498 of height the short layout showed; from 499 the full layout, with the clock at 244 × 36 on two lines (`09:18:54 Pacific Daylight Time ·` then `30 Sep 2026`), and both controls on screen at y 686–718 against the text's 684–720. The copy was not tried. Tony confirmed the wrap, and then the status line's ellipsis, by eye.
 
 **150 % is still owed.**
 
