@@ -17,8 +17,17 @@
          runtime of its own (#586, #588).
       3. Install the Windows App Runtime, if it is not already there.
       4. Install the application itself.
+      5. Replace any EARLIER COPY that this version cannot upgrade (#590). A
+         release signed under a different publisher is a different package
+         family to Windows, so it installs alongside rather than over the old
+         one - as v1.3.1 did over every release from v1.0.1 to v1.3.0, and as
+         the Store identity will again. Its data is saved to Documents and moved
+         into the new copy, then the earlier copy is removed; the certificates
+         earlier releases were signed with come out of Trusted People in the
+         same administrator prompt as step 1. A release under the SAME publisher
+         needs none of this: Windows upgrades it in place.
 
-    Steps 3 and 4 run as the person who started this, NOT elevated, and that is
+    Steps 3 to 5 run as the person who started this, NOT elevated, and that is
     deliberate. Installing an app is a per-user operation: elevating the whole
     script would install it for whichever administrator the UAC prompt
     authenticated, which on a shared machine is not the person at the keyboard.
@@ -45,7 +54,9 @@ param(
     # on a clean VM on 30 Sep 2026 (#588). Hence names nothing else would use.
     [switch]$AsAdministrator,
     [switch]$TrustCertificate,
-    [string]$DotNetInstallerPath
+    [string]$DotNetInstallerPath,
+    # Thumbprints, comma-separated, of certificates earlier releases were signed with.
+    [string]$RemoveCertificates
 )
 
 $ErrorActionPreference = 'Stop'
@@ -68,6 +79,16 @@ $dotnetPage = 'https://dotnet.microsoft.com/download/dotnet/10.0'
 # the one setting that decides whether Windows patches .NET by itself.
 $microsoftUpdateId = '7971f918-a847-4430-9279-4a52d1efe18d'
 
+# Certificates published releases were signed with and no longer are (#590). Listed by thumbprint,
+# which names one certificate exactly, so a leftover is found even when the application it came
+# with was removed by hand long ago - which is how it is usually left behind, since removing an
+# app in Settings never touches Trusted People. Measured on the development machine on
+# 30 Sep 2026: the first entry was still trusted there, a day after its application had gone.
+$retiredThumbprints = @(
+    # Every release from v1.0.1 to v1.3.0, under the earlier publisher identity.
+    '655D07E31BDA80CBF6AAC2F2635EA6664B9399DD'
+)
+
 function Write-Step { param([string]$Text) Write-Host ''; Write-Host $Text -ForegroundColor Cyan }
 function Write-Ok { param([string]$Text) Write-Host "  $Text" -ForegroundColor Green }
 function Write-Info { param([string]$Text) Write-Host "  $Text" -ForegroundColor Gray }
@@ -89,6 +110,15 @@ function Get-DotNet10 {
         Select-Object -First 1 -ExpandProperty Name
 }
 
+# Where a package family's copy of this application keeps everything it stores: the history
+# (trend.db), the settings files and the logs. Every release since v1.0.1 writes only under
+# %LOCALAPPDATA%\WinZ3805A, which Windows redirects into the package's own LocalCache - checked
+# against every tag - so this one folder is the whole of a copy's data.
+function Get-DataFolder {
+    param([string]$Family)
+    Join-Path $env:LOCALAPPDATA "Packages\$Family\LocalCache\Local\WinZ3805A"
+}
+
 # $true when Microsoft Update is on, $false when it is off, $null when Windows would not say.
 function Test-MicrosoftUpdate {
     try {
@@ -105,8 +135,10 @@ function Test-MicrosoftUpdate {
 
 # ---------------------------------------------------------------------------
 # The elevated half: one certificate into one store, and - offline only - one
-# Microsoft installer. Exit codes: 10, the certificate; 20, the runtime
-# installer failed; 21, the runtime installer is not signed by Microsoft.
+# Microsoft installer, and the certificates earlier releases left behind.
+# Exit codes: 10, the certificate; 20, the runtime installer failed; 21, the
+# runtime installer is not signed by Microsoft; 30, an earlier certificate
+# could not be removed.
 # ---------------------------------------------------------------------------
 if ($AsAdministrator) {
     if ($TrustCertificate) {
@@ -117,6 +149,17 @@ if ($AsAdministrator) {
         # Microsoft. Root would do both.
         certutil.exe -addstore TrustedPeople $certificate.FullName | Out-Null
         if ($LASTEXITCODE -ne 0) { exit 10 }
+    }
+
+    if ($RemoveCertificates) {
+        # Only ever from TrustedPeople, only by exact thumbprint, and only thumbprints the
+        # unelevated half chose and showed the person before asking - see step 1.
+        foreach ($stale in ($RemoveCertificates -split ',')) {
+            $path = "Cert:\LocalMachine\TrustedPeople\$($stale.Trim())"
+            if (Test-Path $path) {
+                try { Remove-Item $path -Force -ErrorAction Stop } catch { exit 30 }
+            }
+        }
     }
 
     if ($DotNetInstallerPath) {
@@ -147,13 +190,79 @@ Write-Host ''
 if (-not $certificate) { throw 'The certificate is missing from this folder. Download the release again.' }
 if (-not $bundle) { throw 'The application package is missing from this folder. Download the release again.' }
 
+$signingCertificate = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2 `
+    -ArgumentList $certificate.FullName
+$thumbprint = $signingCertificate.Thumbprint
+
+# The package's publisher IS the certificate's subject - New-SideloadPackage.ps1 refuses to build
+# otherwise - so this is the identity being installed, read off what is in the folder.
+$publisher = $signingCertificate.Subject
+
+# ---------------------------------------------------------------------------
+# Earlier copies (#590). Found now, acted on after the new copy is installed.
+# ---------------------------------------------------------------------------
+# An EARLIER COPY is WinZ3805A under any other publisher: a different package family, which this
+# install would sit beside rather than replace. Read from Windows, never named here. Store-signed
+# copies are never touched by a sideload installer. Other Windows accounts are not looked at -
+# that needs rights this half does not have, and their copies are theirs.
+$allCopies = @(Get-AppxPackage -Name 'WinZ3805A' -ErrorAction SilentlyContinue)
+$earlier = @($allCopies | Where-Object { $_.Publisher -ne $publisher -and $_.SignatureKind -ne 'Store' } |
+    Sort-Object { [version]$_.Version } -Descending)
+$keptPublishers = @($allCopies | Where-Object { $earlier.PackageFullName -notcontains $_.PackageFullName } |
+    ForEach-Object Publisher)
+
+# A certificate is stale if a published release was signed with it, or it vouches for an earlier
+# copy being removed - and in neither case if it is the one being installed, or anything left
+# installed still carries its publisher.
+$staleCertificates = @(Get-ChildItem Cert:\LocalMachine\TrustedPeople -ErrorAction SilentlyContinue |
+    Where-Object {
+        $_.Thumbprint -ne $thumbprint -and
+        $keptPublishers -notcontains $_.Subject -and
+        (($retiredThumbprints -contains $_.Thumbprint) -or ($earlier.Publisher -contains $_.Subject))
+    })
+
+# A running copy holds the serial port and its own files, and one that lives in the notification
+# area for weeks is very likely running. Asked to close, never closed: it may be mid-survey.
+while (Get-Process -Name 'WinZ3805A' -ErrorAction SilentlyContinue) {
+    Write-Host ''
+    Write-Host '  WinZ3805A is running. Close it before installing:' -ForegroundColor Yellow
+    Write-Host '  right-click its icon by the clock and choose Exit, or in its Details window,' -ForegroundColor Yellow
+    Write-Host '  Settings > Exit WinZ3805A.' -ForegroundColor Yellow
+    Read-Host '  Press Enter once it has closed'
+}
+
+if ($earlier.Count -gt 0 -or $staleCertificates.Count -gt 0) {
+    Write-Step 'Before anything changes'
+
+    foreach ($copy in $earlier) {
+        Write-Info "An earlier WinZ3805A is installed: version $($copy.Version) ($($copy.PackageFamilyName))."
+    }
+
+    if ($earlier.Count -gt 0) {
+        Write-Info 'It was signed under an earlier publisher identity, so Windows treats this'
+        Write-Info 'version as a different application and cannot upgrade it. After installing,'
+        Write-Info 'this installer will:'
+        Write-Info '  - save its data - history, settings and logs - to your Documents folder;'
+        Write-Info '  - move that data into the new copy, if the new copy has none yet;'
+        Write-Info '  - then remove the earlier copy.'
+        Write-Info 'Nothing is removed until the data has been saved.'
+    }
+
+    foreach ($stale in $staleCertificates) {
+        Write-Info "An earlier release's certificate will be removed from Trusted People:"
+        Write-Info "  $($stale.Thumbprint.Substring(0, 8))..., expires $($stale.NotAfter.ToString('d MMM yyyy'))."
+    }
+
+    if ($staleCertificates.Count -gt 0) {
+        Write-Info 'It is no longer needed, and left in place it would go on vouching for'
+        Write-Info 'anything signed with it.'
+    }
+}
+
 # ---------------------------------------------------------------------------
 # 1. Trust
 # ---------------------------------------------------------------------------
 Write-Step '1 of 4  Trusting the signature'
-
-$thumbprint = (New-Object System.Security.Cryptography.X509Certificates.X509Certificate2 `
-        -ArgumentList $certificate.FullName).Thumbprint
 
 $trustNeeded = -not (Test-Path "Cert:\LocalMachine\TrustedPeople\$thumbprint")
 
@@ -216,12 +325,21 @@ else {
 }
 
 # ---------------------------------------------------------------------------
-# The one administrator prompt, for whichever of steps 1 and 2 need it.
+# The one administrator prompt, for whichever of the above need it.
 # ---------------------------------------------------------------------------
-if ($trustNeeded -or $dotnetNeeded) {
+$elevationNeeded = $trustNeeded -or $dotnetNeeded -or ($staleCertificates.Count -gt 0)
+
+if (-not $elevationNeeded -and $earlier.Count -gt 0) {
+    # Nothing needs administrator rights, but an earlier copy is about to be replaced, and that is
+    # not something to do without the person having read what it means.
     Write-Host ''
-    Write-Info 'Windows will now ask once for administrator permission, for the step'
-    Write-Info $(if ($trustNeeded -and $dotnetNeeded) { 'or steps above that need it.' } else { 'above that needs it.' })
+    Read-Host '  Press Enter to continue, or close this window to stop'
+}
+
+if ($elevationNeeded) {
+    Write-Host ''
+    Write-Info 'Windows will now ask once for administrator permission, for everything'
+    Write-Info 'above that needs it.'
     Write-Info ''
 
     # Wait for the reader before raising the prompt. Without this the UAC dialog
@@ -238,6 +356,7 @@ if ($trustNeeded -or $dotnetNeeded) {
     )
     if ($trustNeeded) { $arguments += '-TrustCertificate' }
     if ($dotnetNeeded) { $arguments += @('-DotNetInstallerPath', "`"$($dotnetInstaller.FullName)`"") }
+    if ($staleCertificates.Count -gt 0) { $arguments += @('-RemoveCertificates', (($staleCertificates | ForEach-Object Thumbprint) -join ',')) }
 
     if ($dotnetNeeded) { Write-Info 'Installing .NET 10 can take a minute or two.' }
 
@@ -248,6 +367,7 @@ if ($trustNeeded -or $dotnetNeeded) {
         10 { throw 'The certificate was not trusted, so the application cannot be installed. Nothing else has been changed.' }
         21 { throw "$($dotnetInstaller.Name) is not validly signed by Microsoft, so it was not run. Download the release again." }
         20 { throw ".NET 10 did not install. Microsoft's installer wrote what happened to dotnet-install.log in this folder. You can also install it from $dotnetPage and run this again." }
+        30 { throw 'An earlier release''s certificate could not be removed from Trusted People. Nothing else was changed; run this installer again, or remove it in certlm.msc.' }
         default { throw 'The administrator step did not complete - most likely the permission prompt was declined. Run this installer again and agree to it.' }
     }
 
@@ -261,6 +381,10 @@ if ($trustNeeded -or $dotnetNeeded) {
             throw "Microsoft's installer reported success, but .NET 10 cannot be found. See dotnet-install.log in this folder."
         }
         Write-Ok ".NET $dotnet installed."
+    }
+
+    foreach ($stale in $staleCertificates) {
+        Write-Ok "Removed the earlier certificate $($stale.Thumbprint.Substring(0, 8))... from Trusted People."
     }
 }
 
@@ -414,6 +538,73 @@ catch {
     }
 
     throw
+}
+
+# ---------------------------------------------------------------------------
+# The earlier copy (#590), now that the new one is safely installed.
+# ---------------------------------------------------------------------------
+# In this order and no other: save the data, move it across, and only then remove the package -
+# removing a package deletes everything it stored, and Tony's own move off the earlier identity
+# carried 22,277 samples of history (#584). If the save fails, the earlier copy stays.
+if ($earlier.Count -gt 0) {
+    Write-Step 'Replacing the earlier copy'
+
+    $newCopy = Get-AppxPackage -Name 'WinZ3805A' -ErrorAction SilentlyContinue |
+        Where-Object { $_.Publisher -eq $publisher } | Select-Object -First 1
+    $newRoot = if ($newCopy) { Join-Path $env:LOCALAPPDATA "Packages\$($newCopy.PackageFamilyName)" } else { $null }
+    $newData = if ($newCopy) { Get-DataFolder $newCopy.PackageFamilyName } else { $null }
+    $moved = $false
+
+    foreach ($copy in $earlier) {
+        $oldData = Get-DataFolder $copy.PackageFamilyName
+        $saved = $null
+
+        if ((Test-Path $oldData) -and (Get-ChildItem $oldData -Force -ErrorAction SilentlyContinue)) {
+            $documents = [Environment]::GetFolderPath('MyDocuments')
+            $saved = Join-Path $documents "WinZ3805A earlier copy $($copy.Version) $(Get-Date -Format 'yyyy-MM-dd HHmm')"
+
+            try {
+                Copy-Item -Path $oldData -Destination $saved -Recurse -ErrorAction Stop
+            }
+            catch {
+                Write-Host "  Could not save the earlier copy's data to $saved, so it has been left installed." -ForegroundColor Yellow
+                Write-Host "  $($_.Exception.Message)" -ForegroundColor Yellow
+                continue
+            }
+
+            Write-Ok "Saved its data to $saved"
+
+            # Moved in only if the new copy has no history of its own, and even then without
+            # replacing any file it already has: robocopy's /XC /XN /XO copy only files absent at
+            # the destination. The newest earlier copy wins; any other stays in Documents.
+            # Windows creates the package's own folders when it installs it; if they are not there,
+            # nothing is created by hand under a package's folder.
+            if (-not $moved -and $newRoot -and (Test-Path $newRoot) -and
+                -not (Test-Path (Join-Path $newData 'trend.db'))) {
+                New-Item -ItemType Directory -Path $newData -Force | Out-Null
+                robocopy.exe $oldData $newData /E /XC /XN /XO /NFL /NDL /NJH /NJS /NP | Out-Null
+                if ($LASTEXITCODE -lt 8) {
+                    $moved = $true
+                    Write-Ok 'Moved its history and settings into the new copy.'
+                }
+            }
+
+            if (-not $moved) {
+                Write-Info 'The new copy already has history of its own, so the earlier one was not'
+                Write-Info 'copied over it. To add it: Settings > Import history..., and choose'
+                Write-Info "  $(Join-Path $saved 'trend.db')"
+            }
+        }
+
+        try {
+            Remove-AppxPackage -Package $copy.PackageFullName -ErrorAction Stop
+            Write-Ok "Removed the earlier copy, version $($copy.Version)."
+        }
+        catch {
+            Write-Host "  The earlier copy could not be removed: $($_.Exception.Message)" -ForegroundColor Yellow
+            Write-Host '  Remove it in Settings > Apps; its data is saved as above.' -ForegroundColor Yellow
+        }
+    }
 }
 
 Write-Host ''
