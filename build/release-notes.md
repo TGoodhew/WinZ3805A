@@ -8,10 +8,9 @@ double-click **`Install.cmd`**.
 > *Unblock* → *OK*, **before** extracting. Skipping it makes the installer fail
 > in ways that do not mention the mark.
 
-The zip carries everything the install needs — the signed package with its own
-.NET runtime, its certificate, and the x64 Windows App Runtime — so a bench
-machine with no internet connection and no Visual Studio can install and run it.
-Nothing needs downloading first, .NET included.
+The zip carries everything the install needs — the signed package, its
+certificate, and the x64 Windows App Runtime — so a bench machine with no
+internet connection and no Visual Studio can install from it.
 
 ### Upgrading from 1.3.0 or earlier
 
