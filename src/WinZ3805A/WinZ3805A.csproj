@@ -33,6 +33,17 @@
     <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
     <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-x64</RuntimeIdentifier>
     <PublishProfile Condition="Exists('Properties\PublishProfiles\win-$(Platform).pubxml')">win-$(Platform).pubxml</PublishProfile>
+    <!--
+      §6.3: framework-dependent for .NET AND for the Windows App SDK - the package carries neither
+      runtime. Stated rather than left to the SDK's default, because it was flipped once (#587) and
+      reverted (#588): a runtime inside the package is invisible to Microsoft Update, so every .NET
+      security fix would have been this project's to ship. .NET 10 is installed by Microsoft's own
+      installer instead - by the user from the online zip, or by Install.cmd from the offline zip -
+      and Microsoft services it. The package is made by a build (GenerateAppxPackageOnBuild), not a
+      publish, so these belong here and not only in the publish profile.
+    -->
+    <SelfContained>false</SelfContained>
+    <WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
     <UseWinUI>true</UseWinUI>
     <WinUISDKReferences>false</WinUISDKReferences>
     <EnableMsixTooling>true</EnableMsixTooling>
