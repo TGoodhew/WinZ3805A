@@ -232,6 +232,17 @@ The `Device` library must have zero dependency on `Microsoft.UI.*`. All parsing 
 
     Store-signed copies and other Windows accounts are left alone.
   - **Every run of the installer leaves a log** *(#592)* in `%LOCALAPPDATA%\WinZ3805A Installer\logs`. It records what was found; what was removed or kept and why; the state before and after (Windows build, WinZ3805A packages by publisher ID, the Windows App Runtime and its companions, .NET runtimes, relevant certificates, data folders, Microsoft Update); and every failure with its line. At the end the installer starts the app once. If the app isn't still running 15 s later, the log gets Windows' error events for it and the tail of its own `app.log`: the silent exit #473 was is the case this exists for.
+  - **Repair is running the latest installer again** *(decided 30 Sep 2026, #597)*. It already repairs the Windows App Runtime and its companions, .NET, the certificate, and earlier copies. Once #600 lands it also repairs a broken copy of the same version, escalating:
+    1. **re-register** it from its own folder, which keeps the data;
+    2. then **back up, remove, reinstall and restore**;
+    3. then stop and say so.
+
+    Repairs are offered under *Before anything changes*, not applied silently. "Repaired" means the app wrote its own log after being started (#599) and its data folder is intact. **What was measured** with `build/Measure-RepairBehaviour.ps1` on a clean VM:
+    - installing the same version again is a no-op, so it isn't a repair;
+    - Settings' *Repair* keeps the data;
+    - Settings' *Reset* deletes it, so the installer never uses it and users are told *Repair*, never *Reset*.
+
+    Development copies, Store copies, other accounts and damaged data are reported, not repaired. Damaged data is the app's to check (#601).
   - **In every channel**, Windows patches .NET only when *Receive updates for other Microsoft products* is on. `Install.cmd` reports whether it is and does not change it, since the setting covers every Microsoft product on the machine.
 - **Capabilities in `Package.appxmanifest`:**
   ```xml
