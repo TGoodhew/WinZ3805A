@@ -860,24 +860,47 @@ $startedOk = $null
 
 if ($dotnet -and $installedCopy) {
     Write-Step 'Starting WinZ3805A to check it opens'
+
+    # PROOF IS THE APP'S OWN LOG, NOT A LIVE PROCESS (#599). With .NET missing the process stays
+    # alive - to show Windows' "You must install .NET" prompt - so counting processes passed exactly
+    # the broken install this exists to catch. Measured on a clean VM on 30 Sep 2026 (#597): app.log
+    # was written after the launch in every healthy run and in neither broken one. So it passes only
+    # when the app wrote its log after being started AND is still running 15 s later.
+    $appLog = Join-Path (Get-DataFolder $installedCopy.PackageFamilyName) 'logs\app.log'
     $launchedAt = Get-Date
+    $running = @()
+    $logged = $false
     try {
         Start-Process "shell:AppsFolder\$($installedCopy.PackageFamilyName)!App"
         Start-Sleep -Seconds 15
         $running = @(Get-Process -Name 'WinZ3805A' -ErrorAction SilentlyContinue |
             Where-Object { "$($_.Path)" -like "$($installedCopy.InstallLocation)*" })
-        $startedOk = $running.Count -gt 0
+        $logged = (Test-Path $appLog) -and ((Get-Item $appLog).LastWriteTime -ge $launchedAt)
+        $startedOk = ($running.Count -gt 0) -and $logged
     }
     catch {
         Write-Log "could not start it: $($_.Exception.Message)"
         $startedOk = $false
     }
+    $windows = @($running | Where-Object { $_.MainWindowHandle -ne 0 } | ForEach-Object { "'$($_.MainWindowTitle)'" })
+    Write-Log "start check   processes $($running.Count), windows $(if ($windows.Count) { $windows -join ', ' } else { 'none' }), app.log written since launch $logged"
 
     if ($startedOk) {
         Write-Ok "It is running (process $($running[0].Id))."
     }
+    elseif ($running.Count -gt 0) {
+        # Alive but silent: most often Windows' own .NET prompt, which is a window of this process.
+        Write-Log 'ALIVE BUT NOT STARTED: the process is up and has written no log since launch. What Windows recorded:'
+        Write-Host ''
+        Write-Host '  WinZ3805A did not get going: it is showing a window but has not started.' -ForegroundColor Yellow
+        Write-Host '  If Windows is asking for .NET, install .NET 10 from' -ForegroundColor Yellow
+        Write-Host "  $dotnetPage and start it again." -ForegroundColor Yellow
+    }
     else {
         Write-Log 'NOT RUNNING 15 s after being started. What Windows recorded:'
+    }
+
+    if (-not $startedOk) {
 
         # Errors from the run as a whole for deployment, and since the launch for everything else.
         $sources = @(
@@ -894,7 +917,6 @@ if ($dotnet -and $installedCopy) {
             catch { Write-Log "event         $($filter.LogName): none, or unreadable ($($_.Exception.Message))" }
         }
 
-        $appLog = Join-Path (Get-DataFolder $installedCopy.PackageFamilyName) 'logs\app.log'
         if (Test-Path $appLog) {
             Write-Log "app.log       last lines of $appLog"
             Get-Content $appLog -Tail 40 | ForEach-Object { Write-Log "  | $_" }
@@ -902,7 +924,7 @@ if ($dotnet -and $installedCopy) {
         else { Write-Log "app.log       none at $appLog - it stopped before it could write one" }
 
         Write-Host ''
-        Write-Host '  WinZ3805A did not stay open.' -ForegroundColor Yellow
+        if ($running.Count -eq 0) { Write-Host '  WinZ3805A did not stay open.' -ForegroundColor Yellow }
         Write-Host '  Please report it with the install record named below.' -ForegroundColor Yellow
     }
 }
