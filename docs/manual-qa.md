@@ -855,12 +855,14 @@ scaling. Only a real display at a scaling other than 100 % shows whether the sec
 | **Do** | With a receiver connected, drag the window's left edge in until it stops at its minimum width. Then drag the bottom edge up slowly until the footer disappears, and back down. |
 | **Pass** | At the minimum width the clock line wraps onto two lines, breaking before the date and never inside it, and the badge and globe button stay on screen beside it, centred on both lines (#581). The status line, where it no longer fits beside Details, the pin and Connect, ends in an ellipsis rather than being cut mid-character. Dragging up, the footer, readouts and clock line disappear together before the clock line is clipped; dragging down, they come back with the clock line whole. Right-click the clock line and copy it: the pasted text is one line with ordinary spaces. |
 
-**Last run:** 30 Sep 2026, 100 % only, against the packaged Debug build with the Z3805A on COM3 in
-Pacific time.
+**Last run:** 30 Sep 2026, at 100 % and then 150 %, against the packaged Debug build with the
+Z3805A on COM3 in Pacific time.
 - **First launch:** it opened at 553 × 504, with 537 × 495 of content. The clock line (336 px), badge and globe button were all on screen, the text centred on the controls, and the status line whole beside the three buttons.
 - **Minimum width, 380 of content:** at 495 to 498 of height the short layout showed; from 499 the full layout, with the clock at 244 × 36 on two lines (`09:18:54 Pacific Daylight Time ·` then `30 Sep 2026`), and both controls on screen at y 686–718 against the text's 684–720. The copy was not tried. Tony confirmed the wrap, and then the status line's ellipsis, by eye.
+- **150 %, minimum width** (144 DPI, Tony at the desktop): 380 × 501 of content. The clock wrapped to 244 × 36 effective, breaking before the date. The badge and globe button were on screen, their centre at y 687 in line with the text's. The status line ended `1.3.0.0 · COM3 · 9…` before the three buttons, each 32 effective high.
+- **150 %, first launch** (`window.json` renamed away): 828 × 755 physical, **537 × 495 effective**, the same content size as at 100 %. So the second pass, at the real scaling, landed; the first alone would have left about 358 wide. The clock was on one line and whole, and so was the status line (`… · updating…`) beside the buttons.
 
-**150 % is still owed.**
+Both 150 % runs used the old 1.3.0 package registration, which points at the same build folder as the 1.3.1 one, so the code under test was the same; only the version in the status line differs.
 
 ## Before a release
 
