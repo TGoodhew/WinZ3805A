@@ -837,8 +837,8 @@ thickened the bar by 16 px and clipped the compact medallion.
 
 **Why.** With no stored placement, which is every first launch and every launch after a stored
 display has gone, the main window used to open at the size Windows gives any new window. On the
-5120 × 1440 bench that was 3840 × 1023, around a layout 380 wide. It now opens at 380 × 472 content,
-the least height at which the footer and its Connect button show. The display's scaling is not known
+5120 × 1440 bench that was 3840 × 1023, around a layout 380 wide. It now opens at 380 × 495 content,
+the least height at which every row of the layout has its full height (#580). The display's scaling is not known
 until the content loads, so the size is applied twice: once against 100 % and again at the real
 scaling. Only a real display at a scaling other than 100 % shows whether the second one lands.
 
