@@ -1,16 +1,24 @@
 ## Installing
 
-Download **`WinZ3805A-<version>-x64.zip`** below, unblock it, extract it, and
-double-click **`Install.cmd`**.
+Download **one** of the two zips below, unblock it, extract it, and double-click
+**`Install.cmd`**:
+
+- **`WinZ3805A-<version>-x64.zip`**: for a machine with an internet connection.
+  If .NET 10 is not installed, the installer opens Microsoft's download page for it.
+- **`WinZ3805A-<version>-x64-offline.zip`**: for a machine without one. It adds
+  Microsoft's own .NET 10 Runtime installer, run when .NET 10 is missing.
 
 > Unblocking matters: Windows marks anything downloaded from the internet, and
 > the mark survives extraction. Right-click the **zip** → *Properties* → tick
 > *Unblock* → *OK*, **before** extracting. Skipping it makes the installer fail
 > in ways that do not mention the mark.
 
-The zip carries everything the install needs — the signed package, its
-certificate, and the x64 Windows App Runtime — so a bench machine with no
-internet connection and no Visual Studio can install from it.
+Both carry the signed package, its certificate and the x64 Windows App Runtime.
+The application carries **no .NET runtime of its own**. .NET is installed by
+Microsoft's installer and kept patched by Microsoft Update, so a .NET security fix
+reaches you from Microsoft without waiting for this project. Windows applies them
+only when *Settings › Windows Update › Advanced options › Receive updates for
+other Microsoft products* is on, and the installer tells you whether it is.
 
 ### Upgrading from 1.3.0 or earlier
 
@@ -50,6 +58,8 @@ not paying one — so the thumbprint below is what you check it against.
   declares and will install against. Windows 11 is the sensible choice — mainstream servicing
   for 1809 has ended, and only the LTSC Extended channel is still serviced — but the
   application does not require it.
+- **.NET 10 Runtime**, free from Microsoft. The offline zip installs it if it is
+  missing, and the online zip opens its [download page](https://dotnet.microsoft.com/download/dotnet/10.0).
 - A serial port, or a USB-to-serial adapter, wired to the receiver
   (9600-8-N-1 for a Z3805A)
 
