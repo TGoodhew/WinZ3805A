@@ -211,7 +211,14 @@ public sealed partial class MainPage : Page
     /// present and 20 px tall is worse than one that is not present, because it is still a target.
     /// </para>
     /// <para>
-    /// <b>440, not §9.6.2's 472, and the difference is the title bar.</b> §9.6.2's figures are the
+    /// <b>495, not 472: the Connect button was the only thing that sweep watched (#580).</b> The
+    /// clock row is a horizontal stack holding the rollover badge and the time-zone button, both at
+    /// that same 32 px floor, so it needs 32 px at any width — and between 472 and 495 it was where
+    /// the missing height came from: 9 px at 472, cutting the clock through its middle, and a pixel
+    /// more per pixel until 495. Swept a pixel at a time on 30 Sep 2026 with the Z3805A connected.
+    /// </para>
+    /// <para>
+    /// <b>463, not §9.6.2's 495, and the difference is the title bar.</b> §9.6.2's figures are the
     /// window's whole content area, which under <c>ExtendsContentIntoTitleBar</c> includes the
     /// 32 px <c>TitleBar</c>; this page is in the row beneath it, so its <c>ActualHeight</c> is
     /// always 32 less. Comparing §9.6.2's number against the page's own height directly would put
@@ -228,7 +235,7 @@ public sealed partial class MainPage : Page
     /// Public because the window opens at it when there is no placement to restore (#578). Kept
     /// here, beside the switch it names, so the two cannot drift apart.
     /// </remarks>
-    public const int FullLayoutContentHeight = 472;
+    public const int FullLayoutContentHeight = 495;
 
     /// <summary>Picks the one §10.3 layout that fits, and applies it.</summary>
     /// <remarks>
