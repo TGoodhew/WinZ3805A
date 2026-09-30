@@ -345,6 +345,17 @@ non-developer can act on. This is expected to fail; the check is that it fails *
 | **Do** | **A certificate left behind.** On a machine where v1.3.0 was uninstalled from *Settings › Apps*, so its certificate is still trusted: run `Install.cmd`. |
 | **Pass** | *Before anything changes* lists the certificate `655D07E3…` and no earlier copy. After the one prompt, *Trusted People* no longer holds it. |
 
+**Last run of the upgrade rows:** 30 Sep 2026, Tony's clean Windows 11 Pro VM (build 26200), from **v1.2.0** rather than v1.3.0. Both share the earlier identity and certificate. The dry-run artifact of #589 + #591 + #593 + #596 was used, with the online zip. The installer log is quoted in #590's thread. Results:
+- it waited for the running 1.2.0 to be closed;
+- it listed 1.2.0.0 and `655D07E3…`;
+- **one** administrator prompt trusted `7F47E8D7…` and removed `655D07E3…`;
+- the runtime was *already present (2.5.1.0)*, the Store's, so nothing was installed: #595's case on Windows 11;
+- the companions matched 2.5.1.0 (Main 2.5.1.0, Singleton 8002.5.1.0);
+- 1.2.0's data was saved to Documents and moved, then 1.2.0 was removed;
+- the start check reported the app running.
+
+The previous attempt had found the parameter-collision bug that #589 fixes: a successful prompt was reported as declined. **Windows 10 and the offline zip are still to run.**
+
 ---
 
 ## 13. The guide's screenshots still show the application
