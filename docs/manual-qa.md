@@ -833,6 +833,22 @@ thickened the bar by 16 px and clipped the compact medallion.
 
 **Hover testing is only real with real input.** `SetCursorPos` moves the pointer without a pointer event, so no tooltip opens, even on the globe button. Only `SendInput` or `mouse_event` movement proves a tooltip.
 
+## 23. A window with nothing to restore opens at the full layout (#578)
+
+**Why.** With no stored placement, which is every first launch and every launch after a stored
+display has gone, the main window used to open at the size Windows gives any new window. On the
+5120 × 1440 bench that was 3840 × 1023, around a layout 380 wide. It now opens at 380 × 472 content,
+the least height at which the footer and its Connect button show. The display's scaling is not known
+until the content loads, so the size is applied twice: once against 100 % and again at the real
+scaling. Only a real display at a scaling other than 100 % shows whether the second one lands.
+
+| | |
+|---|---|
+| **Do** | Exit the application from its tray menu. Delete `window.json` from `%LOCALAPPDATA%\Packages\<package family>\LocalCache\Local\WinZ3805A\`. Start the application. Repeat at 150 % display scaling. |
+| **Pass** | Both times the window opens narrow and in the standard layout, with the readout row, the figures of merit, the clock line and the footer all showing, and the Connect button whole. Nothing is clipped at the bottom, and the window is no taller than it needs to be. |
+
+**Last run:** not yet.
+
 ## Before a release
 
 Sections 1–4, 8, 9, 11 and 13 in full, then **12 on the published artifact** — which means the release
@@ -848,7 +864,8 @@ broadcasting receiver is to hand and anything on the transport's byte path has c
 one glance at one readout, and the failure it catches is a value quietly not arriving, which no
 other check in this list would notice; **section 18 if the tray icon's code has changed** — it
 costs half a minute; **section 22 if the pin, the tray menu or the main window's title bar has
-changed**; **section 19 if window placement has changed and a second display is to hand**; **section 20 if
+changed**; **section 19 if window placement has changed and a second display is to hand**; **section 23 if
+window placement or the main window's layout heights have changed**; **section 20 if
 anything on the launch or connect-on-launch path has changed**, since only a real sign-in reaches it;
 **section 21 whenever `trend.db`'s schema or the history export has changed**, since an export that
 a later version cannot import loses the history of everyone who relied on it. Section 15 is not a release
