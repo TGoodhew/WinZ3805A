@@ -49,6 +49,10 @@ before and after. The installer starts WinZ3805A once at the end, and the record
 stayed open; if it didn't, it includes Windows' error entries for it. The installer prints the
 path as it finishes. Please attach the file to any report.
 
+If WinZ3805A stops starting later, **run the newest `Install.cmd` again**: it checks and puts right
+what it installed, and keeps your data. Windows' *Settings › Apps › WinZ3805A › Advanced options ›
+**Repair*** is also safe. **Reset** in the same place deletes your history and settings.
+
 ### About the certificate prompt
 
 The package is signed with a **self-signed certificate**, so `Install.cmd` asks

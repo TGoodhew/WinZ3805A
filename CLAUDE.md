@@ -688,7 +688,8 @@ tools/NmeaSimulator/          the NMEA 0183 talker the tests and the tutorial ru
 tools/UccmSimulator/          the UCCM shapes the driver was written against, before hardware
 build/                        the gate scripts, the five capture, transitions and soak harnesses,
                               the two guide-image capture scripts, the sideload packager, the
-                              palette derivation
+                              repair-measurement harness for a test VM (#597), the palette
+                              derivation
 .github/workflows/ci.yml      the gates in their own jobs, alongside the Debug and Release builds and the tests
 ```
 

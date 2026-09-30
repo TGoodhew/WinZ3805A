@@ -67,6 +67,12 @@ IF SOMETHING GOES WRONG
   one file per run, named by date and time, and the installer prints the
   path as it finishes. Please include it when reporting a problem.
 
+  If WinZ3805A stops starting, run the newest Install.cmd again: it checks
+  and puts right the pieces it installed, and keeps your data. Windows'
+  own Settings > Apps > WinZ3805A > Advanced options > Repair is also safe.
+  Do NOT use Reset there unless you mean it: it deletes your history and
+  settings.
+
 
 IF AN EARLIER WINZ3805A IS INSTALLED
 
