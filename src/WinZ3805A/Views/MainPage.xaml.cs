@@ -218,7 +218,17 @@ public sealed partial class MainPage : Page
     /// the switch a title bar too late — which it did, and the sweep found it.
     /// </para>
     /// </remarks>
-    private const double ShortLayoutHeight = 472 - 32;
+    private const double ShortLayoutHeight = FullLayoutContentHeight - 32;
+
+    /// <summary>
+    /// The least window content height, in §9.6.2's units, at which the whole §10.3 layout shows —
+    /// footer and Connect button included. Measured; see <see cref="ShortLayoutHeight"/>.
+    /// </summary>
+    /// <remarks>
+    /// Public because the window opens at it when there is no placement to restore (#578). Kept
+    /// here, beside the switch it names, so the two cannot drift apart.
+    /// </remarks>
+    public const int FullLayoutContentHeight = 472;
 
     /// <summary>Picks the one §10.3 layout that fits, and applies it.</summary>
     /// <remarks>

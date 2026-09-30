@@ -86,6 +86,16 @@ public sealed partial class MainWindow : Window
     /// <summary>Recomputes the §10.3 floor when the display scaling under the window changes.</summary>
     private readonly ScalingWatch _scaling;
 
+    /// <summary>
+    /// Whether the opening size still has to be applied at the display's real scaling (#578).
+    /// </summary>
+    /// <remarks>
+    /// Set when there was no placement to restore. The size is applied at once against 1.0, which
+    /// is right at 100 %, and again when the first scaling arrives with the content — without the
+    /// second, a 150 % display would open two-thirds of the size, under the height the footer needs.
+    /// </remarks>
+    private bool _openingSizePending;
+
     /// <summary>Creates the window over the application's services.</summary>
     /// <param name="services">
     /// The §12 composition root. Passed on to the page as the navigation parameter rather than
@@ -141,7 +151,7 @@ public sealed partial class MainWindow : Window
         _page = page;
         RootFrame.Content = page;
 
-        _scaling = new ScalingWatch(ApplyMinimumSize);
+        _scaling = new ScalingWatch(OnScalingChanged);
 
         RestorePlacement();
 
@@ -492,6 +502,12 @@ public sealed partial class MainWindow : Window
 
         if (placement is null)
         {
+            // Nothing to restore, so the system has placed the window and sized it as it sizes any
+            // new one - 3840 x 1023 on a 5120 x 1440 display, around a layout 380 wide (#578). The
+            // position stays the system's; the size is ours. A compact window is already at its
+            // floor, which is compact's whole size.
+            _openingSizePending = _page?.IsCompact != true;
+            ApplyOpeningSize();
             return;
         }
 
@@ -540,18 +556,7 @@ public sealed partial class MainWindow : Window
     /// </remarks>
     private void ApplyMinimumSize()
     {
-        double scale = Content?.XamlRoot?.RasterizationScale ?? 1.0;
-
-        // AppWindow reports both, so the chrome is measured on the window it applies to rather than
-        // assumed from a border width that varies with theme, DPI and window style.
-        int chromeWidth = Math.Max(0, AppWindow.Size.Width - AppWindow.ClientSize.Width);
-        int chromeHeight = Math.Max(0, AppWindow.Size.Height - AppWindow.ClientSize.Height);
-
-        (int width, int height) = WindowSizing.PhysicalMinimum(
-            MinimumContentWidth, MinimumContentHeight, scale, chromeWidth, chromeHeight);
-
-        (width, height) = WindowSizing.ClampToWorkArea(
-            width, height, DisplayWorkAreas.ForWindow(AppWindow));
+        (int width, int height) = WindowSizeFor(MinimumContentWidth, MinimumContentHeight);
 
         _minimum = new SizeInt32(width, height);
 
@@ -571,6 +576,63 @@ public sealed partial class MainWindow : Window
         if (grownWidth != AppWindow.Size.Width || grownHeight != AppWindow.Size.Height)
         {
             AppWindow.Resize(new SizeInt32(grownWidth, grownHeight));
+        }
+    }
+
+    /// <summary>
+    /// Converts a §9.6.2 content size into this window's physical size, capped at its display.
+    /// </summary>
+    /// <remarks>
+    /// The three steps are the Details window's, in the same order and for the same reasons: read
+    /// the figure as content, convert it at this window's scaling and chrome, then cap it at the
+    /// display so no size asked for here can exceed the screen it is applied on.
+    /// </remarks>
+    private (int Width, int Height) WindowSizeFor(int contentWidth, int contentHeight)
+    {
+        double scale = Content?.XamlRoot?.RasterizationScale ?? 1.0;
+
+        // AppWindow reports both, so the chrome is measured on the window it applies to rather than
+        // assumed from a border width that varies with theme, DPI and window style.
+        int chromeWidth = Math.Max(0, AppWindow.Size.Width - AppWindow.ClientSize.Width);
+        int chromeHeight = Math.Max(0, AppWindow.Size.Height - AppWindow.ClientSize.Height);
+
+        (int width, int height) = WindowSizing.PhysicalMinimum(
+            contentWidth, contentHeight, scale, chromeWidth, chromeHeight);
+
+        return WindowSizing.ClampToWorkArea(width, height, DisplayWorkAreas.ForWindow(AppWindow));
+    }
+
+    /// <summary>
+    /// Sizes a window that had no placement to restore: the §9.6.2 width, and the height at which
+    /// the whole §10.3 layout shows (#578).
+    /// </summary>
+    /// <remarks>
+    /// Not the 240 floor, which is where the Details window opens and where this one would be
+    /// simplest to put. At 240 §9.6.2 collapses the footer, and the launch with nothing to restore
+    /// is a first run - the one launch where the user's next action is the Connect button.
+    /// </remarks>
+    private void ApplyOpeningSize()
+    {
+        if (_page?.IsCompact == true
+            || Presenter is { State: not OverlappedPresenterState.Restored })
+        {
+            return;
+        }
+
+        (int width, int height) = WindowSizeFor(MinimumContentWidth, MainPage.FullLayoutContentHeight);
+
+        AppWindow.Resize(new SizeInt32(Math.Max(width, _minimum.Width), Math.Max(height, _minimum.Height)));
+    }
+
+    /// <summary>Recomputes the floor, and applies an opening size still owed at this scaling.</summary>
+    private void OnScalingChanged()
+    {
+        ApplyMinimumSize();
+
+        if (_openingSizePending)
+        {
+            _openingSizePending = false;
+            ApplyOpeningSize();
         }
     }
 
