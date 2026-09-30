@@ -231,6 +231,7 @@ The `Device` library must have zero dependency on `Microsoft.UI.*`. All parsing 
     - it removes the certificates earlier releases were signed with from *Trusted People* in the same single administrator prompt. It finds them by thumbprint as well as by the publisher of a copy being removed, because removing an app never removes its certificate.
 
     Store-signed copies and other Windows accounts are left alone.
+  - **Every run of the installer leaves a log** *(#592)* in `%LOCALAPPDATA%\WinZ3805A Installer\logs`. It records what was found; what was removed or kept and why; the state before and after (Windows build, WinZ3805A packages by publisher ID, the Windows App Runtime and its companions, .NET runtimes, relevant certificates, data folders, Microsoft Update); and every failure with its line. At the end the installer starts the app once. If the app isn't still running 15 s later, the log gets Windows' error events for it and the tail of its own `app.log`: the silent exit #473 was is the case this exists for.
   - **In every channel**, Windows patches .NET only when *Receive updates for other Microsoft products* is on. `Install.cmd` reports whether it is and does not change it, since the setting covers every Microsoft product on the machine.
 - **Capabilities in `Package.appxmanifest`:**
   ```xml
