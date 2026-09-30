@@ -1433,6 +1433,15 @@ See the amendment below the table before implementing one of them.
 > the same 32 px floor, and between 472 and 495 it was the row that gave up the height: 9 px at 472,
 > the clock cut through its middle. Swept a pixel at a time, it reaches 32 px at 495, so the rows
 > collapse below that.
+>
+> **Where the width runs short, the clock line wraps, and the threshold rises with it** *(amended
+> 30 Sep 2026, #581)*. At the 380 minimum the line does not fit beside the rollover badge and the
+> time-zone button, and it used to overrun and carry both off screen. It now wraps beside them,
+> **before the date and never inside it** (`ReadoutFormatter.ClockLine`), and the controls stay
+> immediately to its right, centred on both lines. Two lines are 36 px against the row's 32, so the
+> full layout needs 4 px more at that width: 499 in Pacific time at 380, measured. The allowance is
+> calculated from the text at the current width, not read from the row, so it cannot oscillate
+> with the layout it decides.
 
 #### 9.6.3 Density
 

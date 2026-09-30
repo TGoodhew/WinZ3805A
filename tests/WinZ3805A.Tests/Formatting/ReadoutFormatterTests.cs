@@ -303,6 +303,45 @@ public class ReadoutFormatterTests
     [InlineData("—")]
     public void NothingToCopyIsNull(string? text) => Assert.Null(ReadoutFormatter.ToMachineText(text));
 
+    private static readonly DateTimeOffset ClockInstant = new(2026, 9, 30, 9, 6, 1, TimeSpan.FromHours(-7));
+
+    /// <remarks>
+    /// The clock line wraps at the main window's minimum width (#581), and ordinary spaces let it
+    /// break anywhere: the separator could start the second line, or the year leave its date. The
+    /// separator is bound to what precedes it and the date is one unit.
+    /// </remarks>
+    [Fact]
+    public void TheClockLineBreaksOnlyBeforeTheDateOrInsideTheZone()
+    {
+        string line = ReadoutFormatter.ClockLine(ClockInstant, "Pacific Daylight Time", CultureInfo.InvariantCulture);
+
+        string nb = ReadoutFormatter.NoBreakSpace;
+        Assert.Equal($"09:06:01 Pacific Daylight Time{nb}· 30{nb}Sep{nb}2026", line);
+
+        int separator = line.IndexOf('·', StringComparison.Ordinal);
+        Assert.DoesNotContain(' ', line[(separator - 1)..separator]);
+        Assert.DoesNotContain(' ', line[(separator + 2)..]);
+    }
+
+    /// <summary>A pasted time is text a person or a script reads; a no-break space is noise in both.</summary>
+    [Fact]
+    public void CopyingTheClockLineGivesOrdinarySpaces()
+    {
+        string line = ReadoutFormatter.ClockLine(ClockInstant, "UTC", CultureInfo.InvariantCulture);
+
+        Assert.Equal("09:06:01 UTC · 30 Sep 2026", ReadoutFormatter.ToMachineText(line));
+    }
+
+    /// <summary>The time is invariant; the month is the user's.</summary>
+    [Fact]
+    public void TheClockLinesDateIsInTheCallersCulture()
+    {
+        string line = ReadoutFormatter.ClockLine(ClockInstant, "UTC", CultureInfo.GetCultureInfo("de-DE"));
+
+        Assert.StartsWith("09:06:01 UTC", line, StringComparison.Ordinal);
+        Assert.EndsWith($"30{ReadoutFormatter.NoBreakSpace}Sept.{ReadoutFormatter.NoBreakSpace}2026", line, StringComparison.Ordinal);
+    }
+
     /// <remarks>
     /// Ordinary text passes through unchanged: the copy layer is not a sanitiser, and a device
     /// string that happens to contain a hyphen or a word must arrive as the receiver wrote it.

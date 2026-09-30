@@ -158,7 +158,11 @@ public sealed partial class MainPage : Page
 
         // §9.6.2's main row. The window enforces the floor; the page decides what fits inside it,
         // and it has to re-decide on every resize because the two thresholds sit 232 px apart.
-        SizeChanged += (_, _) => ApplyLayoutState();
+        SizeChanged += (_, _) =>
+        {
+            FitClockLine();
+            ApplyLayoutState();
+        };
 
         Loaded += async (_, _) =>
         {
@@ -227,6 +231,21 @@ public sealed partial class MainPage : Page
     /// </para>
     /// </remarks>
     private const double ShortLayoutHeight = FullLayoutContentHeight - 32;
+
+    /// <summary><c>HH:mm:ss</c>, the part of the clock line that changes every second.</summary>
+    private const int ClockTimeLength = 8;
+
+    /// <summary>
+    /// How much taller than one line the clock line is at the page's current width (#581), and so
+    /// how far above <see cref="ShortLayoutHeight"/> the full layout's switch sits.
+    /// </summary>
+    private double _clockOverflow;
+
+    /// <summary>The width <see cref="_clockOverflow"/> was measured at.</summary>
+    private double _clockFitWidth = double.NaN;
+
+    /// <summary>The clock line, less its seconds, that <see cref="_clockOverflow"/> was measured for.</summary>
+    private string? _clockFitKey;
 
     /// <summary>
     /// The least window content height, in §9.6.2's units, at which the whole §10.3 layout shows —
@@ -317,10 +336,9 @@ public sealed partial class MainPage : Page
         {
             for (int month = 1; month <= 12; month++)
             {
-                // The same composition as RenderClock, with a two-digit day in every month.
-                string text = "00:00:00"
-                    + $" {label}"
-                    + new DateTime(2026, month, 28).ToString(" · dd MMM yyyy", CultureInfo.CurrentCulture);
+                // The same composition as RenderClockLine, with a two-digit day in every month.
+                string text = ReadoutFormatter.ClockLine(
+                    new DateTimeOffset(2026, month, 28, 0, 0, 0, TimeSpan.Zero), label, CultureInfo.CurrentCulture);
 
                 widest = Math.Max(widest, TextWidth(text, ClockText));
             }
@@ -395,7 +413,9 @@ public sealed partial class MainPage : Page
     /// </remarks>
     private void ApplyLayoutState()
     {
-        _layout = _compact ? Layout.Compact : ActualHeight < ShortLayoutHeight ? Layout.Short : Layout.Normal;
+        _layout = _compact
+            ? Layout.Compact
+            : ActualHeight < ShortLayoutHeight + _clockOverflow ? Layout.Short : Layout.Normal;
         GoToStateIfChanged(_layout switch
         {
             Layout.Compact => "CompactDensity",
@@ -1114,6 +1134,100 @@ public sealed partial class MainPage : Page
 
     private void RenderClock()
     {
+        RenderClockLine();
+        FitClockLine();
+    }
+
+    /// <summary>
+    /// Wraps the clock line beside its controls when the row is too narrow for it on one line, and
+    /// keeps the full layout's threshold honest about the height that costs (#581).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Why a width is set rather than a column used.</b> The badge and the globe button sit
+    /// immediately to the right of the text, not at the right of the row, so the text cannot take a
+    /// star column. It keeps its natural width and is capped at what the row leaves beside the
+    /// controls that are showing: at the main window's 380 minimum, in Pacific time, that is 260 of
+    /// the 336 it wants, and before this it simply overran, carrying both controls off screen.
+    /// </para>
+    /// <para>
+    /// <b>The extra height is added to the threshold, not left to squeeze.</b> Two lines are 36 px
+    /// against the row's 32, and 495 is a one-line figure (#580), so without this the short
+    /// layout's switch would let the row clip by 4 px at the minimum width. The height comes from a
+    /// probe measured at the width, independent of which layout is showing: reading the row's own
+    /// size instead would read nothing while the short layout has it collapsed, switch back, and
+    /// oscillate.
+    /// </para>
+    /// <para>
+    /// <b>Measured only when the answer can change.</b> This runs with every render, several times a
+    /// second, and the clock's text changes every second - but only in its first eight characters,
+    /// which are fixed-width digits. So the probe runs when the rest of the line or the width
+    /// changes, which is a new zone, a new day, or a resize.
+    /// </para>
+    /// </remarks>
+    private void FitClockLine()
+    {
+        if (ActualWidth <= 0)
+        {
+            return;
+        }
+
+        double controls = ZoneButton.Visibility == Visibility.Visible
+            ? ClockRow.Spacing + Math.Max(ZoneButton.MinWidth, ZoneButton.ActualWidth)
+            : 0;
+
+        if (RolloverBadge.Visibility == Visibility.Visible)
+        {
+            controls += ClockRow.Spacing + RolloverBadge.MinWidth;
+        }
+
+        if (ProvisionalBadge.Visibility == Visibility.Visible)
+        {
+            controls += ClockRow.Spacing + ProvisionalBadge.MinWidth;
+        }
+
+        Thickness margin = RootGrid.Padding;
+        double available = Math.Floor(Math.Max(0, ActualWidth - margin.Left - margin.Right - controls));
+
+        if (ClockText.MaxWidth != available)
+        {
+            ClockText.MaxWidth = available;
+        }
+
+        string text = ClockText.Text;
+        string key = text.Length > ClockTimeLength ? text[ClockTimeLength..] : text;
+
+        if (available == _clockFitWidth && string.Equals(key, _clockFitKey, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _clockFitWidth = available;
+        _clockFitKey = key;
+
+        TextBlock probe = new()
+        {
+            Text = text,
+            FontFamily = ClockText.FontFamily,
+            FontSize = ClockText.FontSize,
+            FontWeight = ClockText.FontWeight,
+            CharacterSpacing = ClockText.CharacterSpacing,
+            LineHeight = ClockText.LineHeight,
+            TextWrapping = TextWrapping.Wrap,
+        };
+        probe.Measure(new Windows.Foundation.Size(available, double.PositiveInfinity));
+
+        double overflow = Math.Max(0, Math.Ceiling(probe.DesiredSize.Height) - ZoneButton.MinHeight);
+
+        if (overflow != _clockOverflow)
+        {
+            _clockOverflow = overflow;
+            ApplyLayoutState();
+        }
+    }
+
+    private void RenderClockLine()
+    {
         if (_model.ShownTime is not DisplayTime shown)
         {
             ClockText.Text = "—";
@@ -1124,9 +1238,7 @@ public sealed partial class MainPage : Page
 
         // The zone label is never omitted. A time without one invites the reader to assume it is
         // theirs, and near local midnight the date is a whole day out if it is not (#95).
-        ClockText.Text = shown.Value.ToString("HH:mm:ss", CultureInfo.InvariantCulture)
-            + $" {shown.ZoneLabel}"
-            + shown.Value.ToString(" · dd MMM yyyy", CultureInfo.CurrentCulture);
+        ClockText.Text = ReadoutFormatter.ClockLine(shown.Value, shown.ZoneLabel, CultureInfo.CurrentCulture);
 
         // §7.4: show the corrected date, flag it, and keep what the hardware said in the tooltip.
         // Never substitute silently — a user who sees the wrong year and no explanation reasonably
