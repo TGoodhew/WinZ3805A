@@ -115,6 +115,27 @@
   <ItemGroup Condition="'$(DisableMsixProjectCapabilityAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
     <ProjectCapability Include="Msix" />
   </ItemGroup>
+
+  <!--
+    The .NET runtime's own third-party notices, which travel with it now the package carries it
+    (#586). THIRD-PARTY-NOTICES.md covers the runtime itself; the runtime in turn contains code
+    under other licences, listed in the notices file its runtime pack ships, and a self-contained
+    build copies the runtime and not that file. Taken from the pack actually restored, so the
+    notices are always the ones for the runtime in the package - a copy kept in the repository
+    would go stale at the first servicing update.
+  -->
+  <Target Name="IncludeDotNetRuntimeNotices" AfterTargets="ResolveFrameworkReferences" Condition="'$(SelfContained)' == 'true'">
+    <ItemGroup>
+      <_DotNetRuntimePackForNotices Include="@(ResolvedRuntimePack)" Condition="'%(ResolvedRuntimePack.FrameworkName)' == 'Microsoft.NETCore.App'" />
+      <_DotNetRuntimeNotices Include="@(_DotNetRuntimePackForNotices->'%(PackageDirectory)\THIRD-PARTY-NOTICES.TXT')" />
+      <Content Include="@(_DotNetRuntimeNotices)"
+               Link="Licenses\dotnet-runtime-THIRD-PARTY-NOTICES.txt"
+               TargetPath="Licenses\dotnet-runtime-THIRD-PARTY-NOTICES.txt"
+               CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+    <Error Condition="'@(_DotNetRuntimeNotices)' == '' or !Exists('@(_DotNetRuntimeNotices)')"
+           Text="The package carries the .NET runtime but its THIRD-PARTY-NOTICES.TXT was not found in the restored runtime pack. It must ship with the runtime (#586)." />
+  </Target>
   <ItemGroup>
     <!--
       §6.1's stack table, as amended 15 Aug 2026, minus four entries that were
