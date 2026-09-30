@@ -145,10 +145,16 @@
                     Orientation="Horizontal"
                     Spacing="{StaticResource WzSpaceXxs}"
                     VerticalAlignment="Top">
+            <!--
+                Centred, like the badge and the button beside it. Left to stretch, the text took the
+                row's full 32 px and drew its one line at the top, so the two controls, centred in
+                the same row, sat visibly below it.
+            -->
             <TextBlock x:Name="ClockText"
                        controls:CopyMenu.IsCopyable="True"
                        Style="{StaticResource WzMonoTextStyle}"
-                       Foreground="{ThemeResource WzTextPrimaryBrush}" />
+                       Foreground="{ThemeResource WzTextPrimaryBrush}"
+                       VerticalAlignment="Center" />
             <!--
                 A11Y-5: pointer targets are >= 32 x 32 px AT ALL TIMES, and §9.10.2's sky-plot
                 markers are the one recorded exception. A bare TextBlock is hit-testable only where
