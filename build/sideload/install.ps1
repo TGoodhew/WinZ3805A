@@ -34,6 +34,13 @@
     They would then see the install succeed and no application anywhere.
 
 .NOTES
+    EVERY RUN WRITES A LOG (#592), to
+    %LOCALAPPDATA%\WinZ3805A Installer\logs\install-<date>-<time>.log, and says
+    where at the end and on any failure. It records what was found, what was
+    removed or kept and why, the state of the machine before and after, and
+    whether the application then started - so "it didn't work" arrives with
+    the file that says why.
+
     The certificate is self-signed, and this script says so plainly rather than
     hurrying the user past it. What it grants is narrow - see the TrustedPeople
     comment below - but it is still a decision the user is entitled to make with
@@ -56,12 +63,52 @@ param(
     [switch]$TrustCertificate,
     [string]$DotNetInstallerPath,
     # Thumbprints, comma-separated, of certificates earlier releases were signed with.
-    [string]$RemoveCertificates
+    [string]$RemoveCertificates,
+    # The run's log, passed to the elevated half so both write to one file.
+    [string]$LogPath
 )
 
 $ErrorActionPreference = 'Stop'
 
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
+
+# ---------------------------------------------------------------------------
+# The log (#592). Set up before anything that can fail, so a failure is in it.
+# ---------------------------------------------------------------------------
+# Under the person's own local application data rather than beside Install.cmd: the extracted
+# folder is often deleted straight after installing, and the log is wanted afterwards, when the
+# application will not start. This script is not packaged, so the path is not redirected.
+if (-not $LogPath) {
+    $logFolder = Join-Path $env:LOCALAPPDATA 'WinZ3805A Installer\logs'
+    New-Item -ItemType Directory -Path $logFolder -Force | Out-Null
+    $LogPath = Join-Path $logFolder ('install-{0}.log' -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
+}
+
+# Never allowed to fail the install: a log that cannot be written is a lost line, not a lost run.
+function Write-Log {
+    param([string]$Text)
+    $prefix = if ($AsAdministrator) { '[elevated] ' } else { '' }
+    try {
+        Add-Content -LiteralPath $LogPath -Encoding UTF8 -ErrorAction Stop `
+            -Value ('{0}  {1}{2}' -f (Get-Date -Format 'HH:mm:ss.fff'), $prefix, $Text)
+    }
+    catch { }
+}
+
+# Every terminating error, wherever it is thrown, with where it came from. The friendly messages
+# below are written for the person at the keyboard; this is written for whoever reads the log.
+trap {
+    Write-Log "FAILED: $($_.Exception.Message)"
+    Write-Log "  at line $($_.InvocationInfo.ScriptLineNumber): $("$($_.InvocationInfo.Line)".Trim())"
+    if ($_.ScriptStackTrace) { Write-Log "  $($_.ScriptStackTrace -replace '\r?\n', ' <- ')" }
+    if (-not $AsAdministrator) {
+        try { Write-State 'at failure' } catch { }
+        Write-Host ''
+        Write-Host "  A record of this install is at $LogPath" -ForegroundColor Yellow
+        Write-Host '  Please include it when reporting the problem.' -ForegroundColor Yellow
+    }
+    break
+}
 $certificate = Get-ChildItem -Path $here -Filter '*.cer' | Select-Object -First 1
 $bundle = Get-ChildItem -Path $here -Filter '*.msixbundle' | Select-Object -First 1
 $runtime = Get-ChildItem -Path (Join-Path $here 'Runtime') -Filter '*.msix' -ErrorAction SilentlyContinue |
@@ -89,9 +136,10 @@ $retiredThumbprints = @(
     '655D07E31BDA80CBF6AAC2F2635EA6664B9399DD'
 )
 
-function Write-Step { param([string]$Text) Write-Host ''; Write-Host $Text -ForegroundColor Cyan }
-function Write-Ok { param([string]$Text) Write-Host "  $Text" -ForegroundColor Green }
-function Write-Info { param([string]$Text) Write-Host "  $Text" -ForegroundColor Gray }
+# What the person sees also goes in the log, so the log reads as the run did.
+function Write-Step { param([string]$Text) Write-Host ''; Write-Host $Text -ForegroundColor Cyan; Write-Log "== $Text" }
+function Write-Ok { param([string]$Text) Write-Host "  $Text" -ForegroundColor Green; Write-Log "ok    $Text" }
+function Write-Info { param([string]$Text) Write-Host "  $Text" -ForegroundColor Gray; if ($Text) { Write-Log "info  $Text" } }
 
 # The newest .NET 10 runtime installed machine-wide, or nothing. Read from the folder the .NET host
 # itself loads from - its location is what the installer records in the registry - because a
@@ -117,6 +165,62 @@ function Get-DotNet10 {
 function Get-DataFolder {
     param([string]$Family)
     Join-Path $env:LOCALAPPDATA "Packages\$Family\LocalCache\Local\WinZ3805A"
+}
+
+# The machine as far as this application is concerned, into the log. Called before anything
+# changes, after everything has, and on failure. Publishers are logged by Windows' short publisher
+# ID and by whether they are this release's, never by name.
+function Write-State {
+    param([string]$Label)
+
+    Write-Log "---- state: $Label ----"
+
+    try {
+        $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
+        Write-Log "windows       $($os.Caption) $($os.Version) build $($os.BuildNumber), $($os.OSArchitecture)"
+    }
+    catch { Write-Log "windows       could not be read: $($_.Exception.Message)" }
+
+    $admin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
+        [Security.Principal.WindowsBuiltInRole]::Administrator)
+    Write-Log "powershell    $($PSVersionTable.PSVersion), $(if ($admin) { 'elevated' } else { 'not elevated' })"
+
+    $copies = @(Get-AppxPackage -Name 'WinZ3805A' -ErrorAction SilentlyContinue)
+    if ($copies.Count -eq 0) { Write-Log 'winz3805a     none installed for this account' }
+    foreach ($copy in $copies) {
+        Write-Log ("winz3805a     {0} {1}, signature {2}, development {3}, publisher id {4}{5}, status {6}" -f
+            $copy.PackageFamilyName, $copy.Version, $copy.SignatureKind, $copy.IsDevelopmentMode,
+            $copy.PublisherId, $(if ($copy.Publisher -eq $publisher) { ' (this release)' } else { ' (another)' }), $copy.Status)
+    }
+
+    foreach ($package in @(Get-AppxPackage -Name '*WinAppRuntime*' -ErrorAction SilentlyContinue) +
+                         @(Get-AppxPackage -Name 'Microsoft.WindowsAppRuntime.*' -ErrorAction SilentlyContinue)) {
+        Write-Log "app runtime   $($package.Name) $($package.Version) $($package.Architecture)"
+    }
+
+    $dotnetFolder = Join-Path $env:ProgramFiles 'dotnet\shared\Microsoft.NETCore.App'
+    $runtimes = @(Get-ChildItem $dotnetFolder -Directory -ErrorAction SilentlyContinue | ForEach-Object Name)
+    Write-Log "dotnet        $(if ($runtimes.Count) { $runtimes -join ', ' } else { 'no Microsoft.NETCore.App runtimes' })"
+
+    $publishers = @($copies | ForEach-Object Publisher)
+    foreach ($trusted in @(Get-ChildItem Cert:\LocalMachine\TrustedPeople -ErrorAction SilentlyContinue)) {
+        $role = if ($trusted.Thumbprint -eq $thumbprint) { 'this release' }
+            elseif ($retiredThumbprints -contains $trusted.Thumbprint) { 'an earlier release' }
+            elseif ($publishers -contains $trusted.Subject) { 'an installed copy''s publisher' }
+            else { $null }
+        if ($role) { Write-Log "certificate   $($trusted.Thumbprint), expires $($trusted.NotAfter.ToString('yyyy-MM-dd')), $role" }
+    }
+
+    foreach ($folder in @(Get-ChildItem (Join-Path $env:LOCALAPPDATA 'Packages') -Filter 'WinZ3805A_*' -Directory -ErrorAction SilentlyContinue)) {
+        $data = Get-DataFolder $folder.Name
+        $trend = Join-Path $data 'trend.db'
+        Write-Log ("data          {0}: {1}" -f $folder.Name, $(
+            if (Test-Path $trend) { "trend.db {0:N1} MB" -f ((Get-Item $trend).Length / 1MB) }
+            elseif (Test-Path $data) { 'data folder, no trend.db' }
+            else { 'no data folder' }))
+    }
+
+    Write-Log "ms update     $(switch (Test-MicrosoftUpdate) { $true { 'on' } $false { 'off' } default { 'unknown' } })"
 }
 
 # $true when Microsoft Update is on, $false when it is off, $null when Windows would not say.
@@ -147,8 +251,9 @@ if ($AsAdministrator) {
         # sign *applications you install by hand* and nothing else. It cannot vouch
         # for a website, and it cannot make arbitrary code look like it came from
         # Microsoft. Root would do both.
-        certutil.exe -addstore TrustedPeople $certificate.FullName | Out-Null
-        if ($LASTEXITCODE -ne 0) { exit 10 }
+        $certutil = certutil.exe -addstore TrustedPeople $certificate.FullName
+        Write-Log "certutil -addstore exited $LASTEXITCODE"
+        if ($LASTEXITCODE -ne 0) { Write-Log "certutil said: $($certutil -join ' ')"; exit 10 }
     }
 
     if ($RemoveCertificates) {
@@ -157,8 +262,10 @@ if ($AsAdministrator) {
         foreach ($stale in ($RemoveCertificates -split ',')) {
             $path = "Cert:\LocalMachine\TrustedPeople\$($stale.Trim())"
             if (Test-Path $path) {
-                try { Remove-Item $path -Force -ErrorAction Stop } catch { exit 30 }
+                try { Remove-Item $path -Force -ErrorAction Stop; Write-Log "removed certificate $($stale.Trim())" }
+                catch { Write-Log "could not remove certificate $($stale.Trim()): $($_.Exception.Message)"; exit 30 }
             }
+            else { Write-Log "certificate $($stale.Trim()) was already gone" }
         }
     }
 
@@ -167,6 +274,7 @@ if ($AsAdministrator) {
         # one file this script executes elevated, and it must be Microsoft's and unmodified.
         $signature = Get-AuthenticodeSignature -FilePath $DotNetInstallerPath
         if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'O=Microsoft Corporation') {
+            Write-Log "refused $DotNetInstallerPath - signature $($signature.Status), signer $($signature.SignerCertificate.Subject)"
             exit 21
         }
 
@@ -176,6 +284,7 @@ if ($AsAdministrator) {
         $log = Join-Path $here 'dotnet-install.log'
         $process = Start-Process -FilePath $DotNetInstallerPath -Wait -PassThru `
             -ArgumentList '/install', '/quiet', '/norestart', '/log', "`"$log`""
+        Write-Log "$([IO.Path]::GetFileName($DotNetInstallerPath)) exited $($process.ExitCode); its own log is $log"
         if ($process.ExitCode -notin 0, 3010) { exit 20 }
     }
 
@@ -187,6 +296,11 @@ Write-Host '  WinZ3805A' -ForegroundColor White
 Write-Host '  Monitoring and control for HP/Symmetricom GPS-disciplined oscillators.'
 Write-Host ''
 
+$runStarted = Get-Date
+Write-Log "WinZ3805A installer, run from $here"
+Write-Log ("download      {0}, {1}" -f $(if ($bundle) { $bundle.Name } else { 'NO BUNDLE' }),
+    $(if ($dotnetInstaller) { "offline, with $($dotnetInstaller.Name)" } else { 'online, no .NET installer' }))
+
 if (-not $certificate) { throw 'The certificate is missing from this folder. Download the release again.' }
 if (-not $bundle) { throw 'The application package is missing from this folder. Download the release again.' }
 
@@ -197,6 +311,8 @@ $thumbprint = $signingCertificate.Thumbprint
 # The package's publisher IS the certificate's subject - New-SideloadPackage.ps1 refuses to build
 # otherwise - so this is the identity being installed, read off what is in the folder.
 $publisher = $signingCertificate.Subject
+Write-Log "signing       $thumbprint, expires $($signingCertificate.NotAfter.ToString('yyyy-MM-dd'))"
+Write-State 'before'
 
 # ---------------------------------------------------------------------------
 # Earlier copies (#590). Found now, acted on after the new copy is installed.
@@ -221,9 +337,29 @@ $staleCertificates = @(Get-ChildItem Cert:\LocalMachine\TrustedPeople -ErrorActi
         (($retiredThumbprints -contains $_.Thumbprint) -or ($earlier.Publisher -contains $_.Subject))
     })
 
+# Each decision, with its reason, so the log says what was left as clearly as what was removed.
+foreach ($copy in $allCopies) {
+    $decision = if ($copy.SignatureKind -eq 'Store') { 'keep: installed from the Store' }
+        elseif ($copy.Publisher -eq $publisher) { 'upgrade in place: this release''s publisher' }
+        else { 'replace: an earlier publisher identity, which cannot be upgraded in place' }
+    Write-Log "decide copy   $($copy.PackageFamilyName) $($copy.Version): $decision"
+}
+foreach ($trusted in @(Get-ChildItem Cert:\LocalMachine\TrustedPeople -ErrorAction SilentlyContinue)) {
+    $related = ($trusted.Thumbprint -eq $thumbprint) -or ($retiredThumbprints -contains $trusted.Thumbprint) -or
+        (@($allCopies | ForEach-Object Publisher) -contains $trusted.Subject)
+    if (-not $related) { continue }
+    $decision = if ($trusted.Thumbprint -eq $thumbprint) { 'keep: this release''s certificate' }
+        elseif ($staleCertificates.Thumbprint -contains $trusted.Thumbprint) {
+            if ($retiredThumbprints -contains $trusted.Thumbprint) { 'remove: an earlier release was signed with it' }
+            else { 'remove: it vouches for a copy being replaced' } }
+        else { 'keep: a copy that stays installed still uses its publisher' }
+    Write-Log "decide cert   $($trusted.Thumbprint): $decision"
+}
+
 # A running copy holds the serial port and its own files, and one that lives in the notification
 # area for weeks is very likely running. Asked to close, never closed: it may be mid-survey.
 while (Get-Process -Name 'WinZ3805A' -ErrorAction SilentlyContinue) {
+    Write-Log 'waiting       WinZ3805A is running; asked the person to close it' 
     Write-Host ''
     Write-Host '  WinZ3805A is running. Close it before installing:' -ForegroundColor Yellow
     Write-Host '  right-click its icon by the clock and choose Exit, or in its Details window,' -ForegroundColor Yellow
@@ -357,10 +493,26 @@ if ($elevationNeeded) {
     if ($trustNeeded) { $arguments += '-TrustCertificate' }
     if ($dotnetNeeded) { $arguments += @('-DotNetInstallerPath', "`"$($dotnetInstaller.FullName)`"") }
     if ($staleCertificates.Count -gt 0) { $arguments += @('-RemoveCertificates', (($staleCertificates | ForEach-Object Thumbprint) -join ',')) }
+    $arguments += @('-LogPath', "`"$LogPath`"")
 
     if ($dotnetNeeded) { Write-Info 'Installing .NET 10 can take a minute or two.' }
 
-    $elevation = Start-Process powershell.exe -Verb RunAs -Wait -PassThru -ArgumentList $arguments
+    Write-Log "elevating for:$(if ($trustNeeded) { ' certificate' })$(if ($dotnetNeeded) { ' .NET' })$(if ($staleCertificates.Count) { ' earlier certificates' })"
+    try {
+        $elevation = Start-Process powershell.exe -Verb RunAs -Wait -PassThru -ArgumentList $arguments
+    }
+    catch {
+        # Declining the prompt surfaces here, as an exception rather than an exit code - and it is
+        # the only thing that may be reported as a decline. Anything else is this script's fault, and
+        # saying "declined, nothing changed" about it would be false twice over: #588's test build did
+        # exactly that after the elevated half had already done its work.
+        Write-Log "elevation did not start: $($_.Exception.Message)"
+        if ($_.Exception.Message -match 'cancel') {
+            throw 'The administrator prompt was declined, so nothing was changed. Run this installer again and agree to it.'
+        }
+        throw "The administrator step could not be started: $($_.Exception.Message)"
+    }
+    Write-Log "elevated half exited $($elevation.ExitCode)"
 
     switch ($elevation.ExitCode) {
         0 { }
@@ -400,6 +552,8 @@ if ($runtime) {
         Write-Ok 'Installed.'
     }
     catch {
+        Write-Log "Add-AppxPackage (runtime) said: $($_.Exception.Message)"
+
         # Already present at this version or newer is the common case and is not
         # a failure. Anything else is, and is reported as it was received.
         if ($_.Exception.Message -match '0x80073D06|already installed|higher version') {
@@ -482,6 +636,8 @@ foreach ($name in 'Main.msix', 'Singleton.msix') {
         Add-AppxPackage -Path $package -ErrorAction Stop
     }
     catch {
+        Write-Log "Add-AppxPackage ($name) said: $($_.Exception.Message)"
+
         # Already there at this version is the ordinary case on a re-run. A version mismatch is the
         # case this block exists for, and it needs the force: the companion has to be replaced by
         # the one belonging to the framework now installed, which may be a downgrade.
@@ -505,6 +661,8 @@ try {
     Write-Ok 'Installed.'
 }
 catch {
+    Write-Log "Add-AppxPackage (application) failed: $($_.Exception.Message)"
+
     # Windows reports an untrusted signature as 0x80073CF0, "Package could not
     # be opened", with the real reason - 0x800B0109 - buried in the second
     # sentence. Left alone, that sends someone off to download the file again,
@@ -567,6 +725,7 @@ if ($earlier.Count -gt 0) {
                 Copy-Item -Path $oldData -Destination $saved -Recurse -ErrorAction Stop
             }
             catch {
+                Write-Log "save failed: $oldData -> $saved : $($_.Exception.Message)"
                 Write-Host "  Could not save the earlier copy's data to $saved, so it has been left installed." -ForegroundColor Yellow
                 Write-Host "  $($_.Exception.Message)" -ForegroundColor Yellow
                 continue
@@ -583,6 +742,7 @@ if ($earlier.Count -gt 0) {
                 -not (Test-Path (Join-Path $newData 'trend.db'))) {
                 New-Item -ItemType Directory -Path $newData -Force | Out-Null
                 robocopy.exe $oldData $newData /E /XC /XN /XO /NFL /NDL /NJH /NJS /NP | Out-Null
+                Write-Log "robocopy $oldData -> $newData exited $LASTEXITCODE (below 8 is success)"
                 if ($LASTEXITCODE -lt 8) {
                     $moved = $true
                     Write-Ok 'Moved its history and settings into the new copy.'
@@ -590,6 +750,7 @@ if ($earlier.Count -gt 0) {
             }
 
             if (-not $moved) {
+                Write-Log "not moved: new root $newRoot exists=$(if ($newRoot) { Test-Path $newRoot } else { 'n/a' }), new trend.db exists=$(if ($newData) { Test-Path (Join-Path $newData 'trend.db') } else { 'n/a' })"
                 Write-Info 'The new copy already has history of its own, so the earlier one was not'
                 Write-Info 'copied over it. To add it: Settings > Import history..., and choose'
                 Write-Info "  $(Join-Path $saved 'trend.db')"
@@ -601,10 +762,74 @@ if ($earlier.Count -gt 0) {
             Write-Ok "Removed the earlier copy, version $($copy.Version)."
         }
         catch {
+            Write-Log "Remove-AppxPackage $($copy.PackageFullName) failed: $($_.Exception.Message)"
             Write-Host "  The earlier copy could not be removed: $($_.Exception.Message)" -ForegroundColor Yellow
             Write-Host '  Remove it in Settings > Apps; its data is saved as above.' -ForegroundColor Yellow
         }
     }
+}
+
+Write-State 'after'
+
+# ---------------------------------------------------------------------------
+# Does it start? (#592) The failures worth catching here are the silent ones:
+# #473's application installed, launched and exited in about 200 ms with no
+# window and nothing in its own log. Only possible once .NET is installed.
+# ---------------------------------------------------------------------------
+$installedCopy = Get-AppxPackage -Name 'WinZ3805A' -ErrorAction SilentlyContinue |
+    Where-Object { $_.Publisher -eq $publisher } | Select-Object -First 1
+$startedOk = $null
+
+if ($dotnet -and $installedCopy) {
+    Write-Step 'Starting WinZ3805A to check it opens'
+    $launchedAt = Get-Date
+    try {
+        Start-Process "shell:AppsFolder\$($installedCopy.PackageFamilyName)!App"
+        Start-Sleep -Seconds 15
+        $running = @(Get-Process -Name 'WinZ3805A' -ErrorAction SilentlyContinue |
+            Where-Object { "$($_.Path)" -like "$($installedCopy.InstallLocation)*" })
+        $startedOk = $running.Count -gt 0
+    }
+    catch {
+        Write-Log "could not start it: $($_.Exception.Message)"
+        $startedOk = $false
+    }
+
+    if ($startedOk) {
+        Write-Ok "It is running (process $($running[0].Id))."
+    }
+    else {
+        Write-Log 'NOT RUNNING 15 s after being started. What Windows recorded:'
+
+        # Errors from the run as a whole for deployment, and since the launch for everything else.
+        $sources = @(
+            @{ LogName = 'Application'; StartTime = $launchedAt },
+            @{ LogName = 'Microsoft-Windows-AppModel-Runtime/Admin'; StartTime = $launchedAt },
+            @{ LogName = 'Microsoft-Windows-AppXDeploymentServer/Operational'; StartTime = $runStarted; Level = 1, 2, 3 }
+        )
+        foreach ($filter in $sources) {
+            try {
+                Get-WinEvent -FilterHashtable $filter -ErrorAction Stop |
+                    Where-Object { $_.Message -match 'WinZ3805A' } | Select-Object -First 20 |
+                    ForEach-Object { Write-Log ("event         {0} {1} {2} {3}: {4}" -f $_.TimeCreated.ToString('HH:mm:ss'), $filter.LogName, $_.ProviderName, $_.Id, ($_.Message -replace '\s+', ' ')) }
+            }
+            catch { Write-Log "event         $($filter.LogName): none, or unreadable ($($_.Exception.Message))" }
+        }
+
+        $appLog = Join-Path (Get-DataFolder $installedCopy.PackageFamilyName) 'logs\app.log'
+        if (Test-Path $appLog) {
+            Write-Log "app.log       last lines of $appLog"
+            Get-Content $appLog -Tail 40 | ForEach-Object { Write-Log "  | $_" }
+        }
+        else { Write-Log "app.log       none at $appLog - it stopped before it could write one" }
+
+        Write-Host ''
+        Write-Host '  WinZ3805A did not stay open.' -ForegroundColor Yellow
+        Write-Host '  Please report it with the install record named below.' -ForegroundColor Yellow
+    }
+}
+elseif (-not $dotnet) {
+    Write-Log 'start check   skipped: .NET 10 is not installed yet'
 }
 
 Write-Host ''
@@ -636,3 +861,6 @@ Write-Host ''
 Write-Host '  To remove it later: Settings > Apps > Installed apps > WinZ3805A.' -ForegroundColor Gray
 Write-Host '  Removing it does not remove the certificate; that is in' -ForegroundColor Gray
 Write-Host '  certlm.msc, under Trusted People.' -ForegroundColor Gray
+Write-Host ''
+Write-Host "  A record of this install is at $LogPath" -ForegroundColor Gray
+Write-Log "finished      started ok: $(if ($null -eq $startedOk) { 'not checked' } else { $startedOk })"
