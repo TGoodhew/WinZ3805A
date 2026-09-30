@@ -589,12 +589,24 @@ public sealed partial class MainWindow : Window
     /// </remarks>
     private (int Width, int Height) WindowSizeFor(int contentWidth, int contentHeight)
     {
-        double scale = Content?.XamlRoot?.RasterizationScale ?? 1.0;
+        XamlRoot? root = Content?.XamlRoot;
+        double scale = root?.RasterizationScale ?? 1.0;
 
         // AppWindow reports both, so the chrome is measured on the window it applies to rather than
         // assumed from a border width that varies with theme, DPI and window style.
         int chromeWidth = Math.Max(0, AppWindow.Size.Width - AppWindow.ClientSize.Width);
         int chromeHeight = Math.Max(0, AppWindow.Size.Height - AppWindow.ClientSize.Height);
+
+        // The client area is not all content. Windows 11 keeps a 1 px border across the top of a
+        // window whose content extends into the title bar, and the XAML sits beneath it: a 380 x 472
+        // client area carried a 380 x 471 root, so a window sized to 472 of content gave the page 439
+        // against the 440 it then switched at, and opened with the footer collapsed (#578). Once there is a root it is the
+        // measure. Restored only - a maximised window's frame is not the one being sized for.
+        if (root is { Size.Height: > 0 } && Presenter is { State: OverlappedPresenterState.Restored })
+        {
+            int rootHeight = (int)Math.Floor(root.Size.Height * scale);
+            chromeHeight = Math.Max(chromeHeight, AppWindow.Size.Height - rootHeight);
+        }
 
         (int width, int height) = WindowSizing.PhysicalMinimum(
             contentWidth, contentHeight, scale, chromeWidth, chromeHeight);
