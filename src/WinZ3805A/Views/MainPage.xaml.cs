@@ -13,6 +13,7 @@ using Microsoft.UI.Xaml.Input;
 using Windows.ApplicationModel;
 
 using WinZ3805A.Controls;
+using WinZ3805A.Device.Transport;
 using WinZ3805A.Services;
 using WinZ3805A.ViewModels;
 
@@ -236,6 +237,148 @@ public sealed partial class MainPage : Page
     /// here, beside the switch it names, so the two cannot drift apart.
     /// </remarks>
     public const int FullLayoutContentHeight = 495;
+
+    /// <summary>
+    /// The page size, in effective pixels, at which every row of the standard layout shows whole —
+    /// the size a window with nothing to restore opens at (#578, #581).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Calculated from the rows, not chosen.</b> The width is the widest of the two rows that do
+    /// not wrap: the clock line with the controls to its right, and the status line with Details,
+    /// the pin and Connect. Each is its text, measured in the style it is drawn in, plus the
+    /// controls beside it and the spacing between them, plus the page margins. The height is the
+    /// rows' own heights and the spacing between them, and never less than
+    /// <see cref="ShortLayoutHeight"/>, below which the rows collapse.
+    /// </para>
+    /// <para>
+    /// <b>The widest text each row can show, not the text it shows now.</b> On a first launch there
+    /// is often no reading yet and no port, and a size taken from the dash and the version alone
+    /// would be outgrown by the first reading. So the clock is measured with every label the display
+    /// zone can produce, including the <c>(GPS)</c> a GPS-scale receiver adds, and with every month's
+    /// abbreviation in the user's culture, with both badges showing. The status line is measured
+    /// with this port or a two-digit one and the fastest supported line setting. Measuring rather
+    /// than counting characters is what lets it hold for a zone name and a month in any language,
+    /// and at any text scale — the probes use the elements' own resolved fonts.
+    /// </para>
+    /// </remarks>
+    public Windows.Foundation.Size WholeLayoutSize()
+    {
+        Thickness margin = RootGrid.Padding;
+
+        double clockRow = WidestClockText()
+            + (3 * ClockRow.Spacing)
+            + RolloverBadge.MinWidth
+            + ProvisionalBadge.MinWidth
+            + Math.Max(ZoneButton.MinWidth, ZoneButton.DesiredSize.Width);
+
+        double commandSpacing = FooterCommands.Spacing;
+        double footerRow = TextWidth(WidestFooterText(), FooterText)
+            + FooterRow.ColumnSpacing
+            + ButtonWidth(DetailsButton, "Details")
+            + commandSpacing
+            + Math.Max(AlwaysOnTopButton.MinWidth, AlwaysOnTopButton.DesiredSize.Width)
+            + commandSpacing
+            + Math.Max(ButtonWidth(ConnectButton, "Connect"), ButtonWidth(ConnectButton, "Disconnect"));
+
+        double width = margin.Left + margin.Right
+            + Math.Max(Math.Max(clockRow, footerRow), ReadoutRow.DesiredSize.Width);
+
+        FrameworkElement[] rows = [HeaderRow, ReadoutRow, MeritRow, ClockRow, FooterRow];
+        double height = margin.Top + margin.Bottom
+            + ((rows.Length - 1) * RootGrid.RowSpacing)
+            + rows.Sum(row => row.DesiredSize.Height);
+
+        return new Windows.Foundation.Size(Math.Ceiling(width), Math.Ceiling(Math.Max(height, ShortLayoutHeight)));
+    }
+
+    /// <summary>The widest the clock line can be in the display zone, in its own font.</summary>
+    private double WidestClockText()
+    {
+        TimeZoneInfo zone = _model.DisplayZone;
+
+        // Every label DisplayTimeConverter can print (see LabelFor), for this zone.
+        string[] zoneNames = zone.SupportsDaylightSavingTime
+            ? [zone.StandardName, zone.DaylightName]
+            : [zone.StandardName];
+        string[] labels =
+        [
+            .. zoneNames,
+            .. zoneNames.Select(name => $"{name} (GPS)"),
+            "UTC",
+            "GPS",
+            "device local",
+            "as reported",
+        ];
+
+        double widest = 0;
+
+        foreach (string label in labels)
+        {
+            for (int month = 1; month <= 12; month++)
+            {
+                // The same composition as RenderClock, with a two-digit day in every month.
+                string text = "00:00:00"
+                    + $" {label}"
+                    + new DateTime(2026, month, 28).ToString(" · dd MMM yyyy", CultureInfo.CurrentCulture);
+
+                widest = Math.Max(widest, TextWidth(text, ClockText));
+            }
+        }
+
+        return widest;
+    }
+
+    /// <summary>The widest steady status line: the version, a port and the fastest line setting.</summary>
+    /// <remarks>
+    /// The staleness pill and the age are left out. They appear only while a reading is late, and
+    /// the status line trims rather than pushing the buttons out when they do.
+    /// </remarks>
+    private string WidestFooterText()
+    {
+        string port = _device.Session.PortName is { Length: > 0 } name ? name : "COM00";
+        SerialSettings fastest = new() { BaudRate = SerialSettings.SupportedBaudRates.Max() };
+
+        return string.Join(" · ", PackageVersionText, port, fastest.ToString());
+    }
+
+    /// <summary>The width a button takes with <paramref name="label"/> in it.</summary>
+    private static double ButtonWidth(Control button, string label) =>
+        Math.Max(
+            button.MinWidth,
+            TextWidth(label, button.FontFamily, button.FontSize, button.FontWeight, button.CharacterSpacing)
+                + button.Padding.Left + button.Padding.Right
+                + button.BorderThickness.Left + button.BorderThickness.Right);
+
+    private static double TextWidth(string text, TextBlock like) =>
+        TextWidth(text, like.FontFamily, like.FontSize, like.FontWeight, like.CharacterSpacing);
+
+    /// <summary>Measures <paramref name="text"/> on one line in the given font.</summary>
+    /// <remarks>
+    /// A probe outside the tree, so measuring never disturbs the layout on screen. The text scale
+    /// applies to it as it does to the element it stands in for.
+    /// </remarks>
+    private static double TextWidth(
+        string text,
+        FontFamily family,
+        double size,
+        Windows.UI.Text.FontWeight weight,
+        int characterSpacing)
+    {
+        TextBlock probe = new()
+        {
+            Text = text,
+            FontFamily = family,
+            FontSize = size,
+            FontWeight = weight,
+            CharacterSpacing = characterSpacing,
+            TextWrapping = TextWrapping.NoWrap,
+        };
+
+        probe.Measure(new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
+
+        return Math.Ceiling(probe.DesiredSize.Width);
+    }
 
     /// <summary>Picks the one §10.3 layout that fits, and applies it.</summary>
     /// <remarks>

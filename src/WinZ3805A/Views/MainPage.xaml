@@ -333,7 +333,10 @@
                            TextTrimming="CharacterEllipsis" />
             </StackPanel>
 
-            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="{StaticResource WzSpaceXs}">
+            <StackPanel x:Name="FooterCommands"
+                        Grid.Column="1"
+                        Orientation="Horizontal"
+                        Spacing="{StaticResource WzSpaceXs}">
                 <Button x:Name="DetailsButton"
                         Content="Details"
                         Click="OnDetailsClicked"

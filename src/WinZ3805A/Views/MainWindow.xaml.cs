@@ -37,6 +37,9 @@ public sealed partial class MainWindow : Window
     private const int MinimumStandardContentHeight = 240;
     private const int MinimumCompactContentHeight = 144;
 
+    /// <summary>§10.3's title bar, for the one moment before it has been laid out.</summary>
+    private const double TitleBarHeight = 32;
+
     private readonly IWindowPlacementStore _placements;
     private readonly IServiceProvider _services;
     private readonly ILogger? _log;
@@ -615,23 +618,41 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Sizes a window that had no placement to restore: the §9.6.2 width, and the height at which
-    /// the whole §10.3 layout shows (#578).
+    /// Sizes a window that had no placement to restore to the page's whole layout: wide enough for
+    /// the clock line and the status line with the controls beside each, tall enough for every row
+    /// (#578, #581).
     /// </summary>
     /// <remarks>
+    /// <para>
+    /// The page calculates it (<see cref="MainPage.WholeLayoutSize"/>); this adds the title bar and
+    /// converts. Before the content has loaded the rows have no size yet, so the first pass falls
+    /// back to §9.6.2's width and the full-layout height, and the second, at the real scaling,
+    /// has the page's own answer.
+    /// </para>
+    /// <para>
     /// Not the 240 floor, which is where the Details window opens and where this one would be
     /// simplest to put. At 240 §9.6.2 collapses the footer, and the launch with nothing to restore
     /// is a first run - the one launch where the user's next action is the Connect button.
+    /// </para>
     /// </remarks>
     private void ApplyOpeningSize()
     {
-        if (_page?.IsCompact == true
+        if (_page is not MainPage page
+            || page.IsCompact
             || Presenter is { State: not OverlappedPresenterState.Restored })
         {
             return;
         }
 
-        (int width, int height) = WindowSizeFor(MinimumContentWidth, MainPage.FullLayoutContentHeight);
+        Windows.Foundation.Size whole = page.WholeLayoutSize();
+        double titleBar = AppTitleBar.ActualHeight > 0 ? AppTitleBar.ActualHeight : TitleBarHeight;
+
+        int contentWidth = Math.Max(MinimumContentWidth, (int)Math.Ceiling(whole.Width));
+        int contentHeight = Math.Max(
+            MainPage.FullLayoutContentHeight,
+            (int)Math.Ceiling(whole.Height + titleBar));
+
+        (int width, int height) = WindowSizeFor(contentWidth, contentHeight);
 
         AppWindow.Resize(new SizeInt32(Math.Max(width, _minimum.Width), Math.Max(height, _minimum.Height)));
     }
