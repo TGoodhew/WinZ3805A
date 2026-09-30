@@ -610,7 +610,9 @@ XAML failure in CI may not name the file — reproduce it locally with MSBuild.
 `PublishReadyToRun` lives in `Properties/PublishProfiles/*.pubxml`, not in the
 csproj: setting it for all non-Debug configurations makes an ordinary Release
 build fail with NETSDK1094 unless the crossgen pack was restored with the flag
-already set. Publishing is framework-dependent, never self-contained (§6.3).
+already set. The package is **self-contained for .NET and framework-dependent for the Windows App
+SDK** (§6.3, #586) - two flags set in opposite directions in the csproj, not a single policy. There
+is no .NET framework package for either channel to depend on; there is one for the Windows App SDK.
 
 ---
 

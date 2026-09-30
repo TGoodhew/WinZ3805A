@@ -106,7 +106,7 @@ what the Windows App SDK runs on.
 | **Also supported** | Windows 10 21H2 / 22H2 / 23H2, Windows 11 21H2 through 25H2 |
 | **Windows Server** | Server 2019 (17763) and Server 2022 (20348) |
 | **Architecture** | **x64 only** — see §6.1. Windows on ARM is not a supported configuration |
-| **Runtime** | .NET 10 (LTS) and the Windows App SDK runtime, both resolved at install time |
+| **Runtime** | .NET 10 (LTS), carried inside the package; the Windows App SDK runtime, carried in the zip |
 
 The floor is set in [`WinZ3805A.csproj`](src/WinZ3805A/WinZ3805A.csproj) as
 `TargetPlatformMinVersion` `10.0.17763.0`, while the project *builds* against the
@@ -171,10 +171,13 @@ listing; this is sideloaded.
 > survives extraction, where it makes the install fail without mentioning why.
 
 The zip carries the signed package, its certificate and the x64 Windows App
-Runtime, so a bench machine with neither Visual Studio nor an internet
-connection can install from it. Deployment of the Windows App SDK is
-framework-dependent rather than self-contained (§6.3), which is why the runtime
-travels in the zip rather than being fetched.
+Runtime, and the package carries its own .NET runtime, so a bench machine with
+neither Visual Studio nor an internet connection can install **and run** it.
+Deployment of the Windows App SDK is framework-dependent rather than
+self-contained (§6.3), which is why its runtime travels in the zip rather than
+being fetched; .NET has no framework package to depend on, so the package is
+self-contained for .NET instead (#586). Before that change the zip installed on
+a blank machine and then asked for a .NET download on first launch.
 
 The package is signed with a **self-signed certificate** (`build/devcert.pfx`,
 generated from the manifest on first use so its subject cannot drift from the

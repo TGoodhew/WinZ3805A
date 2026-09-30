@@ -14,9 +14,11 @@
         the certificate has to match Package/Identity/Publisher exactly.
 
       - The Windows App Runtime must be available. The application is
-        framework-dependent (§6.3), so a clean machine does not have it. The
-        x64 runtime is included in the zip rather than downloaded, which is what
-        makes the install work on a bench machine with no internet.
+        framework-dependent on the Windows App SDK (§6.3), so a clean machine
+        does not have it. The x64 runtime is included in the zip rather than
+        downloaded, which is what makes the install work on a bench machine
+        with no internet. .NET needs nothing here: the package is
+        self-contained for .NET and carries its own runtime (#586).
 
       - It has to be ONE obvious thing to double-click. Visual Studio's own
         sideload output is four architectures of runtime, two PowerShell
@@ -24,7 +26,7 @@
         "right-click this and choose Run with PowerShell", which is not a thing
         a non-developer knows.
 
-    The result is dist\WinZ3805A-<version>-x64.zip, around 60 MB, containing the
+    The result is dist\WinZ3805A-<version>-x64.zip, around 105 MB, containing the
     bundle, its certificate, the x64 runtime, Install.cmd and a README that
     explains the certificate prompt rather than hurrying the reader past it.
 
