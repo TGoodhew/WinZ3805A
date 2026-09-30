@@ -297,7 +297,7 @@ being tested.
 |---|---|
 | **Do** | On a machine with no Visual Studio and no Windows App SDK: download the zip from the release, right-click it → *Properties* → **Unblock**, extract, double-click `Install.cmd`. |
 | **Watch** | The certificate thumbprint in the UAC/trust prompt. |
-| **Pass** | The thumbprint matches the one in the release notes. One administrator prompt and no others. The app appears in Start and launches. |
+| **Pass** | The thumbprint matches the one in the release notes. One administrator prompt and no others. The app appears in Start and launches **without asking for anything to be downloaded** - v1.3.1 installed and then prompted for .NET 10 on first launch, which is why the package is now self-contained for .NET (#586). |
 
 | | |
 |---|---|
