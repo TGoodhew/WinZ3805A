@@ -35,9 +35,17 @@
 param(
     # Set when this script re-launches itself elevated to do the steps that need
     # administrator rights, and nothing else. Not for a user to pass.
-    [switch]$Elevated,
+    #
+    # NO PARAMETER MAY SHARE A NAME WITH A VARIABLE BELOW, IN ANY CASE. PowerShell
+    # variable names ignore case, so a local $elevated IS the parameter $Elevated,
+    # and assigning to it converts to the parameter's type. That shipped once in a
+    # test build: the prompt's Process was assigned to a [switch] and threw after
+    # the elevated half had already succeeded, and the local $dotnetInstaller - a
+    # file - became a [string] holding its bare name, so its path was empty. Found
+    # on a clean VM on 30 Sep 2026 (#588). Hence names nothing else would use.
+    [switch]$AsAdministrator,
     [switch]$TrustCertificate,
-    [string]$DotNetInstaller
+    [string]$DotNetInstallerPath
 )
 
 $ErrorActionPreference = 'Stop'
@@ -100,7 +108,7 @@ function Test-MicrosoftUpdate {
 # Microsoft installer. Exit codes: 10, the certificate; 20, the runtime
 # installer failed; 21, the runtime installer is not signed by Microsoft.
 # ---------------------------------------------------------------------------
-if ($Elevated) {
+if ($AsAdministrator) {
     if ($TrustCertificate) {
         # LocalMachine\TrustedPeople, never Root. The distinction is the whole
         # reason this is defensible: a certificate in TrustedPeople is trusted to
@@ -111,10 +119,10 @@ if ($Elevated) {
         if ($LASTEXITCODE -ne 0) { exit 10 }
     }
 
-    if ($DotNetInstaller) {
+    if ($DotNetInstallerPath) {
         # Checked again here, with administrator rights, immediately before it runs: this is the
         # one file this script executes elevated, and it must be Microsoft's and unmodified.
-        $signature = Get-AuthenticodeSignature -FilePath $DotNetInstaller
+        $signature = Get-AuthenticodeSignature -FilePath $DotNetInstallerPath
         if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'O=Microsoft Corporation') {
             exit 21
         }
@@ -123,7 +131,7 @@ if ($Elevated) {
         # double-clicked - which is the point: Microsoft Update recognises this install and keeps
         # it patched. 3010 is "installed; a restart would finish it", and is success.
         $log = Join-Path $here 'dotnet-install.log'
-        $process = Start-Process -FilePath $DotNetInstaller -Wait -PassThru `
+        $process = Start-Process -FilePath $DotNetInstallerPath -Wait -PassThru `
             -ArgumentList '/install', '/quiet', '/norestart', '/log', "`"$log`""
         if ($process.ExitCode -notin 0, 3010) { exit 20 }
     }
@@ -153,7 +161,8 @@ if (-not $trustNeeded) {
     Write-Ok 'Already trusted. Nothing to do.'
 }
 else {
-    Write-Info 'Windows will ask for administrator permission in a moment.'
+    Write-Info 'Windows will ask for administrator permission once, after the steps'
+    Write-Info 'below have said what they need.'
     Write-Info ''
     Write-Info 'It is being asked so this app''s signature can be added to the'
     Write-Info '"Trusted People" store, which is what lets Windows install an'
@@ -225,16 +234,16 @@ if ($trustNeeded -or $dotnetNeeded) {
     $arguments = @(
         '-NoProfile', '-ExecutionPolicy', 'Bypass',
         '-File', "`"$($MyInvocation.MyCommand.Path)`"",
-        '-Elevated'
+        '-AsAdministrator'
     )
     if ($trustNeeded) { $arguments += '-TrustCertificate' }
-    if ($dotnetNeeded) { $arguments += @('-DotNetInstaller', "`"$($dotnetInstaller.FullName)`"") }
+    if ($dotnetNeeded) { $arguments += @('-DotNetInstallerPath', "`"$($dotnetInstaller.FullName)`"") }
 
     if ($dotnetNeeded) { Write-Info 'Installing .NET 10 can take a minute or two.' }
 
-    $elevated = Start-Process powershell.exe -Verb RunAs -Wait -PassThru -ArgumentList $arguments
+    $elevation = Start-Process powershell.exe -Verb RunAs -Wait -PassThru -ArgumentList $arguments
 
-    switch ($elevated.ExitCode) {
+    switch ($elevation.ExitCode) {
         0 { }
         10 { throw 'The certificate was not trusted, so the application cannot be installed. Nothing else has been changed.' }
         21 { throw "$($dotnetInstaller.Name) is not validly signed by Microsoft, so it was not run. Download the release again." }
