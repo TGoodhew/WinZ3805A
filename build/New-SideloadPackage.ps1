@@ -24,9 +24,23 @@
         "right-click this and choose Run with PowerShell", which is not a thing
         a non-developer knows.
 
-    The result is dist\WinZ3805A-<version>-x64.zip, around 60 MB, containing the
-    bundle, its certificate, the x64 runtime, Install.cmd and a README that
-    explains the certificate prompt rather than hurrying the reader past it.
+    The result is TWO zips from one build (#588), identical but for one file:
+
+      dist\WinZ3805A-<version>-x64.zip          the ONLINE zip, around 62 MB:
+          the bundle, its certificate, the x64 Windows App Runtime, Install.cmd
+          and a README that explains the certificate prompt rather than hurrying
+          the reader past it. .NET 10 is not in it; Install.cmd opens
+          Microsoft's download page when the machine lacks it.
+
+      dist\WinZ3805A-<version>-x64-offline.zip  the OFFLINE zip, around 90 MB:
+          the same, plus Microsoft's own .NET 10 Runtime installer, which
+          Install.cmd runs machine-wide when the machine lacks .NET 10.
+
+    Neither carries a .NET runtime inside the package. A runtime Microsoft's
+    installer put there is one Microsoft Update keeps patched; one inside the
+    package would be this project's to service, release by release (#586,
+    #588). The installer is fetched from Microsoft at build time - see
+    Get-DotNetInstaller - so no .NET version number lives in this repository.
 
 .PARAMETER SkipBuild
     Package whatever is already in AppPackages rather than rebuilding.
@@ -37,6 +51,11 @@
 
 .PARAMETER CertificatePassword
     The PFX password. Defaults to the one 'winapp cert generate' uses.
+
+.PARAMETER DotNetCache
+    Where Microsoft's .NET Runtime installer is kept between runs, so a rebuild
+    on the same patch does not download it again. Defaults to dist\dotnet-cache.
+    A cached file is used only if it matches the SHA-512 Microsoft publishes.
 
 .PARAMETER UseSdkMSBuild
     Build with the .NET SDK's own MSBuild ("dotnet build") rather than resolving
@@ -81,6 +100,8 @@ param(
     [string]$CertificatePassword = 'password',
 
     [string]$TimestampUrl = 'http://timestamp.digicert.com',
+
+    [string]$DotNetCache,
 
     [switch]$UseSdkMSBuild
 )
@@ -307,9 +328,69 @@ if (-not $runtime) {
 }
 
 # ---------------------------------------------------------------------------
+# Microsoft's .NET Runtime installer, for the offline zip (#588).
+# ---------------------------------------------------------------------------
+# THE CHANNEL COMES FROM THE PROJECT, AND THE PATCH FROM MICROSOFT. The target
+# framework says which .NET the application needs (net10.0 -> 10.0), and
+# Microsoft's release metadata for that channel says which patch is current, so
+# each release carries whatever Microsoft was offering on the day it was built
+# and nothing here has to be edited when .NET is serviced. After that, the patch
+# on a user's machine is Microsoft Update's business, not this repository's.
+#
+# Only the plain ".NET Runtime" (Microsoft.NETCore.App) is needed. The
+# application references no Windows Desktop framework - WinUI comes from the
+# Windows App SDK - so the larger Desktop Runtime would install WPF and Windows
+# Forms for nothing.
+function Get-DotNetInstaller {
+    param([string]$Cache)
+
+    [xml]$projectXml = Get-Content $project
+    $framework = @($projectXml.Project.PropertyGroup.TargetFramework | Where-Object { $_ }) | Select-Object -First 1
+    if ($framework -notmatch '^net(\d+\.\d+)') { throw "Cannot read a .NET channel from the target framework '$framework'." }
+    $channel = $Matches[1]
+
+    $metadataUrl = "https://builds.dotnet.microsoft.com/dotnet/release-metadata/$channel/releases.json"
+    $metadata = Invoke-RestMethod -Uri $metadataUrl -TimeoutSec 60
+
+    $latest = $metadata.'latest-runtime'
+    $release = $metadata.releases | Where-Object { $_.runtime.version -eq $latest } | Select-Object -First 1
+    $file = $release.runtime.files | Where-Object { $_.rid -eq 'win-x64' -and $_.name -eq 'dotnet-runtime-win-x64.exe' } |
+        Select-Object -First 1
+
+    if (-not $file) { throw "Microsoft's $channel metadata lists no win-x64 runtime installer for $latest." }
+
+    New-Item -ItemType Directory -Path $Cache -Force | Out-Null
+    $target = Join-Path $Cache ([IO.Path]::GetFileName(([Uri]$file.url).AbsolutePath))
+
+    # The hash Microsoft publishes beside the file is the authority, for a cached copy as much as
+    # for a fresh one - a truncated download from last week is the same failure as a bad one today.
+    $expected = $file.hash.ToUpperInvariant()
+    if (-not (Test-Path $target) -or (Get-FileHash $target -Algorithm SHA512).Hash -ne $expected) {
+        Write-Host "Downloading the .NET $latest Runtime installer from Microsoft..."
+        Invoke-WebRequest -Uri $file.url -OutFile $target -TimeoutSec 600
+    }
+
+    $actual = (Get-FileHash $target -Algorithm SHA512).Hash
+    if ($actual -ne $expected) {
+        Remove-Item $target -Force
+        throw "The .NET installer downloaded from $($file.url) does not match the SHA-512 Microsoft publishes. Nothing was packaged."
+    }
+
+    # And it must be Microsoft's signature on it, which is what install.ps1 checks again on the
+    # user's machine before running it with administrator rights.
+    $signature = Get-AuthenticodeSignature -FilePath $target
+    if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'O=Microsoft Corporation') {
+        throw "$target is not validly signed by Microsoft ($($signature.Status))."
+    }
+
+    [pscustomobject]@{ Path = $target; Version = $latest; Security = [bool]$release.security }
+}
+
+# ---------------------------------------------------------------------------
 # Assemble
 # ---------------------------------------------------------------------------
 $dist = Join-Path $repo 'dist'
+if (-not $DotNetCache) { $DotNetCache = Join-Path $dist 'dotnet-cache' }
 $name = "WinZ3805A-$version-x64"
 $staging = Join-Path $dist $name
 
@@ -337,20 +418,33 @@ if ($runtime) {
     Copy-Item $runtime.FullName $runtimeFolder
 }
 
+# The online zip first: everything above, and no .NET.
 $zip = Join-Path $dist "$name.zip"
 if (Test-Path $zip) { Remove-Item $zip -Force }
 Compress-Archive -Path (Join-Path $staging '*') -DestinationPath $zip -CompressionLevel Optimal
 
+# Then the offline zip: the same folder with Microsoft's installer added to Runtime\. One staging
+# folder, so the two cannot differ in anything else.
+$dotnetInstaller = Get-DotNetInstaller -Cache $DotNetCache
+$runtimeFolder = Join-Path $staging 'Runtime'
+New-Item -ItemType Directory -Path $runtimeFolder -Force | Out-Null
+Copy-Item $dotnetInstaller.Path $runtimeFolder
+
+$offlineZip = Join-Path $dist "$name-offline.zip"
+if (Test-Path $offlineZip) { Remove-Item $offlineZip -Force }
+Compress-Archive -Path (Join-Path $staging '*') -DestinationPath $offlineZip -CompressionLevel Optimal
+
 Remove-Item $staging -Recurse -Force
 
-$megabytes = [math]::Round((Get-Item $zip).Length / 1MB, 1)
-
 Write-Host ''
-Write-Host "  $name.zip  ($megabytes MB)" -ForegroundColor Green
-Write-Host "  $zip"
+foreach ($built in $zip, $offlineZip) {
+    Write-Host "  $([IO.Path]::GetFileName($built))  ($([math]::Round((Get-Item $built).Length / 1MB, 1)) MB)" -ForegroundColor Green
+    Write-Host "  $built"
+}
 Write-Host ''
-Write-Host '  Contents: the signed bundle, its certificate, the x64 Windows App' -ForegroundColor Gray
-Write-Host '  Runtime, Install.cmd and a README.' -ForegroundColor Gray
+Write-Host '  Both: the signed bundle, its certificate, the x64 Windows App Runtime,' -ForegroundColor Gray
+Write-Host '  Install.cmd and a README. The offline zip adds Microsoft''s .NET' -ForegroundColor Gray
+Write-Host "  $($dotnetInstaller.Version) Runtime installer$(if ($dotnetInstaller.Security) { ', a security release' })." -ForegroundColor Gray
 Write-Host ''
 Write-Host '  The person installing double-clicks Install.cmd and agrees to one' -ForegroundColor Gray
 Write-Host '  administrator prompt, which the README explains.' -ForegroundColor Gray
