@@ -833,21 +833,27 @@ thickened the bar by 16 px and clipped the compact medallion.
 
 **Hover testing is only real with real input.** `SetCursorPos` moves the pointer without a pointer event, so no tooltip opens, even on the globe button. Only `SendInput` or `mouse_event` movement proves a tooltip.
 
-## 23. A window with nothing to restore opens at the full layout (#578)
+## 23. A window with nothing to restore opens at the whole layout (#578, #581)
 
 **Why.** With no stored placement, which is every first launch and every launch after a stored
 display has gone, the main window used to open at the size Windows gives any new window. On the
-5120 × 1440 bench that was 3840 × 1023, around a layout 380 wide. It now opens at 380 × 495 content,
-the least height at which every row of the layout has its full height (#580). The display's scaling is not known
+5120 × 1440 bench that was 3840 × 1023, around a layout 380 wide. It now opens at a size the page
+calculates from its own rows: wide enough for the clock line and the status line with the controls
+beside each, at the widest text either can show, and tall enough for every row (#580). The
+calculation measures text, so it depends on the zone, the language and the text scale, and only
+the running application can show it came out right. The display's scaling is not known
 until the content loads, so the size is applied twice: once against 100 % and again at the real
 scaling. Only a real display at a scaling other than 100 % shows whether the second one lands.
 
 | | |
 |---|---|
 | **Do** | Exit the application from its tray menu. Delete `window.json` from `%LOCALAPPDATA%\Packages\<package family>\LocalCache\Local\WinZ3805A\`. Start the application. Repeat at 150 % display scaling. |
-| **Pass** | Both times the window opens narrow and in the standard layout, with the readout row, the figures of merit, the clock line and the footer all showing, and the Connect button whole. Nothing is clipped at the bottom, and the window is no taller than it needs to be. |
+| **Pass** | Both times the window opens in the standard layout, with the readout row, the figures of merit, the clock line and the footer all showing. The whole clock line shows, with the badge and the globe button on screen to its right and vertically centred on the text. The whole status line shows beside Details, the pin and Connect. Nothing is clipped at the bottom, and the window is no taller than it needs to be. |
 
-**Last run:** not yet.
+**Last run:** 30 Sep 2026, 100 % only, against the packaged Debug build with the Z3805A on COM3 in
+Pacific time. It opened at 553 × 504, with 537 × 495 of content. The clock line (336 px), badge and
+globe button were all on screen, the text centred on the controls, and the status line whole beside
+the three buttons. **150 % is still owed.**
 
 ## Before a release
 
