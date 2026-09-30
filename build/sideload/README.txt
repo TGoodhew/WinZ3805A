@@ -56,6 +56,22 @@ WHAT GETS INSTALLED
   THIRD-PARTY-NOTICES.md, in this folder and inside the application.
 
 
+IF AN EARLIER WINZ3805A IS INSTALLED
+
+  Releases up to 1.3.0 were signed under an earlier publisher identity, so
+  Windows cannot upgrade them in place. The installer handles it: it asks
+  you to close the earlier copy if it is running, and lists what it will
+  remove before changing anything. After installing, it saves the earlier
+  copy's history, settings and logs to a "WinZ3805A earlier copy ..." folder
+  in Documents, moves them into the new copy, and removes the earlier copy.
+  The certificate earlier releases were signed with is removed from Trusted
+  People in the same permission prompt.
+
+  If the new version was already installed and has history of its own, it
+  is not overwritten. Import the earlier history from Settings > Import
+  history..., choosing trend.db in the saved folder.
+
+
 TO REMOVE IT
 
   Settings > Apps > Installed apps > WinZ3805A > Uninstall.

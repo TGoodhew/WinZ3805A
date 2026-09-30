@@ -223,6 +223,14 @@ The `Device` library must have zero dependency on `Microsoft.UI.*`. All parsing 
   - **The online sideload zip** (`WinZ3805A-<version>-x64.zip`) carries no runtime. `Install.cmd` detects a missing .NET 10 and opens Microsoft's download page. Otherwise Windows' own prompt at first launch offers the same page.
   - **The offline sideload zip** (`WinZ3805A-<version>-x64-offline.zip`) adds Microsoft's .NET 10 Runtime installer. `Install.cmd` runs it quietly and machine-wide when .NET 10 is missing, in the same administrator prompt as the certificate. That is the install dotnet.microsoft.com gives, so Microsoft Update services it once the machine is online. The packager fetches the current patch from Microsoft's release metadata at build time and checks its published SHA-512 and its Microsoft signature, so no .NET version is written in the repository.
   - **The Store** has no .NET framework package and cannot run an installer. The listing therefore states the dependency at the start of its description, as Store Policy 10.2.4 requires, and the certification notes say so too (#575).
+  - **An earlier copy is replaced by the installer** *(#590)*. A release under a different publisher is a different package family, so it cannot upgrade an earlier copy in place: this happened at v1.3.1 and will happen again with the Store identity. `Install.cmd` handles it for every release from v1.0.1 on:
+    - it asks the user to close a running copy;
+    - it lists what it will remove before changing anything;
+    - after installing, it saves the earlier copy's data folder (`%LOCALAPPDATA%\WinZ3805A`, redirected into the package; every release since v1.0.1 writes only there) to Documents, and moves it into the new copy if that copy has no history yet, never overwriting a file the new copy has;
+    - only then does it remove the earlier copy;
+    - it removes the certificates earlier releases were signed with from *Trusted People* in the same single administrator prompt. It finds them by thumbprint as well as by the publisher of a copy being removed, because removing an app never removes its certificate.
+
+    Store-signed copies and other Windows accounts are left alone.
   - **In every channel**, Windows patches .NET only when *Receive updates for other Microsoft products* is on. `Install.cmd` reports whether it is and does not change it, since the setting covers every Microsoft product on the machine.
 - **Capabilities in `Package.appxmanifest`:**
   ```xml

@@ -24,18 +24,22 @@ other Microsoft products* is on, and the installer tells you whether it is.
 
 From **1.3.1** the package is signed as **The Schnauzer Group LLC**. Earlier releases were signed
 under a misspelling of the company's name. The publisher is part of a package's identity, so
-Windows treats this release as a **different application**: it installs **alongside** the old
-one rather than over it, and it starts with no history. To move across:
+Windows treats this release as a **different application** that cannot upgrade the old one.
+**`Install.cmd` handles it** (#590), for every release from 1.0.1 on:
 
-1. In the old copy, **Settings → Export history…**, and save the file.
-2. Exit the old copy: right-click its notification-area icon → **Exit**. Two copies would compete
-   for the same serial port.
-3. Install this release, then **Settings → Import history…** the file.
-4. Uninstall the old copy in *Settings › Apps*. Both are called WinZ3805A. The old one is the copy
-   whose publisher is **not** The Schnauzer Group LLC. `build/Uninstall-Sideload.ps1` removes both
-   copies and both certificates.
+1. It asks you to exit the old copy if it is running (right-click its notification-area icon →
+   **Exit**).
+2. Before changing anything, it lists the old copy and the old certificate it will remove.
+3. After installing this release, it saves the old copy's history, settings and logs to a
+   *WinZ3805A earlier copy …* folder in **Documents**. It moves them into the new copy, then
+   removes the old copy. The old certificate comes out of *Trusted People* in the same single
+   administrator prompt as the new one goes in.
 
-This happens once. Later releases upgrade in place again.
+If this release was already installed and has history of its own, that history is not
+overwritten. Add the old history from **Settings → Import history…**, choosing `trend.db` in the
+saved folder.
+
+Later releases under the same publisher upgrade in place.
 
 ### About the certificate prompt
 
