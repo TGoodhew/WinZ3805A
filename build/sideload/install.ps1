@@ -223,6 +223,36 @@ function Write-State {
     Write-Log "ms update     $(switch (Test-MicrosoftUpdate) { $true { 'on' } $false { 'off' } default { 'unknown' } })"
 }
 
+# A package file's identity, read from its own manifest rather than guessed from its file name.
+function Get-PackageIdentity {
+    param([string]$Path)
+
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $archive = [IO.Compression.ZipFile]::OpenRead($Path)
+    try {
+        $reader = New-Object IO.StreamReader($archive.GetEntry('AppxManifest.xml').Open())
+        try { [xml]$manifest = $reader.ReadToEnd() } finally { $reader.Dispose() }
+    }
+    finally {
+        $archive.Dispose()
+    }
+
+    [pscustomobject]@{
+        Name    = $manifest.Package.Identity.Name
+        Version = [version]$manifest.Package.Identity.Version
+    }
+}
+
+# The newest installed x64 package of that name, at the given version or above, or nothing.
+function Get-InstalledAtLeast {
+    param([string]$Name, [version]$Minimum)
+
+    Get-AppxPackage -Name $Name -ErrorAction SilentlyContinue |
+        Where-Object { $_.Architecture -eq 'X64' -and [version]$_.Version -ge $Minimum } |
+        Sort-Object { [version]$_.Version } -Descending |
+        Select-Object -First 1
+}
+
 # $true when Microsoft Update is on, $false when it is off, $null when Windows would not say.
 function Test-MicrosoftUpdate {
     try {
@@ -545,22 +575,44 @@ if ($elevationNeeded) {
 # ---------------------------------------------------------------------------
 Write-Step '3 of 4  Windows App Runtime'
 
+# THE ZIP'S RUNTIME IS A MINIMUM, NOT A REQUIREMENT (#595). The package declares
+# MinVersion, and in Windows App SDK 2.x the family name carries only the major
+# version, so any 2.x at or above it satisfies the application. A newer one
+# arrives on its own - on the reporter's Windows 10 machine it came with a Store
+# update to Photos, which then refuses to let it go - and on Windows 10 installing
+# the older one beside it is refused as a downgrade. That refusal stopped the
+# install before the application was attempted, though the application would have
+# installed against the newer runtime unchanged.
+#
+# So: look first, and install only when nothing good enough is there. And when
+# installing fails, judge by what is installed afterwards, not by the words of the
+# error - those are localised, and a pattern of English phrases never matched a
+# machine running Windows in another language.
 if ($runtime) {
-    Write-Info 'Installing, or confirming it is already present. This can take a minute.'
-    try {
-        Add-AppxPackage -Path $runtime.FullName -ErrorAction Stop
-        Write-Ok 'Installed.'
-    }
-    catch {
-        Write-Log "Add-AppxPackage (runtime) said: $($_.Exception.Message)"
+    $zipRuntime = Get-PackageIdentity $runtime.FullName
+    Write-Log "zip runtime   $($zipRuntime.Name) $($zipRuntime.Version)"
 
-        # Already present at this version or newer is the common case and is not
-        # a failure. Anything else is, and is reported as it was received.
-        if ($_.Exception.Message -match '0x80073D06|already installed|higher version') {
-            Write-Ok 'Already present.'
+    $present = Get-InstalledAtLeast -Name $zipRuntime.Name -Minimum $zipRuntime.Version
+
+    if ($present) {
+        Write-Ok "Already present ($($present.Version)), which is this version or newer."
+    }
+    else {
+        Write-Info 'Installing. This can take a minute.'
+        try {
+            Add-AppxPackage -Path $runtime.FullName -ErrorAction Stop
+            Write-Ok "Installed ($($zipRuntime.Version))."
         }
-        else {
-            throw
+        catch {
+            Write-Log "Add-AppxPackage (runtime) said: $($_.Exception.Message)"
+
+            $present = Get-InstalledAtLeast -Name $zipRuntime.Name -Minimum $zipRuntime.Version
+            if ($present) {
+                Write-Ok "Present ($($present.Version)), which is this version or newer."
+            }
+            else {
+                throw "The Windows App Runtime could not be installed, and no version $($zipRuntime.Version) or newer is present. Windows said: $($_.Exception.Message)"
+            }
         }
     }
 }
@@ -603,8 +655,14 @@ $frameworkName = if ($runtime) { [IO.Path]::GetFileNameWithoutExtension($runtime
 $installed = Get-AppxPackage -Name 'Microsoft.WindowsAppRuntime.*' -ErrorAction SilentlyContinue |
     Where-Object { $_.Architecture -eq 'X64' }
 
+# THE NEWEST OF THE FAMILY, because that is the one the application binds to, and so the one the
+# companions must match (#594). Several versions of one family install side by side - the zip's
+# 2.3.1.0 beside a Store-serviced 2.5.1.0, on the 30 Sep 2026 test VM - and "the first one Windows
+# lists" was the older there, so the companions were checked against the wrong framework and the
+# match reported was not one.
 $framework = if ($frameworkName) {
-    $installed | Where-Object { $_.Name -eq $frameworkName } | Select-Object -First 1
+    $installed | Where-Object { $_.Name -eq $frameworkName } |
+        Sort-Object { [version]$_.Version } -Descending | Select-Object -First 1
 }
 else {
     # No runtime in the download, so the family has to be guessed from what is installed. The
@@ -620,36 +678,56 @@ if (-not $framework) {
           'Install the runtime from this folder and run this installer again.'
 }
 
-$companions = Join-Path $framework.InstallLocation 'MSIX'
+Write-Log "framework     $($framework.Name) $($framework.Version), signature $($framework.SignatureKind)"
 
-foreach ($name in 'Main.msix', 'Singleton.msix') {
-    $package = Join-Path $companions $name
+# A Store-serviced framework carries its companions too - checked 30 Sep 2026 on a machine with the
+# Store's 2.5.1.0: MSIX\Main.msix and MSIX\Singleton.msix are both there - so the same folder serves
+# whichever framework is newest.
+$companions = Join-Path $framework.InstallLocation 'MSIX'
+$matched = @()
+
+foreach ($file in 'Main.msix', 'Singleton.msix') {
+    $package = Join-Path $companions $file
     if (-not (Test-Path $package)) {
         # A runtime laid out differently to the one this was written against. Say so rather than
         # carrying on: the application would install and then exit without explaining itself.
-        throw "The Windows App Runtime at $($framework.InstallLocation) does not carry $name, " +
+        throw "The Windows App Runtime at $($framework.InstallLocation) does not carry $file, " +
               'so the application cannot be made to start. Report this with the runtime version: ' +
               "$($framework.Version)."
     }
 
-    try {
-        Add-AppxPackage -Path $package -ErrorAction Stop
-    }
-    catch {
-        Write-Log "Add-AppxPackage ($name) said: $($_.Exception.Message)"
+    # What this framework's companion is, from its own manifest, and what is installed under that
+    # name. Equal is done; anything else is installed from the framework's own copy - forced, since
+    # the companion must belong to this framework even where that is a downgrade.
+    $wanted = Get-PackageIdentity $package
+    $current = Get-AppxPackage -Name $wanted.Name -ErrorAction SilentlyContinue |
+        Where-Object { $_.Architecture -eq 'X64' } | Select-Object -First 1
+    Write-Log "companion     $($wanted.Name): wanted $($wanted.Version), installed $(if ($current) { $current.Version } else { 'none' })"
 
-        # Already there at this version is the ordinary case on a re-run. A version mismatch is the
-        # case this block exists for, and it needs the force: the companion has to be replaced by
-        # the one belonging to the framework now installed, which may be a downgrade.
-        if ($_.Exception.Message -match '0x80073D06|already installed|higher version') {
-            continue
+    if (-not $current -or [version]$current.Version -ne $wanted.Version) {
+        try {
+            Add-AppxPackage -Path $package -ErrorAction Stop
+        }
+        catch {
+            Write-Log "Add-AppxPackage ($file) said: $($_.Exception.Message)"
+            Add-AppxPackage -Path $package -ForceUpdateFromAnyVersion -ErrorAction Stop
         }
 
-        Add-AppxPackage -Path $package -ForceUpdateFromAnyVersion -ErrorAction Stop
+        $current = Get-AppxPackage -Name $wanted.Name -ErrorAction SilentlyContinue |
+            Where-Object { $_.Architecture -eq 'X64' } | Select-Object -First 1
     }
+
+    # Reported from what is installed now, never asserted.
+    if (-not $current -or [version]$current.Version -ne $wanted.Version) {
+        throw "$($wanted.Name) should be $($wanted.Version) to match the Windows App Runtime " +
+              "$($framework.Version), but is $(if ($current) { $current.Version } else { 'not installed' }). " +
+              'The application would install and then close without a window.'
+    }
+
+    $matched += "$([IO.Path]::GetFileNameWithoutExtension($file)) $($current.Version)"
 }
 
-Write-Ok "Runtime companions match the runtime ($($framework.Version))."
+Write-Ok "Runtime companions match the runtime $($framework.Version): $($matched -join ', ')."
 
 # ---------------------------------------------------------------------------
 # 3. The application
