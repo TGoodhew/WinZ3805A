@@ -324,9 +324,16 @@ non-developer can act on. This is expected to fail; the check is that it fails *
 > certificate. It happened at v1.0.1, when the placeholder `CN=AppPublisher` was replaced, and
 > again at v1.3.1, when a misspelling of the company's name was corrected to
 > `CN=The Schnauzer Group LLC`. Since then `Uninstall-Sideload.ps1` also removes the certificate
-> of every installed copy's publisher, whatever that publisher was. **At v1.3.1, also check the release notes' upgrade steps
-> against a machine that has 1.3.0 installed**: export, exit, install alongside, import, then
-> uninstall the old copy.
+> of every installed copy's publisher, whatever that publisher was. **Since #590, `Install.cmd`
+> replaces an earlier copy itself.** The next row checks that on a machine with a real earlier
+> copy.
+
+| | |
+|---|---|
+| **Do** | **Replacing an earlier copy (#590).** On a machine with **v1.3.0** installed from its own release page, with some history recorded and the app running: run this release's `Install.cmd`. |
+| **Pass** | It asks for the running copy to be closed and waits. *Before anything changes* lists version 1.3.0.0 and the certificate `655D07E3…`, and only then asks, in **one** administrator prompt. Afterwards: <ul><li>`Get-AppxPackage -Name WinZ3805A` lists only this release;</li><li>`certlm.msc` → *Trusted People* holds only this release's certificate;</li><li>Documents has a *WinZ3805A earlier copy 1.3.0.0 …* folder containing `trend.db`;</li><li>the app opens with 1.3.0's history and its remembered connection.</li></ul> |
+| **Do** | **A certificate left behind.** On a machine where v1.3.0 was uninstalled from *Settings › Apps*, so its certificate is still trusted: run `Install.cmd`. |
+| **Pass** | *Before anything changes* lists the certificate `655D07E3…` and no earlier copy. After the one prompt, *Trusted People* no longer holds it. |
 
 ---
 

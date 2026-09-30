@@ -196,10 +196,12 @@ SHA-256, so both can be checked against what Windows shows you.
 
 **Coming from 1.3.0 or earlier?** Those releases were signed under a misspelling
 of the company's name, corrected to **The Schnauzer Group LLC** in 1.3.1. The
-publisher is part of the package's identity, so 1.3.1 installs *alongside* the old
-copy instead of upgrading it. Export the history from the old copy first
-(Settings → Export history…), exit it, install, import, then uninstall the old
-one. The release notes give the steps. This happens once.
+publisher is part of the package's identity, so 1.3.1 cannot upgrade the old copy
+in place. `Install.cmd` handles that (#590). It saves the old copy's data to
+Documents, moves the data into the new copy, then removes the old copy and the
+certificate earlier releases were signed with. That certificate is removed in the
+same single administrator prompt, even if the old app was already uninstalled by
+hand, since removing an app never removes its certificate.
 
 Uninstall from *Settings › Apps*, or with
 [`build/Uninstall-Sideload.ps1`](build/Uninstall-Sideload.ps1), which also
