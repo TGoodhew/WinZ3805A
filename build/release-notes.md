@@ -41,6 +41,14 @@ saved folder.
 
 Later releases under the same publisher upgrade in place.
 
+### If the install or the first start goes wrong
+
+`Install.cmd` records every run in `%LOCALAPPDATA%\WinZ3805A Installer\logs`, one file per run.
+The record covers what it found, what it removed or kept and why, and the state of the machine
+before and after. The installer starts WinZ3805A once at the end, and the record says whether it
+stayed open; if it didn't, it includes Windows' error entries for it. The installer prints the
+path as it finishes. Please attach the file to any report.
+
 ### About the certificate prompt
 
 The package is signed with a **self-signed certificate**, so `Install.cmd` asks

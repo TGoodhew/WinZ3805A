@@ -293,6 +293,14 @@ never sees the mark Windows puts on a downloaded file.
 Do it on the artifact from the **release page**, not on `dist\` — downloading is half of what is
 being tested.
 
+**Keep the installer's log with the result** (#592). Every run writes one to
+`%LOCALAPPDATA%\WinZ3805A Installer\logs`, and it holds three things:
+- what the installer found and why it removed or kept each copy and certificate;
+- the machine's state before and after;
+- whether the app stayed open when the installer started it.
+
+Attach it to the release's QA-run issue. A failure should leave a log that ends in its reason.
+
 There are **two zips** since #588. Run both, each on a machine that has never had .NET 10: a fresh virtual machine per zip is the honest way.
 
 | | |

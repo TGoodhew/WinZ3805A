@@ -56,6 +56,18 @@ WHAT GETS INSTALLED
   THIRD-PARTY-NOTICES.md, in this folder and inside the application.
 
 
+IF SOMETHING GOES WRONG
+
+  The installer keeps a record of everything it did: what it found, what
+  it removed or kept and why, and whether WinZ3805A opened when it was
+  started at the end. It is in
+
+    %LOCALAPPDATA%\WinZ3805A Installer\logs
+
+  one file per run, named by date and time, and the installer prints the
+  path as it finishes. Please include it when reporting a problem.
+
+
 IF AN EARLIER WINZ3805A IS INSTALLED
 
   Releases up to 1.3.0 were signed under an earlier publisher identity, so
