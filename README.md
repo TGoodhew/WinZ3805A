@@ -106,7 +106,7 @@ what the Windows App SDK runs on.
 | **Also supported** | Windows 10 21H2 / 22H2 / 23H2, Windows 11 21H2 through 25H2 |
 | **Windows Server** | Server 2019 (17763) and Server 2022 (20348) |
 | **Architecture** | **x64 only** — see §6.1. Windows on ARM is not a supported configuration |
-| **Runtime** | .NET 10 (LTS) and the Windows App SDK runtime, both resolved at install time |
+| **Runtime** | .NET 10 (LTS), installed by Microsoft's installer (the offline zip carries it); the Windows App SDK runtime, carried in both zips |
 
 The floor is set in [`WinZ3805A.csproj`](src/WinZ3805A/WinZ3805A.csproj) as
 `TargetPlatformMinVersion` `10.0.17763.0`, while the project *builds* against the
@@ -164,17 +164,25 @@ Sources: [Windows App SDK and supported Windows releases](https://learn.microsof
 
 **[Download the latest release](https://github.com/TGoodhew/WinZ3805A/releases/latest)**,
 unblock the zip, extract it, and double-click `Install.cmd`. There is no Store
-listing; this is sideloaded.
+listing; this is sideloaded. Each release has two zips:
+
+- **`WinZ3805A-<version>-x64.zip`**, for a machine with an internet connection.
+  If .NET 10 is not installed, `Install.cmd` opens Microsoft's download page for it.
+- **`WinZ3805A-<version>-x64-offline.zip`**, for a machine without one. It adds
+  Microsoft's own .NET 10 Runtime installer, which `Install.cmd` runs when .NET 10
+  is missing.
 
 > Unblock before extracting — right-click the **zip** → *Properties* →
 > *Unblock*. Windows marks anything downloaded from the internet and the mark
 > survives extraction, where it makes the install fail without mentioning why.
 
-The zip carries the signed package, its certificate and the x64 Windows App
-Runtime, so a bench machine with neither Visual Studio nor an internet
-connection can install from it. Deployment of the Windows App SDK is
-framework-dependent rather than self-contained (§6.3), which is why the runtime
-travels in the zip rather than being fetched.
+Both zips carry the signed package, its certificate and the x64 Windows App
+Runtime. The package carries **no .NET runtime** of its own (§6.3). .NET 10 is
+installed by Microsoft's installer and kept patched by Microsoft Update, which
+it could not do for a runtime inside the package (#586, #588). Windows applies
+those patches only when *Receive updates for other Microsoft products* is on,
+and `Install.cmd` says whether it is. So a bench machine with neither Visual
+Studio nor an internet connection installs and runs from the offline zip.
 
 The package is signed with a **self-signed certificate** (`build/devcert.pfx`,
 generated from the manifest on first use so its subject cannot drift from the
@@ -182,8 +190,9 @@ declared publisher), so the person installing trusts it once: `Install.cmd`
 asks for administrator permission for exactly that step — adding the
 certificate to *Trusted People* and nothing wider — and the
 [README in the zip](build/sideload/README.txt) explains what that does and does
-not grant before asking. Every release publishes the certificate thumbprint and
-the zip's SHA-256 so both can be checked against what Windows shows you.
+not grant before asking. In the offline zip, the same single prompt also
+installs .NET. Every release publishes the certificate thumbprint and each zip's
+SHA-256, so both can be checked against what Windows shows you.
 
 **Coming from 1.3.0 or earlier?** Those releases were signed under a misspelling
 of the company's name, corrected to **The Schnauzer Group LLC** in 1.3.1. The

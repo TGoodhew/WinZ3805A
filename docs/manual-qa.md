@@ -293,11 +293,18 @@ never sees the mark Windows puts on a downloaded file.
 Do it on the artifact from the **release page**, not on `dist\` — downloading is half of what is
 being tested.
 
+There are **two zips** since #588. Run both, each on a machine that has never had .NET 10: a fresh virtual machine per zip is the honest way.
+
 | | |
 |---|---|
-| **Do** | On a machine with no Visual Studio and no Windows App SDK: download the zip from the release, right-click it → *Properties* → **Unblock**, extract, double-click `Install.cmd`. |
+| **Do** | **Online zip**, on a machine with no Visual Studio, no Windows App SDK and no .NET, connected to the internet: download `WinZ3805A-<version>-x64.zip` from the release, right-click it → *Properties* → **Unblock**, extract, double-click `Install.cmd`. Install .NET from the page it opens, then start the app. |
 | **Watch** | The certificate thumbprint in the UAC/trust prompt. |
-| **Pass** | The thumbprint matches the one in the release notes. One administrator prompt and no others. The app appears in Start and launches. |
+| **Pass** | The thumbprint matches the one in the release notes. One administrator prompt, for the certificate. Step 2 says .NET 10 is not installed and opens `dotnet.microsoft.com`'s .NET 10 page. Once .NET is installed from that page, the app appears in Start and launches. The last lines say whether Microsoft Update is on, and that matches *Settings › Windows Update › Advanced options*. |
+
+| | |
+|---|---|
+| **Do** | **Offline zip**, on a second such machine, **disconnected from the network**: the same steps with `WinZ3805A-<version>-x64-offline.zip`. |
+| **Pass** | **One** administrator prompt, for the certificate **and** .NET together, and no other. Step 2 names the installer and reports *.NET 10.0.x installed*. The version matches the release notes' row for the offline zip. The app launches with no network and no download prompt. *Settings › Apps* lists *Microsoft .NET Runtime - 10.0.x (x64)*: an ordinary Microsoft install, which is what Microsoft Update services. v1.3.1's single zip installed and then stopped at first launch on a .NET download prompt (#586). |
 
 | | |
 |---|---|

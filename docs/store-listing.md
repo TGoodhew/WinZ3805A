@@ -77,6 +77,15 @@ otherwise — and it deliberately contains no company mark.
 
 ### Description
 
+**The first lines must state the .NET 10 dependency.** Store Policy 10.2.4 (v7.20):
+*"Your product may depend on non-integrated software … if you disclose the dependency at the
+beginning of the description in metadata."* The package carries no .NET runtime (§6.3, #588),
+and the Store has no .NET framework package to install with it, so the listing has to say so:
+
+> **Requires the free .NET 10 Runtime from Microsoft.** If it is not installed, Windows offers to
+> download it the first time WinZ3805A starts; after that, Windows Update keeps it patched when
+> *Receive updates for other Microsoft products* is on.
+>
 > WinZ3805A is a modern Windows application for monitoring and controlling
 > GPS-disciplined oscillators over RS-232. It works with HP and Symmetricom SCPI
 > GPS receivers including the Z3805A, Z3801A, 58503A/B, 59551A and Z3816A, and
@@ -175,6 +184,9 @@ screenshot of a disconnected application shows nothing worth seeing.
 - [ ] `pwsh build/Invoke-Wack.ps1` clean on **x64**, from an elevated shell —
       the only architecture, per §6.1 as amended
 - [ ] Screenshots captured
+- [ ] The description opens with the .NET 10 dependency (Policy 10.2.4, above), and the
+      certification notes say it too: a tester's machine without .NET 10 sees Windows'
+      download prompt at first launch, and that is expected
 - [ ] `Identity/@Version` in the manifest set to the release version — it is
       the single version source; `build/New-SideloadPackage.ps1` reads it and
       names the zip from it, and nothing else carries a version

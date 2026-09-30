@@ -12,10 +12,12 @@ in the project files under `src/` with its version, each package's `<license>` f
 `.nuspec` in the NuGet cache, and a listing of the built package to see which of
 them actually land in it.
 
-**Two things travel as files rather than assemblies**: the Cascadia Mono font,
-whose licence requires its text to travel with it, and — in the sideload zip —
-the x64 Windows App Runtime installer, under Microsoft's terms. Everything else
-is an assembly in the MSIX. The MIT, BSD-2-Clause and Apache-2.0 licences each
+**Three things travel as files rather than assemblies**: the Cascadia Mono font,
+whose licence requires its text to travel with it; in both sideload zips, the x64
+Windows App Runtime installer, under Microsoft's terms; and in the offline zip
+only, Microsoft's .NET Runtime installer, unmodified. Everything else is an
+assembly in the MSIX. **The package contains no .NET runtime.** .NET is installed
+separately by Microsoft's installer (§6.3, #588). The MIT, BSD-2-Clause and Apache-2.0 licences each
 require their notice to accompany a binary redistribution, so this file ships
 inside the package and in the zip, and every licence text is reproduced in full
 below.
@@ -26,6 +28,7 @@ below.
 
 | Component | Version | Licence | Redistributed as |
 |---|---|---|---|
+| .NET Runtime installer (offline zip only) | The current 10.0 patch when the release is built; each release's notes name it | MIT | `Runtime/dotnet-runtime-<version>-win-x64.exe` in the offline zip: Microsoft's installer, unmodified and signed by Microsoft. It installs .NET for the whole machine, where Microsoft Update services it |
 | Cascadia Mono (font) | 2407.24 | SIL Open Font License 1.1 | `Assets/Fonts/CascadiaMono.ttf` in the package, with the licence text beside it |
 | Windows App SDK / WinUI 3 (`Microsoft.WindowsAppSDK`) | 2.3.1 | Microsoft Software License Terms (redistribution permitted by its §3) | `Microsoft.WinUI.dll`, the projection assemblies and the bootstrapper in the package; the native runtime as a framework package — carried in the sideload zip as `Runtime\Microsoft.WindowsAppRuntime.2.msix`, and resolved by the Store at install if that channel is ever used |
 | Microsoft.Web.WebView2 (via the Windows App SDK) | 1.0.3719.77 | Microsoft's BSD-style licence (`LICENSE.txt` in the package) | `Microsoft.Web.WebView2.Core.dll` and `WebView2Loader.dll` in the package; nothing in the application uses them |
@@ -194,6 +197,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 
 Applies to the components listed above as MIT. Their copyright notices:
 
+- The .NET Runtime, as installed by the offline zip's installer — Copyright (c)
+  .NET Foundation and Contributors. All rights reserved.
 - CommunityToolkit.WinUI.Controls.SettingsControls, CommunityToolkit.Common,
   CommunityToolkit.WinUI.Extensions / Helpers / Triggers — Copyright (c) .NET
   Foundation and Contributors. All rights reserved.

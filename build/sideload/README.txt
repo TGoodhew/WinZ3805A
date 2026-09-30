@@ -12,6 +12,11 @@ TO INSTALL
   Windows will ask for administrator permission once. Read the next section
   before you agree to it.
 
+  WinZ3805A needs Microsoft's free .NET 10 Runtime. If this folder has a
+  Runtime\dotnet-runtime-...exe file (the "offline" download), the installer
+  installs .NET from it when your machine does not have it, in that same
+  permission prompt. Otherwise it opens Microsoft's download page for you.
+
 
 ABOUT THAT PERMISSION PROMPT
 
@@ -39,7 +44,14 @@ ABOUT THAT PERMISSION PROMPT
 WHAT GETS INSTALLED
 
   WinZ3805A itself, and the Windows App Runtime it needs if your machine does
-  not already have it. Both come from this folder; nothing is downloaded.
+  not already have it. Both come from this folder.
+
+  .NET 10, if your machine does not have it: from this folder in the offline
+  download, or from Microsoft's page in the other one. Either way it is
+  Microsoft's own installer, installed for the whole machine, and Windows keeps
+  it up to date - provided "Receive updates for other Microsoft products" is
+  on (Settings > Windows Update > Advanced options). The installer tells you
+  whether it is.
   The licences of the components the application uses are listed in
   THIRD-PARTY-NOTICES.md, in this folder and inside the application.
 
@@ -57,6 +69,10 @@ TO REMOVE IT
 
   Either way the certificate stays behind. To remove that too, run
   certlm.msc, open Trusted People > Certificates, and delete the entry.
+
+  .NET stays installed too, because other applications may use it. If
+  nothing else needs it, remove "Microsoft .NET Runtime - 10..." from
+  Settings > Apps.
 
 
 WHAT IT NEEDS

@@ -219,6 +219,11 @@ The `Device` library must have zero dependency on `Microsoft.UI.*`. All parsing 
 
 - **Single-project MSIX.** Create from the *Blank App, Packaged (WinUI 3 in Desktop)* template. Do not use a separate Windows Application Packaging Project.
 - **Framework-dependent** deployment of the Windows App SDK, not self-contained. The Store handles the framework package dependency and this keeps the submission small.
+- **Framework-dependent for .NET too: the package never carries a .NET runtime.** *(Amended 30 Sep 2026, #586, #587, #588.)* .NET 10 is a prerequisite, installed by **Microsoft's own installer**, and serviced by Microsoft Update. It is not serviced by this project. A runtime inside the package was tried (#587) and reverted: Microsoft Update cannot see one, so every .NET security fix would have reached users only when this project released. How .NET reaches a machine depends on the channel:
+  - **The online sideload zip** (`WinZ3805A-<version>-x64.zip`) carries no runtime. `Install.cmd` detects a missing .NET 10 and opens Microsoft's download page. Otherwise Windows' own prompt at first launch offers the same page.
+  - **The offline sideload zip** (`WinZ3805A-<version>-x64-offline.zip`) adds Microsoft's .NET 10 Runtime installer. `Install.cmd` runs it quietly and machine-wide when .NET 10 is missing, in the same administrator prompt as the certificate. That is the install dotnet.microsoft.com gives, so Microsoft Update services it once the machine is online. The packager fetches the current patch from Microsoft's release metadata at build time and checks its published SHA-512 and its Microsoft signature, so no .NET version is written in the repository.
+  - **The Store** has no .NET framework package and cannot run an installer. The listing therefore states the dependency at the start of its description, as Store Policy 10.2.4 requires, and the certification notes say so too (#575).
+  - **In every channel**, Windows patches .NET only when *Receive updates for other Microsoft products* is on. `Install.cmd` reports whether it is and does not change it, since the setting covers every Microsoft product on the machine.
 - **Capabilities in `Package.appxmanifest`:**
   ```xml
   <Capabilities>
