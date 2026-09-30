@@ -43,6 +43,38 @@ public static class ReadoutFormatter
     public const string NoValue = "—";
 
     /// <summary>
+    /// U+00A0 NO-BREAK SPACE, which holds the parts of a clock line together when it wraps (#581).
+    /// </summary>
+    public const string NoBreakSpace = " ";
+
+    /// <summary>
+    /// The main window's clock line: the time, the zone label, and the date (§10.3, #95).
+    /// </summary>
+    /// <param name="value">The instant, already in the zone being shown.</param>
+    /// <param name="zoneLabel">What <c>DisplayTimeConverter</c> printed beside it.</param>
+    /// <param name="culture">The culture the date is written in; the time is invariant.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>Where it may break, and where it may not.</b> At the main window's minimum width the line
+    /// does not fit beside its two controls, and wraps (#581). Left to ordinary spaces it broke
+    /// wherever the width ran out, which could leave the separator starting the second line or
+    /// split the date from its year. So the date's own spaces and the one before the separator do
+    /// not break: the separator ends the first line, and the date is one unit on the second. The
+    /// zone name keeps ordinary spaces, because a long one may have to wrap itself.
+    /// </para>
+    /// <para>
+    /// Copying undoes this, in <see cref="ToMachineText"/>.
+    /// </para>
+    /// </remarks>
+    public static string ClockLine(DateTimeOffset value, string zoneLabel, CultureInfo culture)
+    {
+        string date = value.ToString("dd MMM yyyy", culture).Replace(" ", NoBreakSpace, StringComparison.Ordinal);
+
+        return value.ToString("HH:mm:ss", CultureInfo.InvariantCulture)
+            + $" {zoneLabel}{NoBreakSpace}· {date}";
+    }
+
+    /// <summary>
     /// Undoes §9.5.3's typesetting, for a value on its way out of the application (§9.7.4).
     /// </summary>
     /// <returns>The machine-readable text, or null when the field holds nothing.</returns>
@@ -71,6 +103,7 @@ public static class ReadoutFormatter
         string plain = text
             .Replace(MinusSign, "-", StringComparison.Ordinal)
             .Replace(HairSpace, string.Empty, StringComparison.Ordinal)
+            .Replace(NoBreakSpace, " ", StringComparison.Ordinal)
             .Trim();
 
         return plain.Length == 0 || string.Equals(plain, NoValue, StringComparison.Ordinal)

@@ -149,11 +149,17 @@
                 Centred, like the badge and the button beside it. Left to stretch, the text took the
                 row's full 32 px and drew its one line at the top, so the two controls, centred in
                 the same row, sat visibly below it.
+
+                Wraps, at a MaxWidth MainPage.FitClockLine sets to what the row leaves beside the
+                controls showing (#581). At the 380 minimum the line does not fit on one line, and
+                before this it overran and carried both controls off screen. Where it may break is
+                ReadoutFormatter.ClockLine's business: before the date, never inside it.
             -->
             <TextBlock x:Name="ClockText"
                        controls:CopyMenu.IsCopyable="True"
                        Style="{StaticResource WzMonoTextStyle}"
                        Foreground="{ThemeResource WzTextPrimaryBrush}"
+                       TextWrapping="Wrap"
                        VerticalAlignment="Center" />
             <!--
                 A11Y-5: pointer targets are >= 32 x 32 px AT ALL TIMES, and §9.10.2's sky-plot
