@@ -777,9 +777,8 @@ name is `WinZ3805A_` followed by a hash of the publisher — which is what *Show
 Diagnostics page opens, so you never need to find it by hand. In it: the application log
 (`logs\app.log`, rolled at 1 MB with four older files kept), the recorded trend (`trend.db`), the
 remembered connection, and the window positions and settings. Uninstalling removes all of it; to
-keep the trend across a reinstall,
-uninstall from PowerShell with `Get-AppxPackage WinZ3805A | Remove-AppxPackage
--PreserveApplicationData`.
+keep the trend across a reinstall, use **Export history…** before uninstalling and **Import
+history…** after installing again.
 
 The application collects nothing and sends nothing anywhere. It has no network code at all;
 everything it knows, it learned from the serial port.
