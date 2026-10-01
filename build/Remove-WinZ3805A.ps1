@@ -196,21 +196,36 @@ foreach ($o in $orphanFolders) { Write-Log "left behind   $o" }
 # Certificates, in the four stores a person could have put one: the installers use the machine's
 # Trusted People; double-clicking WinZ3805A.cer and accepting the wizard's defaults puts it in this
 # account's. Root is checked because a certificate there vouches for even more.
+#
+# THIS ACCOUNT'S STORES ARE A MERGED VIEW that also shows the machine's, so a certificate the machine
+# trusts appears in both. It is counted once, as the machine's: removing it there removes it from
+# this view too, and removing it again by the account's path then finds nothing - measured on the
+# Windows 10 VM on 1 Oct 2026, where the first version of this listed 7F47E8D7 twice. A copy the
+# account ALSO holds itself shows only once the machine's is gone, which is why step 6 looks again.
 $copyPublishers = @($copies | ForEach-Object Publisher | Select-Object -Unique)
-$certificates = @()
-$unclaimed = @()
-foreach ($location in 'LocalMachine', 'CurrentUser') {
+function Find-Certificates {
     foreach ($store in 'TrustedPeople', 'Root') {
-        foreach ($c in @(Get-ChildItem "Cert:\$location\$store" -ErrorAction SilentlyContinue)) {
-            $ours = $knownThumbprints.ContainsKey($c.Thumbprint) -or ($knownSubjects -contains $c.Subject) -or
-                (($c.Subject -eq $placeholderSubject) -and ($copyPublishers -contains $placeholderSubject))
-            $name = if ($knownThumbprints.ContainsKey($c.Thumbprint)) { $knownThumbprints[$c.Thumbprint] } else { $c.Subject }
-            $entry = [pscustomobject]@{ Location = $location; Store = $store; Thumbprint = $c.Thumbprint; Name = $name; Expires = $c.NotAfter }
-            if ($ours) { $certificates += $entry }
-            elseif ($c.Subject -eq $placeholderSubject) { $unclaimed += $entry }
+        $machine = @(Get-ChildItem "Cert:\LocalMachine\$store" -ErrorAction SilentlyContinue)
+        $machinePrints = @($machine | ForEach-Object Thumbprint)
+        $account = @(Get-ChildItem "Cert:\CurrentUser\$store" -ErrorAction SilentlyContinue |
+            Where-Object { $machinePrints -notcontains $_.Thumbprint })
+        foreach ($pair in @(@($machine | ForEach-Object { , @('LocalMachine', $_) }) + @($account | ForEach-Object { , @('CurrentUser', $_) }))) {
+            $c = $pair[1]
+            $kind = $null
+            if ($knownThumbprints.ContainsKey($c.Thumbprint) -or ($knownSubjects -contains $c.Subject) -or
+                (($c.Subject -eq $placeholderSubject) -and ($copyPublishers -contains $placeholderSubject))) { $kind = 'ours' }
+            elseif ($c.Subject -eq $placeholderSubject) { $kind = 'unclaimed' }
+            if (-not $kind) { continue }
+            [pscustomobject]@{
+                Location = $pair[0]; Store = $store; Thumbprint = $c.Thumbprint; Kind = $kind; Expires = $c.NotAfter
+                Name = $(if ($knownThumbprints.ContainsKey($c.Thumbprint)) { $knownThumbprints[$c.Thumbprint] } else { $c.Subject })
+            }
         }
     }
 }
+$found = @(Find-Certificates)
+$certificates = @($found | Where-Object { $_.Kind -eq 'ours' })
+$unclaimed = @($found | Where-Object { $_.Kind -eq 'unclaimed' })
 foreach ($c in $certificates) { Write-Log "certificate   $($c.Location)\$($c.Store) $($c.Thumbprint), $($c.Name): remove" }
 foreach ($c in $unclaimed) { Write-Log "certificate   $($c.Location)\$($c.Store) $($c.Thumbprint), $($c.Name): keep, no installed WinZ3805A was signed by it" }
 
@@ -232,7 +247,8 @@ $everyPackage = @(Get-AppxPackage -ErrorAction SilentlyContinue)
 $runtimeLines = @()
 foreach ($r in $runtimes) {
     $users = @($everyPackage | Where-Object {
-            $_.Name -ne 'WinZ3805A' -and @($_.Dependencies | ForEach-Object PackageFullName) -contains $r.PackageFullName
+            $_.Name -ne 'WinZ3805A' -and $_.Name -notlike 'MicrosoftCorporationII.WinAppRuntime.*' -and
+            @($_.Dependencies | ForEach-Object PackageFullName) -contains $r.PackageFullName
         } | ForEach-Object Name | Select-Object -Unique)
     $line = "$($r.Name) $($r.Version) $($r.Architecture), $(if ($r.SignatureKind -eq 'Store') { 'from the Store' } else { 'installed outside the Store' })" +
         $(if ($r.IsFramework) { if ($users.Count) { "; also used by $(@($users | Select-Object -First 4) -join ', ')" } else { '; nothing else on this account declares it' } } else { '' })
@@ -395,7 +411,9 @@ if (Test-Path -LiteralPath $looseData) {
     catch { Write-Warn "Could not remove ${looseData}: $($_.Exception.Message)" }
 }
 
-foreach ($c in @($certificates | Where-Object { $_.Location -eq 'CurrentUser' })) {
+# Looked for again now, not taken from the survey: with the machine's copies gone, what this
+# account's view still shows is the account's own.
+foreach ($c in @(Find-Certificates | Where-Object { $_.Kind -eq 'ours' -and $_.Location -eq 'CurrentUser' })) {
     try {
         Remove-Item -Path "Cert:\CurrentUser\$($c.Store)\$($c.Thumbprint)" -Force -ErrorAction Stop
         Write-Ok "Removed certificate $($c.Thumbprint.Substring(0, 8))... from this account's $($c.Store)."
@@ -423,8 +441,8 @@ $remaining = @()
 foreach ($copy in @(Get-AppxPackage -Name 'WinZ3805A' -ErrorAction SilentlyContinue | Where-Object { $_.SignatureKind -ne 'Store' })) {
     $remaining += "package $($copy.PackageFullName)"
 }
-foreach ($c in $certificates) {
-    if (Test-Path "Cert:\$($c.Location)\$($c.Store)\$($c.Thumbprint)") { $remaining += "certificate $($c.Thumbprint) in $($c.Location)\$($c.Store)" }
+foreach ($c in @(Find-Certificates | Where-Object { $_.Kind -eq 'ours' })) {
+    $remaining += "certificate $($c.Thumbprint.Substring(0, 8))... in $($c.Location)\$($c.Store)"
 }
 foreach ($path in @($looseData, $installerFolder)) { if (Test-Path -LiteralPath $path) { $remaining += $path } }
 foreach ($r in $remaining) { Write-Warn "Still here: $r" }
