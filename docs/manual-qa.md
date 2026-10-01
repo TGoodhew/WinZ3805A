@@ -899,6 +899,26 @@ Z3805A on COM3 in Pacific time.
 
 Both 150 % runs used the old 1.3.0 package registration, which points at the same build folder as the 1.3.1 one, so the code under test was the same; only the version in the status line differs.
 
+## 24. Cancel stops a connection attempt (#585, #607)
+
+**Why.** A ContentDialog's buttons can't be clicked from a headless test, and the defect lived in
+exactly that gap. The view model's cancellation was tested and correct; the dialog never delivered
+the click. While the Connect click held its deferral, the dialog ignored Cancel and Esc, so an
+auto-detect walk on a silent port ran its full ninety seconds. Once Cancel worked, it left the
+session reading *Connecting* with the port held (#607); that half is now a test.
+
+| | |
+|---|---|
+| **Do** | Leave the USB adapter plugged in but **disconnect the serial cable from the receiver**, so the port exists and nothing answers. Open the connection dialog, choose *Auto-detect settings*, press **Connect**, and about ten seconds in press **Cancel**. Repeat, pressing **Esc** instead. Then press Cancel with nothing running. Reconnect the cable and press **Connect** once more. |
+| **Pass** | Cancel stops the walk within a second or two. `app.log` has *Cancel pressed while connecting* and then *is now Disconnected. Cancelled.*, with no more `*CLS` lines after it. The dialog stays open with the port picker and Connect usable, and no error message. The main window reads *Disconnected*, not *Connecting*. Esc does the same. Cancel with nothing running closes the dialog. With the cable back, Connect finds the receiver, **the dialog closes itself**, and the main window shows it. |
+
+**Last run:** 30 Sep 2026, packaged Debug build, Z3805A on COM3.
+- **Cancel:** pressed at 17:54:18.955; the log reached *Disconnected. Cancelled.* at 17:54:19.007, and the main window read *Disconnected*.
+- **Esc:** handled in 0.2 s.
+- **Cancel while idle:** closed the dialog.
+- **Success:** with the cable reconnected, Connect settled on 9600-8-N-1 in about 2 s, the dialog closed itself, and the main window showed *Locked to GPS*.
+- **Before the fix,** a mouse click on Cancel nine seconds in, and Esc later, reached no handler, and the walk ran on.
+
 ## Before a release
 
 Sections 1–4, 8, 9, 11 and 13 in full, then **12 on the published artifact** — which means the release
@@ -915,7 +935,8 @@ one glance at one readout, and the failure it catches is a value quietly not arr
 other check in this list would notice; **section 18 if the tray icon's code has changed** — it
 costs half a minute; **section 22 if the pin, the tray menu or the main window's title bar has
 changed**; **section 19 if window placement has changed and a second display is to hand**; **section 23 if
-window placement or the main window's layout heights have changed**; **section 20 if
+window placement or the main window's layout heights have changed**; **section 24 if the
+connection dialog or the session's connect paths have changed**; **section 20 if
 anything on the launch or connect-on-launch path has changed**, since only a real sign-in reaches it;
 **section 21 whenever `trend.db`'s schema or the history export has changed**, since an export that
 a later version cannot import loses the history of everyone who relied on it. Section 15 is not a release
