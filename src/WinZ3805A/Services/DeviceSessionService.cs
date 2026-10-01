@@ -88,6 +88,12 @@ public sealed class DeviceSessionService : IAsyncDisposable
     private ITransport? _transport;
     private LineProtocol? _protocol;
     private CancellationTokenSource? _sessionCts;
+
+    /// <summary>
+    /// The connect attempt in flight, so <see cref="DisconnectAsync"/> can end it rather than queue
+    /// behind it (#609). Set and cleared under <see cref="_lifecycle"/>; read without it, by design.
+    /// </summary>
+    private volatile CancellationTokenSource? _attempt;
     private Task? _pump;
 
     /// <summary>Wakes the backoff wait when Retry now or Stop retrying is pressed (#248).</summary>
@@ -371,6 +377,7 @@ public sealed class DeviceSessionService : IAsyncDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
 
         await _lifecycle.WaitAsync(cancellationToken).ConfigureAwait(false);
+        CancellationTokenSource attempt = BeginAttempt(cancellationToken);
         try
         {
             await TearDownAsync().ConfigureAwait(false);
@@ -379,7 +386,7 @@ public sealed class DeviceSessionService : IAsyncDisposable
             Settings = settings;
             SetStatus(ConnectionStatus.Connecting, $"Connecting to {portName} at {settings}.");
 
-            return await OpenAndSynchroniseAsync(cancellationToken).ConfigureAwait(false);
+            return await OpenAndSynchroniseAsync(attempt.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -388,6 +395,7 @@ public sealed class DeviceSessionService : IAsyncDisposable
         }
         finally
         {
+            EndAttempt(attempt);
             _lifecycle.Release();
         }
     }
@@ -434,6 +442,8 @@ public sealed class DeviceSessionService : IAsyncDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
 
         await _lifecycle.WaitAsync(cancellationToken).ConfigureAwait(false);
+        CancellationTokenSource attempt = BeginAttempt(cancellationToken);
+        cancellationToken = attempt.Token;
         try
         {
             await TearDownAsync().ConfigureAwait(false);
@@ -476,8 +486,26 @@ public sealed class DeviceSessionService : IAsyncDisposable
         }
         finally
         {
+            EndAttempt(attempt);
             _lifecycle.Release();
         }
+    }
+
+    /// <summary>Records a connect attempt as the one in flight, cancellable by its caller or by
+    /// <see cref="DisconnectAsync"/> (#609).</summary>
+    private CancellationTokenSource BeginAttempt(CancellationToken cancellationToken)
+    {
+        CancellationTokenSource attempt = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _attempt = attempt;
+        return attempt;
+    }
+
+    /// <summary>Clears the attempt before disposing it, so a racing <see cref="DisconnectAsync"/>
+    /// either cancels a live one or finds none.</summary>
+    private void EndAttempt(CancellationTokenSource attempt)
+    {
+        _attempt = null;
+        attempt.Dispose();
     }
 
     /// <summary>
@@ -557,6 +585,21 @@ public sealed class DeviceSessionService : IAsyncDisposable
         if (_disposed)
         {
             return;
+        }
+
+        // END AN ATTEMPT IN FLIGHT RATHER THAN QUEUE BEHIND IT (#609). A connect holds the lifecycle
+        // lock for its whole run - an auto-detect walk on a silent port for about ninety seconds - so
+        // waiting for the lock meant Disconnect took effect only when the walk gave up of its own
+        // accord. Seen on 30 Sep 2026: Disconnect pressed twenty seconds into connect-on-launch's
+        // walk, and the timeouts went on for another seventy. Cancelling first lets the attempt tear
+        // itself down (#607) and release the lock within one transaction. The attempt may finish and
+        // be disposed between the read and the call, which is the race ObjectDisposedException is.
+        try
+        {
+            _attempt?.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
         }
 
         try
