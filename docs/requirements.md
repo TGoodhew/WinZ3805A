@@ -228,6 +228,7 @@ The `Device` library must have zero dependency on `Microsoft.UI.*`. All parsing 
     - it lists what it will remove before changing anything;
     - after installing, it saves the earlier copy's data folder (`%LOCALAPPDATA%\WinZ3805A`, redirected into the package; every release since v1.0.1 writes only there) to Documents, and moves it into the new copy if that copy has no history yet, never overwriting a file the new copy has;
     - only then does it remove the earlier copy;
+    - **on Windows 10 the order is save, remove, install, move** *(#617)*. Windows 10 will not install two packages with the same name and different publishers side by side, and the refused attempt leaves the app unable to start until Windows restarts (#614). So the installer never makes that attempt there: it decides the order from the build number (Windows 11 is 22000 and later) before installing anything. If saving or removing the earlier copy fails, it stops before installing. A refusal on a later build is recorded, the person is told to restart before touching the earlier copy, and later runs on that machine use the Windows 10 order;
     - it removes the certificates earlier releases were signed with from *Trusted People* in the same single administrator prompt. It finds them by thumbprint as well as by the publisher of a copy being removed, because removing an app never removes its certificate.
 
     Store-signed copies and other Windows accounts are left alone.

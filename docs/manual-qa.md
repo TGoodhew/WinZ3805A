@@ -340,6 +340,10 @@ non-developer can act on. This is expected to fail; the check is that it fails *
 |---|---|
 | **Do** | **Replacing an earlier copy (#590).** On a machine with **v1.3.0** installed from its own release page, with some history recorded and the app running: run this release's `Install.cmd`. |
 | **Pass** | It asks for the running copy to be closed and waits. *Before anything changes* lists version 1.3.0.0 and the certificate `655D07E3…`, and only then asks, in **one** administrator prompt. Afterwards: <ul><li>`Get-AppxPackage -Name WinZ3805A` lists only this release;</li><li>`certlm.msc` → *Trusted People* holds only this release's certificate;</li><li>Documents has a *WinZ3805A earlier copy 1.3.0.0 …* folder containing `trend.db`;</li><li>the app opens with 1.3.0's history and its remembered connection.</li></ul> |
+| **Do** | **Replacing an earlier copy on Windows 10 (#617).** The same as the row above, on a **Windows 10** x64 machine: an earlier-identity copy (v1.2.0 or v1.3.0) installed from its own release page, started, used for a minute, then closed. Run this release's `Install.cmd`. |
+| **Pass** | *Before anything changes* says this version of Windows cannot install the two side by side, and lists save, remove, install. The log has `decide order  save and remove the earlier copy, then install: build 19045`. A *Removing the earlier copy* step saves the data to Documents and removes the copy **before** *4 of 4*. Step 4 installs **without** `0x80073CF3`, the data is moved in afterwards, and **the start check reports the app running**. The start check is the real test, because the refused install this replaces left the app unable to start (#614). |
+| **Do** | **A machine an earlier installer left unable to start the app (#614).** On Windows 10, reproduce it with the **v1.3.2** installer: 1.2.0 installed and used, then 1.3.2's `Install.cmd` (refused with `0x80073CF3`), then uninstall 1.2.0 in *Settings*, then 1.3.2's `Install.cmd` again. Then run this release's `Install.cmd`. |
+| **Pass** | The start check finds no process and says to **restart Windows**, then start WinZ3805A from the Start menu. After a restart, the app starts from the Start menu. |
 | **Do** | **A newer Windows App Runtime already installed (#594, #595).** On a **Windows 10** x64 machine whose only `Microsoft.WindowsAppRuntime.2` is a newer, Store-serviced one (2.5.1.0 or later, typically brought by a Photos update): run `Install.cmd`. |
 | **Pass** | Step 3 says the runtime is *already present (2.5.x), which is this version or newer* and installs nothing. The companion line names the newest framework and gives both companions' versions. The app installs, the start check reports it running, and its window opens. The start check is the real test here, because missing companions fail silently (#473). On Windows 11 with the zip's runtime beside a newer one, the companions follow the newer. |
 | **Do** | **A certificate left behind.** On a machine where v1.3.0 was uninstalled from *Settings › Apps*, so its certificate is still trusted: run `Install.cmd`. |
@@ -355,6 +359,13 @@ non-developer can act on. This is expected to fail; the check is that it fails *
 - the start check reported the app running.
 
 The previous attempt had found the parameter-collision bug that #589 fixes: a successful prompt was reported as declined. **Windows 10 and the offline zip are still to run.**
+
+**Windows 10, 1 Oct 2026** (Tony's Windows 10 22H2 VM, build 19045, published v1.3.2 zips; the diagnosis files are attached to #614):
+- **The v1.3.2 installer fails the upgrade row on Windows 10.** Step 4 is refused with `0x80073CF3`, because a package with the same name is already installed (#617).
+- Uninstalling the earlier copy by hand after that refusal, then installing again, leaves an app that is listed and intact but never starts: `0x80270254` (#614). **A restart fixes it.**
+- Uninstalling the earlier copy *without* a refused attempt first, then installing, works. So does a fresh install with no earlier copy.
+
+The two Windows 10 rows above were written from those runs. Neither has yet been run against an installer containing #617's fix.
 
 ---
 

@@ -199,7 +199,9 @@ of the company's name, corrected to **The Schnauzer Group LLC** in 1.3.1. The
 publisher is part of the package's identity, so 1.3.1 cannot upgrade the old copy
 in place. `Install.cmd` handles that (#590). It saves the old copy's data to
 Documents, moves the data into the new copy, then removes the old copy and the
-certificate earlier releases were signed with. That certificate is removed in the
+certificate earlier releases were signed with. On Windows 10, which will not
+install the two side by side, it saves the data and removes the old copy
+*before* installing, then moves the data in (#617). That certificate is removed in the
 same single administrator prompt, even if the old app was already uninstalled by
 hand, since removing an app never removes its certificate.
 

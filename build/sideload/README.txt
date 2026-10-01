@@ -82,6 +82,9 @@ IF AN EARLIER WINZ3805A IS INSTALLED
   remove before changing anything. After installing, it saves the earlier
   copy's history, settings and logs to a "WinZ3805A earlier copy ..." folder
   in Documents, moves them into the new copy, and removes the earlier copy.
+  Windows 10 cannot install the two side by side, so there it saves the data
+  and removes the earlier copy first, then installs and moves the data in.
+  The saved folder stays in Documents either way.
   The certificate earlier releases were signed with is removed from Trusted
   People in the same permission prompt.
 
