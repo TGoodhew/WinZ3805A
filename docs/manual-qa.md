@@ -365,7 +365,9 @@ The previous attempt had found the parameter-collision bug that #589 fixes: a su
 - Uninstalling the earlier copy by hand after that refusal, then installing again, leaves an app that is listed and intact but never starts: `0x80270254` (#614). **A restart fixes it.**
 - Uninstalling the earlier copy *without* a refused attempt first, then installing, works. So does a fresh install with no earlier copy.
 
-The two Windows 10 rows above were written from those runs. Neither has yet been run against an installer containing #617's fix.
+The two Windows 10 rows above were written from those runs. Both were then run against #617's fix: the fixed `install.ps1` in the extracted v1.3.2 folder, which is what the packager ships, verbatim.
+- **Replacing an earlier copy on Windows 10:** passes. The log has `decide order  save and remove the earlier copy, then install: build 19045`. 1.2.0's data was saved to Documents and the copy removed, then 1.3.2 installed with no refusal. The data was moved in, and the start check and a second launch both found the app running.
+- **A machine an earlier installer left unable to start the app:** passes. After the v1.3.2 installer's refusal and a manual uninstall, the fixed installer's start check found no process. After a restart, the app started.
 
 ---
 
