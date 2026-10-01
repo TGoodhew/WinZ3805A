@@ -27,6 +27,12 @@
          same administrator prompt as step 1. A release under the SAME publisher
          needs none of this: Windows upgrades it in place.
 
+         ON WINDOWS 10 THE ORDER IS DIFFERENT (#617). Windows 10 will not
+         install the two side by side, and the refused attempt leaves the app
+         unable to start until a restart (#614). So there the earlier copy's
+         data is saved and the copy removed BEFORE step 4, and the data is
+         moved in after it.
+
     Steps 3 to 5 run as the person who started this, NOT elevated, and that is
     deliberate. Installing an app is a per-user operation: elevating the whole
     script would install it for whichever administrator the UAC prompt
@@ -165,6 +171,57 @@ function Get-DotNet10 {
 function Get-DataFolder {
     param([string]$Family)
     Join-Path $env:LOCALAPPDATA "Packages\$Family\LocalCache\Local\WinZ3805A"
+}
+
+# An earlier copy's data, saved to Documents before anything removes it (#590). Returns the folder
+# it was saved to, or nothing when the copy had no data; throws when there was data and it could not
+# be saved, so that no caller can go on to remove a copy whose data exists only inside it.
+function Save-EarlierData {
+    param($Copy)
+    $from = Get-DataFolder $Copy.PackageFamilyName
+    if (-not ((Test-Path $from) -and (Get-ChildItem $from -Force -ErrorAction SilentlyContinue))) {
+        Write-Log "nothing to save: $from is empty or absent"
+        return
+    }
+
+    $to = Join-Path ([Environment]::GetFolderPath('MyDocuments')) "WinZ3805A earlier copy $($Copy.Version) $(Get-Date -Format 'yyyy-MM-dd HHmm')"
+    try {
+        Copy-Item -Path $from -Destination $to -Recurse -ErrorAction Stop
+    }
+    catch {
+        Write-Log "save failed: $from -> $to : $($_.Exception.Message)"
+        throw
+    }
+    Write-Ok "Saved its data to $to"
+    $to
+}
+
+# Saved data, moved into the newly installed copy - only if that copy has no history of its own, and
+# even then without replacing any file it already has: robocopy's /XC /XN /XO copy only files absent
+# at the destination. Windows creates the package's own folders when it installs it; if they are not
+# there, nothing is created by hand under a package's folder. Returns whether it moved anything.
+function Move-IntoNewCopy {
+    param([string]$Saved)
+    $newCopy = Get-AppxPackage -Name 'WinZ3805A' -ErrorAction SilentlyContinue |
+        Where-Object { $_.Publisher -eq $publisher } | Select-Object -First 1
+    $newRoot = if ($newCopy) { Join-Path $env:LOCALAPPDATA "Packages\$($newCopy.PackageFamilyName)" } else { $null }
+    $newData = if ($newCopy) { Get-DataFolder $newCopy.PackageFamilyName } else { $null }
+
+    if ($newRoot -and (Test-Path $newRoot) -and -not (Test-Path (Join-Path $newData 'trend.db'))) {
+        New-Item -ItemType Directory -Path $newData -Force | Out-Null
+        robocopy.exe $Saved $newData /E /XC /XN /XO /NFL /NDL /NJH /NJS /NP | Out-Null
+        Write-Log "robocopy $Saved -> $newData exited $LASTEXITCODE (below 8 is success)"
+        if ($LASTEXITCODE -lt 8) {
+            Write-Ok 'Moved its history and settings into the new copy.'
+            return $true
+        }
+    }
+
+    Write-Log "not moved: new root $newRoot exists=$(if ($newRoot) { Test-Path $newRoot } else { 'n/a' }), new trend.db exists=$(if ($newData) { Test-Path (Join-Path $newData 'trend.db') } else { 'n/a' })"
+    Write-Info 'The new copy already has history of its own, so the earlier one was not'
+    Write-Info 'copied over it. To add it: Settings > Import history..., and choose'
+    Write-Info "  $(Join-Path $Saved 'trend.db')"
+    $false
 }
 
 # The machine as far as this application is concerned, into the log. Called before anything
@@ -367,6 +424,31 @@ $staleCertificates = @(Get-ChildItem Cert:\LocalMachine\TrustedPeople -ErrorActi
         (($retiredThumbprints -contains $_.Thumbprint) -or ($earlier.Publisher -contains $_.Subject))
     })
 
+# WHETHER THIS IDENTITY CAN BE INSTALLED BESIDE THE EARLIER ONE (#617). Windows 11 installs two
+# packages with the same Name and different publishers side by side, and #590's order was written
+# and measured there: install, save, move, and only then remove. WINDOWS 10 REFUSES THAT INSTALL
+# (0x80073CF3), AND THE REFUSAL IS NOT HARMLESS. It leaves state Windows holds in memory, so once the
+# earlier copy is removed and this one installed, the app is listed, intact and Ok, and Windows will
+# not start it (0x80270254, "not registered") until the machine restarts. Measured on a Windows 10
+# 22H2 VM on 1 Oct 2026 (#614): refused, removed, reinstalled - never starts; removed first, then
+# installed - starts; a restart clears the broken state.
+#
+# So on Windows 10 the attempt is never made: the earlier copy is saved and removed BEFORE this one
+# is installed. That is decided here, by build number, because reacting to the refusal is already
+# too late - the damage is done by the attempt. Windows 11 is build 22000 and later. The marker
+# covers a Windows 11 that refuses after all: one refusal, recorded by step 4, makes every later run
+# on this machine take the Windows 10 order.
+$refusedMarker = Join-Path $env:LOCALAPPDATA 'WinZ3805A Installer\side-by-side-refused'
+try { $osBuild = [int](Get-CimInstance Win32_OperatingSystem -ErrorAction Stop).BuildNumber }
+catch { $osBuild = [Environment]::OSVersion.Version.Build }
+$refusedBefore = Test-Path $refusedMarker
+$removeFirst = ($earlier.Count -gt 0) -and (($osBuild -lt 22000) -or $refusedBefore)
+if ($earlier.Count -gt 0) {
+    Write-Log ("decide order  {0}: build {1}{2}" -f
+        $(if ($removeFirst) { 'save and remove the earlier copy, then install' } else { 'install, then save and remove the earlier copy' }),
+        $osBuild, $(if ($refusedBefore) { ', and this machine has refused the two side by side before' }))
+}
+
 # Each decision, with its reason, so the log says what was left as clearly as what was removed.
 foreach ($copy in $allCopies) {
     $decision = if ($copy.SignatureKind -eq 'Store') { 'keep: installed from the Store' }
@@ -406,12 +488,23 @@ if ($earlier.Count -gt 0 -or $staleCertificates.Count -gt 0) {
 
     if ($earlier.Count -gt 0) {
         Write-Info 'It was signed under an earlier publisher identity, so Windows treats this'
-        Write-Info 'version as a different application and cannot upgrade it. After installing,'
-        Write-Info 'this installer will:'
-        Write-Info '  - save its data - history, settings and logs - to your Documents folder;'
-        Write-Info '  - move that data into the new copy, if the new copy has none yet;'
-        Write-Info '  - then remove the earlier copy.'
-        Write-Info 'Nothing is removed until the data has been saved.'
+        Write-Info 'version as a different application and cannot upgrade it.'
+        if ($removeFirst) {
+            Write-Info 'This version of Windows cannot install the two side by side, so this'
+            Write-Info 'installer will:'
+            Write-Info '  - save its data - history, settings and logs - to your Documents folder;'
+            Write-Info '  - remove the earlier copy;'
+            Write-Info '  - install this version, and move that data into it.'
+            Write-Info 'Nothing is removed until the data has been saved, and the saved copy stays'
+            Write-Info 'in Documents whatever happens next.'
+        }
+        else {
+            Write-Info 'After installing, this installer will:'
+            Write-Info '  - save its data - history, settings and logs - to your Documents folder;'
+            Write-Info '  - move that data into the new copy, if the new copy has none yet;'
+            Write-Info '  - then remove the earlier copy.'
+            Write-Info 'Nothing is removed until the data has been saved.'
+        }
     }
 
     foreach ($stale in $staleCertificates) {
@@ -732,6 +825,37 @@ Write-Ok "Runtime companions match the runtime $($framework.Version): $($matched
 # ---------------------------------------------------------------------------
 # 3. The application
 # ---------------------------------------------------------------------------
+# On Windows 10 the earlier copy goes first (#617; see where $removeFirst is decided). Saved, then
+# removed, copy by copy; any failure stops the run before this version is attempted, because
+# attempting it beside a copy still installed is the one thing that must not happen here.
+$savedFolders = @()
+if ($removeFirst) {
+    Write-Step 'Removing the earlier copy'
+
+    foreach ($copy in $earlier) {
+        try {
+            $saved = Save-EarlierData $copy
+        }
+        catch {
+            throw "The data of the earlier copy $($copy.Version) could not be saved to Documents, so that copy " +
+                  "has not been removed and this version has not been installed: $($_.Exception.Message)" +
+                  $(if ($savedFolders.Count) { " Data already saved from another earlier copy: $($savedFolders -join ', ')." })
+        }
+        if ($saved) { $savedFolders += $saved }
+
+        try {
+            Remove-AppxPackage -Package $copy.PackageFullName -ErrorAction Stop
+            Write-Ok "Removed the earlier copy, version $($copy.Version)."
+        }
+        catch {
+            Write-Log "Remove-AppxPackage $($copy.PackageFullName) failed: $($_.Exception.Message)"
+            throw "The earlier copy could not be removed, so this version has not been installed: " +
+                  "$($_.Exception.Message) Remove it in Settings > Apps$(if ($saved) { " - its data is saved in $saved -" }) " +
+                  'and run this installer again.'
+        }
+    }
+}
+
 Write-Step '4 of 4  WinZ3805A'
 
 try {
@@ -740,6 +864,26 @@ try {
 }
 catch {
     Write-Log "Add-AppxPackage (application) failed: $($_.Exception.Message)"
+
+    # Said first, whatever the failure: the earlier copy is already gone, so where its data went is
+    # the most important thing on the screen.
+    foreach ($folder in $savedFolders) {
+        Write-Host "  The earlier copy was removed before this failed. Its data is saved in $folder" -ForegroundColor Yellow
+    }
+
+    # 0x80073CF3 beside an earlier copy: a Windows that would not install the two side by side,
+    # where $removeFirst expected it would (#617). The attempt itself is what leaves Windows unable
+    # to start the app until a restart, so the person is told to restart BEFORE touching the earlier
+    # copy - uninstalling it and installing this again in the same session is exactly the sequence
+    # that broke #614's machine - and the marker makes the next run save and remove it first.
+    if ($_.Exception.Message -match '0x80073CF3' -and $earlier.Count -gt 0 -and -not $removeFirst) {
+        try { New-Item -ItemType File -Path $refusedMarker -Force | Out-Null } catch { }
+        Write-Log "side by side refused on build $osBuild; marker written to $refusedMarker"
+        throw 'Windows would not install this version beside the earlier copy. Your earlier copy and ' +
+              'its data have not been touched. Restart Windows before doing anything else - do not ' +
+              'uninstall the earlier copy first - and then run this installer again. It will then ' +
+              'save the earlier copy''s data, remove it, and install this version.'
+    }
 
     # Windows reports an untrusted signature as 0x80073CF0, "Package could not
     # be opened", with the real reason - 0x800B0109 - buried in the second
@@ -777,63 +921,28 @@ catch {
 }
 
 # ---------------------------------------------------------------------------
-# The earlier copy (#590), now that the new one is safely installed.
+# The earlier copy (#590), now that the new one is safely installed - where Windows allows the two
+# side by side. On Windows 10 it was saved and removed before step 4 instead (#617).
 # ---------------------------------------------------------------------------
 # In this order and no other: save the data, move it across, and only then remove the package -
 # removing a package deletes everything it stored, and Tony's own move off the earlier identity
 # carried 22,277 samples of history (#584). If the save fails, the earlier copy stays.
-if ($earlier.Count -gt 0) {
+# The newest earlier copy's data is the one moved in; any other stays in Documents.
+if ($earlier.Count -gt 0 -and -not $removeFirst) {
     Write-Step 'Replacing the earlier copy'
-
-    $newCopy = Get-AppxPackage -Name 'WinZ3805A' -ErrorAction SilentlyContinue |
-        Where-Object { $_.Publisher -eq $publisher } | Select-Object -First 1
-    $newRoot = if ($newCopy) { Join-Path $env:LOCALAPPDATA "Packages\$($newCopy.PackageFamilyName)" } else { $null }
-    $newData = if ($newCopy) { Get-DataFolder $newCopy.PackageFamilyName } else { $null }
     $moved = $false
 
     foreach ($copy in $earlier) {
-        $oldData = Get-DataFolder $copy.PackageFamilyName
-        $saved = $null
-
-        if ((Test-Path $oldData) -and (Get-ChildItem $oldData -Force -ErrorAction SilentlyContinue)) {
-            $documents = [Environment]::GetFolderPath('MyDocuments')
-            $saved = Join-Path $documents "WinZ3805A earlier copy $($copy.Version) $(Get-Date -Format 'yyyy-MM-dd HHmm')"
-
-            try {
-                Copy-Item -Path $oldData -Destination $saved -Recurse -ErrorAction Stop
-            }
-            catch {
-                Write-Log "save failed: $oldData -> $saved : $($_.Exception.Message)"
-                Write-Host "  Could not save the earlier copy's data to $saved, so it has been left installed." -ForegroundColor Yellow
-                Write-Host "  $($_.Exception.Message)" -ForegroundColor Yellow
-                continue
-            }
-
-            Write-Ok "Saved its data to $saved"
-
-            # Moved in only if the new copy has no history of its own, and even then without
-            # replacing any file it already has: robocopy's /XC /XN /XO copy only files absent at
-            # the destination. The newest earlier copy wins; any other stays in Documents.
-            # Windows creates the package's own folders when it installs it; if they are not there,
-            # nothing is created by hand under a package's folder.
-            if (-not $moved -and $newRoot -and (Test-Path $newRoot) -and
-                -not (Test-Path (Join-Path $newData 'trend.db'))) {
-                New-Item -ItemType Directory -Path $newData -Force | Out-Null
-                robocopy.exe $oldData $newData /E /XC /XN /XO /NFL /NDL /NJH /NJS /NP | Out-Null
-                Write-Log "robocopy $oldData -> $newData exited $LASTEXITCODE (below 8 is success)"
-                if ($LASTEXITCODE -lt 8) {
-                    $moved = $true
-                    Write-Ok 'Moved its history and settings into the new copy.'
-                }
-            }
-
-            if (-not $moved) {
-                Write-Log "not moved: new root $newRoot exists=$(if ($newRoot) { Test-Path $newRoot } else { 'n/a' }), new trend.db exists=$(if ($newData) { Test-Path (Join-Path $newData 'trend.db') } else { 'n/a' })"
-                Write-Info 'The new copy already has history of its own, so the earlier one was not'
-                Write-Info 'copied over it. To add it: Settings > Import history..., and choose'
-                Write-Info "  $(Join-Path $saved 'trend.db')"
-            }
+        try {
+            $saved = Save-EarlierData $copy
         }
+        catch {
+            Write-Host "  Could not save the earlier copy's data, so it has been left installed." -ForegroundColor Yellow
+            Write-Host "  $($_.Exception.Message)" -ForegroundColor Yellow
+            continue
+        }
+
+        if ($saved -and -not $moved) { $moved = Move-IntoNewCopy -Saved $saved }
 
         try {
             Remove-AppxPackage -Package $copy.PackageFullName -ErrorAction Stop
@@ -845,6 +954,12 @@ if ($earlier.Count -gt 0) {
             Write-Host '  Remove it in Settings > Apps; its data is saved as above.' -ForegroundColor Yellow
         }
     }
+}
+
+# Windows 10's order: the earlier copy was saved and removed before step 4, so its data comes in now.
+if ($removeFirst -and $savedFolders.Count -gt 0) {
+    Write-Step 'Moving the earlier copy''s data in'
+    [void](Move-IntoNewCopy -Saved $savedFolders[0])
 }
 
 Write-State 'after'
@@ -923,9 +1038,18 @@ if ($dotnet -and $installedCopy) {
         }
         else { Write-Log "app.log       none at $appLog - it stopped before it could write one" }
 
+        # No process at all is what a refused side-by-side install leaves behind on Windows 10:
+        # Windows will not start the app until it restarts (#614, #617). This installer no longer
+        # makes that attempt, but a machine an earlier run left that way is put right by a restart,
+        # so that is said first. It costs nothing on any other cause, which the log still records.
         Write-Host ''
-        if ($running.Count -eq 0) { Write-Host '  WinZ3805A did not stay open.' -ForegroundColor Yellow }
-        Write-Host '  Please report it with the install record named below.' -ForegroundColor Yellow
+        if ($running.Count -eq 0) {
+            Write-Host '  WinZ3805A did not open. Restart Windows, then start WinZ3805A from the' -ForegroundColor Yellow
+            Write-Host '  Start menu: Windows can need a restart before it will start an app that' -ForegroundColor Yellow
+            Write-Host '  replaced an earlier copy. If it still does not open, please report it' -ForegroundColor Yellow
+            Write-Host '  with the install record named below.' -ForegroundColor Yellow
+        }
+        else { Write-Host '  Please report it with the install record named below.' -ForegroundColor Yellow }
     }
 }
 elseif (-not $dotnet) {
