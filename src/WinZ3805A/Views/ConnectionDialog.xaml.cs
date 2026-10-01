@@ -217,21 +217,32 @@ public sealed partial class ConnectionDialog : ContentDialog
     }
 
     /// <remarks>
-    /// The click is deferred so the attempt can run with the dialog still on screen, and the dialog
-    /// is held open on failure: §9.11 puts the error where the control that caused it is, and a
-    /// dialog that vanished would take the port picker with it.
+    /// <para>
+    /// The dialog stays open while the attempt runs, and on failure: §9.11 puts the error where the
+    /// control that caused it is, and a dialog that vanished would take the port picker with it.
+    /// It closes itself, with <see cref="ContentDialog.Hide"/>, only once the receiver has answered.
+    /// </para>
+    /// <para>
+    /// <b>NOT A DEFERRAL, AND THAT IS THE FIX FOR #585.</b> This used to take the click's deferral
+    /// and hold it for the whole attempt. While a button's deferral is outstanding, ContentDialog
+    /// does not deliver its other buttons: Cancel looked enabled and did nothing, and so did Esc,
+    /// so an auto-detect walk on a silent port ran its full ninety seconds whatever the user
+    /// pressed. Measured on 30 Sep 2026 against COM3 with the receiver unplugged: a mouse click on
+    /// Cancel nine seconds in, and Esc later, reached no handler and the walk went on. The click is
+    /// now refused synchronously - <c>args.Cancel</c> is read when the handler first yields - so
+    /// the dialog is never waiting on it, and <see cref="OnCancelClicked"/> receives Cancel and Esc
+    /// as it always meant to.
+    /// </para>
     /// </remarks>
     private async void OnConnectClicked(ContentDialog sender, ContentDialogButtonClickEventArgs args)
     {
-        ContentDialogButtonClickDeferral deferral = args.GetDeferral();
-        try
+        args.Cancel = true;
+
+        Connected = await _model.ConnectAsync();
+
+        if (Connected)
         {
-            Connected = await _model.ConnectAsync();
-            args.Cancel = !Connected;
-        }
-        finally
-        {
-            deferral.Complete();
+            Hide();
         }
     }
 
@@ -242,6 +253,8 @@ public sealed partial class ConnectionDialog : ContentDialog
     /// </remarks>
     private void OnCancelClicked(ContentDialog sender, ContentDialogButtonClickEventArgs args)
     {
+        Log?.LogInformation("Connection dialog: Cancel pressed while {State}.", _model.IsBusy ? "connecting" : "idle");
+
         if (_model.IsBusy)
         {
             args.Cancel = true;
