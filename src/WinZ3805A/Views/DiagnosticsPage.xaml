@@ -387,6 +387,47 @@
                     </StackPanel>
                 </Border>
 
+                <!-- ============================== Last install ============================== -->
+                <!--
+                    The installer's own record of the run that put this copy here (#592, #602). When
+                    something goes wrong, the person is asked for it, and a button is easier to follow
+                    than a path to paste into Explorer. Its own card rather than a line in the
+                    application log's, because it is a different program's record, kept somewhere else.
+                -->
+                <Border Style="{ThemeResource WzCardStyle}">
+                    <StackPanel Spacing="{ThemeResource WzSpaceSm}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Grid.Column="0"
+                                       VerticalAlignment="Center"
+                                       Style="{ThemeResource WzBodyStrongTextStyle}"
+                                       Text="Last install" />
+
+                            <Button x:Name="ShowInstallLogsButton"
+                                    Grid.Column="1"
+                                    Content="Show install logs"
+                                    ToolTipService.ToolTip="Open the folder holding the installer&apos;s record of each install"
+                                    Click="OnShowInstallLogsClicked" />
+                        </Grid>
+
+                        <TextBlock x:Name="InstallSummaryText"
+                                   Style="{ThemeResource WzBodyTextStyle}"
+                                   TextWrapping="Wrap"
+                                   HorizontalAlignment="Left"
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}" />
+
+                        <TextBlock x:Name="InstallPathText"
+                                   Style="{ThemeResource WzMonoTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   TextWrapping="Wrap"
+                                   IsTextSelectionEnabled="True" />
+                    </StackPanel>
+                </Border>
+
                 <!-- ============================== Parse warnings ============================ -->
                 <!--
                     §11.2 has always said these are "surfaced in Diagnostics". They were not: they
