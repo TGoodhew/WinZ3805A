@@ -8,6 +8,10 @@ The script starts WinZ3805A once, watches it for up to 20 seconds, and writes
 what happened to a text file on your Desktop. **It changes nothing on your
 machine.** It does not need administrator permission.
 
+**Ran it before?** If the first line of your result file does not say
+`WinZ3805A start diagnosis 2`, please download the script again and rerun it.
+It now checks more.
+
 ## 1. Download the script
 
 **[Download Diagnose-Start.ps1](https://raw.githubusercontent.com/TGoodhew/WinZ3805A/main/build/Diagnose-Start.ps1)**
@@ -55,10 +59,15 @@ whoever asked you to run this. If you also have the newest install log from
 - Your Windows version.
 - The WinZ3805A and Windows App Runtime packages installed for your account,
   and which runtime WinZ3805A uses.
-- How WinZ3805A ended: the **exit code** of its process. This is the one fact
-  the installer cannot record.
+- Whether the Start menu lists WinZ3805A, and whether every file installed
+  with it is still in place. Antivirus software that quarantines a file can
+  stop an app starting without anything else looking wrong.
+- Whether a policy on the PC restricts apps installed from outside the
+  Microsoft Store, and whether your Windows profile is a temporary one.
+- How WinZ3805A ended: either the **exit code** of its process, or the reason
+  Windows gave for not starting it. The installer can record neither.
 - Anything Windows logged about installing or starting apps during those
-  20 seconds.
+  20 seconds, including why it refused to start one.
 
 It contains none of your files or settings. Some Windows log entries include
 your account's security ID (a string beginning `S-1-5-21-`), which identifies
