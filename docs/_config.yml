@@ -36,3 +36,4 @@ exclude:
   - nmea-against-lady-heather.md
   - porting-to-python-qt.md
   - review/
+  - diagnose-start.md

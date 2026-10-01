@@ -203,6 +203,11 @@ certificate earlier releases were signed with. That certificate is removed in th
 same single administrator prompt, even if the old app was already uninstalled by
 hand, since removing an app never removes its certificate.
 
+**Installed, but it does not start?** If `Install.cmd` reports that WinZ3805A did not
+stay open, [docs/diagnose-start.md](docs/diagnose-start.md) gives you a script to
+download. It starts the app once and records how it ended, which the installer
+cannot see (#614).
+
 Uninstall from *Settings › Apps*, or with
 [`build/Uninstall-Sideload.ps1`](build/Uninstall-Sideload.ps1), which also
 removes the certificate, including any left by a former publisher name. It is
