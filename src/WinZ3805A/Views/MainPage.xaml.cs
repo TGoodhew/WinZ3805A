@@ -604,11 +604,14 @@ public sealed partial class MainPage : Page
         }
         else
         {
-            _logger?.LogWarning("The history file could not be read and was set aside as {Path}.", history.SetAsidePath);
+            // The path as File Explorer and the import's file picker see it, not as this packaged
+            // application does: shown the latter, nobody browsing for the file would find it.
+            string where = PackagedPath.Real(history.SetAsidePath!);
+            _logger?.LogWarning("The history file could not be read and was set aside as {Path}.", where);
             title = "Earlier history set aside";
             body = "The recorded history could not be read, so it was moved aside and a new one started. "
                 + "To try to bring it back: Details > Settings > Import history..., and choose "
-                + history.SetAsidePath;
+                + where;
         }
 
         try

@@ -7,7 +7,6 @@ using Microsoft.UI.Xaml.Navigation;
 
 using Microsoft.Extensions.DependencyInjection;
 
-using Windows.ApplicationModel;
 using Windows.Storage;
 using Windows.System;
 
@@ -886,28 +885,7 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
             return null;
         }
 
-        try
-        {
-            string local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            if (!asked.StartsWith(local, StringComparison.OrdinalIgnoreCase))
-            {
-                return asked;
-            }
-
-            string redirected = Path.Combine(
-                local,
-                "Packages",
-                Package.Current.Id.FamilyName,
-                "LocalCache",
-                "Local",
-                asked[local.Length..].TrimStart(Path.DirectorySeparatorChar));
-
-            return Directory.Exists(redirected) ? redirected : asked;
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
-        {
-            return asked;
-        }
+        return PackagedPath.Real(asked);
     }
 
     /// <summary>Keeps the run label naming whichever subsystem is selected.</summary>
