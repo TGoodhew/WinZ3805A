@@ -210,10 +210,13 @@ stay open, [docs/diagnose-start.md](docs/diagnose-start.md) gives you a script t
 download. It starts the app once and records how it ended, which the installer
 cannot see (#614).
 
-Uninstall from *Settings › Apps*, or with
-[`build/Uninstall-Sideload.ps1`](build/Uninstall-Sideload.ps1), which also
-removes the certificate, including any left by a former publisher name. It is
-what puts a test machine back to clean.
+Uninstall from *Settings › Apps*. To remove **everything** any release has put on
+a machine, including the certificates, the installer's logs and the copies it saved
+to Documents, follow [docs/remove-winz3805a.md](docs/remove-winz3805a.md). It
+gives you a script to download and walks through each step (#618). It saves the
+history first, and it never removes the shared Windows App Runtime or .NET.
+[`build/Uninstall-Sideload.ps1`](build/Uninstall-Sideload.ps1) is the developer's
+version: it runs from a clone and puts a test machine back to clean.
 
 To build the installer yourself instead,
 [`build/New-SideloadPackage.ps1`](build/New-SideloadPackage.ps1) produces the

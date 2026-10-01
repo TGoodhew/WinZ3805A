@@ -37,3 +37,4 @@ exclude:
   - porting-to-python-qt.md
   - review/
   - diagnose-start.md
+  - remove-winz3805a.md
