@@ -1082,9 +1082,13 @@ switch (Test-MicrosoftUpdate) {
     }
 }
 Write-Host ''
-Write-Host '  To remove it later: Settings > Apps > Installed apps > WinZ3805A.' -ForegroundColor Gray
-Write-Host '  Removing it does not remove the certificate; that is in' -ForegroundColor Gray
-Write-Host '  certlm.msc, under Trusted People.' -ForegroundColor Gray
+# The Settings path differs between the two Windows this supports, and the old text gave only
+# Windows 11's. Removing the app there leaves the certificate and these logs, so the page that
+# removes everything (#618) is named too.
+$appsPath = if ($osBuild -ge 22000) { 'Settings > Apps > Installed apps' } else { 'Settings > Apps > Apps & features' }
+Write-Host "  To remove it later: $appsPath > WinZ3805A." -ForegroundColor Gray
+Write-Host '  That leaves its certificate and the installer''s logs; to remove everything,' -ForegroundColor Gray
+Write-Host '  see https://github.com/TGoodhew/WinZ3805A/blob/main/docs/remove-winz3805a.md' -ForegroundColor Gray
 Write-Host ''
 Write-Host "  A record of this install is at $LogPath" -ForegroundColor Gray
 Write-Log "finished      started ok: $(if ($null -eq $startedOk) { 'not checked' } else { $startedOk })"
