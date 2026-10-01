@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel;
+using System.Globalization;
 
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -413,6 +414,7 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
         // than by hiding: a missing log is worth noticing.
         _logProvider = App.Services?.GetService<FileLoggerProvider>();
         _logFolder = ResolveLogFolder(_logProvider);
+        RenderInstallRecord();
         _model = new DiagnosticsViewModel(device.Session) { ParseWarnings = device.Store.Status?.ParseWarnings ?? [] };
         _model.PropertyChanged += OnModelChanged;
         device.Session.StatusChanged += OnStatusChanged;
@@ -797,6 +799,40 @@ public sealed partial class DiagnosticsPage : Page, ICsvExportSource
     /// development and is refused at certification.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Fills the Last install card from the installer's newest record (#602).
+    /// </summary>
+    /// <remarks>
+    /// Read once per visit: the record changes only when the installer runs, which this application
+    /// is not doing while this page is open. A copy put here some other way - a development build,
+    /// the Store, or a release before the installer kept records - has none, and says so.
+    /// </remarks>
+    private void RenderInstallRecord()
+    {
+        string folder = InstallRecords.Folder;
+        InstallRecord? record = InstallRecords.ReadNewest(folder);
+
+        InstallSummaryText.Text = record is null
+            ? "No install record on this machine. The installer keeps one for every run from version 1.3.2 on; a copy installed another way, or earlier, has none."
+            : InstallRecords.Describe(record, CultureInfo.CurrentCulture);
+
+        InstallPathText.Text = record is null ? folder : Path.Combine(folder, record.FileName);
+        ShowInstallLogsButton.IsEnabled = Directory.Exists(folder);
+    }
+
+    private async void OnShowInstallLogsClicked(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            await Launcher.LaunchFolderAsync(await StorageFolder.GetFolderFromPathAsync(InstallRecords.Folder));
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            // As for the application log: the path is on screen beside the button, so a shell that
+            // will not open it still leaves the person a way there.
+        }
+    }
+
     private async void OnShowLogFolderClicked(object sender, RoutedEventArgs e)
     {
         if (_logProvider is not FileLoggerProvider provider || _logFolder is not string folder)

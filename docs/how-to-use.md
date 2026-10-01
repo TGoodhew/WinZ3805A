@@ -565,6 +565,11 @@ changes**. This page is for finding out why a summary bit is set; most people ne
   on, every connection change, and the receiver's mode and satellite count whenever they move.
   **Show log folder** opens it in Explorer. This is the place to look for a fault that comes and
   goes while nobody is watching the window.
+- **Last install** — what the installer recorded the last time it ran on this machine: the version,
+  when, and whether WinZ3805A got going when the installer started it, or why the install stopped.
+  **Show install logs** opens the folder of those records, one per run, which is what to send with a
+  report about installing or upgrading. A copy installed some other way, or before version 1.3.2, has
+  no record.
 - **Status screen parsing** — whether the last full status screen was understood completely. A
   field the application could not read becomes an em dash rather than a guess, and this card is
   where it says so, naming the line it could not parse. It is the first place to look if a reading

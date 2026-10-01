@@ -90,6 +90,7 @@
          reasoned about, and reasoning is what got #399 wrong the first time. -->
     <Compile Include="..\..\src\WinZ3805A\ViewModels\RenderCoalescer.cs" Link="ViewModels\RenderCoalescer.cs" />
     <Compile Include="..\..\src\WinZ3805A\Services\HelpDocument.cs" Link="Services\HelpDocument.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Services\InstallRecord.cs" Link="Services\InstallRecord.cs" />
     <Compile Include="..\..\src\WinZ3805A\Services\HighContrast.cs" Link="Services\HighContrast.cs" />
     <!-- #290's accent source. Linked for the same reason as the rest: AccentPalette speaks WinUI and
          cannot come in, but the rule deciding which ramp was actually applied is a boolean pair. It
