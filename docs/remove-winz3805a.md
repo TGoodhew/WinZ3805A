@@ -150,9 +150,10 @@ remove the WinZ3805A installer's copy in Windows PowerShell:
 Get-AppxPackage Microsoft.WindowsAppRuntime.2 | Where-Object SignatureKind -ne 'Store' | Remove-AppxPackage
 ```
 
-Windows refuses if another app still depends on it, so this cannot break an app
-by accident. Leave `WinAppRuntime.Main.2` and `WinAppRuntime.Singleton` in
-place: apps use them without declaring it.
+If you are not sure, leave it: it takes little space, and an app that needs it
+will not start without it. Leave `WinAppRuntime.Main.2` and
+`WinAppRuntime.Singleton` in place either way, because apps use them without
+declaring it.
 
 **.NET 10** runs any app built on it, not only WinZ3805A. If you installed it
 for WinZ3805A and nothing else needs it, remove it in **Settings › Apps**. It is
