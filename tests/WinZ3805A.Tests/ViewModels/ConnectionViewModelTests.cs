@@ -542,6 +542,48 @@ public sealed class ConnectionViewModelTests
         Assert.Null(fixture.Model.ErrorMessage);
     }
 
+    /// <remarks>
+    /// #609. Disconnect pressed during a walk - connect on launch's, from the main window, where the
+    /// walk's own token is out of reach - used to wait for the session's lock, which the walk holds
+    /// until it gives up of its own accord. With a fake clock the walk never times out here, so
+    /// without the fix the disconnect below waits forever and the test fails on its timeout.
+    /// </remarks>
+    [Fact]
+    public async Task DisconnectDuringAWalkEndsTheWalk()
+    {
+        using Fixture fixture = new(ports: [Port("COM3")]);
+        ControllableTransport silent = new(_ => null) { Behaviour = TransportBehaviour.Silent };
+        fixture.Transports.Enqueue(silent);
+
+        await fixture.Model.RefreshPortsAsync();
+        Task<bool> attempt = fixture.Model.ConnectAsync();
+
+        DateTime giveUp = DateTime.UtcNow + TestTimeout;
+        while (!silent.IsOpen && DateTime.UtcNow < giveUp)
+        {
+            await Task.Delay(10);
+        }
+
+        Assert.True(silent.IsOpen);
+
+        try
+        {
+            await fixture.Session.DisconnectAsync().WaitAsync(TestTimeout);
+        }
+        finally
+        {
+            // On a regression the disconnect times out with the walk still running, and the
+            // fixture's disposal would then wait on that walk forever. Ending it through the
+            // model's own token lets a regression fail on the timeout instead of hanging the run.
+            fixture.Model.Cancel();
+        }
+
+        Assert.False(await attempt.WaitAsync(TestTimeout));
+        Assert.Equal(ConnectionStatus.Disconnected, fixture.Session.Status);
+        Assert.False(silent.IsOpen);
+        Assert.Null(fixture.Model.ErrorMessage);
+    }
+
     // -------------------------------------------------------------------------------------
     // Connect on launch
     // -------------------------------------------------------------------------------------
