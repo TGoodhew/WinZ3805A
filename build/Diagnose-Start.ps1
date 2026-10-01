@@ -73,7 +73,7 @@ public static class StartProbe
 }
 '@
 
-Say "WinZ3805A start diagnosis, $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
+Say "WinZ3805A start diagnosis 2, $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
 $os = Get-CimInstance Win32_OperatingSystem
 Say "windows      $($os.Caption) $($os.Version)"
 
@@ -93,17 +93,76 @@ foreach ($p in @(Get-AppxPackage -Name '*WinAppRuntime*') + @(Get-AppxPackage -N
     Say "runtime      $($p.PackageFullName), signature $($p.SignatureKind), status $($p.Status)$extra"
 }
 
+# What Windows holds for the app itself. Windows 10 has been seen refusing the launch as "not
+# registered" (0x80270254) while listing the package as Ok, and re-registering it at launch to no
+# effect (#614), so these are the records that answer differently from Get-AppxPackage: the
+# applications the installed manifest declares, whether the Start menu knows the app, and whether
+# every signed file is still on disk - antivirus quarantining a file leaves the package listed Ok.
+try {
+    $manifest = Get-AppxPackageManifest -Package $app.PackageFullName
+    foreach ($a in $manifest.Package.Applications.Application) {
+        Say "application  Id $($a.Id), executable $($a.Executable), entry point $($a.EntryPoint)"
+    }
+}
+catch { Say "application  manifest unreadable: $($_.Exception.Message)" }
+
+try {
+    $start = @(Get-StartApps | Where-Object { $_.AppID -like "$($app.PackageFamilyName)!*" })
+    Say "start menu   $(if ($start.Count) { ($start | ForEach-Object { "'$($_.Name)' as $($_.AppID)" }) -join ', ' } else { 'not listed' })"
+}
+catch { Say "start menu   could not be read: $($_.Exception.Message)" }
+
+try {
+    [xml]$blockMap = Get-Content -LiteralPath (Join-Path $app.InstallLocation 'AppxBlockMap.xml') -Raw -ErrorAction Stop
+    $files = @($blockMap.BlockMap.File)
+    $missing = New-Object System.Collections.Generic.List[string]
+    $changed = New-Object System.Collections.Generic.List[string]
+    foreach ($f in $files) {
+        $path = Join-Path $app.InstallLocation $f.Name
+        if (-not (Test-Path -LiteralPath $path)) { $missing.Add($f.Name) }
+        elseif ((Get-Item -LiteralPath $path).Length -ne [long]$f.Size) { $changed.Add($f.Name) }
+    }
+    Say "files        $($files.Count) in the package, $($missing.Count) missing, $($changed.Count) a different size"
+    foreach ($n in ($missing | Select-Object -First 10)) { Say "missing      $n" }
+    foreach ($n in ($changed | Select-Object -First 10)) { Say "changed      $n" }
+}
+catch { Say "files        could not be checked: $($_.Exception.Message)" }
+
+foreach ($key in 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock', 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Appx') {
+    $values = Get-ItemProperty -Path $key -ErrorAction SilentlyContinue
+    $set = foreach ($n in 'AllowAllTrustedApps', 'AllowDevelopmentWithoutDevLicense', 'BlockNonAdminUserInstall', 'AllowDeploymentInSpecialProfiles') {
+        if ($values -and $null -ne $values.$n) { "$n=$($values.$n)" }
+    }
+    Say "policy       ${key}: $(if ($set) { $set -join ', ' } else { 'nothing set' })"
+}
+
+try {
+    $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+    $userProfile = Get-CimInstance Win32_UserProfile -Filter "SID='$sid'" -ErrorAction Stop
+    Say "profile      status $($userProfile.Status) (0 ordinary; 1 temporary, 2 roaming, 4 mandatory, 8 corrupted)"
+}
+catch { Say "profile      could not be read: $($_.Exception.Message)" }
+
+$sideloaded = @(Get-AppxPackage | Where-Object { $_.SignatureKind -eq 'Developer' -and $_.Name -ne 'WinZ3805A' -and -not $_.IsFramework -and -not $_.IsResourcePackage })
+Say "dev-signed   $(if ($sideloaded.Count) { ($sideloaded | Select-Object -First 8 | ForEach-Object Name) -join ', ' } else { 'no other developer-signed apps for this account' })"
+
 $aumid = "$($app.PackageFamilyName)!App"
 $started = Get-Date
 Say ''
 Say "starting     $aumid"
 Say "result       $([StartProbe]::Run($aumid, 20000))"
 
-# Everything Windows' deployment and app-model logs recorded since the start, unfiltered: an attempt
-# to deploy the runtime's companions would name them, not WinZ3805A.
-foreach ($log in 'Microsoft-Windows-AppXDeploymentServer/Operational', 'Microsoft-Windows-AppModel-Runtime/Admin', 'Application') {
+# Everything these logs recorded since the start, unfiltered: an attempt to deploy the runtime's
+# companions would name them, not WinZ3805A. TWinUI is where the shell records why it refused an
+# activation, and AppReadiness and StateRepository hold the per-user registration it consults.
+# A second's margin, because the logs stamp whole seconds less often than Get-Date does.
+$logs = 'Microsoft-Windows-AppXDeploymentServer/Operational', 'Microsoft-Windows-AppModel-Runtime/Admin',
+        'Microsoft-Windows-TWinUI/Operational', 'Microsoft-Windows-AppReadiness/Admin',
+        'Microsoft-Windows-AppReadiness/Operational', 'Microsoft-Windows-StateRepository/Operational',
+        'Microsoft-Windows-AppxPackaging/Operational', 'Application'
+foreach ($log in $logs) {
     try {
-        Get-WinEvent -FilterHashtable @{ LogName = $log; StartTime = $started } -ErrorAction Stop |
+        Get-WinEvent -FilterHashtable @{ LogName = $log; StartTime = $started.AddSeconds(-1) } -ErrorAction Stop |
             Select-Object -First 40 |
             ForEach-Object { Say ("event        {0} {1} {2} {3}: {4}" -f $_.TimeCreated.ToString('HH:mm:ss'), $log, $_.LevelDisplayName, $_.Id, ($_.Message -replace '\s+', ' ')) }
     }
