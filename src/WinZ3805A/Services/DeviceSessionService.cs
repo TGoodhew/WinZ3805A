@@ -381,6 +381,11 @@ public sealed class DeviceSessionService : IAsyncDisposable
 
             return await OpenAndSynchroniseAsync(cancellationToken).ConfigureAwait(false);
         }
+        catch (OperationCanceledException)
+        {
+            await AbandonAttemptAsync().ConfigureAwait(false);
+            throw;
+        }
         finally
         {
             _lifecycle.Release();
@@ -464,10 +469,36 @@ public sealed class DeviceSessionService : IAsyncDisposable
             SetStatus(ConnectionStatus.Faulted, $"No receiver answered on {portName} at any supported setting.");
             return null;
         }
+        catch (OperationCanceledException)
+        {
+            await AbandonAttemptAsync().ConfigureAwait(false);
+            throw;
+        }
         finally
         {
             _lifecycle.Release();
         }
+    }
+
+    /// <summary>
+    /// Puts a cancelled connect back to <see cref="ConnectionStatus.Disconnected"/>, with the port it
+    /// opened closed (#607).
+    /// </summary>
+    /// <remarks>
+    /// A cancellation used to leave both connect paths exactly where it found them mid-attempt: the
+    /// status still <see cref="ConnectionStatus.Connecting"/> and the transport still open, because
+    /// the exception passed through a <c>finally</c> that only released the lifecycle lock. Nobody saw
+    /// it while #585 kept Cancel from ever arriving; the moment it did, the main window read
+    /// "Disconnected, Connecting." indefinitely, offering Disconnect for a link that did not exist,
+    /// and the port stayed held. This is <see cref="DisconnectAsync"/>'s tear-down and status, without
+    /// its pre-tear-down hook, which is for a link that got far enough to have something to undo.
+    /// Called with the lifecycle lock held. The caller still rethrows: cancelling is a decision, and
+    /// <c>ConnectionViewModel</c> treats it as one rather than as a failure (§9.11).
+    /// </remarks>
+    private async Task AbandonAttemptAsync()
+    {
+        await TearDownAsync().ConfigureAwait(false);
+        SetStatus(ConnectionStatus.Disconnected, "Cancelled.");
     }
 
     /// <summary>
