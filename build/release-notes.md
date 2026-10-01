@@ -35,6 +35,11 @@ Windows treats this release as a **different application** that cannot upgrade t
    removes the old copy. The old certificate comes out of *Trusted People* in the same single
    administrator prompt as the new one goes in.
 
+**On Windows 10 the order is different** (#617). Windows 10 cannot install the two side by side,
+so the installer saves the old copy's data to Documents and removes the old copy *before*
+installing this release, then moves the data in. If saving or removing fails, it stops before
+installing anything.
+
 If this release was already installed and has history of its own, that history is not
 overwritten. Add the old history from **Settings → Import history…**, choosing `trend.db` in the
 saved folder.
@@ -48,6 +53,12 @@ The record covers what it found, what it removed or kept and why, and the state 
 before and after. The installer starts WinZ3805A once at the end, and the record says whether it
 stayed open; if it didn't, it includes Windows' error entries for it. The installer prints the
 path as it finishes. Please attach the file to any report.
+
+**If WinZ3805A installs but does not open, restart Windows and start it from the Start menu.**
+An upgrade with an earlier installer on Windows 10 could leave Windows unable to start it until a
+restart (#614). If it still does not open,
+[the start diagnosis](https://github.com/TGoodhew/WinZ3805A/blob/main/docs/diagnose-start.md)
+records why, for a report.
 
 If WinZ3805A stops starting later, **run the newest `Install.cmd` again**: it checks and puts right
 what it installed, and keeps your data. Windows' *Settings › Apps › WinZ3805A › Advanced options ›
@@ -81,10 +92,14 @@ not paying one — so the thumbprint below is what you check it against.
 
 ### Uninstalling
 
-*Settings › Apps* removes the application. To remove the certificate too, run
-[`build/Uninstall-Sideload.ps1`](https://github.com/TGoodhew/WinZ3805A/blob/main/build/Uninstall-Sideload.ps1)
-from a clone, or delete the entry by hand from `certlm.msc` → *Trusted People* →
-*Certificates*.
+*Settings › Apps* removes the application and everything it stored. To keep the history, use
+**Export history…** on its Settings page first.
+
+Uninstalling leaves the certificate and the installer's logs behind. To remove everything any
+release has put on the machine, follow
+[Removing WinZ3805A completely](https://github.com/TGoodhew/WinZ3805A/blob/main/docs/remove-winz3805a.md).
+Its script saves your history to Documents first, and never removes the shared Windows App
+Runtime or .NET.
 
 ## What this is
 
