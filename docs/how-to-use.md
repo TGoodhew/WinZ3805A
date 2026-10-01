@@ -737,6 +737,11 @@ the same file twice does no harm. A `trend.db` file copied by hand from the appl
 folder can be imported the same way. If an export or import fails, you are told why, and an import
 that fails leaves the history as it was.
 
+If the history file itself is ever damaged - by a power cut mid-write, say - the application doesn't
+refuse to start. It moves the damaged file aside as `trend.damaged-<date>-<time>.db`, starts a new
+history, and tells you once, with the file's location. Never delete that file: **Import history…**
+can try it, and refuses it if too little of it is readable to trust.
+
 ---
 
 ## Keyboard shortcuts

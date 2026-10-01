@@ -2999,6 +2999,20 @@ A `trend.db` copied by hand imports too, as a file with no manifest. Four decisi
 **Unlike a preference, history fails loud.** A failed export or import is always reported, because it
 is the user's only copy of data that cannot be gathered again.
 
+**A damaged history is set aside, never fatal and never deleted** *(#601, 30 Sep 2026)*. `trend.db`
+is opened through SQLite's `quick_check` on every start, and a file that fails it, or isn't a database,
+is renamed beside itself as `trend.damaged-<date>-<time>.db` with its `-wal` and `-shm`. A fresh
+history starts in its place, and the main window says so once, naming the file for **Import
+history…**, whose full integrity check decides what of it can be trusted. Before this, the store
+opened the file with nothing around it while the device was being put together, so a damaged file
+stopped the application opening at all.
+
+Three details matter:
+- **The check opens the file *immutable*.** Opened read-write, SQLite took a damaged file's `-wal` to
+  recover, and the newest history went with it before it could be moved.
+- **The cost was measured:** 5 ms warm and 26 ms cold, on a real 2.24 MB history.
+- **If the file can't even be moved,** that run's history is kept in memory, and the notice says so.
+
 **Preferences fail safe and fail silent.** A preference file that is missing, truncated or unreadable
 reads as the default, and the default for anything advanced is *off* — a store that failed open would
 enable an advanced surface because a disk went wrong. A write that fails is not reported: a

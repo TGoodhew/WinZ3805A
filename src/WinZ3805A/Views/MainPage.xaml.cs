@@ -48,6 +48,12 @@ public sealed partial class MainPage : Page
     private bool _compact;
     private bool _launchAttempted;
 
+    /// <summary>What opening the history found (#601); null when the store was not registered.</summary>
+    private readonly TrendStoreOpened? _history;
+
+    /// <summary>Whether <see cref="ReportHistoryAsync"/> has said its piece this run.</summary>
+    private bool _historyReported;
+
     /// <summary>How this run began: a start at sign-in retries the remembered receiver (#548).</summary>
     private readonly LaunchContext _launch;
 
@@ -128,6 +134,7 @@ public sealed partial class MainPage : Page
         _logger = services.GetService<ILoggerFactory>()?.CreateLogger("Connection");
         _launch = services.GetService<LaunchContext>() ?? LaunchContext.ByHand;
         _time = services.GetRequiredService<TimeProvider>();
+        _history = services.GetService<TrendStoreOpened>();
 
         _model = new MainViewModel(
             _device.Store, services.GetRequiredService<TimeProvider>(), _device.Driver);
@@ -168,7 +175,12 @@ public sealed partial class MainPage : Page
         {
             ApplyLayoutState();
             Render();
+
+            // Started before connecting and awaited after, so a notice about the history never
+            // holds up the receiver: the connect goes ahead while it is on screen.
+            Task history = ReportHistoryAsync();
             await ConnectOnLaunchAsync();
+            await history;
         };
         // The session and poller belong to the container now, and are let go when the window that
         // opened the receiver closes. Disposing them here would take the port away from the §10.4
@@ -559,6 +571,66 @@ public sealed partial class MainPage : Page
             cap <= DialogHeight.Stock ? " (the stock cap — the window is too short to raise it)" : string.Empty);
 
         await dialog.ShowAsync();
+    }
+
+    /// <summary>
+    /// Says once, if opening the history had to set a damaged file aside or could not keep it on disk
+    /// (#601).
+    /// </summary>
+    /// <remarks>
+    /// Shaped like the close-to-tray notice: the title says what happened and the body what to do,
+    /// briefly, because a dialog cannot be taller than this window - which may be compact. It is shown
+    /// only on the run that found the problem; the next run opens the fresh file and has nothing to say.
+    /// Nothing here may throw: it runs from the page's Loaded handler.
+    /// </remarks>
+    private async Task ReportHistoryAsync()
+    {
+        if (_historyReported || _history is not { } history || XamlRoot is null
+            || (history.SetAsidePath is null && history.Problem is null))
+        {
+            return;
+        }
+
+        _historyReported = true;
+
+        string title;
+        string body;
+        if (history.Problem is not null)
+        {
+            _logger?.LogWarning("History is being kept in memory for this run: {Problem}", history.Problem);
+            title = "History is not being saved";
+            body = "The history file could not be opened, so this session's readings are kept until the "
+                + "application closes and no longer. Windows said: " + history.Problem;
+        }
+        else
+        {
+            _logger?.LogWarning("The history file could not be read and was set aside as {Path}.", history.SetAsidePath);
+            title = "Earlier history set aside";
+            body = "The recorded history could not be read, so it was moved aside and a new one started. "
+                + "To try to bring it back: Details > Settings > Import history..., and choose "
+                + history.SetAsidePath;
+        }
+
+        try
+        {
+            ContentDialog dialog = new()
+            {
+                XamlRoot = XamlRoot,
+                Title = title,
+                Content = new ScrollViewer
+                {
+                    Content = new TextBlock { TextWrapping = TextWrapping.Wrap, Text = body },
+                },
+                CloseButtonText = "OK",
+                DefaultButton = ContentDialogButton.Close,
+            };
+
+            await dialog.ShowAsync();
+        }
+        catch (Exception exception)
+        {
+            _logger?.LogWarning(exception, "Could not show the history notice.");
+        }
     }
 
     /// <summary>Toggles compact mode, which §10.3 binds to double-click and Ctrl+Shift+M.</summary>
