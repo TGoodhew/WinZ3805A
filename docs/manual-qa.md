@@ -324,6 +324,8 @@ non-developer can act on. This is expected to fail; the check is that it fails *
 |---|---|
 | **Do** | `build\Uninstall-Sideload.ps1`, then `Get-AppxPackage -Name WinZ3805A` and `certlm.msc` → *Trusted People*. |
 | **Pass** | Neither the package nor the certificate is left behind. |
+| **Do** | **Removing everything (#618).** On a machine where this release's `Install.cmd` replaced an earlier-identity copy (v1.2.0), so there is a saved copy in Documents and the installer's logs, and where an earlier release's `WinZ3805A.cer` was also added to the account's own *Trusted People* (double-click it and accept the wizard): download `build/Remove-WinZ3805A.ps1` from the page `docs/remove-winz3805a.md` and run it with `-ListOnly`, then without. Accept saving the data; decline deleting the saved copies. |
+| **Pass** | `-ListOnly` changes nothing. The real run asks once for administrator permission. Afterwards: <ul><li>`Get-AppxPackage -Name WinZ3805A` lists nothing;</li><li>*Trusted People* holds neither `7F47E8D7…` nor `655D07E3…`, in `certlm.msc` or in `certmgr.msc`;</li><li>`%LOCALAPPDATA%\WinZ3805A Installer` is gone;</li><li>Documents has a *WinZ3805A saved data …* folder with `trend.db`, and the earlier saved copies are still there;</li><li>the Windows App Runtime and .NET are untouched;</li><li>its own *Checking* step reports nothing left, and its log is on the Desktop.</li></ul> After a restart, this release's `Install.cmd` installs and starts. |
 
 > **When the publisher changes, this section is not optional.** `Identity/@Name` and
 > `Identity/@Publisher` together form the package family name, so a build signed by a different

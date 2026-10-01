@@ -15,6 +15,12 @@
     certificate thumbprint, and the thumbprint changes whenever the certificate
     is regenerated.
 
+    This is the DEVELOPER'S tool: it reads the publisher from the manifest in
+    the clone and can delete build artefacts. For a user's machine, use
+    build/Remove-WinZ3805A.ps1 and its page, docs/remove-winz3805a.md (#618).
+    That one stands alone, saves the history first, and also removes the
+    installer's logs and certificates the person added to their own account.
+
 .PARAMETER IncludeArtifacts
     Also delete dist\ and any WinZ3805A-install folder on the Desktop.
 
