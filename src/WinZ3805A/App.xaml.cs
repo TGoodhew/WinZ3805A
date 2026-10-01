@@ -527,7 +527,13 @@ public partial class App : Application
         // P1-2 (#50). Application-scoped rather than per device: v1 has one receiver, and a second
         // would want its own file rather than a shared table with a device column - which is a
         // decision for #61, not something to prejudge with a schema now.
-        services.AddSingleton(_ => new TrendStore(TrendStore.DefaultPath()));
+        //
+        // Opened through the check (#601): a damaged trend.db used to stop the application opening at
+        // all. What the check did is registered too, so the main window can say so once; the store
+        // itself is resolved from it, which keeps it disposed with the container.
+        services.AddSingleton(provider =>
+            TrendStore.OpenChecked(TrendStore.DefaultPath(), provider.GetRequiredService<TimeProvider>()));
+        services.AddSingleton(provider => provider.GetRequiredService<TrendStoreOpened>().Store);
 
         services.AddSingleton<IConnectionPreferenceStore, LocalConnectionPreferenceStore>();
         services.AddSingleton<IDetailsViewPreferenceStore, LocalDetailsViewPreferenceStore>();

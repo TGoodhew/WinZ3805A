@@ -1,3 +1,6 @@
+using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Time.Testing;
+
 using WinZ3805A.Controls;
 using WinZ3805A.Services;
 
@@ -349,5 +352,96 @@ public sealed class TrendStoreTests : IDisposable
         store.Append(Sample(TimeSpan.Zero));
 
         Assert.Empty(store.Read(At(TimeSpan.FromDays(2)), At(TimeSpan.FromDays(1))));
+    }
+
+    // -------------------------------------------------------------------------------------
+    // A damaged file (#601)
+    // -------------------------------------------------------------------------------------
+
+    private static readonly FakeTimeProvider Clock = new(new DateTimeOffset(2026, 9, 30, 18, 0, 0, TimeSpan.Zero));
+
+    private void WriteGarbage()
+    {
+        Directory.CreateDirectory(_folder);
+        File.WriteAllBytes(Path0, [.. Enumerable.Range(0, 4096).Select(i => (byte)(i * 37))]);
+    }
+
+    /// <remarks>Why <see cref="TrendStore.OpenChecked"/> exists: the constructor alone throws on a
+    /// file that is not a database, and it runs at startup.</remarks>
+    [Fact]
+    public void ADamagedFileStopsTheConstructor()
+    {
+        WriteGarbage();
+
+        Assert.Throws<SqliteException>(() => new TrendStore(Path0));
+    }
+
+    [Fact]
+    public void ADamagedFileIsSetAsideAndAFreshOneOpened()
+    {
+        WriteGarbage();
+        byte[] damaged = File.ReadAllBytes(Path0);
+
+        TrendStoreOpened opened = TrendStore.OpenChecked(Path0, Clock);
+        using (opened.Store)
+        {
+            Assert.True(opened.Store.Append(Sample(TimeSpan.Zero)));
+        }
+
+        Assert.Null(opened.Problem);
+        Assert.NotNull(opened.SetAsidePath);
+        Assert.Equal(_folder, Path.GetDirectoryName(opened.SetAsidePath));
+        Assert.Matches(@"^trend\.damaged-\d{8}-\d{6}\.db$", Path.GetFileName(opened.SetAsidePath));
+        Assert.Equal(damaged, File.ReadAllBytes(opened.SetAsidePath));
+        Assert.True(File.Exists(Path0));
+    }
+
+    /// <remarks>An old write-ahead log left beside a fresh database is one SQLite would apply to it.</remarks>
+    [Fact]
+    public void TheWriteAheadLogGoesWithIt()
+    {
+        WriteGarbage();
+        File.WriteAllText(Path0 + "-wal", "not a log");
+        File.WriteAllText(Path0 + "-shm", "not shared memory");
+
+        TrendStoreOpened opened = TrendStore.OpenChecked(Path0, Clock);
+        opened.Store.Dispose();
+
+        Assert.NotNull(opened.SetAsidePath);
+        Assert.Equal("not a log", File.ReadAllText(opened.SetAsidePath + "-wal"));
+        Assert.Equal("not shared memory", File.ReadAllText(opened.SetAsidePath + "-shm"));
+    }
+
+    [Fact]
+    public void AHealthyFileIsKeptWithItsHistory()
+    {
+        using (TrendStore first = new(Path0))
+        {
+            first.Append(Sample(TimeSpan.Zero));
+        }
+
+        SqliteConnection.ClearAllPools();
+
+        TrendStoreOpened opened = TrendStore.OpenChecked(Path0, Clock);
+        using (opened.Store)
+        {
+            Assert.Null(opened.SetAsidePath);
+            Assert.Null(opened.Problem);
+            Assert.Single(opened.Store.Read(At(TimeSpan.FromHours(-1)), At(TimeSpan.FromHours(1))));
+        }
+
+        Assert.Empty(Directory.GetFiles(_folder, "*.damaged-*"));
+    }
+
+    [Fact]
+    public void NoFileYetIsSimplyAFreshStore()
+    {
+        TrendStoreOpened opened = TrendStore.OpenChecked(Path0, Clock);
+        using (opened.Store)
+        {
+            Assert.Null(opened.SetAsidePath);
+            Assert.Null(opened.Problem);
+            Assert.True(opened.Store.Append(Sample(TimeSpan.Zero)));
+        }
     }
 }

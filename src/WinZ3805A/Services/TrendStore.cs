@@ -51,6 +51,12 @@ public readonly record struct TrendRecord(
 /// trend; a propagated exception is a receiver that stops being polled.
 /// </para>
 /// </remarks>
+/// <summary>What <see cref="TrendStore.OpenChecked"/> did (#601).</summary>
+/// <param name="Store">The store, ready to use.</param>
+/// <param name="SetAsidePath">Where a damaged file was moved, or null when nothing was.</param>
+/// <param name="Problem">Why history is being kept in memory for this run, or null when it is on disk.</param>
+public sealed record TrendStoreOpened(TrendStore Store, string? SetAsidePath, string? Problem);
+
 public sealed class TrendStore : IDisposable
 {
     /// <summary>Beyond this age, samples are thinned to <see cref="CoarseInterval"/> (§12).</summary>
@@ -159,6 +165,127 @@ public sealed class TrendStore : IDisposable
         {
             // An older file that cannot be widened keeps working without the new series.
         }
+    }
+
+    /// <summary>
+    /// Opens the store at <paramref name="path"/>, first setting aside a file that SQLite cannot vouch
+    /// for and starting a fresh one in its place (#601).
+    /// </summary>
+    /// <param name="path">The database file.</param>
+    /// <param name="clock">Dates the set-aside file's name.</param>
+    /// <param name="retention">As for the constructor.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>The constructor alone made a damaged file fatal.</b> It opens the file and runs its pragmas
+    /// with nothing around them, and it runs as the device is put together at startup - so a
+    /// <c>trend.db</c> that was not a database, or failed SQLite's own check, stopped the application
+    /// opening at all, for the sake of a chart. The test that shows it is
+    /// <c>ADamagedFileStopsTheConstructor</c>.
+    /// </para>
+    /// <para>
+    /// <b>Set aside, never deleted.</b> The file is renamed beside itself with the date, so it can be
+    /// offered to <see cref="HistoryFile"/>'s import (#551) - which refuses a file that fails the full
+    /// integrity check, so nothing damaged gets merged - or sent in. Its <c>-wal</c> and <c>-shm</c>
+    /// files go with it: the store runs in WAL mode, and an old write-ahead log left beside a fresh
+    /// database is one SQLite would try to apply to it.
+    /// </para>
+    /// <para>
+    /// <b><c>quick_check</c>, not <c>integrity_check</c>.</b> It skips cross-checking indexes against
+    /// their tables, which is the expensive half and the half this one-table, primary-key-only schema
+    /// has least of, and it still reads every page - so a file that is not a database, or is
+    /// truncated or overwritten, fails it. It runs on every start rather than only after an update:
+    /// damage arrives with a power cut as readily as with an upgrade, and the history this keeps is a
+    /// few megabytes.
+    /// </para>
+    /// <para>
+    /// If even moving the file fails, the history is kept in memory for this run and the problem is
+    /// reported, so the application still opens.
+    /// </para>
+    /// </remarks>
+    public static TrendStoreOpened OpenChecked(string path, TimeProvider clock, TimeSpan? retention = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        ArgumentNullException.ThrowIfNull(clock);
+
+        string? setAside = null;
+        try
+        {
+            if (File.Exists(path) && !PassesQuickCheck(path))
+            {
+                setAside = SetAside(path, clock);
+            }
+
+            return new TrendStoreOpened(new TrendStore(path, retention), setAside, null);
+        }
+        catch (Exception exception) when (exception is SqliteException or IOException or UnauthorizedAccessException)
+        {
+            // Opened as a file and failed on the store's own statements, or could not be moved:
+            // set aside if not yet done, and otherwise keep this run's history in memory.
+            try
+            {
+                if (setAside is null && File.Exists(path))
+                {
+                    setAside = SetAside(path, clock);
+                    return new TrendStoreOpened(new TrendStore(path, retention), setAside, null);
+                }
+            }
+            catch (Exception inner) when (inner is SqliteException or IOException or UnauthorizedAccessException)
+            {
+                exception = inner;
+            }
+
+            return new TrendStoreOpened(new TrendStore(":memory:", retention), setAside, exception.Message);
+        }
+    }
+
+    /// <summary>Whether SQLite's quick check passes on the file at <paramref name="path"/>.</summary>
+    private static bool PassesQuickCheck(string path)
+    {
+        try
+        {
+            // IMMUTABLE, so checking changes nothing - and that was found the hard way. Opened read-write,
+            // SQLite took the damaged file's -wal as its own to recover and was gone with it before
+            // the set-aside could move it, so the check destroyed the newest history exactly when it
+            // was the part worth keeping. An immutable open reads the main file and touches no
+            // companion. Unpooled, so the file is closed - and can be moved - the moment this returns.
+            using SqliteConnection connection = new(new SqliteConnectionStringBuilder
+            {
+                DataSource = new Uri(Path.GetFullPath(path)).AbsoluteUri + "?immutable=1",
+                Mode = SqliteOpenMode.ReadOnly,
+                Pooling = false,
+            }.ToString());
+
+            connection.Open();
+
+            using SqliteCommand check = connection.CreateCommand();
+            check.CommandText = "PRAGMA quick_check;";
+            return check.ExecuteScalar() is string verdict && string.Equals(verdict, "ok", StringComparison.OrdinalIgnoreCase);
+        }
+        catch (SqliteException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Renames the file, and its write-ahead log and shared memory, aside with the date.</summary>
+    private static string SetAside(string path, TimeProvider clock)
+    {
+        SqliteConnection.ClearAllPools();
+
+        string folder = Path.GetDirectoryName(path) ?? string.Empty;
+        string stamp = clock.GetLocalNow().ToString("yyyyMMdd-HHmmss", System.Globalization.CultureInfo.InvariantCulture);
+        string target = Path.Combine(folder, $"{Path.GetFileNameWithoutExtension(path)}.damaged-{stamp}{Path.GetExtension(path)}");
+
+        File.Move(path, target);
+        foreach (string companion in new[] { "-wal", "-shm" })
+        {
+            if (File.Exists(path + companion))
+            {
+                File.Move(path + companion, target + companion);
+            }
+        }
+
+        return target;
     }
 
     /// <summary>Where the file lives by default, beside the other stores.</summary>
