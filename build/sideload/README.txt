@@ -95,17 +95,19 @@ IF AN EARLIER WINZ3805A IS INSTALLED
 
 TO REMOVE IT
 
-  Settings > Apps > Installed apps > WinZ3805A > Uninstall.
+  Windows 11: Settings > Apps > Installed apps > WinZ3805A > Uninstall.
+  Windows 10: Settings > Apps > Apps & features > WinZ3805A > Uninstall.
 
   Uninstalling deletes what the application has stored: your remembered
   connection, your settings, the recorded trend history, and the application
-  log. If you want to keep those - to reinstall a newer version, say -
-  uninstall from PowerShell instead:
+  log. To keep the history - to reinstall later, say - use Export history...
+  on the application's Settings page first, and Import history... after
+  installing again.
 
-    Get-AppxPackage WinZ3805A | Remove-AppxPackage -PreserveApplicationData
-
-  Either way the certificate stays behind. To remove that too, run
-  certlm.msc, open Trusted People > Certificates, and delete the entry.
+  Uninstalling leaves the certificate and the installer's logs behind. To
+  remove everything this installer has put on the machine, follow
+  https://github.com/TGoodhew/WinZ3805A/blob/main/docs/remove-winz3805a.md
+  Its script saves your history to Documents before removing anything.
 
   .NET stays installed too, because other applications may use it. If
   nothing else needs it, remove "Microsoft .NET Runtime - 10..." from
