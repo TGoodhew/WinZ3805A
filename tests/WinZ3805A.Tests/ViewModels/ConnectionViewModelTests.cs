@@ -507,6 +507,41 @@ public sealed class ConnectionViewModelTests
         Assert.False(fixture.Model.IsBusy);
     }
 
+    /// <remarks>
+    /// #607. Cancelled mid-transaction - the port open, the walk waiting on a receiver that will
+    /// never answer - the session used to stay Connecting with the port held, because the
+    /// cancellation passed through without a tear-down. The main window then read "Connecting"
+    /// indefinitely. Found the first time Cancel actually reached the attempt (#585).
+    /// </remarks>
+    [Fact]
+    public async Task CancellingMidWalkLeavesTheSessionDisconnectedAndThePortClosed()
+    {
+        using Fixture fixture = new(ports: [Port("COM3")]);
+        ControllableTransport silent = new(_ => null) { Behaviour = TransportBehaviour.Silent };
+        fixture.Transports.Enqueue(silent);
+
+        await fixture.Model.RefreshPortsAsync();
+        Task<bool> attempt = fixture.Model.ConnectAsync();
+
+        // Waits for the walk to be inside its first transaction, with the port open - the state
+        // a user pressing Cancel nine seconds in actually meets.
+        DateTime giveUp = DateTime.UtcNow + TestTimeout;
+        while (!silent.IsOpen && DateTime.UtcNow < giveUp)
+        {
+            await Task.Delay(10);
+        }
+
+        Assert.True(silent.IsOpen);
+        Assert.Equal(ConnectionStatus.Connecting, fixture.Session.Status);
+
+        fixture.Model.Cancel();
+
+        Assert.False(await attempt.WaitAsync(TestTimeout));
+        Assert.Equal(ConnectionStatus.Disconnected, fixture.Session.Status);
+        Assert.False(silent.IsOpen);
+        Assert.Null(fixture.Model.ErrorMessage);
+    }
+
     // -------------------------------------------------------------------------------------
     // Connect on launch
     // -------------------------------------------------------------------------------------
