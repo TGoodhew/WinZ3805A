@@ -981,29 +981,147 @@ if ($dotnet -and $installedCopy) {
     # the broken install this exists to catch. Measured on a clean VM on 30 Sep 2026 (#597): app.log
     # was written after the launch in every healthy run and in neither broken one. So it passes only
     # when the app wrote its log after being started AND is still running 15 s later.
+    #
+    # LAUNCHED SO THAT A FAILURE SAYS WHAT IT WAS (#624). Started through Explorer, as it was until
+    # v1.3.3, this check never saw the process, so it could not tell Windows refusing the launch
+    # from the app exiting at once - and #614 took three rounds with the person to learn the one fact
+    # that settled it: activation refused, 0x80270254. IApplicationActivationManager returns that
+    # refusal as a result, or the process id; a handle opened at once keeps the exit code however
+    # quickly the process ends. It is build/Diagnose-Start.ps1's probe, which got that answer on
+    # Windows 10. Explorer remains the fallback where the manager cannot be used: an elevated run,
+    # which it refuses (0x80270251), or a failed Add-Type.
     $appLog = Join-Path (Get-DataFolder $installedCopy.PackageFamilyName) 'logs\app.log'
+    $aumid = "$($installedCopy.PackageFamilyName)!App"
     $launchedAt = Get-Date
-    $running = @()
-    $logged = $false
+    $probe = $null
     try {
-        Start-Process "shell:AppsFolder\$($installedCopy.PackageFamilyName)!App"
-        Start-Sleep -Seconds 15
-        $running = @(Get-Process -Name 'WinZ3805A' -ErrorAction SilentlyContinue |
-            Where-Object { "$($_.Path)" -like "$($installedCopy.InstallLocation)*" })
-        $logged = (Test-Path $appLog) -and ((Get-Item $appLog).LastWriteTime -ge $launchedAt)
-        $startedOk = ($running.Count -gt 0) -and $logged
+        Add-Type -ErrorAction Stop -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+
+namespace WinZ3805AInstaller
+{
+    [ComImport, Guid("2e941141-7f97-4756-ba1d-9decde894a3d"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IApplicationActivationManager
+    {
+        [PreserveSig] int ActivateApplication([MarshalAs(UnmanagedType.LPWStr)] string appUserModelId,
+            [MarshalAs(UnmanagedType.LPWStr)] string arguments, int options, out uint processId);
+        [PreserveSig] int ActivateForFile([MarshalAs(UnmanagedType.LPWStr)] string appUserModelId,
+            IntPtr itemArray, [MarshalAs(UnmanagedType.LPWStr)] string verb, out uint processId);
+        [PreserveSig] int ActivateForProtocol([MarshalAs(UnmanagedType.LPWStr)] string appUserModelId,
+            IntPtr itemArray, out uint processId);
     }
-    catch {
-        Write-Log "could not start it: $($_.Exception.Message)"
-        $startedOk = $false
+
+    [ComImport, Guid("45BA127D-10A8-46EA-8AB7-56EA9078943C")]
+    class ApplicationActivationManager { }
+
+    public sealed class StartResult
+    {
+        public int ActivationResult;
+        public uint ProcessId;
+        public bool Opened;
+        public int OpenError;
+        public bool Exited;
+        public uint ExitCode;
     }
-    $windows = @($running | Where-Object { $_.MainWindowHandle -ne 0 } | ForEach-Object { "'$($_.MainWindowTitle)'" })
-    Write-Log "start check   processes $($running.Count), windows $(if ($windows.Count) { $windows -join ', ' } else { 'none' }), app.log written since launch $logged"
+
+    public static class StartProbe
+    {
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern IntPtr OpenProcess(uint access, bool inherit, uint pid);
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern uint WaitForSingleObject(IntPtr handle, uint milliseconds);
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool GetExitCodeProcess(IntPtr handle, out uint code);
+        [DllImport("kernel32.dll")]
+        static extern bool CloseHandle(IntPtr handle);
+
+        const uint Synchronize = 0x00100000, QueryLimited = 0x1000;
+
+        public static StartResult Run(string aumid, uint waitMs)
+        {
+            var result = new StartResult();
+            var manager = (IApplicationActivationManager)new ApplicationActivationManager();
+            uint pid;
+            result.ActivationResult = manager.ActivateApplication(aumid, null, 0, out pid);
+            result.ProcessId = pid;
+            if (result.ActivationResult < 0) return result;
+
+            IntPtr handle = OpenProcess(Synchronize | QueryLimited, false, pid);
+            if (handle == IntPtr.Zero) { result.OpenError = Marshal.GetLastWin32Error(); return result; }
+            result.Opened = true;
+            try
+            {
+                if (WaitForSingleObject(handle, waitMs) == 0)
+                {
+                    result.Exited = true;
+                    uint code;
+                    if (GetExitCodeProcess(handle, out code)) result.ExitCode = code;
+                }
+            }
+            finally { CloseHandle(handle); }
+            return result;
+        }
+    }
+}
+'@
+        $probe = [WinZ3805AInstaller.StartProbe]::Run($aumid, 15000)
+    }
+    catch { Write-Log "start check   the activation manager could not be used: $($_.Exception.Message)" }
+
+    # The outcome: alive (and started, if it logged), refused, exited, or gone.
+    $outcome = 'gone'
+    $processId = $null
+    $hr = $null
+    $exitCode = $null
+    if ($probe -and ('0x{0:X8}' -f $probe.ActivationResult) -ne '0x80270251') {
+        if ($probe.ActivationResult -lt 0) {
+            $outcome = 'refused'
+            $hr = '0x{0:X8}' -f $probe.ActivationResult
+            Write-Log "start check   Windows refused to start it: $hr"
+        }
+        else {
+            $processId = [int]$probe.ProcessId
+            if (-not $probe.Opened) {
+                Write-Log "start check   process $processId ended before it could be opened (error $($probe.OpenError)), so its exit code is unknown"
+            }
+            elseif ($probe.Exited) {
+                $outcome = 'exited'
+                $exitCode = '0x{0:X8}' -f $probe.ExitCode
+                Write-Log "start check   process $processId exited within 15 s, code $exitCode"
+            }
+            else {
+                $outcome = 'alive'
+                Write-Log "start check   process $processId still running 15 s later"
+            }
+        }
+    }
+    else {
+        if ($probe) { Write-Log 'start check   the activation manager refuses an elevated run (0x80270251); launching through Explorer' }
+        try {
+            Start-Process "shell:AppsFolder\$aumid"
+            Start-Sleep -Seconds 15
+            $process = Get-Process -Name 'WinZ3805A' -ErrorAction SilentlyContinue |
+                Where-Object { "$($_.Path)" -like "$($installedCopy.InstallLocation)*" } | Select-Object -First 1
+            if ($process) { $outcome = 'alive'; $processId = $process.Id }
+            Write-Log "start check   through Explorer: $(if ($process) { "process $processId running 15 s later" } else { 'no process 15 s later' })"
+        }
+        catch { Write-Log "could not start it: $($_.Exception.Message)" }
+    }
+
+    $logged = (Test-Path $appLog) -and ((Get-Item $appLog).LastWriteTime -ge $launchedAt)
+    $startedOk = ($outcome -eq 'alive') -and $logged
+    $window = $null
+    if ($outcome -eq 'alive') {
+        $window = Get-Process -Id $processId -ErrorAction SilentlyContinue |
+            Where-Object { $_.MainWindowHandle -ne 0 } | ForEach-Object { "'$($_.MainWindowTitle)'" }
+    }
+    Write-Log "start check   $outcome, window $(if ($window) { $window } else { 'none' }), app.log written since launch $logged"
 
     if ($startedOk) {
-        Write-Ok "It is running (process $($running[0].Id))."
+        Write-Ok "It is running (process $processId)."
     }
-    elseif ($running.Count -gt 0) {
+    elseif ($outcome -eq 'alive') {
         # Alive but silent: most often Windows' own .NET prompt, which is a window of this process.
         Write-Log 'ALIVE BUT NOT STARTED: the process is up and has written no log since launch. What Windows recorded:'
         Write-Host ''
@@ -1012,7 +1130,7 @@ if ($dotnet -and $installedCopy) {
         Write-Host "  $dotnetPage and start it again." -ForegroundColor Yellow
     }
     else {
-        Write-Log 'NOT RUNNING 15 s after being started. What Windows recorded:'
+        Write-Log "NOT RUNNING 15 s after being started ($outcome). What Windows recorded:"
     }
 
     if (-not $startedOk) {
@@ -1038,18 +1156,43 @@ if ($dotnet -and $installedCopy) {
         }
         else { Write-Log "app.log       none at $appLog - it stopped before it could write one" }
 
-        # No process at all is what a refused side-by-side install leaves behind on Windows 10:
-        # Windows will not start the app until it restarts (#614, #617). This installer no longer
-        # makes that attempt, but a machine an earlier run left that way is put right by a restart,
-        # so that is said first. It costs nothing on any other cause, which the log still records.
+        # Each outcome says what it was, so the person and the log agree on it.
         Write-Host ''
-        if ($running.Count -eq 0) {
-            Write-Host '  WinZ3805A did not open. Restart Windows, then start WinZ3805A from the' -ForegroundColor Yellow
-            Write-Host '  Start menu: Windows can need a restart before it will start an app that' -ForegroundColor Yellow
-            Write-Host '  replaced an earlier copy. If it still does not open, please report it' -ForegroundColor Yellow
-            Write-Host '  with the install record named below.' -ForegroundColor Yellow
+        switch ($outcome) {
+            'refused' {
+                if ($hr -eq '0x80270254') {
+                    # "Not registered": what a refused side-by-side install leaves on Windows 10, put
+                    # right by a restart (#614, #617). This installer no longer makes that attempt,
+                    # but a machine an earlier one left that way still needs the restart.
+                    Write-Host '  Windows would not start WinZ3805A: it says the app is not registered' -ForegroundColor Yellow
+                    Write-Host '  (0x80270254). Restart Windows, then start WinZ3805A from the Start menu.' -ForegroundColor Yellow
+                    Write-Host '  An upgrade by an earlier installer on Windows 10 can leave it this way' -ForegroundColor Yellow
+                    Write-Host '  until Windows restarts.' -ForegroundColor Yellow
+                }
+                else {
+                    Write-Host "  Windows would not start WinZ3805A ($hr). Restart Windows, then start it" -ForegroundColor Yellow
+                    Write-Host '  from the Start menu.' -ForegroundColor Yellow
+                }
+            }
+            'exited' {
+                if ($probe.ExitCode -ge [uint32]2147483648) {
+                    # An HRESULT as the exit code is what the Windows App SDK's deployment check
+                    # leaves when it gives up before the application's own code runs (#473, #625).
+                    Write-Host "  WinZ3805A closed as soon as it started, with code $exitCode. That is the" -ForegroundColor Yellow
+                    Write-Host '  Windows App Runtime failing its own start-up check. Run this installer' -ForegroundColor Yellow
+                    Write-Host '  again: it puts the runtime''s parts back.' -ForegroundColor Yellow
+                }
+                else {
+                    Write-Host "  WinZ3805A closed as soon as it started, with code $exitCode." -ForegroundColor Yellow
+                }
+            }
+            'gone' {
+                Write-Host '  WinZ3805A did not open. Restart Windows, then start WinZ3805A from the' -ForegroundColor Yellow
+                Write-Host '  Start menu: Windows can need a restart before it will start an app that' -ForegroundColor Yellow
+                Write-Host '  replaced an earlier copy.' -ForegroundColor Yellow
+            }
         }
-        else { Write-Host '  Please report it with the install record named below.' -ForegroundColor Yellow }
+        Write-Host '  If it still does not open, please report it with the install record named below.' -ForegroundColor Yellow
     }
 }
 elseif (-not $dotnet) {
