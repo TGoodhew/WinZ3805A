@@ -264,6 +264,61 @@ function Stop-QaVm {
     if ($running -match [regex]::Escape($Vm.Vmx)) { Invoke-VmRun $Vm stop -Arguments 'hard' | Out-Null }
 }
 
+# The named pipe a VM's second serial port is served on. The guest sees it as COM2: COM1 is the
+# provisioning trail to guest-serial.log.
+function Get-QaSimulatorPipe {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)]$Vm)
+    'winz-qa-' + [IO.Path]::GetFileNameWithoutExtension($Vm.Vmx)
+}
+
+# Gives the VM a second serial port, served by the VM on a named pipe, for the Z3805A simulator to
+# connect to (#639): SmartClockSimulator --pipe-client <Get-QaSimulatorPipe>. The VM is the pipe's
+# server so the simulator can come and go between checks without the VM noticing.
+#
+# The QA Clean snapshot holds a running machine, and a running machine cannot gain a serial port,
+# so the snapshot is taken again: revert, shut the guest down cleanly, add the port, boot to the
+# desktop, replace the snapshot, power off. A VM that already has the port is left alone.
+function Add-QaSimulatorPort {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)]$Vm, [string]$Snapshot = 'QA Clean')
+
+    $pipe = '\\.\pipe\' + (Get-QaSimulatorPipe -Vm $Vm)
+    if (Select-String -LiteralPath $Vm.Vmx -SimpleMatch "serial1.fileName = `"$pipe`"" -Quiet) {
+        Write-Host "$($Vm.Vmx) already has the simulator port."
+        return
+    }
+
+    Start-QaVm -Vm $Vm -Snapshot $Snapshot
+    Invoke-VmRun $Vm stop -Arguments 'soft' | Out-Null
+    $deadline = (Get-Date).AddMinutes(3)
+    while ((& $script:VmRunPath -T ws list) -match [regex]::Escape($Vm.Vmx)) {
+        if ((Get-Date) -gt $deadline) { throw 'The guest did not shut down within three minutes.' }
+        Start-Sleep -Seconds 2
+    }
+
+    # Read only now. Reverting moves the VM onto a new disk delta and rewrites the vmx to name it, so
+    # a copy read before the revert names a delta that no longer exists; the first version of this
+    # function wrote one back and the VM would not start (2 Oct 2026).
+    $vmx = Get-Content -LiteralPath $Vm.Vmx
+    $kept = @($vmx | Where-Object { $_ -notmatch '^serial1\.' })
+    $port = @(
+        'serial1.present = "TRUE"'
+        'serial1.fileType = "pipe"'
+        "serial1.fileName = `"$pipe`""
+        'serial1.pipe.endPoint = "server"'
+        'serial1.tryNoRxLoss = "TRUE"'
+        'serial1.startConnected = "TRUE"'
+    )
+    Set-Content -LiteralPath $Vm.Vmx -Value ($kept + $port) -Encoding ascii
+
+    Invoke-VmRun $Vm start -Arguments 'nogui' | Out-Null
+    Wait-QaDesktop -Vm $Vm
+    Invoke-VmRun $Vm deleteSnapshot -Arguments $Snapshot | Out-Null
+    Invoke-VmRun $Vm snapshot -Arguments $Snapshot | Out-Null
+    Stop-QaVm -Vm $Vm
+}
+
 # Copies a file into the guest (-ToGuest) or out of it.
 function Copy-QaFile {
     [CmdletBinding()]
@@ -344,4 +399,4 @@ function Invoke-QaGuestScript {
     [pscustomobject]@{ ExitCode = $code; Output = "$output".TrimEnd() }
 }
 
-Export-ModuleMember -Function Get-QaCredential, Set-QaCredential, New-QaIso, New-QaVm, Invoke-VmRun, Wait-QaDesktop, Start-QaVm, Stop-QaVm, Copy-QaFile, Invoke-QaGuest, Invoke-QaGuestScript
+Export-ModuleMember -Function Get-QaCredential, Set-QaCredential, New-QaIso, New-QaVm, Invoke-VmRun, Wait-QaDesktop, Start-QaVm, Stop-QaVm, Get-QaSimulatorPipe, Add-QaSimulatorPort, Copy-QaFile, Invoke-QaGuest, Invoke-QaGuestScript
