@@ -689,7 +689,8 @@ tools/UccmSimulator/          the UCCM shapes the driver was written against, be
 build/                        the gate scripts, the five capture, transitions and soak harnesses,
                               the two guide-image capture scripts, the sideload packager, the
                               repair-measurement harness for a test VM (#597), the palette
-                              derivation
+                              derivation, and qa/ - the automated QA harness that provisions
+                              VMware test VMs unattended and drives them (#633)
 .github/workflows/ci.yml      the gates in their own jobs, alongside the Debug and Release builds and the tests
 ```
 
