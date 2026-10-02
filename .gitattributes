@@ -63,6 +63,11 @@ tests/WinZ3805A.Tests/Nmea/Captures/*.nmea -text
 # prose and are excluded.
 tests/WinZ3805A.Tests/Uccm/Captures/*.txt -text
 
+# The status screens the SmartClock simulator's state runs kept (#639), for the Fixtures/
+# reason: they are the receiver's bytes, CRLF and trailing spaces included. The cycles.md
+# records beside them are prose about the wire and are excluded.
+tools/SmartClockSimulator/comparisons/**/screens/*.txt -text
+
 # ---------------------------------------------------------------------------
 # The specification is byte-exact and must stay that way.
 # ---------------------------------------------------------------------------
