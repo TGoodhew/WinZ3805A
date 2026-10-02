@@ -46,6 +46,33 @@ The installer runs in a guest with `Install.cmd -Unattended`, whose exit code is
 (see `install.ps1`'s help). On 2 Oct 2026 v1.3.3's online zip returned 3 (installed, .NET
 missing) in 17 seconds and the offline zip 0 (installed .NET, started) in 41.
 
+## Running the QA pass
+
+```powershell
+.\build\qa\Invoke-QaPass.ps1 -Online <online zip> -Offline <offline zip>   # a dry-run build
+.\build\qa\Invoke-QaPass.ps1 -Release v1.3.4                               # published zips
+```
+
+Every scenario reverts a VM to *QA Clean*, does what a person would do on a fresh machine, reads
+the outcome from the installer's exit code, its log and the guest's state, and powers the VM off
+afterwards. The report, `report.md`, goes into the release's QA-run issue; everything collected
+from the guests sits beside it. The exit code is 1 if any scenario failed or errored, and also if
+nothing ran.
+
+| Scenario | manual-qa.md section | What it requires |
+|---|---|---|
+| `binary-audit` | 8 | No excluded command in the assemblies this repository builds (host, no VM) |
+| `fresh-online` | 12 | Online zip, no .NET: exit 3, this release installed and trusted, start check skipped |
+| `fresh-offline` | 12 | Offline zip: .NET and the app in one elevation, exit 0, start check passed |
+| `upgrade-1.2.0` | 12 | A used v1.2.0 replaced: the right order for the build, data saved and moved, old copy and certificate gone |
+| `leftover-cert` | 12 | v1.2.0 uninstalled by hand first: its certificate still removed |
+| `app-checks` | 11, 18, 25 | On the running app: the guide in the package and F1, a second launch typed into the Start menu bringing a covered window forward, the tray icon surviving an Explorer restart; a screenshot is kept for the agent to judge |
+
+A candidate built before `-Unattended` existed - any release up to v1.3.3 - gets its prompts
+answered with newlines and its outcome read from its log, so older releases can be candidates.
+That is how the harness was shown to fail: given v1.3.2, `upgrade-1.2.0` fails on Windows 10
+exactly as #617 did.
+
 ## Things worth not rediscovering
 
 Each of these cost a failed run on 1 Oct 2026.
@@ -74,5 +101,18 @@ Each of these cost a failed run on 1 Oct 2026.
   `-File`, and brings its output back.
 - **Give `vmrun` a program's arguments as separate words.** As one string they arrive as one
   quoted argument: `cmd /c` copes, `powershell.exe` exits 1 without running anything.
+- **A list passed through `powershell -File` arrives as one string.** `-Scenarios a,b` became the
+  single name `a,b`, matched nothing, and the run reported success having run nothing; lists are
+  split, and a run with no results fails.
+- **A desktop is not yet a Tools session.** On Windows 11, Explorer can be up after a revert while
+  VMware Tools' user-session process is not, and `runProgramInGuest -interactive` then refuses;
+  `Wait-QaDesktop` waits for that process too.
+- **The state #614 found does not reproduce under `vmrun`.** A scenario that refused a
+  side-by-side install, removed the earlier copy and installed again never met `0x80270254`, in
+  two forms (v1.3.2's own package, then the candidate's), where the same steps taken by hand on a
+  Windows 10 desktop had (#614). Why is not known — the installs here run through `vmrun`'s own
+  logon rather than from the desktop, which is the obvious difference and an unproven one. A
+  scenario that cannot set up its own precondition proves nothing when it passes, so it was
+  removed and that row of section 12 stays by hand; the message it checked was seen in VM test 9 (#624).
 - **A blank guest password cannot be used.** Windows refuses non-console logons to accounts
   with blank passwords, which is why the account has a generated one.
