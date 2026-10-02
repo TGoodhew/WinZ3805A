@@ -313,7 +313,8 @@ public sealed class StatusRegistersViewModel : INotifyPropertyChanged
             return null;
         }
 
-        // Responses carry a leading space (#78) and the register masks are plain integers.
+        // Trimmed for safety (the receiver sends no leading space, §7.2), and the register masks
+        // are plain integers.
         return int.TryParse(
             transaction.Lines[0].Trim(),
             NumberStyles.Integer,

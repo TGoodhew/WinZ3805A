@@ -48,8 +48,12 @@ public readonly record struct SatelliteTrackingState(
 /// <para>
 /// Two things there that no reasonable guess would have produced. An <b>empty list answers
 /// <c>+0</c></b> rather than an empty response — and since PRN 0 does not exist, that is
-/// unambiguous. And a <b>non-empty list arrives on the second line</b>, the first being blank; the
-/// value is not in <c>Lines[0]</c> where every other query in this application puts it.
+/// unambiguous. And a <b>non-empty list arrived on the second line</b>, the first being blank.
+/// </para>
+/// <para>
+/// The second has not held up. Asked again on 2 Oct 2026 by the simulator comparison (#639), the
+/// unit put the list on the first line with nothing before it, so the blank line was most likely
+/// the console's. The parser reads every line, so it is right either way.
 /// </para>
 /// </remarks>
 public static class SatelliteTrackingParser

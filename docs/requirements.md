@@ -363,9 +363,17 @@ This is the fiddliest part of the implementation. Get it right before building a
   it matches. A client that assumes echo-on eats the first line of every response the day it meets a
   unit with echo off; one that assumes echo-off reads its own command back as the answer.
 - **Response terminator:** responses end `CR LF`.
-- **Response values carry a leading space.** `:SYNC:TFOM?` answers `␣+3`, not `+3`. Trim before
-  parsing rather than treating the space as part of the field. This affects every scalar parse
-  in §11.
+- **Response values start with the value.** `:SYNC:TFOM?` answers `+3`. Trim before parsing
+  anyway: it costs nothing, and it is what kept every scalar parse in §11 working while this
+  section said otherwise.
+
+  > **⚠ Corrected 2 Oct 2026 (#639).** This said values *carry a leading space*, that
+  > `:SYNC:TFOM?` answers `␣+3`. The simulator comparison asked the bench unit 71 read-only queries
+  > and **none of 70 replies began with a space**. The raw bytes in
+  > `tests/WinZ3805A.Tests/Fixtures/captured/power-up-gps-acquisition.txt` already showed it for the
+  > identity, which follows the prompt's own trailing space with no second one. The likeliest origin
+  > is a terminal session reading that trailing space as part of the answer. Nothing broke, because
+  > every parser trims.
 - **Prompt sentinel — a grammar, not a literal.** The prompt marks end-of-transaction and carries
   **no trailing newline**. It has two forms:
 
@@ -452,6 +460,14 @@ This is the fiddliest part of the implementation. Get it right before building a
 
   The glitch is directly observable: open the port and send `*IDN?` first and it answers `E-362> `
   with no identity string; send anything else first and `*IDN?` answers normally.
+
+  > **⚠ Not reproduced 2 Oct 2026 (#639).** The simulator comparison opened the port with DTR
+  > asserted and heard no banner in three seconds. A second capture then opened it with DTR down
+  > and raised DTR on the open port: no banner in five seconds, and the first `*CLS` answered a
+  > clean `scpi > `. That is the same unit, the same firmware and the same cable as on 21 Aug 2026.
+  > What differed is not known. A receiver that had been running for weeks may announce itself
+  > only after a power cycle. **The sequence stays as written**: it costs one short listen and one
+  > `*CLS` when the receiver is silent, and it is the only defence when the receiver is not.
 - **Read strategy:** a transaction completes when the stream yields the prompt sentinel, or on timeout. Never rely on `ReadLine()` alone — `:SYST:STAT?` is a multi-line block of ~1900 bytes that will span many reads. Implement with `PipeReader` over `SerialPort.BaseStream` and `SequenceReader<byte>` for sentinel detection (§6.4); this handles the straddling-buffer case for free and avoids the manual compaction bugs that plague hand-rolled versions.
 - **Timeouts — six classes** (`Transport/TransactionTimeouts.cs`; the three measured since the original three were added 29 Aug 2026, #316): **3000 ms** default for every scalar query and setter; **15000 ms** for `:SYST:STAT?` (≈1900 bytes at 9600 baud ≈ 2 s of wire time, plus device latency; 3521 ms measured end to end); **30000 ms** for `*TST?` and `:DIAG:TEST?` (the `GPS` subsystem alone reached 24.0 s on the bench, #53); **60000 ms** for `:DIAG:LOG:READ:ALL?` (a full 222-entry log is ≈15 kB, about 16 s at 9600 baud — measured after the default timed out on it); **2000 ms** per transaction of the auto-detect walk (§10.12); **30000 ms** for the three `:GPS:POSition…` setters that commit a position (`:GPS:POS`, `LAST`, `SURVey` — 9.67 s measured to a clean prompt, #256; they tear down a running survey before answering). Matching is exact against every legal SCPI spelling, never by prefix, so `:SYST:STAT:LENG?` keeps the default.
 - **Concurrency:** the device is strictly one-transaction-at-a-time. `DeviceSessionService` owns a single-consumer `Channel<PendingCommand>`; all callers `await` their turn. No exceptions to this.

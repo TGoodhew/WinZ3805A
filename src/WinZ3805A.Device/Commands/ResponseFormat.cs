@@ -4,9 +4,9 @@ namespace WinZ3805A.Device.Commands;
 /// The shape of what a command answers with, so a caller knows which parser to reach for.
 /// </summary>
 /// <remarks>
-/// Taken from responses observed on the reference unit rather than from the manual's prose. Note
-/// that every value arrives with a leading space — <c>_+3</c> rather than <c>+3</c> — which is a
-/// framing artefact of the receiver and belongs to none of these formats; trim before parsing.
+/// Taken from responses observed on the reference unit rather than from the manual's prose. Trim
+/// before parsing. This once said every value arrived with a leading space; the bench unit sends
+/// none (§7.2, corrected 2 Oct 2026), but a trim costs nothing either way.
 /// </remarks>
 public enum ResponseFormat
 {
