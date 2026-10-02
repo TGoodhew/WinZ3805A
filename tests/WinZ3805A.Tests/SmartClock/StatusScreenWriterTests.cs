@@ -31,6 +31,14 @@ public sealed class StatusScreenWriterTests
         Height = 38.00,
     };
 
+    /// <summary>Where the bench unit was holding during the October sittings.</summary>
+    private static readonly PositionPanel October = new()
+    {
+        Latitude = Lat(47, 31, 18.546),
+        Longitude = -Lat(122, 12, 22.128),
+        Height = 38.00,
+    };
+
     private static readonly PositionPanel Surveyed = new()
     {
         Latitude = Lat(47, 31, 18.582),
@@ -44,6 +52,10 @@ public sealed class StatusScreenWriterTests
         "captured/locked-to-gps.txt",
         "captured/locked-to-gps-stabilizing-frequency.txt",
         "captured/locked-to-gps-sub-unit-readings.txt",
+        "captured/holdover-manually-initiated.txt",
+        "captured/recovery-fine-freq-adj-sub-nanosecond.txt",
+        "captured/power-up-gps-acquisition-single-digit-prns.txt",
+        "captured/power-up-survey-suspended-initial-position.txt",
         "captured/power-up-gps-acquisition.txt",
         "captured/power-up-fine-freq-adj.txt",
         "captured/surveying-locked-to-gps-stabilizing-frequency.txt",
@@ -170,6 +182,91 @@ public sealed class StatusScreenWriterTests
             Time = new DateTime(2007, 1, 12, 3, 24, 19),
             AntennaDelayNanoseconds = 77,
             Position = Original,
+        },
+
+        "captured/holdover-manually-initiated.txt" => new()
+        {
+            // Forced from the Holdover page, 2 Oct 2026. GPS is still there, so the offset is too.
+            Outputs = OutputsSummary.ValidReducedAccuracy,
+            Mode = ClockMode.Holdover,
+            ModeDetail = "manually initiated",
+            Tfom = 3,
+            Ffom = 2,
+            TimeIntervalNanoseconds = -0.3,
+            PredictMicroseconds = 0.8,
+            PresentMicroseconds = 1.0,
+            HoldoverDuration = new TimeSpan(0, 1, 38),
+            GpsOnePpsValid = true,
+            Tracked = [T(3, 55, 172, 40), T(4, 74, 319, 39), T(7, 16, 231, 33), T(9, 39, 290, 35), T(16, 37, 124, 37), T(26, 41, 76, 38), T(31, 30, 55, 37)],
+            NotTracked = [U(6, 23, 298), U(11, 8, 329)],
+            Time = new DateTime(2007, 2, 16, 19, 57, 38),
+            AntennaDelayNanoseconds = 60,
+            Position = October,
+        },
+
+        "captured/recovery-fine-freq-adj-sub-nanosecond.txt" => new()
+        {
+            Outputs = OutputsSummary.ValidReducedAccuracy,
+            Mode = ClockMode.Recovery,
+            ModeDetail = "fine freq adj",
+            ModeTimeIntervalNanoseconds = -0.5,
+            Tfom = 3,
+            Ffom = 2,
+            TimeIntervalNanoseconds = -5.0,
+            PredictMicroseconds = 0.8,
+            PresentMicroseconds = 1.0,
+            HoldoverDuration = new TimeSpan(0, 40, 49),
+            GpsOnePpsValid = true,
+            Tracked = [T(3, 36, 172, 36), T(4, 80, 45, 40), T(6, 19, 280, 33), T(7, 31, 241, 39), T(9, 55, 300, 39), T(16, 47, 101, 36), T(26, 33, 56, 36)],
+            NotTracked = [U(11, 13, 314), U(31, 14, 59)],
+            Time = new DateTime(2007, 2, 16, 20, 36, 49),
+            AntennaDelayNanoseconds = 60,
+            Position = October,
+        },
+
+        "captured/power-up-gps-acquisition-single-digit-prns.txt" => new()
+        {
+            Outputs = OutputsSummary.Invalid,
+            Mode = ClockMode.PowerUp,
+            ModeDetail = "GPS acquisition",
+            Tfom = 9,
+            Ffom = 3,
+            GpsOnePpsValid = false,
+            NotTracked = [U(3, 20, 173), U(4, 69, 96, true), U(6, 11, 267, true), U(7, 44, 251, true), U(9, 70, 308, true), U(11, 12, 301), U(16, 48, 77, true), U(21, 11, 322), U(26, 23, 47), U(27, 8, 110), U(30, 7, 248)],
+            TimeScale = "GPS",
+            Time = new DateTime(2007, 2, 16, 21, 9, 18),
+            TimeProvisional = true,
+            ClockAdvisory = "Invalid: not tracking",
+            AntennaDelayNanoseconds = 0,
+            Position = October,
+            ElevationMaskDegrees = 0,
+        },
+
+        "captured/power-up-survey-suspended-initial-position.txt" => new()
+        {
+            // The second power cycle of 2 Oct 2026: no position yet, and the factory initial one shown.
+            Outputs = OutputsSummary.Invalid,
+            Mode = ClockMode.PowerUp,
+            ModeDetail = "GPS acquisition",
+            Tfom = 9,
+            Ffom = 3,
+            GpsOnePpsValid = false,
+            Tracked = [new TrackedSatellite(4, null, null, null), T(7, 24, 73, 39), T(9, 15, 42, 40)],
+            NotTracked = [U(30, 29, 115)],
+            TimeScale = "GPS",
+            Time = new DateTime(2007, 2, 16, 21, 19, 2),
+            TimeProvisional = true,
+            ClockAdvisory = "Invalid: inacc position",
+            AntennaDelayNanoseconds = 60,
+            Position = new()
+            {
+                SurveyPercent = 0,
+                SurveySuspended = "track <4 sats",
+                Initial = true,
+                Latitude = Lat(34, 44, 0),
+                Longitude = Lat(135, 21, 0),
+                Height = 0,
+            },
         },
 
         "captured/locked-to-gps-sub-unit-readings.txt" => new()

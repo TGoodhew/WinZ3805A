@@ -963,6 +963,12 @@ public sealed partial class StatusScreenParser(TimeProvider timeProvider)
     /// screens that draw it. The remark above used to say every captured screen was a held one,
     /// which is how it went unnoticed until there were screens that were not.
     /// </para>
+    /// <para>
+    /// <b>The same, again, for <c>INIT</c>.</b> The fix for <c>AVG</c> learned one label and not its
+    /// sibling, so a power-up still on the receiver's initial position (<c>INIT LAT N  34:44:00.000</c>,
+    /// first captured on 2 Oct 2026, #644) read as unqualified, and nothing could say the position
+    /// on screen was a factory default rather than the antenna's.
+    /// </para>
     /// </remarks>
     private static PositionQualifier ParsePositionQualifier(string[] lines)
     {
@@ -978,9 +984,12 @@ public sealed partial class StatusScreenParser(TimeProvider timeProvider)
                     PositionQualifier.Held;
             }
 
-            if (AveragedPositionLabelPattern().IsMatch(line))
+            Match label = QualifiedPositionLabelPattern().Match(line);
+            if (label.Success)
             {
-                return PositionQualifier.Average;
+                return label.Groups["label"].Value.Equals("INIT", StringComparison.OrdinalIgnoreCase)
+                    ? PositionQualifier.Init
+                    : PositionQualifier.Average;
             }
         }
 
@@ -1354,15 +1363,16 @@ public sealed partial class StatusScreenParser(TimeProvider timeProvider)
     private static partial Regex PositionQualifierPattern();
 
     /// <summary>
-    /// The SmartClock family's own way of saying the position is a survey average.
+    /// The SmartClock family's own way of qualifying a position: <c>AVG</c> for a survey average,
+    /// <c>INIT</c> for the initial position before there is a fix.
     /// </summary>
     /// <remarks>
     /// Anchored on the label rather than the line, because the position block shares its lines with
     /// the satellite table — <c>AVG LAT</c> appears after eight columns of PRN, elevation and
     /// azimuth on a screen tracking eight satellites.
     /// </remarks>
-    [GeneratedRegex(@"\bAVG\s+(?:LAT|LON|HGT)\b", RegexOptions.IgnoreCase)]
-    private static partial Regex AveragedPositionLabelPattern();
+    [GeneratedRegex(@"\b(?<label>AVG|INIT)\s+(?:LAT|LON|HGT)\b", RegexOptions.IgnoreCase)]
+    private static partial Regex QualifiedPositionLabelPattern();
 
     [GeneratedRegex(@"\s{2,}")]
     private static partial Regex PairSeparatorPattern();

@@ -198,16 +198,25 @@ public static class StatusScreenWriter
     {
         PositionPanel position = screen.Position;
         bool surveying = position.SurveyPercent is not null;
-        string qualifier = surveying ? "AVG " : string.Empty;
+        string qualifier = position.Initial ? "INIT " : surveying ? "AVG " : string.Empty;
 
         string[] rows = new string[TableRows];
         Array.Fill(rows, string.Empty);
         rows[0] = "GPS 1PPS " + screen.ClockAdvisory;
         rows[1] = "ANT DLY  " + screen.AntennaDelayNanoseconds.ToString(Invariant) + " ns";
         rows[2] = "Position ________________________";
+
+        // A survey at nothing prints "0", not "0.0" (2 Oct 2026); every other figure has a decimal.
         rows[3] = position.SurveyPercent is double percent
-            ? "MODE     Survey: " + percent.ToString("0.0", Invariant).PadLeft(6) + "% complete"
+            ? "MODE     Survey: " + (percent == 0 ? "0" : percent.ToString("0.0", Invariant)).PadLeft(6) + "% complete"
             : "MODE     Hold";
+
+        // The reason a survey is stalled sits under its percentage, nine columns into the panel.
+        if (position.SurveySuspended is string reason)
+        {
+            rows[4] = new string(' ', 9) + "Suspended: " + reason;
+        }
+
         rows[5] = (qualifier + "LAT").PadRight(9) + Angle(position.Latitude, 'N', 'S');
         rows[6] = (qualifier + "LON").PadRight(9) + Angle(position.Longitude, 'E', 'W');
         rows[7] = (qualifier + "HGT").PadRight(9) +
@@ -235,7 +244,7 @@ public static class StatusScreenWriter
         if (row < screen.Tracked.Count)
         {
             TrackedSatellite t = screen.Tracked[row];
-            tracked = Field(t.Prn, 3) + Field(t.Elevation, 4) + Field(t.Azimuth, 4) + Field(t.CarrierToNoise, 5);
+            tracked = Field(t.Prn, 3) + Field(t.Elevation, 4, "--") + Field(t.Azimuth, 4, "---") + Field(t.CarrierToNoise, 5, "--");
         }
 
         if (row >= screen.NotTracked.Count)
@@ -243,12 +252,15 @@ public static class StatusScreenWriter
             return row < screen.Tracked.Count ? tracked : string.Empty;
         }
 
+        // The star has a column of its own, before a PRN right-aligned in two: "* 4" and "*15"
+        // (2 Oct 2026; every August capture starred only two-digit PRNs).
         UntrackedSatellite u = screen.NotTracked[row];
-        string prn = (u.Attempting ? "*" : string.Empty) + u.Prn.ToString(Invariant);
-        return tracked + prn.PadLeft(6) + Field(u.Elevation, 4) + Field(u.Azimuth, 4);
+        string prn = (u.Attempting ? "*" : " ") + u.Prn.ToString(Invariant).PadLeft(2);
+        return tracked + prn.PadLeft(6) + Field(u.Elevation, 4, "--") + Field(u.Azimuth, 4, "---");
     }
 
-    private static string Field(int value, int width) => value.ToString(Invariant).PadLeft(width);
+    private static string Field(int? value, int width, string unknown = "") =>
+        (value?.ToString(Invariant) ?? unknown).PadLeft(width);
 
     private static string Item(string label, bool ok, int width) =>
         (label + ": " + (ok ? "OK" : "Err")).PadRight(width);

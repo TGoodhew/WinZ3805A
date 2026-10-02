@@ -1,0 +1,27 @@
+------------------------------- Receiver Status -------------------------------
+SYNCHRONIZATION ........................................... [ Outputs Invalid ]
+SmartClock Mode ___________________________   Reference Outputs _______________
+   Locked                                     TFOM     9             FFOM     3
+   Recovery                                   1PPS TI  --
+   Holdover                                   HOLD THR 1.000 us
+>> Power-up: GPS acquisition                  Holdover Uncertainty ____________
+                                              Predict  --
+                                                
+ACQUISITION .............................................. [ GPS 1PPS Invalid ]
+Tracking: 3 ____   Not Tracking: 1 ________   Time ____________________________
+PRN  El  Az  C/N   PRN  El  Az                GPS      21:19:02 (?) 16 Feb 2007
+  4  -- ---   --    30  29 115                GPS 1PPS Invalid: inacc position
+  7  24  73   39                              ANT DLY  60 ns
+  9  15  42   40                              Position ________________________
+                                              MODE     Survey:      0% complete
+                                                       Suspended: track <4 sats
+                                              INIT LAT N  34:44:00.000
+                                              INIT LON E 135:21:00.000
+                                              INIT HGT           +0.00 m  (MSL)
+                                              
+                                              
+                                              
+                                              
+ELEV MASK 10 deg                              
+HEALTH MONITOR ......................................................... [ OK ]
+Self Test: OK    Int Pwr: OK   Oven Pwr: OK   OCXO: OK   EFC: OK   GPS Rcv: OK 

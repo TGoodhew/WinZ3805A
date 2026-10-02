@@ -12,13 +12,14 @@ at the front, no prompt at the back, everything in between untouched, CRLF endin
 ## Provenance
 
 Every capture is from one unit — `SYMMETRICOM,Z3805A,3625A02931,1.01.03-A`, at 9600-8-N-1 —
-in three sittings:
+in four sittings:
 
 | Sitting | When | How | Files |
 |---|---|---|---|
 | The first capture | 12 August 2026 | By hand, from a terminal session, with the scalar queries below taken alongside it | `locked-stabilizing.txt` |
 | The backyard sitting | 27–28 August 2026 | `build/Capture-Fixtures.ps1` left watching the screen through a hardware move, a power cycle and an antenna pull, writing one file per state it had not seen — plus two screens taken by hand where the harness could not (#242, #247) | everything under `captured/` but the file below |
 | The simulator comparison | 2 October 2026 | `SmartClockSimulator --compare COM3` (#639), which saves the bench unit's screen beside its report; the trailing prompt was removed before committing | `captured/locked-to-gps-sub-unit-readings.txt` |
+| The state runs | 2 October 2026 | `SmartClockSimulator --watch COM3` (#639) through a forced holdover, a pulled antenna and two power cycles; the trailing prompt removed before committing. The raw runs are in `tools/SmartClockSimulator/comparisons/states-2026-10-02/` | the four files below the comparison's |
 
 ## What is here
 
@@ -35,6 +36,10 @@ means adding a row to the table below and pointing a test at it; the file does n
 | `captured/power-up-fine-freq-adj.txt` | `Power-up: fine freq adj`, outputs invalid, 1 PPS valid, 8 tracked — §11.1's *acquiring* | the provisional power-up time and its `?` marker (#245); absent readings as distinct from provisional ones; a mode detail stopping before its bracketed figure | `AProvisionalPowerUpTimeIsReadAndFlagged`, `ThePowerUpScreenSeparatesAbsentFromProvisionalReadings`, `AnAveragedPositionIsDistinguishedFromAHeldOne`, `OnlyAMarkedRowIsProvisional`, `AModeDetailStopsBeforeItsBracketedFigure` |
 | `captured/locked-to-gps-stabilizing-frequency.txt` | `Locked to GPS: stabilizing frequency`, outputs valid / reduced accuracy, 8 tracked | | `TheStabilizingScreenParses`, `AnAveragedPositionIsDistinguishedFromAHeldOne` |
 | `captured/locked-to-gps-sub-unit-readings.txt` | `Locked to GPS`, outputs valid, 8 tracked, after weeks of running | **readings a unit down**: `1PPS TI +300 ps` and `Predict  800 ns`, the first capture with either below the nanosecond and microsecond every earlier screen used | `ASettledScreenScalesItsReadingsDownAUnit` |
+| `captured/holdover-manually-initiated.txt` | `Holdover: manually initiated`, forced from the Holdover page, 1 m 38 s in | the manual's wording, never seen until then; the 1 PPS offset still measured (`-300 ps`) because GPS is still there | `AForcedHoldoverSaysItWasManuallyInitiated` |
+| `captured/recovery-fine-freq-adj-sub-nanosecond.txt` | `Recovery: fine freq adj` after the forced holdover | the bracketed offset in picoseconds, `[TI   -500 ps]` | `ARecoveryOffsetBelowANanosecondIsReadInPicoseconds` |
+| `captured/power-up-gps-acquisition-single-digit-prns.txt` | `Power-up: GPS acquisition`, 0 tracked, after a power cycle | single-digit PRNs starred as `* 4`, the star in a column of its own | `AStarredSingleDigitPrnIsStillAttempted` |
+| `captured/power-up-survey-suspended-initial-position.txt` | `Power-up: GPS acquisition` after a second power cycle that came up with no position | the factory initial position (`INIT LAT`), a survey at `0%` `Suspended: track <4 sats`, `inacc position`, and a tracked satellite printed `-- ---   --` | `APowerUpWithNoPositionShowsTheInitialOneAndASuspendedSurvey` (#644) |
 | `captured/locked-to-gps.txt` | `Locked to GPS`, outputs valid, 9 tracked — the fully locked state, §11.1's *locked* | an averaged position as distinct from a held one | `TheFullyLockedScreenParses`, `AnAveragedPositionIsDistinguishedFromAHeldOne` |
 | `captured/surveying-locked-to-gps-stabilizing-frequency.txt` | a **survey in progress** while locked and stabilizing — §11.1's *survey in progress*. Taken by hand: until #242 the harness could not see a survey and reported the screen as one already seen, so its log entry is reconstructed | the rolled-over date corrected on a surveying screen | `TheSurveyingScreenParses`, `TheSurveyingScreensRolledOverDateIsCorrected`, `AnAveragedPositionIsDistinguishedFromAHeldOne` |
 | `captured/holdover-gps-1pps-invalid.txt` | `Holdover: GPS 1PPS invalid`, 0 tracked, three seconds in — the antenna pulled. §11.1's *holdover* | both holdover uncertainties; how long the receiver has been degraded; the mode row not mistaken for the advisory; the surveyed position held through holdover | `TheHoldoverScreenParses`, `TheHoldoverScreenReportsBothUncertainties`, `TheHoldoverScreenReportsHowLongItHasBeenDegraded`, `ThePresentUncertaintyIsTheSameOnBothHoldoverScreens`, `TheModeRowIsNotMistakenForTheAdvisory`, `TheHoldoverScreenHoldsTheSurveyedPosition` |
