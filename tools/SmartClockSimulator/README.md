@@ -1,0 +1,163 @@
+# SmartClockSimulator
+
+A Symmetricom Z3805A that is not a Z3805A (#639).
+
+## Why it exists
+
+The SmartClock family is this project's first receiver, and until this existed the only way to see
+the application handle it was the one bench unit. That was a problem for three things:
+
+- **The automated QA pass (#633)** runs in virtual machines, which have no receiver. Sections 21 and
+  23 of `docs/manual-qa.md` need one connected.
+- **The faults worth testing** can otherwise only be caused by doing them to the bench unit: pulling
+  the antenna for holdover, waiting out a power-up, or dropping the cable mid-session.
+- **Two states have never been seen at all:** a health-monitor failure, and a forced (manual) holdover.
+
+This produces every state the bench unit was captured in, plus those two, and the faults on demand.
+
+## It is a second reading, not a copy
+
+Unlike the NMEA and UCCM simulators, **this one references nothing from the application**, not
+even the Device library. It is checked against the bench unit in two ways:
+
+1. **Its screens are the bench unit's, byte for byte.** `StatusScreenWriterTests` types out the values
+   each capture under [`tests/WinZ3805A.Tests/Fixtures/`](../../tests/WinZ3805A.Tests/Fixtures/README.md)
+   shows. It then requires the simulator to print that capture exactly, every space, underscore and
+   CRLF. All ten captures pass, and a new capture without a matching test fails `EveryCaptureHasASnapshot`.
+2. **Its wire behaviour is §7.2's**, which was itself corrected against the bench unit (#78).
+   `ScpiEngineTests` checks the rules that once cost a client its connection:
+   - the error prompt names the error queue, not the last command;
+   - the framing glitch on the first command;
+   - the reading that has no answer while unlocked.
+
+Only after that is the application run against it (`SmartClockSimulatedSessionTests`). Because the
+two share no code, agreement there is two independent readings agreeing, not one reading agreeing
+with itself.
+
+## Running it
+
+```powershell
+# One answer to each query, printed, for a look:
+dotnet run --project tools\SmartClockSimulator -- --stdout --start locked
+
+# On one end of a com0com pair, with the application on the other:
+dotnet run --project tools\SmartClockSimulator -- --port COM7 --start locked
+
+# On a named pipe a VMware VM's serial port is connected to (the VM serves the pipe):
+dotnet run --project tools\SmartClockSimulator -- --pipe-client winz-qa --start locked --control winz-qa-ctl
+```
+
+| Option | Default | |
+|---|---|---|
+| `--port COMn` / `--pipe <name>` / `--pipe-client <name>` / `--stdout` | | Where to answer. One is required. |
+| `--start powerup` or `locked` | `powerup` | `locked` starts in a settled lock, as a unit that has run for a day would be. |
+| `--speed <factor>` | `1` | Runs the timeline faster. The clock the receiver reports stays real. |
+| `--baud <rate>` | `9600` | Paces replies at the line rate, so a status screen takes the ~2 s of wire time it takes on hardware. Use `0` for instant. |
+| `--echo` | off | Echo each command, as `FDUPLEX ON` does. The bench unit does not echo. |
+| `--no-leading-space` | | Values without the space §7.2 records before them. See the table below. |
+| `--no-announce` | | No banner and no framing glitch when a client connects. |
+| `--control <name>` | | Also take control commands on `\\.\pipe\<name>`. |
+| `--compare COMn` | | Compare against a real receiver. See *Comparing it with the bench unit*. |
+
+**Connecting a VM to it.** A VM's serial port behind a named pipe carries no DTR, so the simulator
+cannot see the guest open its port. In `--pipe-client` mode, give `--no-announce`. Otherwise the
+banner goes out to nobody and the glitch fires on whatever the guest sends first. The application
+copes either way: §7.2's connect sequence is built for a receiver that says nothing.
+
+### Control commands
+
+Type these on standard input, or write them a line at a time to the control pipe. A QA scenario
+pulls the antenna this way, which takes the application down the same path a person pulling the
+real one would.
+
+```
+antenna off | on          pull or reconnect the antenna (holdover, then recovery)
+power-cycle               start again from power-up
+start locked              jump straight to a settled lock
+holdover | recover        force holdover, or start recovery, as the commands would
+health <item> fail | ok   item: selftest intpwr ovenpwr ocxo efc gpsrcv
+fault silent | garbage | truncate | latency <ms> | drop | none
+echo on | off             the receiver's FDUPLEX setting
+speed <factor>            run the timeline faster
+status                    one line describing the receiver and the link
+```
+
+The faults behave as follows:
+- `silent` hears and never answers, as a dead TX line looks.
+- `garbage` replaces every reply with noise, as a wrong baud rate does.
+- `truncate` cuts the next reply off before its prompt.
+- `drop` closes the connection.
+
+## The timeline
+
+These are the states the bench unit was captured in, in the order it passed through them:
+
+```
+Power-up: GPS acquisition -> Power-up: fine freq adj -> Locked to GPS: stabilizing frequency -> Locked to GPS
+                       antenna off: Holdover: GPS 1PPS invalid
+                       antenna on:  holdover with the signal back -> Recovery: fine freq adj -> Locked (stabilizing)
+                       holdover:    Holdover: manually initiated, until recover
+```
+
+**The order and what each state prints come from the captures. How long each state lasts does not**,
+because that depends on the oscillator, the sky and how long the unit was off. The defaults
+(30 s, 90 s, 180 s; 30 s and 60 s for recovery) make a run watchable, and `--speed` shortens them further.
+
+## What is measured and what is not
+
+Read this before trusting a green test that runs through the simulator. The comparison session
+settles the right-hand column a row at a time.
+
+| Behaviour | Source |
+|---|---|
+| The status screen's layout: every column, width, label, underscore and trailing space, in all ten captured states | **Bench unit**, byte for byte |
+| `ANT DLY 0 ns` and `ELEV MASK 0 deg` during GPS acquisition | **Bench unit**, once (`power-up-gps-acquisition.txt`) |
+| The `scpi > ` and `E-nnn> ` prompts: the newest error shown, the oldest read, the clean prompt on the read that empties the queue | **Bench unit** (§7.2) |
+| No echo; CR, LF and CRLF all end a command | **Bench unit** (§7.2) |
+| The banner on opening the port, and `-362` on the first command | **Bench unit** (§7.2). The banner's exact bytes were never captured: it is the identity, CRLF and a prompt here |
+| `:SYNC:TINT?` unlocked, and `:PTIM:LEAP:DATE?`/`DUR?` with nothing announced: no data, `E-230` | **Bench unit** (§7.3.1, §10.14) |
+| The §8.5 undocumented queries answer `-113` | **Bench unit** (§8.5) |
+| `*IDN?`, `:SYST:DATE?`, `:SYST:TIME?`, `:PTIM:DATE?`, `:PTIM:TIME?`, `:SYNC:TFOM?`, `:SYNC:FFOM?`, `:SYNC:TINT?`, `:SYNC:HOLD:DUR?`, `:GPS:REF:ADEL?`, `:DIAG:ROSC:EFC:REL?`, `:GPS:SAT:TRAC:COUN?`, `:SYST:STAT:LENG?`, `:PTIM:LEAP:ACC?`, `:PTIM:TCOD:FORM?`, `:DIAG:IDEN:GPS?`, `:DIAG:TEST:RES?`, `:DIAG:TEST?` | **Bench unit**, formats from `Fixtures/README.md`, §7.3, #37 and the parser tests |
+| `:GPS:SAT:TRAC:IGN?` answering `+0`, and `:GPS:SAT:TRAC:INCL?` putting its list on the second line | **Bench unit** (`SatelliteTrackingParser`) |
+| The diagnostic log's form, `Log NNN:YYYYMMDD.HH:MM:SS:  message`, and its two messages | **Bench unit** (`DiagnosticLogParserTests`) |
+| `:PTIM:TCOD?`, format T2 with its checksum, sent on the receiver's tick about 509 ms before the second | **Bench unit** (#37) |
+| A survey refused with `-300` while a position is held | **Bench unit** (#229) |
+| Timings: 30 ms for a query, 1.5 s for a screen before its wire time, 0.9 s for a lamp write, 9.67 s for a position setter, 12.4 s and 11.6 s for the ALL and GPS tests | **Bench unit** (§7.2, §7.3, #440, #256, #53) |
+| `*TST?` and the subsystem tests taking the receiver back to power-up | **Bench unit** for the subsystem tests (#53). `*TST?` was never run |
+| **A space before every value** (` +3`) | §7.2 says so. **The identity and the screen have none on the wire**, which the raw captures show; whether the numbers do is the first thing to compare. `--no-leading-space` turns it off |
+| The health failure: `[ Error ]` and `Err` | **Manual** (p. 3-18), never seen |
+| `Holdover: manually initiated` | **Manual** (p. 3-13), never seen |
+| A time interval over a microsecond printed in `us` | **Manual** sample screen; the threshold is a guess |
+| Booleans unsigned (`0`, `1`) | One query (`:PTIM:LEAP:STAT?`) answered `0`. Two commits say the same of `:LED:ACT?`, while one comment says `+0`. **Guess** |
+| The error queue's capacity, 30 | **Guess**. Five were read back as five; overflow to `-350` was seen but not counted |
+| `:SYST:ERR?` with nothing queued: `+0,"No error"` | **Guess** (SCPI-99). The application accepts either `0,` or the words |
+| `:SYST:COMM?`, `:GPS:POS?` and its siblings, `:GPS:POS:SURV:*?`, `:PTIM:TIME:STR?`, `:PTIM:TZON?`, `:DIAG:QUER:RESP?`, the `:STAT:` registers, `:SYNC:HOLD:TUNC:*?` | **Guess** in form. None has been asked on the bench unit with its answer recorded |
+| A holdover past 99 minutes; a day of the month below ten; satellites beyond twelve rows | **Guess** |
+| How long each state lasts; the sky; the noise on the time interval and the control voltage | **Made up**, to be plausible |
+
+## Comparing it with the bench unit
+
+`--compare` sends the same read-only queries to a real receiver and to the simulator, then writes the
+answers side by side:
+
+```powershell
+# Disconnect the application from the receiver first: only one program can hold the port.
+dotnet run --project tools\SmartClockSimulator -- --compare COM3 --report compare.md
+```
+
+- **It only reads.** Its list is fixed in code and every entry is a query. It leaves out `*TST?` and
+  `:DIAG:TEST?`, the two queries that act on the receiver, and a guard checks every line before it
+  is sent. `ComparisonTests` pins both.
+- **It compares shapes, not values.** The receiver and the simulator are in different states under
+  different skies. Each answer is reduced to its form:
+  - signs become `±`;
+  - a run of integer digits becomes `#`;
+  - decimal places and exponent digits are kept one `#` each.
+
+  A difference in shape is then either a wrong guess here, or a keyword that differs with the state
+  (`LOCK` against `HOLD`). The report shows both answers so a person can tell which.
+- **It saves both status screens** beside the report. A new screen from the bench unit is also a
+  candidate fixture.
+
+Where the bench unit and the simulator disagree, **the bench unit wins**: fix the simulator, then
+move that row of the table above.
