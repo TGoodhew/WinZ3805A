@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    A Z3805A on the bench that is not on the bench (#639). The automated QA pass (#633) needs a
+    receiver a virtual machine can connect to, and the faults worth testing - an antenna pulled,
+    holdover, recovery, a cable dropped mid-session - are otherwise produced by doing them to the one
+    real unit.
+
+    Unlike the NMEA and UCCM simulators this one references NOTHING from the application, the Device
+    library included. It is a second, independent reading of the receiver: its screens are checked
+    byte for byte against captures of the bench unit, and the application's parser is then checked
+    against it. Sharing code with the parser would let one misreading pass both sides at once.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>WinZ3805A.Simulation.SmartClock</RootNamespace>
+    <AssemblyName>SmartClockSimulator</AssemblyName>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.IO.Ports" Version="10.0.11" />
+  </ItemGroup>
+
+</Project>
