@@ -43,6 +43,7 @@ even when a check fails.
 | `Invoke-VmRun` | Any other `vmrun` command; guest operations with `-Guest` |
 | `Add-QaSimulatorPort` | Gives the VM a COM2 served on a named pipe for the Z3805A simulator, and re-takes *QA Clean* with it (#639) |
 | `Get-QaSimulatorPipe` | The pipe's name: `winz-qa-<VM name>` |
+| `Save-QaCleanSnapshot` | Re-takes *QA Clean* from the running guest once `Wait-QaQuiet` says it has gone quiet, then powers off |
 
 **The simulator port.** The `receiver` scenario needs a receiver, and a VM has none, so each QA VM
 has a second serial port that the VM serves on `\\.\pipe\winz-qa-<name>`. The guest sees it as
@@ -90,6 +91,13 @@ That is how the harness was shown to fail: given v1.3.2, `upgrade-1.2.0` fails o
 exactly as #617 did.
 
 ## Things worth not rediscovering
+
+- **Take a snapshot only once the guest has gone quiet.** A desktop that has just appeared is still
+  busy with updates, indexing and first runs, and every check started from that snapshot starts busy.
+  One taken 30 s after a cold boot made the app's first launch take 14 s on Windows 11. That failed
+  the installer's 15 s start check in every run from it, `fresh-offline` included, until the snapshot
+  was taken again after four quiet minutes. `Save-QaCleanSnapshot` waits for the processor to stay
+  under 10 % for 30 s. A real machine can be that busy too, which is #646.
 
 Each of these cost a failed run on 1 Oct 2026.
 
