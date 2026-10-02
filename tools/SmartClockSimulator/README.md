@@ -59,10 +59,13 @@ dotnet run --project tools\SmartClockSimulator -- --pipe-client winz-qa --start 
 | `--control <name>` | | Also take control commands on `\\.\pipe\<name>`. |
 | `--compare COMn` | | Compare against a real receiver. See *Comparing it with the bench unit*. |
 
-**Connecting a VM to it.** A VM's serial port behind a named pipe carries no DTR, so the simulator
-cannot see the guest open its port. Leave `--announce` off there. Otherwise the banner goes out to
-nobody and the glitch fires on whatever the guest sends first. The application copes either way:
-§7.2's connect sequence is built for a receiver that says nothing.
+**Connecting a VM to it.** Each QA VM has a COM2 that the VM serves on `\\.\pipe\winz-qa-<name>`
+(`Add-QaSimulatorPort`, `build/qa/README.md`), and the QA pass's `receiver` scenario runs the app in
+the guest against this simulator over it. It connects, locks, follows a pulled antenna into holdover
+and back, and survives a 30-second power cycle, all driven through `--control`. A VM's serial port
+carries no DTR through the pipe, so the simulator cannot see the guest open its port; leave
+`--announce` off there, or the banner goes out to nobody and the glitch fires on whatever the guest
+sends first.
 
 ### Control commands
 

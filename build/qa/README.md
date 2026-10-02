@@ -41,6 +41,21 @@ even when a check fails.
 | `Invoke-QaGuest` | Runs a program on the signed-in desktop and returns its exit code |
 | `Invoke-QaGuestScript` | Runs a PowerShell script there and returns its exit code and output |
 | `Invoke-VmRun` | Any other `vmrun` command; guest operations with `-Guest` |
+| `Add-QaSimulatorPort` | Gives the VM a COM2 served on a named pipe for the Z3805A simulator, and re-takes *QA Clean* with it (#639) |
+| `Get-QaSimulatorPipe` | The pipe's name: `winz-qa-<VM name>` |
+
+**The simulator port.** The `receiver` scenario needs a receiver, and a VM has none, so each QA VM
+has a second serial port that the VM serves on `\\.\pipe\winz-qa-<name>`. The guest sees it as
+COM2; COM1 is the provisioning trail. `tools/SmartClockSimulator --pipe-client <pipe>` connects to
+it from the host. `Install-QaVm.ps1` gives a new VM the port. A VM provisioned before 2 Oct 2026 gets
+it once, with `Add-QaSimulatorPort`, which takes about three minutes:
+1. revert, and shut the guest down cleanly;
+2. add the port to the `.vmx`;
+3. boot to the desktop and replace *QA Clean*;
+4. power off.
+
+The snapshot has to be taken again because it holds a running machine, and a running machine cannot
+gain a serial port.
 
 The installer runs in a guest with `Install.cmd -Unattended`, whose exit code is the outcome
 (see `install.ps1`'s help). On 2 Oct 2026 v1.3.3's online zip returned 3 (installed, .NET
@@ -67,6 +82,7 @@ nothing ran.
 | `upgrade-1.2.0` | 12 | A used v1.2.0 replaced: the right order for the build, data saved and moved, old copy and certificate gone |
 | `leftover-cert` | 12 | v1.2.0 uninstalled by hand first: its certificate still removed |
 | `app-checks` | 11, 18, 25 | On the running app: the guide in the package and F1, a second launch typed into the Start menu bringing a covered window forward, the tray icon surviving an Explorer restart; a screenshot is kept for the agent to judge |
+| `receiver` | 2, 10 | The app against the simulated Z3805A on the VM's COM2, its settings written for connect-on-launch: it connects and locks; follows a pulled antenna into holdover (`WAIT`, #642), notifies after the grace minute, recovers and notifies again; and comes back by itself after a 30-second power cycle. Needs the simulator port |
 
 A candidate built before `-Unattended` existed - any release up to v1.3.3 - gets its prompts
 answered with newlines and its outcome read from its log, so older releases can be candidates.

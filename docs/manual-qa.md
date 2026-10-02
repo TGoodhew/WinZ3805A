@@ -32,7 +32,9 @@ with the screenshots attached.
 
 | Section | Status | How |
 |---|---|---|
+| 2 | **automated** | `receiver`: the simulated Z3805A on the VM's COM2 powered off for 30 s and back; the session must reach *Reconnecting*, reconnect by itself, and log a `State:` line after (#639) |
 | 8 | **automated** | `binary-audit`: `Test-NoBlockedCommands.ps1 -ScanBinaries` on the unpacked package |
+| 10 | **partly automated** | `receiver`: the simulated antenna pulled and held off past the grace minute; the app must log both notifications. Still by hand: that they appear on screen, and that none comes with the switch off |
 | 11 | **automated** | `app-checks`: the guide and every image it names in the package; F1 opens the guide window |
 | 12 | **partly automated** | `fresh-online`, `fresh-offline`, `upgrade-1.2.0`, `leftover-cert`, on Windows 10 and 11. Still by hand: a browser download with *Unblock* and the thumbprint compared, the offline zip with the network off, a run without unblocking, and a machine an earlier installer left unable to start the app, which does not reproduce under the harness (see `build/qa/README.md`) |
 | 18 | **automated** | `app-checks`: Explorer killed; the app logs re-adding its icon and keeps running |
@@ -65,6 +67,8 @@ now** and **Stop retrying**, and the number counts down.
 ---
 
 ## 2. Receiver power cycle (#259)
+
+> **Automated** by the `receiver` scenario of `build/qa/Invoke-QaPass.ps1`, against the Z3805A simulator on each QA VM's COM2. It reproduces what the bench unit did on 2 Oct 2026: silence while off, then a lost first command and a first screen more than 15 s late. Do it by hand when the transport changes.
 
 **Why.** Not the same test as pulling the adapter, and it fails differently. Removal throws
 `IOException`, which the transport recognises. A power cycle throws **nothing at all** — the adapter
@@ -286,6 +290,8 @@ the details UI* — has no test, because a test cannot know what "represented" m
 | **Pass** | Every field has a home — a readout, a table cell, a card — or a recorded reason for not having one. |
 
 ## 10. Lock notifications (P1-9, #288)
+
+> **Partly automated** by the `receiver` scenario: the simulated antenna is pulled and held off until the app logs its notification, then reconnected until it logs the second. On screen, and the switch-off half, are still by hand.
 
 **Why.** The notification path was rebuilt on 29 Aug 2026 after `AppNotificationManager` turned out
 never to have registered on any machine, and nobody noticed for a fortnight because nothing tests
