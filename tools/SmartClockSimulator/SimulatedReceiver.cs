@@ -120,8 +120,8 @@ public sealed class SimulatedReceiver
         Height = 25.20,
     };
 
-    /// <summary>Whether a survey starts by itself at power-up.</summary>
-    public bool SurveyAtPowerUp { get; set; }
+    /// <summary>Whether a survey starts by itself at power-up. On, as the bench unit is set.</summary>
+    public bool SurveyAtPowerUp { get; set; } = true;
 
     /// <summary>Satellites excluded from tracking.</summary>
     public SortedSet<int> Ignored { get; } = [];
@@ -133,7 +133,7 @@ public sealed class SimulatedReceiver
     public bool EnabledLamp { get; set; }
 
     /// <summary>Hours of running time, as <c>:DIAG:LIF:COUN?</c> reports them.</summary>
-    public int LifetimeHours { get; set; } = 108_731;
+    public int LifetimeHours { get; set; } = 37_014;
 
     /// <summary>Raised when the SmartClock mode changes, which is what the diagnostic log records.</summary>
     public event EventHandler<ModeChange>? ModeChanged;
@@ -299,7 +299,7 @@ public sealed class SimulatedReceiver
         _manualHoldover = false;
         _surveyStarted = null;
         _simulatedElapsed += TimeSpan.FromDays(1);
-        _timeInterval = 5.0;
+        _timeInterval = 1.0;
         Enter(Phase.Locked);
     }
 
@@ -475,7 +475,9 @@ public sealed class SimulatedReceiver
                 break;
 
             case Phase.Locked:
-                _timeInterval = Wander(_timeInterval, 20, seconds);
+                // Settled, the bench unit read +2.0 ns on one query and +300 ps on the screen a
+                // second later (2 Oct 2026); the captures from August show up to 50 ns.
+                _timeInterval = Wander(_timeInterval, 3, seconds);
                 break;
 
             case Phase.Holdover when AntennaConnected:
@@ -540,13 +542,14 @@ public sealed class SimulatedReceiver
 
     /// <summary>
     /// The predicted 24-hour holdover uncertainty, in microseconds: large just after power-up,
-    /// falling as the oscillator is learned. The captures show 432.0 two minutes after power-up and
-    /// 2.0 to 6.8 once settled.
+    /// falling as the oscillator is learned. The captures show 432.0 two minutes after power-up,
+    /// 2.0 to 6.8 within the first hours, and the comparison 0.8 after weeks of running.
     /// </summary>
     private double Predict()
     {
-        double learned = (_simulatedElapsed - Timing.Acquisition - Timing.FineFrequency).TotalSeconds;
-        return Math.Max(2.5, 432.0 * Math.Exp(-Math.Max(0, learned) / 300.0)) + (_holdoverStarted is null ? 0 : 3.0);
+        double learned = Math.Max(0, (_simulatedElapsed - Timing.Acquisition - Timing.FineFrequency).TotalSeconds);
+        double settling = (432.0 * Math.Exp(-learned / 300.0)) + (2.0 * Math.Exp(-learned / 21_600.0));
+        return 0.8 + settling + (_holdoverStarted is null ? 0 : 3.0);
     }
 
     /// <summary>The present holdover uncertainty in microseconds, growing with time in holdover.</summary>

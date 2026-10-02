@@ -52,6 +52,9 @@ public sealed class ScpiEngine
 
     private static readonly CultureInfo Invariant = CultureInfo.InvariantCulture;
 
+    private const string GpsIdentity =
+        "\"--\",\"SFTW P/N # 4850266\",\"SOFTWARE VER # 005\",\"--\",\"--\",\"MODEL # FURUNO GT-80\",\"--\",\"--\",\"--\",\"--\"";
+
     private static readonly string[] Subsystems =
         ["ALL", "DISPlay", "PROCessor", "RAM", "EEPROM", "UART", "QSPI", "FPGA", "INTerpolator", "IREFerence", "GPS", "POWer"];
 
@@ -62,9 +65,18 @@ public sealed class ScpiEngine
     private int _newestError;
     private bool _glitchPending;
     private string _lastTest = "+0,ALL";
-    private readonly Dictionary<string, int> _registers = new(StringComparer.OrdinalIgnoreCase);
+    // The bench unit's condition registers while locked (2 Oct 2026). What they read in any other
+    // state is not known, so they stay at these.
+    private readonly Dictionary<string, int> _registers = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["OPERation:COND"] = 90,
+        ["OPERation:POWerup:COND"] = 7,
+    };
+
     private int _eventEnable;
-    private int _serviceEnable;
+
+    // The bench unit's service request mask, 2 Oct 2026. Whether it is the factory value is not known.
+    private int _serviceEnable = 136;
 
     /// <summary>Creates the engine for one receiver.</summary>
     public ScpiEngine(SimulatedReceiver receiver, TimeProvider clock)
@@ -82,16 +94,15 @@ public sealed class ScpiEngine
     public bool Echo { get; set; }
 
     /// <summary>
-    /// Whether a value reply starts with a space, as §7.2 records (<c>:SYNC:TFOM?</c> answering
+    /// Whether a value reply starts with a space, as §7.2 recorded (<c>:SYNC:TFOM?</c> answering
     /// <c>␣+3</c>).
     /// </summary>
     /// <remarks>
-    /// On by default because §7.2 says so. The identity, the screen and the log carry no space on the
-    /// wire (the raw captures show it), so this applies only to single values. It is a setting
-    /// because it is the first thing to check against the bench unit: the parser trims either way,
-    /// so nothing in the application could tell the two apart.
+    /// Off, because the bench unit does not do it: compared on 2 Oct 2026, none of 70 replies began
+    /// with a space. Kept as a setting so a client can still be shown one; the application trims
+    /// either way, so nothing in it could tell the two apart.
     /// </remarks>
-    public bool LeadingSpace { get; set; } = true;
+    public bool LeadingSpace { get; set; }
 
     /// <summary>How many errors the queue holds before the newest is replaced by -350.</summary>
     /// <remarks>Never measured on the bench unit; five were read back as five. 30 is a guess.</remarks>
@@ -272,12 +283,14 @@ public sealed class ScpiEngine
         });
 
         // ---- System -------------------------------------------------------------------------
-        On(":SYSTem:STATus?", _ => Result.Text(StatusScreenWriter.Write(r.Snapshot()).TrimEnd('\r', '\n'), TimeSpan.FromMilliseconds(1500)));
+        On(":SYSTem:STATus?", _ => Result.Text(StatusScreenWriter.Write(r.Snapshot()).TrimEnd('\r', '\n'), TimeSpan.FromMilliseconds(1200)));
         On(":SYSTem:STATus:LENGth?", _ => Result.Value(Int(23)));
         On(":SYSTem:ERRor?", _ => Result.Value(NextError()));
         On(":SYSTem:DATE?", _ => Result.Value(Date(r.ReportedUtc)));
         On(":SYSTem:TIME?", _ => Result.Value(Time(r.ReportedUtc)));
-        On(":SYSTem:COMMunicate?", _ => Result.Value("+9600,+8,NONE,+1"));
+
+        // The bench unit names its port rather than describing it (2 Oct 2026).
+        On(":SYSTem:COMMunicate?", _ => Result.Value("SER1"));
         On(":SYSTem:PRESet", _ =>
         {
             r.AntennaDelaySeconds = 0;
@@ -303,12 +316,21 @@ public sealed class ScpiEngine
         On(":SYNChronization:FFOMerit?", _ => Result.Value(Int(r.Ffom)));
         On(":SYNChronization:TINTerval?", _ => r.HasTimeInterval ? Result.Value(Short(r.TimeIntervalSeconds)) : Result.Fail(-230));
         On(":SYNChronization:HOLDover:DURation?", _ => Result.Value(Real(r.LastHoldover.TotalSeconds) + "," + (r.InHoldover ? "1" : "0")));
-        On(":SYNChronization:HOLDover:DURation:THReshold?", _ => Result.Value(Real(r.HoldDurationThresholdSeconds)));
+        // "+86400" on the bench unit: an integer, unlike the holdover duration beside it.
+        On(":SYNChronization:HOLDover:DURation:THReshold?", _ => Result.Value(
+            r.HoldDurationThresholdSeconds == Math.Floor(r.HoldDurationThresholdSeconds)
+                ? Int((long)r.HoldDurationThresholdSeconds)
+                : Real(r.HoldDurationThresholdSeconds)));
         On(":SYNChronization:HOLDover:DURation:THReshold", c => Number(c, 0, double.MaxValue, v => r.HoldDurationThresholdSeconds = v));
         On(":SYNChronization:HOLDover:DURation:THReshold:EXCeeded?", _ => Result.Value(Bool(r.LastHoldover.TotalSeconds > r.HoldDurationThresholdSeconds)));
-        On(":SYNChronization:HOLDover:TUNCertainty:PREDicted?", _ => Result.Value(Real(r.Snapshot().PredictMicroseconds is double p ? p * 1e-6 : 0) + "," + (r.InHoldover ? "1" : "0")));
-        On(":SYNChronization:HOLDover:TUNCertainty:PRESent?", _ => r.Snapshot().PresentMicroseconds is double p && r.InHoldover ? Result.Value(Real(p * 1e-6)) : Result.Fail(-230));
-        On(":SYNChronization:HOLDover:WAITing?", _ => Result.Value(Bool(false)));
+        // "+0.8E-006,0" on the bench unit: microseconds to one decimal over a fixed exponent, then a flag.
+        On(":SYNChronization:HOLDover:TUNCertainty:PREDicted?", _ => Result.Value(Micro(r.Snapshot().PredictMicroseconds ?? 0) + "," + (r.InHoldover ? "1" : "0")));
+
+        // -221 outside holdover on the bench unit, not the -230 the 58503A guide gives.
+        On(":SYNChronization:HOLDover:TUNCertainty:PRESent?", _ => r.Snapshot().PresentMicroseconds is double p && r.InHoldover ? Result.Value(Micro(p)) : Result.Fail(-221));
+
+        // "NONE" on the bench unit while locked. What it says while waiting is not known.
+        On(":SYNChronization:HOLDover:WAITing?", _ => Result.Value("NONE"));
         On(":SYNChronization:HOLDover:INITiate", _ =>
         {
             r.ForceHoldover();
@@ -329,9 +351,11 @@ public sealed class ScpiEngine
         On(":GPS:POSition?", _ => Result.Value(Position(r.HeldPosition)));
         On(":GPS:POSition:ACTual?", _ => Result.Value(Position(r.HeldPosition)));
         On(":GPS:POSition:HOLD:LAST?", _ => Result.Value(Position(r.HeldPosition)));
-        On(":GPS:POSition:HOLD:STATe?", _ => Result.Value(r.SurveyPercent is null ? "ON" : "OFF"));
-        On(":GPS:POSition:SURVey:PROGress?", _ => Result.Value(Int((int)(r.SurveyPercent ?? 100))));
-        On(":GPS:POSition:SURVey:STATe?", _ => Result.Value(r.SurveyPercent is null ? "OFF" : "ONCE"));
+        On(":GPS:POSition:HOLD:STATe?", _ => Result.Value(Bool(r.SurveyPercent is null)));
+
+        // With no survey running the bench unit refuses this with -221 rather than answer a number.
+        On(":GPS:POSition:SURVey:PROGress?", _ => r.SurveyPercent is double percent ? Result.Value(Int((int)percent)) : Result.Fail(-221));
+        On(":GPS:POSition:SURVey:STATe?", _ => Result.Value(Bool(r.SurveyPercent is not null)));
         On(":GPS:POSition:SURVey:STATe:POWerup?", _ => Result.Value(Bool(r.SurveyAtPowerUp)));
         On(":GPS:POSition:SURVey:STATe:POWerup", c => Switch(c, on => r.SurveyAtPowerUp = on));
         On(":GPS:POSition:SURVey:STATe", c =>
@@ -361,9 +385,9 @@ public sealed class ScpiEngine
             r.Ignored.UnionWith(prns);
         }));
 
-        // A non-empty inclusion list arrives on the SECOND line, the first being blank (20 Aug 2026,
-        // SatelliteTrackingParser). Nothing else this receiver says is shaped like that.
-        On(":GPS:SATellite:TRACking:INCLude?", _ => Included().Count == 0 ? Result.Value(Int(0)) : Result.Text("\r\n" + PrnList(Included())));
+        // On the first line. SatelliteTrackingParser records a blank line before it on 20 Aug 2026; the
+        // comparison on 2 Oct 2026 saw none, so that line was most likely the console's.
+        On(":GPS:SATellite:TRACking:INCLude?", _ => Result.Value(PrnList(Included())));
         On(":GPS:SATellite:TRACking:INCLude:COUNt?", _ => Result.Value(Int(Included().Count)));
         On(":GPS:SATellite:TRACking:INCLude:STATe?", c => Prn(c, prn => Result.Value(Bool(!r.Ignored.Contains(prn)))));
         On(":GPS:SATellite:TRACking:INCLude", c => Selection(c, prns =>
@@ -419,8 +443,10 @@ public sealed class ScpiEngine
         // ---- Diagnostics ----------------------------------------------------------------------
         On(":DIAGnostic:ROSCillator:EFControl:RELative?", _ => Result.Value(Real(r.EfcPercent)));
         On(":DIAGnostic:LIFetime:COUNt?", _ => Result.Value(Int(r.LifetimeHours)));
-        On(":DIAGnostic:IDENtify:GPS?", _ => Result.Text("\"--\",\"SFTW P/N # 4850266\",\"SOFTWARE VER # 005\",\"--\",\"--\",\"MODEL # FURUNO GT-80\",\"--\",\"--\",\"--\",\"--\""));
-        On(":DIAGnostic:QUERy:RESPonse?", _ => Result.Value("+1"));
+        On(":DIAGnostic:IDENtify:GPS?", _ => Result.Text(GpsIdentity));
+
+        // Answered with the GPS engine's identity on the bench unit, the same as the query above.
+        On(":DIAGnostic:QUERy:RESPonse?", _ => Result.Text(GpsIdentity));
         On(":DIAGnostic:LOG:COUNt?", _ => Result.Value(Int(Log.Count)));
         On(":DIAGnostic:LOG:READ?", c =>
         {
@@ -723,7 +749,11 @@ public sealed class ScpiEngine
         return value < 0 ? text : "+" + text;
     }
 
-    /// <summary>Booleans unsigned, as <c>:PTIM:LEAP:STAT?</c> answered <c>0</c>.</summary>
+    /// <summary><c>+0.8E-006</c>: microseconds to one decimal over a fixed exponent, as the uncertainties are.</summary>
+    public static string Micro(double microseconds) =>
+        (microseconds < 0 ? "-" : "+") + Math.Abs(microseconds).ToString("0.0", Invariant) + "E-006";
+
+    /// <summary>Booleans unsigned: the lamps, the leap state and the survey and hold states all answered <c>0</c> or <c>1</c>.</summary>
     public static string Bool(bool value) => value ? "1" : "0";
 
     /// <summary><c>+2006,+12,+27</c>: unpadded and signed.</summary>
@@ -787,33 +817,48 @@ public sealed class ScpiEngine
 public sealed record Reply(string Text, TimeSpan Delay);
 
 /// <summary>
-/// The receiver's diagnostic log: <c>Log NNN:YYYYMMDD.HH:MM:SS:  message</c>, unquoted, on the
-/// rolled-over date, exactly as the bench unit printed it (DiagnosticLogParserTests).
+/// The receiver's diagnostic log, in the two forms the bench unit prints it (2 Oct 2026).
 /// </summary>
+/// <remarks>
+/// <para>
+/// <c>:DIAG:LOG:READ:ALL?</c> answers a status line, a blank line, one unquoted entry a line
+/// (<c>Log NNN:YYYYMMDD.HH:MM:SS:  message</c>, two spaces after the time), and two blank lines.
+/// <c>:DIAG:LOG:READ? n</c> answers one entry <b>quoted, with one space</b>, which is the manual's
+/// form. Entries are numbered by position, oldest first, so a full log that overwrites still runs
+/// from 001 to 222. Stamps are on the receiver's rolled-over date.
+/// </para>
+/// <para>
+/// Three messages have been seen: <c>GPS lock started</c>, <c>Holdover started, not tracking
+/// GPS</c> and <c>Holdover started, temporary</c>. What causes the third is not known, so the
+/// simulator never writes it of its own accord.
+/// </para>
+/// </remarks>
 public sealed class DiagnosticLog(TimeProvider clock)
 {
-    /// <summary>The bench unit's log was full at 222 entries.</summary>
+    /// <summary>The bench unit's log holds 222 entries.</summary>
     public const int Capacity = 222;
 
-    private readonly List<(int Number, DateTime At, string Message)> _entries = [];
-    private int _next = 1;
+    private readonly List<(DateTime At, string Message)> _entries = [];
+    private bool _overwriting;
 
     /// <summary>How many entries the log holds.</summary>
     public int Count => _entries.Count;
 
-    /// <summary>How long a full read takes: about 16 s for 222 entries at 9600 baud, most of it wire time.</summary>
+    /// <summary>The receiver's own latency before a full read; the 14 s it takes is wire time.</summary>
     public TimeSpan ReadTime => TimeSpan.FromMilliseconds(200);
 
     /// <summary>Adds an entry stamped with the receiver's own (rolled-over) clock.</summary>
-    public void Add(string message, int rolloverEpochs = 1)
-    {
-        DateTime at = (clock.GetUtcNow() - (SimulatedReceiver.Epoch * rolloverEpochs)).UtcDateTime;
-        _entries.Add((_next++, at, message));
+    public void Add(string message, int rolloverEpochs = 1) =>
+        Add(message, (clock.GetUtcNow() - (SimulatedReceiver.Epoch * rolloverEpochs)).UtcDateTime);
 
-        // What a full log does next is unknown; this keeps the newest, numbered on.
+    /// <summary>Adds an entry with a given stamp, as a log written before the simulator started has.</summary>
+    public void Add(string message, DateTime at)
+    {
+        _entries.Add((at, message));
         if (_entries.Count > Capacity)
         {
             _entries.RemoveAt(0);
+            _overwriting = true;
         }
     }
 
@@ -821,16 +866,35 @@ public sealed class DiagnosticLog(TimeProvider clock)
     public void Clear()
     {
         _entries.Clear();
-        _next = 1;
+        _overwriting = false;
     }
 
-    /// <summary>One entry by its number, or null.</summary>
-    public string? Read(int number) =>
-        _entries.Where(e => e.Number == number).Select(Format).FirstOrDefault();
+    /// <summary>
+    /// Fills the log as the bench unit's is: full and overwriting, lock and holdover alternating,
+    /// the newest entry at <paramref name="end"/>.
+    /// </summary>
+    public void FillLikeTheBenchUnit(DateTime end)
+    {
+        Clear();
+        for (int i = Capacity; i >= 0; i--)
+        {
+            Add(i % 2 == 0 ? "GPS lock started" : "Holdover started, not tracking GPS", end.AddMinutes(-150 * i));
+        }
+    }
 
-    /// <summary>Every entry, one per line, oldest first.</summary>
-    public string ReadAll() => _entries.Count == 0 ? string.Empty : string.Join("\r\n", _entries.Select(Format));
+    /// <summary>One entry by its number, quoted, or null.</summary>
+    public string? Read(int number) => number >= 1 && number <= _entries.Count
+        ? string.Create(CultureInfo.InvariantCulture, $"\"Log {number:000}:{_entries[number - 1].At:yyyyMMdd.HH:mm:ss}: {_entries[number - 1].Message}\"")
+        : null;
 
-    private static string Format((int Number, DateTime At, string Message) entry) =>
-        string.Create(CultureInfo.InvariantCulture, $"Log {entry.Number:000}:{entry.At:yyyyMMdd.HH:mm:ss}:  {entry.Message}");
+    /// <summary>The whole log as <c>:DIAG:LOG:READ:ALL?</c> prints it.</summary>
+    public string ReadAll()
+    {
+        // "Log status: 222 entries (overwriting)" is the only status line seen; the wording for a log
+        // that is not full is the obvious guess.
+        string status = string.Create(CultureInfo.InvariantCulture, $"Log status: {_entries.Count} entries{(_overwriting ? " (overwriting)" : string.Empty)}");
+        IEnumerable<string> lines = _entries.Select((e, i) => string.Create(
+            CultureInfo.InvariantCulture, $"Log {i + 1:000}:{e.At:yyyyMMdd.HH:mm:ss}:  {e.Message}"));
+        return status + "\r\n\r\n" + string.Join("\r\n", lines) + "\r\n\r\n";
+    }
 }

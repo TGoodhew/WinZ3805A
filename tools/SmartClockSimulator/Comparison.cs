@@ -69,6 +69,7 @@ public static class Comparison
         SimulatedReceiver simulated = new(TimeProvider.System);
         simulated.StartLocked();
         ScpiEngine engine = new(simulated, TimeProvider.System);
+        engine.Log.FillLikeTheBenchUnit(simulated.ReportedUtc.AddHours(-1));
         engine.Receive("*CLS");
 
         using SerialPort port = new(portName, baud, Parity.None, 8, StopBits.One)
