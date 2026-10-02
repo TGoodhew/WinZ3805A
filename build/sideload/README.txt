@@ -20,8 +20,8 @@ TO INSTALL
 
 ABOUT THAT PERMISSION PROMPT
 
-  This application is not distributed through the Microsoft Store, so Windows
-  has no reason to trust it until you say it can. The installer asks for
+  Windows only installs an application whose signature it trusts, and it has
+  no reason to trust this one until you say it can. The installer asks for
   administrator rights once, to add this application's signature to a
   certificate store called "Trusted People".
 

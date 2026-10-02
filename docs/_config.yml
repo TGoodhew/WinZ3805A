@@ -1,11 +1,10 @@
 # GitHub Pages configuration.
 #
-# This site exists for one reason: Microsoft Store policy requires a reachable
-# privacy policy URL for the listing (§6.3, OQ-6/#39). Publishing from /docs is
-# the cheapest way to have one that lives in the repository and is reviewed in
-# the same pull request as the code it describes. Pages is not enabled yet -
-# OQ-6 records that only submission needs the URL to resolve - so index.md and
-# privacy.md are written for the day it is.
+# This site would publish the documents a person using the application needs,
+# from /docs, so that they live in the repository and are reviewed in the same
+# pull request as the code they describe. It was made for a Microsoft Store
+# listing's privacy-policy URL, and the Store was dropped on 2 Oct 2026 (#575);
+# Pages is not enabled.
 #
 # The site publishes the documents a person USING the application needs, and
 # nothing else: the privacy policy, and how-to-use.md with its images (#308) -
@@ -32,7 +31,6 @@ exclude:
   - tutorial-nmea-driver.md
   - lady-heather-comparison.md
   - manual-qa.md
-  - store-listing.md
   - nmea-against-lady-heather.md
   - porting-to-python-qt.md
   - review/

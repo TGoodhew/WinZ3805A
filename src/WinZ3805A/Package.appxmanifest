@@ -9,26 +9,18 @@
   IgnorableNamespaces="uap rescap uap5">
 
   <!--
-    TODO (blocked by OQ-6, issue #39): three values here and one below come from
-    Partner Center and are the only thing standing between this manifest and a
-    submittable package. Reserve the app name in Partner Center, then copy from
-    Product identity:
-
-      Name       <- "Package/Identity/Name"       e.g. 12345TonyGoodhew.WinZ3805A
-      Publisher  <- "Package/Identity/Publisher"  e.g. CN=A1B2C3D4-...-E5F6
-      (below)    <- "Package/Properties/PublisherDisplayName"
-
-    Copy them verbatim. The publisher is a distinguished name that must match the
-    certificate the Store signs with exactly - retyping it from memory is the
-    usual way a first submission fails.
+    IDENTITY. Name and Publisher are final. The application is a signed MSIX
+    package installed from the release zips (§6.3); a Microsoft Store listing,
+    which would have issued its own, was dropped on 2 Oct 2026 (#575). Publisher
+    must equal the signing certificate's subject exactly, and
+    build\New-SideloadPackage.ps1 refuses to build otherwise.
 
     Identity/@Name is effectively permanent: changing it later creates a new app
-    with a new listing and no upgrade path for existing users. Properties
+    with no upgrade path for existing users. Properties
     /DisplayName below is deliberately decoupled from it (§6.3) and can be
     changed at any time without consequence.
 
-    Until then these are the SIDELOAD identity, not placeholders in the sense of
-    being arbitrary. Publisher was "CN=AppPublisher" until the first public
+    Publisher was "CN=AppPublisher" until the first public
     release (30 Aug 2026), and it had to stop being that before anyone installed:
     the publisher string is what the trust prompt shows, and asking a person to
     trust a certificate issued to "AppPublisher" is asking them to make a
@@ -44,9 +36,6 @@
     .github/workflows/release.yml fails the release if they disagree, rather
     than rewriting one to match the other, so this file stays the one place a
     version is decided.
-
-    These still would be rejected at submission: Partner Center issues its own
-    Name and Publisher and they must match the account exactly.
   -->
   <Identity
     Name="WinZ3805A"
@@ -56,8 +45,8 @@
   <mp:PhoneIdentity PhoneProductId="DB5D1AF4-65FD-41CA-91F9-D83D5ACEB3B0" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
 
   <Properties>
-    <!-- TODO (OQ-8): decide whether this survives Store certification as-is, or
-         becomes descriptive (e.g. "GPSDO Monitor for Z3805A"). Read at runtime
+    <!-- The name a person sees; it could become descriptive (e.g. "GPSDO Monitor
+         for Z3805A") without touching package identity (§6.3). Read at runtime
          via Package.Current.DisplayName; never hard-coded in XAML or tests.
          Also named by VisualElements/@DisplayName and uap5:StartupTask/@DisplayName
          below - change all three together. -->
@@ -66,11 +55,6 @@
       The publisher as a person reads it. This is display only, unlike the
       Publisher distinguished name in Identity above, which is bound to the
       signing certificate and to package identity (§6.3) and is NOT changed here.
-
-      Still subject to OQ-6 / #39 at Store submission: Partner Center issues its
-      own publisher display name and it must match the account, so this may be
-      overwritten by the value they give. It is correct for the sideloaded build,
-      which is the only one that exists.
     -->
     <PublisherDisplayName>The Schnauzer Group LLC</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
@@ -84,13 +68,6 @@
   <Resources>
     <Resource Language="x-generate"/>
   </Resources>
-
-  <!--
-    The privacy policy URL Store policy requires is NOT declared here - the
-    manifest has no element for it. It is entered in Partner Center against the
-    listing. The policy itself is docs/privacy.md, published by GitHub Pages;
-    see docs/store-listing.md for the URL and the rest of the submission copy.
-  -->
 
   <Applications>
     <Application Id="App"
@@ -151,14 +128,12 @@
 
   <!--
     §6.3: runFullTrust only. It is what permits System.IO.Ports, which opens
-    \\.\COMn through Win32. It is a restricted capability and needs justification
-    at submission:
-      "Desktop application requiring Win32 serial port access to communicate with
-       user-attached RS-232 laboratory instruments."
+    \\.\COMn through Win32. It is a restricted capability, and the one a desktop
+    application needs for Win32 serial-port access to user-attached instruments.
 
     Do NOT declare the serialcommunication DeviceCapability - that is for the UWP
     Windows.Devices.SerialCommunication API, which this app does not use.
-    Unnecessary capabilities add certification friction. The template's
+    A capability the app does not use only widens what it may do. The template's
     systemAIModels capability was removed for the same reason.
   -->
   <Capabilities>

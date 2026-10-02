@@ -94,7 +94,7 @@ and collects nothing from anyone.
 ## Changes
 
 If a future version ever collects or transmits anything, this policy will be
-updated before that version ships, the Store listing will disclose it, and the
+updated before that version ships, the release notes will say so, and the
 behaviour will be opt-in rather than on by default.
 
 ## Contact

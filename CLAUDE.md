@@ -3,7 +3,7 @@
 WinZ3805A is a WinUI 3 desktop application for monitoring and controlling
 HP/Symmetricom SmartClock GPS-disciplined oscillators — the Z3805A and its
 siblings (Z3801A, 58503A/B, 59551A, Z3816A) — over RS-232. It replaces
-Windows-9x-era tooling with a modern, Store-distributable app built around two
+Windows-9x-era tooling with a modern, signed app built around two
 ideas: a glanceable primary window that a lab user can leave on a second monitor
 for weeks, and a command model that makes destructive receiver commands
 *unreachable* rather than merely warned about. The receiver's full status is

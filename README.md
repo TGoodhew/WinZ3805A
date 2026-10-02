@@ -32,7 +32,7 @@ Two ideas shape this replacement:
 ## Status
 
 Feature-complete against the specification's P0 set and in daily use against a
-bench Z3805A; **it is sideloaded rather than published to the Store**
+bench Z3805A; **it is installed from the release zips**
 ([latest release](https://github.com/TGoodhew/WinZ3805A/releases/latest)). The transport, parser, command
 model, design system and every view are implemented, with the test suite and
 every CI gate green. The
@@ -163,8 +163,8 @@ Sources: [Windows App SDK and supported Windows releases](https://learn.microsof
 ## Installing
 
 **[Download the latest release](https://github.com/TGoodhew/WinZ3805A/releases/latest)**,
-unblock the zip, extract it, and double-click `Install.cmd`. There is no Store
-listing; this is sideloaded. Each release has two zips:
+unblock the zip, extract it, and double-click `Install.cmd`. Each release has
+two zips:
 
 - **`WinZ3805A-<version>-x64.zip`**, for a machine with an internet connection.
   If .NET 10 is not installed, `Install.cmd` opens Microsoft's download page for it.
@@ -436,7 +436,7 @@ the platform floor, the x64 decision), the owner is named beside it.
 | Which checks need a person, a receiver or a machine setting | [docs/manual-qa.md](docs/manual-qa.md) |
 | Which fixtures exist and which test reads each | [tests/WinZ3805A.Tests/Fixtures/README.md](tests/WinZ3805A.Tests/Fixtures/README.md); their provenance is `captured/capture-log.md` |
 | What ships in the package, and under which licence | [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md), regenerated from the project files |
-| The Store decisions and the privacy position | [docs/store-listing.md](docs/store-listing.md), [docs/privacy.md](docs/privacy.md) |
+| The privacy position | [docs/privacy.md](docs/privacy.md) |
 | Where this stands against the incumbent tool | [docs/lady-heather-comparison.md](docs/lady-heather-comparison.md) |
 
 The rest of `docs/`, and the other documents worth knowing about:
@@ -458,12 +458,9 @@ The rest of `docs/`, and the other documents worth knowing about:
   which reaches a different kind of conclusion from the one above.
 - [docs/privacy.md](docs/privacy.md) — the privacy policy: the application
   collects nothing and transmits nothing.
-- [docs/store-listing.md](docs/store-listing.md) — everything the Microsoft
-  Store submission asks for that is a decision rather than a file.
-- [docs/index.md](docs/index.md) — the front page of the GitHub Pages site,
-  which exists to give the Store listing a privacy-policy URL and is not enabled
-  until submission needs it; it publishes the policy and the user's guide, and
-  nothing else.
+- [docs/index.md](docs/index.md) — the front page of a GitHub Pages site that
+  would publish the policy and the user's guide, and nothing else. Pages is not
+  enabled.
 - [docs/porting-to-python-qt.md](docs/porting-to-python-qt.md) — a work plan for
   porting this application to Python and Qt, so it runs on Linux. Written to be
   handed to someone who has not seen this repository; it is being followed in
@@ -479,7 +476,7 @@ The rest of `docs/`, and the other documents worth knowing about:
 ## Naming
 
 `WinZ3805A` is the repository, solution, root namespace, and MSIX package
-identity name. The Store *display* name is deliberately a separate thing that can
+identity name. The *display* name is deliberately a separate thing that can
 change at any time, so it is read from the package manifest at runtime and never
 hard-coded (§6.3).
 
