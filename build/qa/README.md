@@ -23,9 +23,28 @@ seconds. The account's password is generated, stored in Windows Credential Manag
 Windows is installed with the generic Pro key and is not activated, which a test machine
 does not need.
 
-`QaVm.psm1` is what the QA pass drives a VM with: `New-QaVm` opens one with its stored
-credential, `Invoke-VmRun` runs any `vmrun` command (guest operations with `-Guest`), and
-`Wait-QaDesktop` waits for a signed-in desktop after a revert.
+Two exist on the development machine: **QA-Win10** (Windows 10 22H2) and **QA-Win11**
+(Windows 11 26H2, 18 minutes to provision). Both are left **powered off**: provisioning stops
+its VM once the snapshot is taken, and a QA pass starts the VM it needs and stops it again,
+even when a check fails.
+
+## Driving a VM
+
+`QaVm.psm1` is what the QA pass drives a VM with:
+
+| Function | What it does |
+|---|---|
+| `New-QaVm` | Opens a VM with its stored credential |
+| `Start-QaVm` | Reverts to a snapshot (*QA Clean* by default), starts without a window, waits for the desktop |
+| `Stop-QaVm` | Powers it off; call it in a `finally` |
+| `Copy-QaFile` | Copies a file in (`-ToGuest`) or out |
+| `Invoke-QaGuest` | Runs a program on the signed-in desktop and returns its exit code |
+| `Invoke-QaGuestScript` | Runs a PowerShell script there and returns its exit code and output |
+| `Invoke-VmRun` | Any other `vmrun` command; guest operations with `-Guest` |
+
+The installer runs in a guest with `Install.cmd -Unattended`, whose exit code is the outcome
+(see `install.ps1`'s help). On 2 Oct 2026 v1.3.3's online zip returned 3 (installed, .NET
+missing) in 17 seconds and the offline zip 0 (installed .NET, started) in 41.
 
 ## Things worth not rediscovering
 
@@ -50,5 +69,10 @@ Each of these cost a failed run on 1 Oct 2026.
   a `ready` line that a run-once script writes after the restart.
 - **A login is not a desktop either.** It succeeds while the automatic sign-in is still under
   way; `Wait-QaDesktop` waits for Explorer and no sign-in screen.
+- **Ship scripts as files, not command strings.** A `-Command` string passed through `vmrun`
+  ran nothing and reported nothing; `Invoke-QaGuestScript` copies a `.ps1` in, runs it with
+  `-File`, and brings its output back.
+- **Give `vmrun` a program's arguments as separate words.** As one string they arrive as one
+  quoted argument: `cmd /c` copes, `powershell.exe` exits 1 without running anything.
 - **A blank guest password cannot be used.** Windows refuses non-console logons to accounts
   with blank passwords, which is why the account has a generated one.

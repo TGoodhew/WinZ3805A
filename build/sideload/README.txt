@@ -93,6 +93,16 @@ IF AN EARLIER WINZ3805A IS INSTALLED
   history..., choosing trend.db in the saved folder.
 
 
+INSTALLING FROM A SCRIPT
+
+  Install.cmd -Unattended installs without stopping for a key: it skips the
+  "Press Enter" prompts, stops at once if WinZ3805A is running, and does not
+  open the .NET download page. The administrator prompt still appears when
+  something needs it. Its exit code says how it went: 0 installed and
+  started, 1 failed, 2 installed but did not start, 3 installed but .NET 10 is
+  missing. The log is written as usual.
+
+
 TO REMOVE IT
 
   Windows 11: Settings > Apps > Installed apps > WinZ3805A > Uninstall.
