@@ -10,6 +10,7 @@ using Microsoft.UI.Xaml.Controls;
 using AppActivationArguments = Microsoft.Windows.AppLifecycle.AppActivationArguments;
 using AppInstance = Microsoft.Windows.AppLifecycle.AppInstance;
 using ExtendedActivationKind = Microsoft.Windows.AppLifecycle.ExtendedActivationKind;
+using Microsoft.Windows.ApplicationModel.WindowsAppRuntime;
 
 using Windows.ApplicationModel;
 
@@ -126,6 +127,9 @@ public partial class App : Application
         // evidence costs a bench session per occurrence, because the only way back to it is to
         // reproduce it with a debugger attached to a packaged app.
         HookUnhandledExceptions();
+
+        // The Windows App SDK's own deployment check, made here rather than before Main (#625).
+        CheckWindowsAppRuntime();
 
         if (launch.IsSignInStart)
         {
@@ -687,6 +691,48 @@ public partial class App : Application
             log.LogError(e.Exception, "A faulted task was never observed.");
             _services?.GetService<FileLogWriter>()?.Flush();
         };
+    }
+
+    /// <summary>
+    /// Asks the Windows App SDK whether its runtime's parts are in place, and logs the answer (#625).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The SDK would otherwise ask itself, from a module initializer that runs before <c>Main</c>,
+    /// and answer a failure with <c>Environment.Exit(hr)</c>: no window, no event, no WER report and
+    /// nothing in app.log, because logging is composed long after. That was #473 exactly - the
+    /// runtime's Main and Singleton packages missing - and it took a CLR trace to name. The project
+    /// turns that initializer off, so the same call happens here, once there is a log to write to.
+    /// </para>
+    /// <para>
+    /// A status other than Ok is logged and the launch carries on: exiting would put back exactly
+    /// the silence this exists to end. Whether everything this application uses still works in that
+    /// state is what #625's measurement on a machine without the runtime's parts settles.
+    /// </para>
+    /// </remarks>
+    private void CheckWindowsAppRuntime()
+    {
+        ILogger? log = _services?.GetService<ILoggerFactory>()?.CreateLogger("Runtime");
+        try
+        {
+            DeploymentResult result = DeploymentManager.Initialize(new DeploymentInitializeOptions { OnErrorShowUI = false });
+            if (result.Status == DeploymentStatus.Ok)
+            {
+                log?.LogInformation("Windows App Runtime: its parts are in place.");
+            }
+            else
+            {
+                log?.LogError(
+                    result.ExtendedError,
+                    "Windows App Runtime: {Status}, 0x{Error:X8}. Running the newest Install.cmd again puts its parts back.",
+                    result.Status,
+                    result.ExtendedError?.HResult ?? 0);
+            }
+        }
+        catch (Exception ex)
+        {
+            log?.LogError(ex, "Windows App Runtime: the deployment check failed: {Message}", ex.Message);
+        }
     }
 
     /// <summary>Whether the close button should hide rather than exit.</summary>

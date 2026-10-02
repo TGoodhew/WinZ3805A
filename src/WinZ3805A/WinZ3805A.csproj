@@ -44,6 +44,14 @@
     -->
     <SelfContained>false</SelfContained>
     <WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
+    <!--
+      #625: the Windows App SDK's deployment check is made by App.CheckWindowsAppRuntime, once the
+      log exists, and not by the SDK's own module initializer. That initializer runs before Main and
+      answers a failure with Environment.Exit(hr): no window, no event and nothing in app.log, which
+      was #473 exactly and took a CLR trace to name. The SDK switches it on only when this property
+      is empty, so stating false here leaves the other initializers in place.
+    -->
+    <WindowsAppSdkDeploymentManagerInitialize>false</WindowsAppSdkDeploymentManagerInitialize>
     <UseWinUI>true</UseWinUI>
     <WinUISDKReferences>false</WinUISDKReferences>
     <EnableMsixTooling>true</EnableMsixTooling>
