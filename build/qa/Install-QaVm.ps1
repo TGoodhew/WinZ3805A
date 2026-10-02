@@ -18,7 +18,8 @@
          the guest running and a guest operation succeeds with the stored credential.
       5. The VM is shut down, the Windows and answer ISOs are detached, the answer ISO - which
          holds the password - is deleted, and the VM is started again and snapshotted as
-         'QA Clean', running and signed in, which is what the QA pass reverts to.
+         'QA Clean', running and signed in, which is what the QA pass reverts to. Then it is
+         powered off: nothing here is left running.
 
     BIOS, not UEFI, is deliberate. A Windows ISO booted under UEFI waits at "Press any key to
     boot from CD or DVD", and nothing can press it that early. Under BIOS, with a blank disk, it
@@ -375,4 +376,9 @@ Invoke-VmRun $vm start -Arguments 'nogui' | Out-Null
 Wait-Guest -Minutes 15
 Wait-QaDesktop -Vm $vm
 Invoke-VmRun $vm snapshot -Arguments 'QA Clean' | Out-Null
-Say "Snapshot 'QA Clean' taken. $Name is ready: $vmx"
+Say "Snapshot 'QA Clean' taken."
+
+# Not left running: a QA pass starts the VM it needs and stops it again. The snapshot was taken
+# with the VM on, so reverting to it and starting resumes the signed-in desktop in seconds.
+Invoke-VmRun $vm stop -Arguments 'soft' | Out-Null
+Say "$Name is ready, and powered off: $vmx"
