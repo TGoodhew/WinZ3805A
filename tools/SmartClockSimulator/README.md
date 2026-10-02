@@ -111,7 +111,8 @@ Read this before trusting a green test that runs through the simulator.
 queries. 65 answers first differed in shape. After the fixes below, 4 differ, and all 4 only in
 their values: a checksum digit, which log entry comes first, and the readings on the screen and
 in the log. The screens match line for line in width and structure. The error queue the run left
-behind read back identically, four entries deep.
+behind read back identically, four entries deep. The last run's report is
+[`comparisons/bench-2026-10-02.md`](comparisons/bench-2026-10-02.md).
 
 | Behaviour | Source |
 |---|---|
