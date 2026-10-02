@@ -618,6 +618,31 @@ public class StatusScreenParserTests
         Assert.Equal(38.0, status.Position!.HeightMetres);
     }
 
+    /// <summary>
+    /// A screen whose readings are below the units every earlier capture used (#639).
+    /// </summary>
+    /// <remarks>
+    /// Taken by the simulator comparison on 2 Oct 2026. The receiver had settled far enough that the
+    /// 1 PPS offset printed <c>+300 ps</c> and the predicted holdover uncertainty <c>800 ns</c>: it
+    /// scales each figure to the unit that keeps it above one. Every capture before this showed ns and
+    /// µs, so the picosecond and sub-microsecond paths of the unit scaling had never met the receiver.
+    /// </remarks>
+    [Fact]
+    public void ASettledScreenScalesItsReadingsDownAUnit()
+    {
+        ReceiverStatus status = ParseSittingFixture("captured/locked-to-gps-sub-unit-readings.txt");
+
+        Assert.Empty(status.ParseWarnings);
+        Assert.Equal(SmartClockMode.Locked, status.Mode);
+        Assert.Equal(OutputValidity.Valid, status.Outputs);
+        Assert.Equal(0.3, status.OnePpsTiNanoseconds!.Value, 10);
+        Assert.Equal(800e-9, status.HoldoverPredictedSeconds!.Value, 15);
+        Assert.Equal(60.0, status.AntennaDelayNanoseconds!.Value, 10);
+        Assert.Equal(8, status.Tracked.Count);
+        Assert.Equal(3, status.NotTracked.Count);
+        Assert.Equal(38.0, status.Position!.HeightMetres);
+    }
+
     /// <summary>Locked but still stabilizing, the state the sitting spent longest in.</summary>
     [Fact]
     public void TheStabilizingScreenParses()

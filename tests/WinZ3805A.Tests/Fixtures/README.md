@@ -12,12 +12,13 @@ at the front, no prompt at the back, everything in between untouched, CRLF endin
 ## Provenance
 
 Every capture is from one unit — `SYMMETRICOM,Z3805A,3625A02931,1.01.03-A`, at 9600-8-N-1 —
-in two sittings:
+in three sittings:
 
 | Sitting | When | How | Files |
 |---|---|---|---|
 | The first capture | 12 August 2026 | By hand, from a terminal session, with the scalar queries below taken alongside it | `locked-stabilizing.txt` |
-| The backyard sitting | 27–28 August 2026 | `build/Capture-Fixtures.ps1` left watching the screen through a hardware move, a power cycle and an antenna pull, writing one file per state it had not seen — plus two screens taken by hand where the harness could not (#242, #247) | everything under `captured/` |
+| The backyard sitting | 27–28 August 2026 | `build/Capture-Fixtures.ps1` left watching the screen through a hardware move, a power cycle and an antenna pull, writing one file per state it had not seen — plus two screens taken by hand where the harness could not (#242, #247) | everything under `captured/` but the file below |
+| The simulator comparison | 2 October 2026 | `SmartClockSimulator --compare COM3` (#639), which saves the bench unit's screen beside its report; the trailing prompt was removed before committing | `captured/locked-to-gps-sub-unit-readings.txt` |
 
 ## What is here
 
@@ -33,6 +34,7 @@ means adding a row to the table below and pointing a test at it; the file does n
 | `captured/power-up-gps-acquisition.txt` | `Power-up: GPS acquisition`, outputs invalid, 1 PPS invalid, **0 tracked** — §11.1's *power-up (0 tracked)*. **Its 28th line is a stray `*IDN?` answer and prompt**: the harness's reconnect path ran during the power cycle, and the framing strip cut after the *last* CRLF, so a reply arriving after the screen was kept. Since #319 the strip cuts at the *first* prompt — where §7.2 says a transaction ends — so this cannot recur. The line is left here as captured: it is the device's own bytes, it is the only evidence in the corpus that the reconnect path has ever run, and the parser ignores it (#316 audit) | satellites the receiver is *attempting* to track, kept rather than dropped; the provisional power-up time and its `?` marker in the GPS time scale (#245) | `SatellitesTheReceiverIsAttemptingToTrackAreNotDropped`, `AProvisionalPowerUpTimeIsReadAndFlagged` |
 | `captured/power-up-fine-freq-adj.txt` | `Power-up: fine freq adj`, outputs invalid, 1 PPS valid, 8 tracked — §11.1's *acquiring* | the provisional power-up time and its `?` marker (#245); absent readings as distinct from provisional ones; a mode detail stopping before its bracketed figure | `AProvisionalPowerUpTimeIsReadAndFlagged`, `ThePowerUpScreenSeparatesAbsentFromProvisionalReadings`, `AnAveragedPositionIsDistinguishedFromAHeldOne`, `OnlyAMarkedRowIsProvisional`, `AModeDetailStopsBeforeItsBracketedFigure` |
 | `captured/locked-to-gps-stabilizing-frequency.txt` | `Locked to GPS: stabilizing frequency`, outputs valid / reduced accuracy, 8 tracked | | `TheStabilizingScreenParses`, `AnAveragedPositionIsDistinguishedFromAHeldOne` |
+| `captured/locked-to-gps-sub-unit-readings.txt` | `Locked to GPS`, outputs valid, 8 tracked, after weeks of running | **readings a unit down**: `1PPS TI +300 ps` and `Predict  800 ns`, the first capture with either below the nanosecond and microsecond every earlier screen used | `ASettledScreenScalesItsReadingsDownAUnit` |
 | `captured/locked-to-gps.txt` | `Locked to GPS`, outputs valid, 9 tracked — the fully locked state, §11.1's *locked* | an averaged position as distinct from a held one | `TheFullyLockedScreenParses`, `AnAveragedPositionIsDistinguishedFromAHeldOne` |
 | `captured/surveying-locked-to-gps-stabilizing-frequency.txt` | a **survey in progress** while locked and stabilizing — §11.1's *survey in progress*. Taken by hand: until #242 the harness could not see a survey and reported the screen as one already seen, so its log entry is reconstructed | the rolled-over date corrected on a surveying screen | `TheSurveyingScreenParses`, `TheSurveyingScreensRolledOverDateIsCorrected`, `AnAveragedPositionIsDistinguishedFromAHeldOne` |
 | `captured/holdover-gps-1pps-invalid.txt` | `Holdover: GPS 1PPS invalid`, 0 tracked, three seconds in — the antenna pulled. §11.1's *holdover* | both holdover uncertainties; how long the receiver has been degraded; the mode row not mistaken for the advisory; the surveyed position held through holdover | `TheHoldoverScreenParses`, `TheHoldoverScreenReportsBothUncertainties`, `TheHoldoverScreenReportsHowLongItHasBeenDegraded`, `ThePresentUncertaintyIsTheSameOnBothHoldoverScreens`, `TheModeRowIsNotMistakenForTheAdvisory`, `TheHoldoverScreenHoldsTheSurveyedPosition` |
@@ -65,8 +67,10 @@ Scalar queries taken in the first sitting, for cross-checking parsed values:
 :SYST:STAT:LENG?      +23
 ```
 
-Note that response values arrive with a **leading space** — `_+3`, not `+3`. Trim before
-parsing rather than treating the space as part of the field.
+The values above are as the receiver sent them, with nothing before them. This note used to
+say each arrived with a leading space, and §7.2 said the same. The simulator comparison of
+2 Oct 2026 found none in 70 replies (§7.2, corrected). Trim before parsing anyway; it costs
+nothing.
 
 ## What is still missing
 

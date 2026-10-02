@@ -53,7 +53,7 @@ public static class StatusScreenWriter
         Row(ModeRow(screen, ClockMode.Holdover), "HOLD THR " + screen.HoldThresholdMicroseconds.ToString("0.000", Invariant) + " us");
         Row(ModeRow(screen, ClockMode.PowerUp), "Holdover Uncertainty ____________");
         Row(string.Empty, screen.PredictMicroseconds is double predict
-            ? "Predict  " + predict.ToString("0.0", Invariant) + " us/initial 24 hrs"
+            ? "Predict  " + Uncertainty(predict) + "/initial 24 hrs"
             : "Predict  --");
 
         // The one row whose right panel is not empty when it has nothing to say: with no Present
@@ -61,7 +61,7 @@ public static class StatusScreenWriter
         // on every capture taken outside holdover.
         Row(
             screen.HoldoverDuration is TimeSpan held ? "                 Holdover Duration: " + Duration(held) : string.Empty,
-            screen.PresentMicroseconds is double present ? "Present  " + present.ToString("0.0", Invariant) + " us" : "  ");
+            screen.PresentMicroseconds is double present ? "Present  " + Uncertainty(present) : "  ");
 
         Line(Banner("ACQUISITION", screen.GpsOnePpsValid ? "GPS 1PPS Valid" : "GPS 1PPS Invalid"));
         Line(
@@ -142,16 +142,29 @@ public static class StatusScreenWriter
     }
 
     /// <summary>
-    /// A time interval with its unit: <c>+108.5 ns</c>, or <c>+1.296 us</c> from a microsecond up.
+    /// A time interval in the unit that keeps it at one or more: <c>+300 ps</c>, <c>+108.5 ns</c>,
+    /// <c>+1.296 us</c>.
     /// </summary>
     /// <remarks>
-    /// Every captured value is under a microsecond. The microsecond form is the manual's own sample
-    /// screen (<c>[TI +1.296 us]</c>, p. 3-20); the threshold between the two is a guess.
+    /// The receiver works to 0.1 ns. Below a nanosecond it prints whole picoseconds, which the bench
+    /// unit did on 2 Oct 2026 (<c>+300 ps</c>, <c>locked-to-gps-sub-unit-readings.txt</c>); from there
+    /// up, nanoseconds to one decimal, as every other capture shows. The microsecond form is the
+    /// manual's sample screen (<c>[TI +1.296 us]</c>, p. 3-20) and has not been seen on a wire.
     /// </remarks>
-    private static string Interval(double nanoseconds) =>
-        Math.Abs(nanoseconds) >= 1000
-            ? Signed(nanoseconds / 1000, "0.000") + " us"
-            : Signed(nanoseconds, "0.0") + " ns";
+    private static string Interval(double nanoseconds) => Math.Abs(nanoseconds) switch
+    {
+        >= 1000 => Signed(nanoseconds / 1000, "0.000") + " us",
+        >= 1 => Signed(nanoseconds, "0.0") + " ns",
+        _ => Signed(Math.Round(nanoseconds * 1000), "0") + " ps",
+    };
+
+    /// <summary>
+    /// A holdover uncertainty: <c>2.5 us</c> to one decimal, or whole nanoseconds below a microsecond
+    /// (<c>800 ns</c>, seen on the bench unit 2 Oct 2026).
+    /// </summary>
+    private static string Uncertainty(double microseconds) => microseconds >= 1
+        ? microseconds.ToString("0.0", Invariant) + " us"
+        : Math.Round(microseconds * 1000).ToString("0", Invariant) + " ns";
 
     private static string TimeIntervalLine(double? nanoseconds) =>
         nanoseconds is double ti ? "1PPS TI " + Interval(ti) + " relative to GPS" : "1PPS TI  --";
