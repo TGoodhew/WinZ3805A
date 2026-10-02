@@ -254,7 +254,8 @@ if ($LASTEXITCODE -ne 0) { throw "vmware-vdiskmanager could not create $disk" }
 # e1000e adapter - a PCIe device - has no slot, and vmware-vmx crashed on power-on with "No PCIe
 # slot available for Ethernet0" (the first run, 1 Oct 2026). uuid.action and msg.autoAnswer keep a
 # start with no window from waiting on a question nobody can see: the first says the VM is new
-# rather than moved or copied, the second takes each question's default.
+# rather than moved or copied, the second takes each question's default. serial1 is COM2 in the guest,
+# served on a named pipe for the Z3805A simulator to connect to (#639, Add-QaSimulatorPort).
 $vmxText = @"
 .encoding = "UTF-8"
 config.version = "8"
@@ -298,6 +299,12 @@ sata0:3.fileName = "$toolsIso"
 serial0.present = "TRUE"
 serial0.fileType = "file"
 serial0.fileName = "guest-serial.log"
+serial1.present = "TRUE"
+serial1.fileType = "pipe"
+serial1.fileName = "\\.\pipe\winz-qa-$Name"
+serial1.pipe.endPoint = "server"
+serial1.tryNoRxLoss = "TRUE"
+serial1.startConnected = "TRUE"
 ethernet0.present = "TRUE"
 ethernet0.connectionType = "nat"
 ethernet0.virtualDev = "e1000e"
