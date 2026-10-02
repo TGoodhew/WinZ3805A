@@ -143,7 +143,7 @@ public sealed class TaskbarOverlay : IDisposable
         // Locked carries no badge and still carries this. See Update for why.
         ReceiverMode.Locked => "Locked to GPS: the receiver is disciplined and healthy.",
         ReceiverMode.Recovering => "Recovering: the receiver is re-acquiring GPS.",
-        ReceiverMode.Waiting => "Waiting to recover: the receiver is not yet disciplining.",
+        ReceiverMode.Waiting => "Holdover: GPS lost; the receiver is free-running until it returns.",
         ReceiverMode.Holdover => "Holdover: the receiver is free-running without GPS.",
         ReceiverMode.PowerUp => "Powering up: the receiver is not yet reporting a state.",
         ReceiverMode.Off => "Diagnostic or off: the receiver is not disciplining.",

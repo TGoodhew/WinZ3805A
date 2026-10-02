@@ -74,14 +74,14 @@ public sealed class HoldoverViewModelTests
         Assert.Equal(expected, Connected(syncState).IsInHoldover);
 
     /// <remarks>
-    /// Holding is critical because the error grows for as long as it lasts and nothing downstream
-    /// says so. Waiting and recovering are cautions: the outputs are usable and the receiver is on
-    /// its way back.
+    /// Both holdovers are critical because the error grows for as long as they last and nothing
+    /// downstream says so: the forced one, and the one waiting for GPS, which was a caution until
+    /// #642. Recovering is a caution: the outputs are usable and the receiver is on its way back.
     /// </remarks>
     [Theory]
     [InlineData("LOCK", Severity.Success)]
     [InlineData("HOLD", Severity.Critical)]
-    [InlineData("WAIT", Severity.Caution)]
+    [InlineData("WAIT", Severity.Critical)]
     [InlineData("REC", Severity.Caution)]
     public void TheStateSeverityDistinguishesHoldingFromRecovering(string syncState, Severity expected) =>
         Assert.Equal(expected, Connected(syncState).StateSeverity);

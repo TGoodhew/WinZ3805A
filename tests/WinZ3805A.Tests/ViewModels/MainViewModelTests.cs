@@ -30,7 +30,7 @@ public class MainViewModelTests
     [Theory]
     [InlineData("LOCK", ReceiverMode.Locked, "Locked to GPS")]
     [InlineData("REC", ReceiverMode.Recovering, "Recovering")]
-    [InlineData("WAIT", ReceiverMode.Waiting, "Waiting to recover")]
+    [InlineData("WAIT", ReceiverMode.Waiting, "Holdover — waiting for GPS")]
     [InlineData("HOLD", ReceiverMode.Holdover, "Holdover")]
     [InlineData("POW", ReceiverMode.PowerUp, "Power-up")]
     [InlineData("OFF", ReceiverMode.Off, "Diagnostic / off")]

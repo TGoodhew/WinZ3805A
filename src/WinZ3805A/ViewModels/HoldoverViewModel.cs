@@ -107,7 +107,7 @@ public sealed class HoldoverViewModel : INotifyPropertyChanged, IDisposable
     {
         ReceiverMode.Locked => "Locked to GPS — not in holdover",
         ReceiverMode.Holdover => "In holdover — running on the oscillator alone",
-        ReceiverMode.Waiting => "Waiting to recover from holdover",
+        ReceiverMode.Waiting => "In holdover — waiting for GPS to return",
         ReceiverMode.Recovering => "Recovering from holdover",
         ReceiverMode.PowerUp => "Powering up",
         ReceiverMode.Off => "Diagnostic or off",
@@ -116,15 +116,16 @@ public sealed class HoldoverViewModel : INotifyPropertyChanged, IDisposable
 
     /// <summary>How bad that state is.</summary>
     /// <remarks>
-    /// Recovering and waiting are cautions rather than criticals: the outputs are still usable and
-    /// the receiver is on its way back. Holding is critical because the error grows for as long as
-    /// it lasts, and nothing downstream will say so.
+    /// Recovering is a caution rather than a critical: the outputs are still usable and the receiver
+    /// is on its way back. Both holdovers are critical because the error grows for as long as they
+    /// last, and nothing downstream will say so. Waiting for GPS is a holdover (#642); it was a caution
+    /// until 2 Oct 2026.
     /// </remarks>
     public Severity StateSeverity => Mode switch
     {
         ReceiverMode.Locked => Severity.Success,
-        ReceiverMode.Holdover => Severity.Critical,
-        ReceiverMode.Waiting or ReceiverMode.Recovering => Severity.Caution,
+        ReceiverMode.Holdover or ReceiverMode.Waiting => Severity.Critical,
+        ReceiverMode.Recovering => Severity.Caution,
         _ => Severity.Neutral,
     };
 
