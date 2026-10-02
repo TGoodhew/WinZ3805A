@@ -39,6 +39,19 @@
     authenticated, which on a shared machine is not the person at the keyboard.
     They would then see the install succeed and no application anywhere.
 
+.PARAMETER Unattended
+    For a run nobody is watching: a script, a deployment tool, or the automated QA pass (#633).
+    The "Press Enter" prompts are skipped, a running copy fails the run at once instead of
+    waiting for the person to close it (it is never closed for them - it may be mid-survey),
+    and the .NET download page is not opened. The one administrator prompt is still raised when
+    something needs it; where nobody can answer it, UAC must already be set not to prompt. The
+    exit code says how it went:
+      0  installed, and the start check found the app running
+      1  failed; the log says where
+      2  installed, but the app did not start; the log has what Windows recorded
+      3  installed, but .NET 10 is missing, so the start check was not run
+    Install.cmd passes it on and, given it, does not wait for a key at the end.
+
 .NOTES
     EVERY RUN WRITES A LOG (#592), to
     %LOCALAPPDATA%\WinZ3805A Installer\logs\install-<date>-<time>.log, and says
@@ -67,6 +80,8 @@ param(
     # on a clean VM on 30 Sep 2026 (#588). Hence names nothing else would use.
     [switch]$AsAdministrator,
     [switch]$TrustCertificate,
+    # For a run nobody is watching (see .PARAMETER Unattended).
+    [switch]$Unattended,
     [string]$DotNetInstallerPath,
     # Thumbprints, comma-separated, of certificates earlier releases were signed with.
     [string]$RemoveCertificates,
@@ -471,6 +486,9 @@ foreach ($trusted in @(Get-ChildItem Cert:\LocalMachine\TrustedPeople -ErrorActi
 # A running copy holds the serial port and its own files, and one that lives in the notification
 # area for weeks is very likely running. Asked to close, never closed: it may be mid-survey.
 while (Get-Process -Name 'WinZ3805A' -ErrorAction SilentlyContinue) {
+    if ($Unattended) {
+        throw 'WinZ3805A is running. An unattended install does not close it - it may be mid-survey - so close it and run this again.'
+    }
     Write-Log 'waiting       WinZ3805A is running; asked the person to close it' 
     Write-Host ''
     Write-Host '  WinZ3805A is running. Close it before installing:' -ForegroundColor Yellow
@@ -580,7 +598,9 @@ else {
     Write-Info 'No internet connection on this machine? Use the offline download'
     Write-Info '(the zip whose name ends in -offline), which includes the installer.'
 
-    try { Start-Process $dotnetPage } catch { Write-Info 'The page could not be opened; the address is above.' }
+    if (-not $Unattended) {
+        try { Start-Process $dotnetPage } catch { Write-Info 'The page could not be opened; the address is above.' }
+    }
 }
 
 # ---------------------------------------------------------------------------
@@ -592,7 +612,7 @@ if (-not $elevationNeeded -and $earlier.Count -gt 0) {
     # Nothing needs administrator rights, but an earlier copy is about to be replaced, and that is
     # not something to do without the person having read what it means.
     Write-Host ''
-    Read-Host '  Press Enter to continue, or close this window to stop'
+    if (-not $Unattended) { Read-Host '  Press Enter to continue, or close this window to stop' }
 }
 
 if ($elevationNeeded) {
@@ -605,8 +625,8 @@ if ($elevationNeeded) {
     # appears over the explanation within a fraction of a second, so the text is
     # on screen and unread — which is worse than not writing it, because it
     # looks like consent was informed when it could not have been. Reported by
-    # the first person to run this.
-    Read-Host '  Press Enter to continue, or close this window to stop'
+    # the first person to run this. Unattended, there is no reader to wait for.
+    if (-not $Unattended) { Read-Host '  Press Enter to continue, or close this window to stop' }
 
     $arguments = @(
         '-NoProfile', '-ExecutionPolicy', 'Bypass',
@@ -1237,3 +1257,11 @@ Write-Host '  see https://github.com/TGoodhew/WinZ3805A/blob/main/docs/remove-wi
 Write-Host ''
 Write-Host "  A record of this install is at $LogPath" -ForegroundColor Gray
 Write-Log "finished      started ok: $(if ($null -eq $startedOk) { 'not checked' } else { $startedOk })"
+
+# Unattended, the outcome is the exit code too (see .PARAMETER Unattended). A failure has already
+# left through the trap, with 1.
+if ($Unattended) {
+    if ($startedOk -eq $true) { exit 0 }
+    if ($startedOk -eq $false) { exit 2 }
+    exit 3
+}
