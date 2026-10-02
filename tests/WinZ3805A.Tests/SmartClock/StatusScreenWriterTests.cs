@@ -43,6 +43,7 @@ public sealed class StatusScreenWriterTests
         "locked-stabilizing.txt",
         "captured/locked-to-gps.txt",
         "captured/locked-to-gps-stabilizing-frequency.txt",
+        "captured/locked-to-gps-sub-unit-readings.txt",
         "captured/power-up-gps-acquisition.txt",
         "captured/power-up-fine-freq-adj.txt",
         "captured/surveying-locked-to-gps-stabilizing-frequency.txt",
@@ -169,6 +170,23 @@ public sealed class StatusScreenWriterTests
             Time = new DateTime(2007, 1, 12, 3, 24, 19),
             AntennaDelayNanoseconds = 77,
             Position = Original,
+        },
+
+        "captured/locked-to-gps-sub-unit-readings.txt" => new()
+        {
+            // Taken by the comparison with the simulator, 2 Oct 2026: both readings a unit down.
+            Outputs = OutputsSummary.Valid,
+            Mode = ClockMode.Locked,
+            Tfom = 3,
+            Ffom = 0,
+            TimeIntervalNanoseconds = 0.3,
+            PredictMicroseconds = 0.8,
+            GpsOnePpsValid = true,
+            Tracked = [T(1, 47, 222, 39), T(2, 29, 205, 36), T(3, 59, 307, 41), T(4, 28, 259, 36), T(26, 15, 134, 34), T(28, 51, 64, 38), T(31, 65, 123, 39), T(32, 21, 71, 35)],
+            NotTracked = [U(17, 5, 291), U(19, 5, 321), U(25, 11, 39)],
+            Time = new DateTime(2007, 2, 16, 17, 55, 17),
+            AntennaDelayNanoseconds = 60,
+            Position = new() { Latitude = Lat(47, 31, 18.546), Longitude = -Lat(122, 12, 22.128), Height = 38.00 },
         },
 
         "captured/power-up-gps-acquisition.txt" => new()
