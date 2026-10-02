@@ -145,6 +145,19 @@ public sealed class PollingService : IAsyncDisposable
     /// <summary>How many full screens have been fetched.</summary>
     public int FullSweeps { get; private set; }
 
+    /// <summary>
+    /// Raised as each fast sweep begins, with the instant the #547 guard measures from (#631).
+    /// </summary>
+    /// <remarks>
+    /// The #547 test needs that instant, and timing a sweep at its first query instead is not the
+    /// same thing: the test's fake clock is advanced concurrently with the loop, so an advance that
+    /// lands between the start and the first query dates the query a second late, and the next
+    /// sweep, correctly half a period on, appears to start at the same moment. That is the flake
+    /// #631 was, reproduced by delaying the first query 5 ms - 2 failures in 20 - with no change to
+    /// the loop. Internal, so only the tests that compile this file see it.
+    /// </remarks>
+    internal event Action<DateTimeOffset>? FastSweepStarting;
+
     /// <summary>Starts polling. Does nothing if already running.</summary>
     public void Start()
     {
@@ -286,6 +299,7 @@ public sealed class PollingService : IAsyncDisposable
                 }
 
                 DateTimeOffset sweepStarted = _timeProvider.GetUtcNow();
+                FastSweepStarting?.Invoke(sweepStarted);
                 await PollFastAsync(cancellationToken).ConfigureAwait(false);
                 _store.SetReadingFullStatus(false);
 

@@ -423,8 +423,11 @@ public class PollingServiceTests
     /// the burst: a screen and three fast updates in about 0.6 s.
     /// </para>
     /// <para>
-    /// Each fast sweep is timed at its first query, <c>:SYNC:STAT?</c>, on the fake clock, across
-    /// three screens, and no two may start less than half a period apart.
+    /// Each fast sweep is timed where the guard times it, at its start
+    /// (<see cref="PollingService.FastSweepStarting"/>), across three screens, and no two may start
+    /// less than half a period apart. It was timed at its first query, <c>:SYNC:STAT?</c>, until
+    /// #631: the clock this test advances can jump between a sweep's start and that query, which
+    /// made a correct loop look like the burst once in CI and never in 300 local runs.
     /// </para>
     /// </remarks>
     [Fact]
@@ -441,13 +444,6 @@ public class PollingServiceTests
                 // The screen occupies the link for 2.4 s: the ticks inside it fire unawaited.
                 clock.Advance(TimeSpan.FromMilliseconds(2400));
             }
-            else if (command == ":SYNC:STAT?" && Volatile.Read(ref recording))
-            {
-                lock (sweeps)
-                {
-                    sweeps.Add(clock.GetUtcNow());
-                }
-            }
 
             return null;
         });
@@ -455,6 +451,16 @@ public class PollingServiceTests
         (DeviceSessionService session, ReceiverStateStore store) = await ConnectedAsync(transport, clock);
         await using DeviceSessionService _ = session;
         await using PollingService poller = new(session, store, clock);
+        poller.FastSweepStarting += started =>
+        {
+            if (Volatile.Read(ref recording))
+            {
+                lock (sweeps)
+                {
+                    sweeps.Add(started);
+                }
+            }
+        };
 
         Volatile.Write(ref recording, true);
         poller.Start();
