@@ -372,7 +372,10 @@ public sealed class OverviewViewModel : INotifyPropertyChanged, IDisposable
                 return ReadoutFormatter.NoValue;
             }
 
-            if (Mode != ReceiverMode.Holdover)
+            // The Holdover page's rule: either holdover, and the recovery after one, which the receiver
+            // goes on counting. HOLD alone read "Not in holdover" through the commonest real holdover,
+            // the one waiting for GPS (#642), and through every recovery.
+            if (Mode is not (ReceiverMode.Holdover or ReceiverMode.Waiting or ReceiverMode.Recovering))
             {
                 return "Not in holdover";
             }

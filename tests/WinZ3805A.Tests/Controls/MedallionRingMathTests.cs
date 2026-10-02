@@ -139,7 +139,7 @@ public class MedallionRingMathTests
     [Theory]
     [InlineData("LOCK", ReceiverMode.Locked, Severity.Success)]
     [InlineData("REC", ReceiverMode.Recovering, Severity.Caution)]
-    [InlineData("WAIT", ReceiverMode.Waiting, Severity.Caution)]
+    [InlineData("WAIT", ReceiverMode.Waiting, Severity.Critical)]
     [InlineData("HOLD", ReceiverMode.Holdover, Severity.Critical)]
     [InlineData("POW", ReceiverMode.PowerUp, Severity.Neutral)]
     [InlineData("OFF", ReceiverMode.Off, Severity.Neutral)]
@@ -172,15 +172,23 @@ public class MedallionRingMathTests
         Assert.Equal(Severity.Neutral, ReceiverModes.SeverityOf(ReceiverMode.Disconnected));
     }
 
-    /// <summary>Every mode has a distinct glyph, or the table would be conveying less than it claims.</summary>
+    /// <summary>
+    /// Every mode has a distinct glyph, or the table would be conveying less than it claims, except
+    /// the two holdovers, which share holdover's on purpose.
+    /// </summary>
+    /// <remarks>
+    /// <c>WAIT</c> and <c>HOLD</c> are both holdover, waiting for GPS and forced, and draw alike by
+    /// decision (#642); their text keeps them apart. Any other pair sharing a glyph is still a defect.
+    /// </remarks>
     [Fact]
     public void EveryModeHasItsOwnGlyph()
     {
-        ReceiverMode[] modes = Enum.GetValues<ReceiverMode>();
+        ReceiverMode[] modes = [.. Enum.GetValues<ReceiverMode>().Where(m => m != ReceiverMode.Waiting)];
 
         string[] glyphs = [.. modes.Select(ReceiverModes.GlyphOf)];
 
         Assert.Equal(glyphs.Length, glyphs.Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(ReceiverModes.GlyphOf(ReceiverMode.Holdover), ReceiverModes.GlyphOf(ReceiverMode.Waiting));
     }
     // -------------------------------------------------------------------------------------
     // Glyph size (#48)
@@ -304,7 +312,8 @@ public class MedallionRingMathTests
     // -------------------------------------------------------------------------------------
 
     /// <summary>
-    /// Holdover, and only holdover, has a custom icon.
+    /// Holdover, and only holdover, has a custom icon: both kinds of it, the forced one (<c>HOLD</c>)
+    /// and the one waiting for GPS (<c>WAIT</c>, #642).
     /// </summary>
     /// <remarks>
     /// It is the reason the set was authored. The medallion had been drawing a generic Warning
@@ -317,7 +326,7 @@ public class MedallionRingMathTests
     [InlineData(ReceiverMode.Holdover, "WzIconHoldover")]
     [InlineData(ReceiverMode.Locked, null)]
     [InlineData(ReceiverMode.Recovering, null)]
-    [InlineData(ReceiverMode.Waiting, null)]
+    [InlineData(ReceiverMode.Waiting, "WzIconHoldover")]
     [InlineData(ReceiverMode.PowerUp, null)]
     [InlineData(ReceiverMode.Off, null)]
     [InlineData(ReceiverMode.Disconnected, null)]

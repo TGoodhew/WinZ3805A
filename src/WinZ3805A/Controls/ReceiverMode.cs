@@ -23,11 +23,18 @@ namespace WinZ3805A.Controls;
 public static class ReceiverModes
 {
     /// <summary>The §9.4.3 severity this mode carries.</summary>
+    /// <remarks>
+    /// <see cref="ReceiverMode.Waiting"/> is a holdover and is critical like one (#642). The receiver
+    /// answers <c>WAIT</c> when it has lost GPS and is running on its oscillator, waiting for GPS to
+    /// return, with its own screen saying <c>Holdover: GPS 1PPS invalid</c>; <c>HOLD</c> is the forced
+    /// kind. This drew amber as "Waiting to recover" until 2 Oct 2026, so the commonest real holdover
+    /// looked milder than a deliberate one.
+    /// </remarks>
     public static Severity SeverityOf(ReceiverMode mode) => mode switch
     {
         ReceiverMode.Locked => Severity.Success,
-        ReceiverMode.Recovering or ReceiverMode.Waiting => Severity.Caution,
-        ReceiverMode.Holdover => Severity.Critical,
+        ReceiverMode.Recovering => Severity.Caution,
+        ReceiverMode.Holdover or ReceiverMode.Waiting => Severity.Critical,
         _ => Severity.Neutral,
     };
 
@@ -36,7 +43,7 @@ public static class ReceiverModes
     {
         ReceiverMode.Locked => "\uE73E",        // CheckMark
         ReceiverMode.Recovering => "\uE72C",    // Refresh
-        ReceiverMode.Waiting => "\uE769",       // Pause
+        ReceiverMode.Waiting => "\uE7BA",       // as Holdover: the fallback behind the custom icon (#642)
         ReceiverMode.Holdover => "\uE7BA",      // Warning, the fallback behind §9.9's custom holdover icon
         ReceiverMode.PowerUp => "\uE823",       // Clock
         ReceiverMode.Off => "\uE7E8",           // PowerButton
@@ -58,16 +65,20 @@ public static class ReceiverModes
     /// A key and not a geometry, because this file compiles into the headless test assembly where
     /// no XAML type exists. Null for every other mode, whose stock glyphs §10.3 chose deliberately.
     /// </para>
+    /// <para>
+    /// Both holdovers carry it: the forced one (<c>HOLD</c>) and the one waiting for GPS
+    /// (<c>WAIT</c>, #642).
+    /// </para>
     /// </remarks>
     public static string? GeometryKeyOf(ReceiverMode mode) =>
-        mode == ReceiverMode.Holdover ? "WzIconHoldover" : null;
+        mode is ReceiverMode.Holdover or ReceiverMode.Waiting ? "WzIconHoldover" : null;
 
     /// <summary>The sentence-case label §10.3 gives this mode.</summary>
     public static string TextOf(ReceiverMode mode) => mode switch
     {
         ReceiverMode.Locked => "Locked to GPS",
         ReceiverMode.Recovering => "Recovering",
-        ReceiverMode.Waiting => "Waiting to recover",
+        ReceiverMode.Waiting => "Holdover — waiting for GPS",
         ReceiverMode.Holdover => "Holdover",
         ReceiverMode.PowerUp => "Power-up",
         ReceiverMode.Off => "Diagnostic / off",

@@ -158,7 +158,7 @@ public sealed class TrayIconTests
     [Theory]
     [InlineData(ReceiverMode.Locked, Severity.Success, "Locked to GPS")]
     [InlineData(ReceiverMode.Recovering, Severity.Caution, "Recovering")]
-    [InlineData(ReceiverMode.Waiting, Severity.Caution, "Waiting to recover")]
+    [InlineData(ReceiverMode.Waiting, Severity.Critical, "Holdover — waiting for GPS")]
     [InlineData(ReceiverMode.Holdover, Severity.Critical, "Holdover")]
     [InlineData(ReceiverMode.PowerUp, Severity.Neutral, "Power-up")]
     [InlineData(ReceiverMode.Disconnected, Severity.Neutral, "Disconnected")]

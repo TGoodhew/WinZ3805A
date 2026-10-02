@@ -189,6 +189,22 @@ public sealed class OverviewViewModelTests
         Assert.DoesNotContain("µs", model.HoldoverDuration, StringComparison.Ordinal);
     }
 
+    /// <remarks>
+    /// <c>WAIT</c> is the holdover a lost antenna causes, the commonest real one, and <c>REC</c> is
+    /// the recovery after any holdover; the receiver counts the duration through both. This row read
+    /// "Not in holdover" for each until #642, while the notification for the same holdover said
+    /// "Receiver in holdover".
+    /// </remarks>
+    [Theory]
+    [InlineData("WAIT")]
+    [InlineData("REC")]
+    public void TheDurationIsShownThroughAHoldoverWaitingForGpsAndTheRecoveryAfter(string syncState)
+    {
+        (OverviewViewModel model, _) = Connected(Status(b => b.Duration = TimeSpan.FromSeconds(694)), syncState: syncState);
+
+        Assert.Equal("11 min", model.HoldoverDuration);
+    }
+
     /// <summary>A receiver in holdover that does not print the duration shows the §11.1 dash.</summary>
     [Fact]
     public void InHoldoverWithNoDurationReportedTheRowIsADash()
