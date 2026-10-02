@@ -643,6 +643,88 @@ public class StatusScreenParserTests
         Assert.Equal(38.0, status.Position!.HeightMetres);
     }
 
+    /// <summary>A holdover forced from the Holdover page, watched on 2 Oct 2026 (#639).</summary>
+    /// <remarks>
+    /// The manual's wording, never seen on a wire until then. Unlike a holdover from a lost antenna,
+    /// GPS is still there: the 1 PPS offset is still measured and the satellites still tracked.
+    /// </remarks>
+    [Fact]
+    public void AForcedHoldoverSaysItWasManuallyInitiated()
+    {
+        ReceiverStatus status = ParseSittingFixture("captured/holdover-manually-initiated.txt");
+
+        Assert.Empty(status.ParseWarnings);
+        Assert.Equal(SmartClockMode.Holdover, status.Mode);
+        Assert.Equal("manually initiated", status.ModeDetail);
+        Assert.Equal(-0.3, status.OnePpsTiNanoseconds!.Value, 10);
+        Assert.True(status.GpsOnePpsValid);
+        Assert.Equal(TimeSpan.FromSeconds(98), status.HoldoverDuration);
+        Assert.NotEmpty(status.Tracked);
+    }
+
+    /// <summary>A recovery whose bracketed offset is below a nanosecond (#639).</summary>
+    [Fact]
+    public void ARecoveryOffsetBelowANanosecondIsReadInPicoseconds()
+    {
+        ReceiverStatus status = ParseSittingFixture("captured/recovery-fine-freq-adj-sub-nanosecond.txt");
+
+        Assert.Empty(status.ParseWarnings);
+        Assert.Equal(SmartClockMode.Recovery, status.Mode);
+        Assert.StartsWith("fine freq adj", status.ModeDetail, StringComparison.Ordinal);
+        Assert.Equal(-5.0, status.OnePpsTiNanoseconds!.Value, 10);
+        Assert.Equal(new TimeSpan(0, 40, 49), status.HoldoverDuration);
+    }
+
+    /// <summary>Single-digit PRNs being attempted: the star keeps its column (#639).</summary>
+    /// <remarks>
+    /// <c>* 4</c>, not <c>*4</c>. The August capture only had two-digit PRNs starred, so the column
+    /// the star sits in was never visible until a power-up on 2 Oct 2026.
+    /// </remarks>
+    [Fact]
+    public void AStarredSingleDigitPrnIsStillAttempted()
+    {
+        ReceiverStatus status = ParseSittingFixture("captured/power-up-gps-acquisition-single-digit-prns.txt");
+
+        Assert.Empty(status.ParseWarnings);
+        Assert.Equal(SmartClockMode.PowerUp, status.Mode);
+        Assert.Empty(status.Tracked);
+        Assert.Equal(11, status.NotTracked.Count);
+        Assert.Equal([4, 6, 7, 9, 16], status.NotTracked.Where(s => s.AttemptingToTrack).Select(s => s.Prn));
+    }
+
+    /// <summary>
+    /// A power-up with no position: the factory initial one, a stalled survey, and a satellite whose
+    /// place in the sky is unknown (#639).
+    /// </summary>
+    /// <remarks>
+    /// The second power cycle of 2 Oct 2026 came up this way while the first did not. Every one of
+    /// its four new shapes is in §11.3 or §11.2 and none had been on a captured screen: the
+    /// <c>INIT</c> qualifier (here the receiver's factory default, 34° 44′ N 135° 21′ E), the survey
+    /// suspended for want of four satellites, the <c>inacc position</c> advisory, and a tracked
+    /// satellite printed <c>-- ---   --</c>.
+    /// </remarks>
+    [Fact]
+    public void APowerUpWithNoPositionShowsTheInitialOneAndASuspendedSurvey()
+    {
+        ReceiverStatus status = ParseSittingFixture("captured/power-up-survey-suspended-initial-position.txt");
+
+        Assert.Empty(status.ParseWarnings);
+        Assert.Equal(SmartClockMode.PowerUp, status.Mode);
+        Assert.Equal(PositionMode.Survey, status.PositionMode);
+        Assert.Equal(0.0, status.SurveyPercentComplete);
+        Assert.Equal(SurveySuspendedReason.TooFewSatellites, status.SurveySuspendedReason);
+        Assert.Equal(PositionQualifier.Init, status.PositionQualifier);
+        Assert.Equal(34 + (44 / 60.0), status.Position!.LatitudeDegrees!.Value, 9);
+        Assert.Equal(135 + (21 / 60.0), status.Position.LongitudeDegrees!.Value, 9);
+        Assert.Equal(ClockAdvisory.InaccurateInaccuratePosition, status.OnePpsClockAdvisory);
+
+        TrackedSatellite unknown = Assert.Single(status.Tracked, s => s.Prn == 4);
+        Assert.Null(unknown.ElevationDegrees);
+        Assert.Null(unknown.AzimuthDegrees);
+        Assert.Null(unknown.SignalStrength);
+        Assert.Equal(3, status.Tracked.Count);
+    }
+
     /// <summary>Locked but still stabilizing, the state the sitting spent longest in.</summary>
     [Fact]
     public void TheStabilizingScreenParses()

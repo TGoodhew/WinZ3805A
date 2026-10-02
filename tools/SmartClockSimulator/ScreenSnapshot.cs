@@ -122,20 +122,36 @@ public enum ClockMode
 /// <param name="Elevation">Degrees above the horizon.</param>
 /// <param name="Azimuth">Degrees from true north.</param>
 /// <param name="CarrierToNoise">C/N in dB-Hz.</param>
-public sealed record TrackedSatellite(int Prn, int Elevation, int Azimuth, int CarrierToNoise);
+/// <remarks>
+/// Any of the three can be unknown, printed <c>--</c>, <c>---</c> and <c>--</c>: a satellite tracked
+/// before the almanac places it (seen on a power-up on 2 Oct 2026).
+/// </remarks>
+public sealed record TrackedSatellite(int Prn, int? Elevation, int? Azimuth, int? CarrierToNoise);
 
 /// <summary>One row of the Not Tracking table.</summary>
 /// <param name="Prn">The satellite.</param>
 /// <param name="Elevation">Degrees above the horizon.</param>
 /// <param name="Azimuth">Degrees from true north.</param>
 /// <param name="Attempting">Whether the row carries the <c>*</c> of a satellite the receiver is trying to track.</param>
-public sealed record UntrackedSatellite(int Prn, int Elevation, int Azimuth, bool Attempting = false);
+public sealed record UntrackedSatellite(int Prn, int? Elevation, int? Azimuth, bool Attempting = false);
 
 /// <summary>The position panel: the mode and the coordinates it shows.</summary>
 public sealed record PositionPanel
 {
     /// <summary>Null for <c>Hold</c>; otherwise the survey's percentage complete.</summary>
     public double? SurveyPercent { get; init; }
+
+    /// <summary>
+    /// Why a survey is stalled, printed on the line under <c>MODE</c>, e.g. <c>track &lt;4 sats</c>;
+    /// null when it is not.
+    /// </summary>
+    public string? SurveySuspended { get; init; }
+
+    /// <summary>
+    /// Whether the coordinates are the initial estimate (<c>INIT LAT</c>) rather than a held or
+    /// averaged position: what a receiver shows before its first fix.
+    /// </summary>
+    public bool Initial { get; init; }
 
     /// <summary>The latitude, in degrees, positive north.</summary>
     public double Latitude { get; init; } = 47 + (31 / 60.0) + (18.822 / 3600);
