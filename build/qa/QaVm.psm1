@@ -264,6 +264,38 @@ function Stop-QaVm {
     if ($running -match [regex]::Escape($Vm.Vmx)) { Invoke-VmRun $Vm stop -Arguments 'hard' | Out-Null }
 }
 
+# Waits until the guest has gone quiet: the processor under 10 % for 30 s together, or ten minutes
+# at most. A desktop that has only just appeared is still busy - updates, indexing, the first run of
+# whatever was installed - and a snapshot taken then makes every check start busy. One taken 30 s
+# after a cold boot made the app's first launch take 14 s on Windows 11, and the installer's 15 s
+# start check fail, in every run from it (2 Oct 2026).
+function Wait-QaQuiet {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)]$Vm)
+    $r = Invoke-QaGuestScript $Vm -Name 'wait-quiet' -Script @'
+$deadline = (Get-Date).AddMinutes(10)
+$quiet = 0
+while ($quiet -lt 6 -and (Get-Date) -lt $deadline) {
+    $load = (Get-CimInstance Win32_Processor | Measure-Object LoadPercentage -Average).Average
+    if ($load -lt 10) { $quiet++ } else { $quiet = 0 }
+    Start-Sleep -Seconds 5
+}
+"quiet: $($quiet -ge 6)"
+'@
+    Write-Verbose $r.Output
+}
+
+# Takes the snapshot again from the running guest, once it has gone quiet, and powers the VM off.
+function Save-QaCleanSnapshot {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)]$Vm, [string]$Snapshot = 'QA Clean')
+    Wait-QaDesktop -Vm $Vm
+    Wait-QaQuiet -Vm $Vm
+    Invoke-VmRun $Vm deleteSnapshot -Arguments $Snapshot | Out-Null
+    Invoke-VmRun $Vm snapshot -Arguments $Snapshot | Out-Null
+    Stop-QaVm -Vm $Vm
+}
+
 # The named pipe a VM's second serial port is served on. The guest sees it as COM2: COM1 is the
 # provisioning trail to guest-serial.log.
 function Get-QaSimulatorPipe {
@@ -313,10 +345,7 @@ function Add-QaSimulatorPort {
     Set-Content -LiteralPath $Vm.Vmx -Value ($kept + $port) -Encoding ascii
 
     Invoke-VmRun $Vm start -Arguments 'nogui' | Out-Null
-    Wait-QaDesktop -Vm $Vm
-    Invoke-VmRun $Vm deleteSnapshot -Arguments $Snapshot | Out-Null
-    Invoke-VmRun $Vm snapshot -Arguments $Snapshot | Out-Null
-    Stop-QaVm -Vm $Vm
+    Save-QaCleanSnapshot -Vm $Vm -Snapshot $Snapshot
 }
 
 # Copies a file into the guest (-ToGuest) or out of it.
@@ -399,4 +428,4 @@ function Invoke-QaGuestScript {
     [pscustomobject]@{ ExitCode = $code; Output = "$output".TrimEnd() }
 }
 
-Export-ModuleMember -Function Get-QaCredential, Set-QaCredential, New-QaIso, New-QaVm, Invoke-VmRun, Wait-QaDesktop, Start-QaVm, Stop-QaVm, Get-QaSimulatorPipe, Add-QaSimulatorPort, Copy-QaFile, Invoke-QaGuest, Invoke-QaGuestScript
+Export-ModuleMember -Function Get-QaCredential, Set-QaCredential, New-QaIso, New-QaVm, Invoke-VmRun, Wait-QaDesktop, Wait-QaQuiet, Start-QaVm, Stop-QaVm, Save-QaCleanSnapshot, Get-QaSimulatorPipe, Add-QaSimulatorPort, Copy-QaFile, Invoke-QaGuest, Invoke-QaGuestScript
