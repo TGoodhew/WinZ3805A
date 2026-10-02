@@ -3,6 +3,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
+using System.Runtime.InteropServices;
 
 using Windows.ApplicationModel;
 using Windows.Graphics;
@@ -226,7 +227,79 @@ public sealed partial class MainWindow : Window
         EnsureOnScreen();
 
         Activate();
+        TakeForeground();
     }
+
+    /// <summary>Puts this window in front of the others, not only on screen (#627).</summary>
+    /// <remarks>
+    /// <para>
+    /// <c>Activate</c> shows a hidden window, which is why reopening from the notification area
+    /// always worked. A window that is open but covered is another matter: on Windows 10 a second
+    /// launch left it behind whatever covered it, with or without the runtime's companions
+    /// (measured on a 22H2 VM, 1 Oct 2026), although the second process hands its foreground right
+    /// over before redirecting (<c>App.RedirectToRunningInstance</c>). So the window asks for the
+    /// foreground itself, as the tray icon's menu already does.
+    /// </para>
+    /// <para>
+    /// Windows can still refuse - the foreground belongs to whoever the user last gave input to -
+    /// and then the taskbar button flashes until the window is chosen, which is Windows' own way
+    /// of saying an application wants attention. The log records which of the three happened.
+    /// </para>
+    /// </remarks>
+    private void TakeForeground()
+    {
+        nint handle = WinRT.Interop.WindowNative.GetWindowHandle(this);
+        if (GetForegroundWindow() == handle)
+        {
+            _log?.LogInformation("Brought to the front: it already was.");
+            return;
+        }
+
+        if (SetForegroundWindow(handle))
+        {
+            _log?.LogInformation("Brought to the front: took the foreground.");
+            return;
+        }
+
+        FlashWindowInfo flash = new()
+        {
+            Size = (uint)Marshal.SizeOf<FlashWindowInfo>(),
+            Window = handle,
+            Flags = FlashTray | FlashUntilForeground,
+        };
+        _ = FlashWindowEx(ref flash);
+        _log?.LogWarning("Brought to the front: Windows kept the foreground elsewhere, so the taskbar button flashes.");
+    }
+
+    /// <summary><c>FLASHW_TRAY</c>: flash the taskbar button.</summary>
+    private const uint FlashTray = 0x2;
+
+    /// <summary><c>FLASHW_TIMERNOFG</c>: until the window comes to the foreground.</summary>
+    private const uint FlashUntilForeground = 0xC;
+
+    /// <summary><c>FLASHWINFO</c>.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    private struct FlashWindowInfo
+    {
+        public uint Size;
+        public nint Window;
+        public uint Flags;
+        public uint Count;
+        public uint Timeout;
+    }
+
+    // DllImport rather than LibraryImport, for the reason App gives for AllowSetForegroundWindow:
+    // the generated form needs AllowUnsafeBlocks across the whole project.
+    [DllImport("user32.dll")]
+    private static extern nint GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetForegroundWindow(nint window);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool FlashWindowEx(ref FlashWindowInfo info);
 
     /// <summary>Moves the window back onto a display if it is not on one (#553).</summary>
     /// <remarks>
