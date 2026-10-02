@@ -477,7 +477,7 @@ public sealed class DiagnosticsViewModel : INotifyPropertyChanged
     {
         Transaction transaction = await ExecuteAsync(mnemonic, cancellationToken).ConfigureAwait(true);
 
-        // Responses carry a leading space (#78).
+        // Trimmed, though the receiver sends no leading space (§7.2, corrected 2 Oct 2026).
         return transaction.Succeeded && transaction.Lines.Count > 0
             ? transaction.Lines[0].Trim()
             : null;

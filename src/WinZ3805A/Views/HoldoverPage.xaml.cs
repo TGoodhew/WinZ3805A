@@ -262,8 +262,8 @@ public sealed partial class HoldoverPage : Page
 
         Transaction reply = await device.Session.ExecuteAsync(query).ConfigureAwait(true);
 
-        // Responses carry a leading space (#78), and the receiver answers in its own invariant
-        // format whatever the operator's locale is.
+        // Trimmed for safety (the receiver sends no leading space, §7.2), and the receiver answers
+        // in its own invariant format whatever the operator's locale is.
         if (!reply.Succeeded ||
             reply.Lines.Count == 0 ||
             !double.TryParse(reply.Lines[0].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out double seconds))

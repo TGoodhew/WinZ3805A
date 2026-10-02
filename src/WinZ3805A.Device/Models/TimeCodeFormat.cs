@@ -58,9 +58,9 @@ public static class TimeCodeFormats
             return TimeCodeFormat.Unknown;
         }
 
-        // Every response arrives with a leading space, and the manual describes this one as a
-        // quoted string though the bench receiver answers bare. Both are stripped rather than
-        // one being assumed.
+        // The manual describes this one as a quoted string though the bench receiver answers bare
+        // (and with no leading space, §7.2). Quotes and spaces are both stripped rather than either
+        // being assumed.
         string value = response.Trim().Trim('"').Trim();
 
         return value.ToUpperInvariant() switch

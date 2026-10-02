@@ -136,8 +136,8 @@ public sealed class HoldoverViewModel : INotifyPropertyChanged, IDisposable
     /// The time error accumulated so far in this holdover.
     /// </summary>
     /// <remarks>
-    /// Only meaningful while in holdover. The 58503A guide is explicit that
-    /// <c>:SYNC:HOLD:TUNC:PRESent?</c> answers error −230 when the receiver is not in holdover, so
+    /// Only meaningful while in holdover. Outside it, <c>:SYNC:HOLD:TUNC:PRESent?</c> is refused:
+    /// with −221 on the bench unit (2 Oct 2026, #639), where the 58503A guide says −230. Either way
     /// a page that showed this unconditionally would be showing a figure the device declines to
     /// give (#34).
     /// </remarks>

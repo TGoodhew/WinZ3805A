@@ -13,10 +13,10 @@ namespace WinZ3805A.Device.Parsing;
 /// a dead application.
 /// </para>
 /// <para>
-/// Every response arrives with a <b>leading space</b> — the device answers <c>_+3</c>, not
-/// <c>+3</c>. That is a framing artefact of the receiver rather than part of any value, and it is
-/// the single most likely thing to break a naive <c>int.Parse</c>, so trimming happens here once
-/// instead of at every call site.
+/// Trimming happens here once instead of at every call site. This was written believing every
+/// response arrived with a leading space (<c>_+3</c>); the bench unit, compared on 2 Oct 2026
+/// (#639), sends none. The trim stays because it costs nothing, and a stray space or line ending
+/// is still the single most likely thing to break a naive <c>int.Parse</c>.
 /// </para>
 /// <para>
 /// Values also carry an explicit sign the .NET parsers accept happily (<c>+3</c>), and reals arrive
@@ -132,7 +132,7 @@ public static class ScalarParsers
         null => null,
     };
 
-    /// <summary>Trims the leading space and anything else stray, or returns null for an empty answer.</summary>
+    /// <summary>Trims any stray whitespace, or returns null for an empty answer.</summary>
     private static string? Clean(string? response)
     {
         string? text = response?.Trim();
