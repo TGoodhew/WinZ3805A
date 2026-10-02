@@ -2123,7 +2123,7 @@ Two behavioural principles remain here because they are functional rather than v
   |---|---|---|---|
   | `LOCK` | `WzSuccessBrush` ● | `\uE73E` CheckMark | Locked to GPS |
   | `REC` | `WzCautionBrush` ▲ | `\uE72C` Refresh | Recovering |
-  | `WAIT` | `WzCautionBrush` ▲ | `\uE769` Pause | Waiting to recover |
+  | `WAIT` | `WzCriticalBrush` ⬢ | the custom Holdover icon, as `HOLD` | Holdover — waiting for GPS |
   | `HOLD` | `WzCriticalBrush` ⬢ | custom Holdover icon — **built 30 Aug 2026 (#320)** with the rest of §9.9's set, and the reason it was authored: a Warning glyph says *something is wrong*, and holdover means the receiver is still producing a disciplined 10 MHz from the oscillator's memory. The stock glyph stays behind it (`Controls/ReceiverMode.cs`) | Holdover |
   | `POW` | `WzNeutralBrush` ○ | `\uE823` Clock | Power-up |
   | `OFF` | `WzNeutralBrush` ○ | `\uE7E8` PowerButton | Diagnostic / off |
@@ -2131,7 +2131,16 @@ Two behavioural principles remain here because they are functional rather than v
 
   Severity is always the triple colour + shape + text (§9.4.3). The medallion changes all three at once; it never pulses or animates (§9.8.2, §9.13 item 7).
 
-- When mode is `HOLD`, the sub-line carries the reason from `:SYNC:HOLD:WAIT?`. The query is **Not built** — nothing sends it, the §7.3 sweep being seven commands (six until #560) and this not one of them; what the sub-line shows is the status screen's own mode detail (`MainViewModel.ModeDetail`; `HoldoverViewModel.WaitingReasonText` on §10.8), which carries the same sentence when the receiver prints one. **Amended to the code 30 Aug 2026 (#320):** the mode detail is the source. The query arrives with no extra wire time, and adding another fast-tier command for a field that is usually blank would spend a query a second on a rare state.
+  > **⚠ Corrected 2 Oct 2026 (#642).** `WAIT` was *Waiting to recover*, `WzCautionBrush` ▲ and the Pause
+  > glyph: a milder state than holdover. It is holdover. Watched on the bench Z3805A, `WAIT` is what
+  > `:SYNC:STAT?` answers once a lost antenna has taken the receiver into holdover, its own screen
+  > saying `Holdover: GPS 1PPS invalid` and `:SYNC:HOLD:WAIT?` answering `GPS`, waiting for GPS to
+  > return; `HOLD` is a holdover forced by command. So the commonest real holdover drew amber while a
+  > deliberate one drew red, the Overview page said *Not in holdover*, and the lock notification for
+  > the same holdover, which reads the screen, said *Receiver in holdover*. Both now draw as holdover;
+  > the text keeps them apart, so a lost antenna can still be told from a forced holdover at a glance.
+
+- When mode is `HOLD` or `WAIT`, the sub-line carries the reason from `:SYNC:HOLD:WAIT?`. The query is **Not built** — nothing sends it, the §7.3 sweep being seven commands (six until #560) and this not one of them; what the sub-line shows is the status screen's own mode detail (`MainViewModel.ModeDetail`; `HoldoverViewModel.WaitingReasonText` on §10.8), which carries the same sentence when the receiver prints one. **Amended to the code 30 Aug 2026 (#320):** the mode detail is the source. The query arrives with no extra wire time, and adding another fast-tier command for a field that is usually blank would spend a query a second on a rare state.
 - **Locked with zero satellites** renders a `WzCautionBrush` `SeverityPill` beside the count reading "coasting", with tooltip *"Locked but tracking no satellites. The receiver is coasting on a 1 PPS it can no longer verify."* This condition appears in real units with antenna or bias-tee faults and is the single most useful diagnostic the app surfaces — it is the reason the satellite count shares top billing with the mode.
 - Date shows the rollover-corrected value with a trailing `\uE946` Info glyph when `WeekRolloverEpochs != 0`; the raw device date is in the tooltip (§7.4).
 - **The clock line ticks every second (#560, 29 Sep 2026).** It showed the time printed on the status screen, which arrives every ten seconds, so it held one time for ten seconds and then jumped. Lady Heather's ticks every second because half its poll is the receiver's time code. Now (`ViewModels/ReceiverClock.cs`):

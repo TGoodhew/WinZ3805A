@@ -30,8 +30,8 @@ link, says **Connecting**, **Reconnecting** or **Connection lost**:
 |---|---|---|---|
 | **Locked to GPS** | green | tick | Disciplining the oscillator to GPS. The normal state. |
 | **Recovering** | amber | refresh arrows | Coming back from holdover; not yet locked. |
-| **Waiting to recover** | amber | pause | Ready to recover but held back — the Holdover page says why. |
-| **Holdover** | red | pause inside a clock face | Lost GPS and running on the oscillator alone. Time error grows the longer this lasts. |
+| **Holdover — waiting for GPS** | red | pause inside a clock face | Lost GPS, usually because of the antenna or its cable, and running on the oscillator alone until GPS returns. Time error grows the longer this lasts. |
+| **Holdover** | red | pause inside a clock face | Holdover started from the Holdover page. The receiver runs on the oscillator alone until you recover it. |
 | **Power-up** | grey | clock | Just switched on; nothing to report yet. |
 | **Diagnostic / off** | grey | power symbol | The receiver is in a diagnostic mode or its outputs are off. |
 | **Disconnected** | grey | disconnected drive | The application is not talking to a receiver. |
