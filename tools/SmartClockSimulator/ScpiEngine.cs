@@ -1,0 +1,836 @@
+using System.Globalization;
+
+namespace WinZ3805A.Simulation.SmartClock;
+
+/// <summary>
+/// The receiver's side of the RS-232 conversation: one command line in, the bytes it answers with out.
+/// </summary>
+/// <remarks>
+/// <para>
+/// <b>Written against <c>docs/requirements.md</c> §7.2, which was itself corrected against the bench
+/// unit (#78).</b> The rules that matter most, because a client that gets them wrong cannot connect:
+/// </para>
+/// <list type="bullet">
+/// <item><description>No echo by default. The manual says the receiver echoes; the bench unit does not.
+/// <see cref="Echo"/> turns it on, as <c>:SYST:COMM:SER1:FDUP ON</c> does.</description></item>
+/// <item><description>The prompt is <c>scpi &gt; </c>, or <c>E-nnn&gt; </c> naming the <i>newest</i> queued
+/// error while the queue is not empty — whatever the last command did. <c>:SYST:ERR?</c> reads the
+/// <i>oldest</i>.</description></item>
+/// <item><description>A refused command answers with the prompt and nothing else.</description></item>
+/// <item><description>Opening the port announces the identity unasked, and the first command after it
+/// is lost to a framing error, <c>-362</c>.</description></item>
+/// </list>
+/// <para>
+/// <b>It answers only what it knows, and it knows only documented commands.</b> Its table is built
+/// from the catalogue in §8.2, §8.3 and the manual, never from a list of anything excluded: a command
+/// it has no entry for gets <c>-113, "Undefined header"</c>, which is what the receiver says to
+/// anything it does not recognise. The §8.5 undocumented queries get the same, because that is what
+/// the bench unit answered (§8.5).
+/// </para>
+/// <para>
+/// Formats are the bench unit's where it has shown one — the README beside this file lists which —
+/// and the manual's, or a labelled guess, where it has not.
+/// </para>
+/// </remarks>
+public sealed class ScpiEngine
+{
+    /// <summary>What the receiver says for each error it can queue (SCPI-99 wording).</summary>
+    private static readonly Dictionary<int, string> ErrorText = new()
+    {
+        [-100] = "Command error",
+        [-108] = "Parameter not allowed",
+        [-109] = "Missing parameter",
+        [-113] = "Undefined header",
+        [-221] = "Settings conflict",
+        [-222] = "Data out of range",
+        [-224] = "Illegal parameter value",
+        [-230] = "Data corrupt or stale",
+        [-300] = "Device-specific error",
+        [-350] = "Queue overflow",
+        [-362] = "Framing error in program message",
+    };
+
+    private static readonly CultureInfo Invariant = CultureInfo.InvariantCulture;
+
+    private static readonly string[] Subsystems =
+        ["ALL", "DISPlay", "PROCessor", "RAM", "EEPROM", "UART", "QSPI", "FPGA", "INTerpolator", "IREFerence", "GPS", "POWer"];
+
+    private readonly SimulatedReceiver _receiver;
+    private readonly TimeProvider _clock;
+    private readonly List<(string Pattern, Func<Command, Result> Handler)> _table = [];
+    private readonly Queue<int> _errors = new();
+    private int _newestError;
+    private bool _glitchPending;
+    private string _lastTest = "+0,ALL";
+    private readonly Dictionary<string, int> _registers = new(StringComparer.OrdinalIgnoreCase);
+    private int _eventEnable;
+    private int _serviceEnable;
+
+    /// <summary>Creates the engine for one receiver.</summary>
+    public ScpiEngine(SimulatedReceiver receiver, TimeProvider clock)
+    {
+        ArgumentNullException.ThrowIfNull(receiver);
+        ArgumentNullException.ThrowIfNull(clock);
+        _receiver = receiver;
+        _clock = clock;
+        Log = new DiagnosticLog(clock);
+        receiver.ModeChanged += OnModeChanged;
+        Build();
+    }
+
+    /// <summary>Whether the receiver echoes each command before answering. Off on the bench unit.</summary>
+    public bool Echo { get; set; }
+
+    /// <summary>
+    /// Whether a value reply starts with a space, as §7.2 records (<c>:SYNC:TFOM?</c> answering
+    /// <c>␣+3</c>).
+    /// </summary>
+    /// <remarks>
+    /// On by default because §7.2 says so. The identity, the screen and the log carry no space on the
+    /// wire (the raw captures show it), so this applies only to single values. It is a setting
+    /// because it is the first thing to check against the bench unit: the parser trims either way,
+    /// so nothing in the application could tell the two apart.
+    /// </remarks>
+    public bool LeadingSpace { get; set; } = true;
+
+    /// <summary>How many errors the queue holds before the newest is replaced by -350.</summary>
+    /// <remarks>Never measured on the bench unit; five were read back as five. 30 is a guess.</remarks>
+    public int ErrorQueueCapacity { get; set; } = 30;
+
+    /// <summary>The diagnostic log <c>:DIAG:LOG:READ?</c> reads.</summary>
+    public DiagnosticLog Log { get; }
+
+    /// <summary>The errors waiting in the queue, oldest first.</summary>
+    public IReadOnlyCollection<int> QueuedErrors => _errors;
+
+    /// <summary>The prompt as it stands: <c>scpi &gt; </c> or <c>E-nnn&gt; </c>.</summary>
+    public string Prompt => _errors.Count == 0
+        ? "scpi > "
+        : string.Create(Invariant, $"E{_newestError}> ");
+
+    /// <summary>The port has just been opened and DTR asserted.</summary>
+    /// <returns>The banner: the identity and a prompt, sent unasked a moment later.</returns>
+    /// <remarks>
+    /// The banner's exact bytes were never captured; §7.2 says it is "its identity string and a
+    /// prompt". The first command after it is lost to the DTR glitch.
+    /// </remarks>
+    public Reply Connected()
+    {
+        _glitchPending = true;
+        return new Reply(_receiver.Identity + "\r\n" + Prompt, TimeSpan.FromMilliseconds(600));
+    }
+
+    /// <summary>Answers one command line, already stripped of its terminator.</summary>
+    /// <returns>What goes back on the wire, or null for a blank line, which the receiver ignores.</returns>
+    public Reply? Receive(string line)
+    {
+        ArgumentNullException.ThrowIfNull(line);
+        string text = line.Trim();
+        if (text.Length == 0)
+        {
+            return null;
+        }
+
+        string echo = Echo ? line + "\r\n" : string.Empty;
+
+        if (_glitchPending)
+        {
+            // §7.2: the DTR assertion reached the receiver as a character, so the first command is
+            // a framing error and is dropped unexecuted.
+            _glitchPending = false;
+            Queue(-362);
+            return new Reply(echo + Prompt, TimeSpan.FromMilliseconds(20));
+        }
+
+        Result result = Execute(text);
+        if (result.Error is int error)
+        {
+            Queue(error);
+        }
+
+        string body = result.Body is null ? string.Empty : Shape(result) + "\r\n";
+        return new Reply(echo + body + Prompt, result.Delay);
+    }
+
+    /// <summary>Puts an error in the queue, replacing the newest with -350 when it is full.</summary>
+    public void Queue(int error)
+    {
+        if (_errors.Count >= ErrorQueueCapacity)
+        {
+            // SCPI-99: on overflow the most recent entry becomes -350 and the rest are kept.
+            List<int> kept = [.. _errors];
+            kept[^1] = -350;
+            _errors.Clear();
+            kept.ForEach(_errors.Enqueue);
+            _newestError = -350;
+            return;
+        }
+
+        _errors.Enqueue(error);
+        _newestError = error;
+    }
+
+    private string Shape(Result result) =>
+        result.IsValue && LeadingSpace ? " " + result.Body : result.Body!;
+
+    private void OnModeChanged(object? sender, ModeChange change)
+    {
+        // The two messages the bench unit's log has ever shown (DiagnosticLogParserTests).
+        if (change.To is ClockMode.Locked && change.From is not ClockMode.Locked)
+        {
+            Log.Add("GPS lock started");
+        }
+        else if (change.To is ClockMode.Holdover)
+        {
+            Log.Add(change.Manual ? "Holdover started, manually initiated" : "Holdover started, not tracking GPS");
+        }
+    }
+
+    private Result Execute(string text)
+    {
+        int space = text.IndexOf(' ', StringComparison.Ordinal);
+        string header = space < 0 ? text : text[..space];
+        string arguments = space < 0 ? string.Empty : text[(space + 1)..].Trim();
+        Command command = new(header, arguments);
+
+        foreach ((string pattern, Func<Command, Result> handler) in _table)
+        {
+            if (Matches(pattern, header))
+            {
+                return handler(command);
+            }
+        }
+
+        return Result.Fail(-113);
+    }
+
+    /// <summary>
+    /// Whether a header matches a pattern in the manual's notation: upper-case letters required,
+    /// lower-case optional, so <c>:SYNChronization:STATe?</c> accepts <c>:SYNC:STAT?</c> and the long form.
+    /// </summary>
+    internal static bool Matches(string pattern, string header)
+    {
+        string[] want = pattern.TrimStart(':').Split(':');
+        string[] got = header.TrimStart(':').Split(':');
+        if (want.Length != got.Length)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < want.Length; i++)
+        {
+            string node = want[i];
+            string candidate = got[i];
+            bool query = node.EndsWith('?');
+            if (query != candidate.EndsWith('?'))
+            {
+                return false;
+            }
+
+            node = node.TrimEnd('?');
+            candidate = candidate.TrimEnd('?');
+            string shortForm = new([.. node.Where(c => !char.IsLower(c))]);
+            if (!candidate.Equals(shortForm, StringComparison.OrdinalIgnoreCase) &&
+                !candidate.Equals(node, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    // ===========================================================================================
+    // The table
+    // ===========================================================================================
+
+    private void On(string pattern, Func<Command, Result> handler) => _table.Add((pattern, handler));
+
+    private void Build()
+    {
+        SimulatedReceiver r = _receiver;
+
+        // ---- IEEE 488.2 ---------------------------------------------------------------------
+        On("*IDN?", _ => Result.Text(r.Identity));
+        On("*CLS", _ =>
+        {
+            _errors.Clear();
+            return Result.None(TimeSpan.FromMilliseconds(15));
+        });
+        On("*ESE?", _ => Result.Value(Int(_eventEnable)));
+        On("*ESE", c => Mask(c, v => _eventEnable = v));
+        On("*SRE?", _ => Result.Value(Int(_serviceEnable)));
+        On("*SRE", c => Mask(c, v => _serviceEnable = v));
+        On("*ESR?", _ => Result.Value(Int(0)));
+        On("*STB?", _ => Result.Value(Int(_errors.Count > 0 ? 4 : 0)));
+        On("*TST?", _ =>
+        {
+            // Never run on the bench unit. The subsystem tests took the receiver from LOCK to POW
+            // (§8.3, #53), and *TST? runs them all, so it does the same.
+            r.PowerCycle();
+            return Result.Value(Int(0), TimeSpan.FromSeconds(12));
+        });
+
+        // ---- System -------------------------------------------------------------------------
+        On(":SYSTem:STATus?", _ => Result.Text(StatusScreenWriter.Write(r.Snapshot()).TrimEnd('\r', '\n'), TimeSpan.FromMilliseconds(1500)));
+        On(":SYSTem:STATus:LENGth?", _ => Result.Value(Int(23)));
+        On(":SYSTem:ERRor?", _ => Result.Value(NextError()));
+        On(":SYSTem:DATE?", _ => Result.Value(Date(r.ReportedUtc)));
+        On(":SYSTem:TIME?", _ => Result.Value(Time(r.ReportedUtc)));
+        On(":SYSTem:COMMunicate?", _ => Result.Value("+9600,+8,NONE,+1"));
+        On(":SYSTem:PRESet", _ =>
+        {
+            r.AntennaDelaySeconds = 0;
+            r.ElevationMaskDegrees = 10;
+            r.Ignored.Clear();
+            return Result.None(TimeSpan.FromSeconds(1));
+        });
+        On(":SYSTem:COMMunicate:SERial1:PRESet", _ =>
+        {
+            Echo = false;
+            return Result.None();
+        });
+        On(":SYSTem:COMMunicate:SERial1:FDUPlex", c => Switch(c, on => Echo = on));
+        foreach (string node in new[] { "BAUD", "BITS", "PARity", "SBITs", "PACE" })
+        {
+            // Accepted and forgotten: the simulated line keeps the settings it was opened at.
+            On($":SYSTem:COMMunicate:SERial1:{node}", c => c.HasArguments ? Result.None() : Result.Fail(-109));
+        }
+
+        // ---- Synchronization ----------------------------------------------------------------
+        On(":SYNChronization:STATe?", _ => Result.Value(r.SyncState));
+        On(":SYNChronization:TFOMerit?", _ => Result.Value(Int(r.Tfom)));
+        On(":SYNChronization:FFOMerit?", _ => Result.Value(Int(r.Ffom)));
+        On(":SYNChronization:TINTerval?", _ => r.HasTimeInterval ? Result.Value(Short(r.TimeIntervalSeconds)) : Result.Fail(-230));
+        On(":SYNChronization:HOLDover:DURation?", _ => Result.Value(Real(r.LastHoldover.TotalSeconds) + "," + (r.InHoldover ? "1" : "0")));
+        On(":SYNChronization:HOLDover:DURation:THReshold?", _ => Result.Value(Real(r.HoldDurationThresholdSeconds)));
+        On(":SYNChronization:HOLDover:DURation:THReshold", c => Number(c, 0, double.MaxValue, v => r.HoldDurationThresholdSeconds = v));
+        On(":SYNChronization:HOLDover:DURation:THReshold:EXCeeded?", _ => Result.Value(Bool(r.LastHoldover.TotalSeconds > r.HoldDurationThresholdSeconds)));
+        On(":SYNChronization:HOLDover:TUNCertainty:PREDicted?", _ => Result.Value(Real(r.Snapshot().PredictMicroseconds is double p ? p * 1e-6 : 0) + "," + (r.InHoldover ? "1" : "0")));
+        On(":SYNChronization:HOLDover:TUNCertainty:PRESent?", _ => r.Snapshot().PresentMicroseconds is double p && r.InHoldover ? Result.Value(Real(p * 1e-6)) : Result.Fail(-230));
+        On(":SYNChronization:HOLDover:WAITing?", _ => Result.Value(Bool(false)));
+        On(":SYNChronization:HOLDover:INITiate", _ =>
+        {
+            r.ForceHoldover();
+            return Result.None();
+        });
+        On(":SYNChronization:HOLDover:RECovery:INITiate", _ =>
+        {
+            r.Recover();
+            return Result.None();
+        });
+        On(":SYNChronization:HOLDover:RECovery:LIMit:IGNore", _ => Result.None());
+        On(":SYNChronization:IMMediate", _ => Result.None());
+
+        // ---- GPS reference and position -----------------------------------------------------
+        On(":GPS:REFerence:VALid?", _ => Result.Value(Bool(r.Tracked.Count > 0)));
+        On(":GPS:REFerence:ADELay?", _ => Result.Value(Real(r.AntennaDelaySeconds)));
+        On(":GPS:REFerence:ADELay", c => Number(c, 0, 999_999e-9, v => r.AntennaDelaySeconds = v));
+        On(":GPS:POSition?", _ => Result.Value(Position(r.HeldPosition)));
+        On(":GPS:POSition:ACTual?", _ => Result.Value(Position(r.HeldPosition)));
+        On(":GPS:POSition:HOLD:LAST?", _ => Result.Value(Position(r.HeldPosition)));
+        On(":GPS:POSition:HOLD:STATe?", _ => Result.Value(r.SurveyPercent is null ? "ON" : "OFF"));
+        On(":GPS:POSition:SURVey:PROGress?", _ => Result.Value(Int((int)(r.SurveyPercent ?? 100))));
+        On(":GPS:POSition:SURVey:STATe?", _ => Result.Value(r.SurveyPercent is null ? "OFF" : "ONCE"));
+        On(":GPS:POSition:SURVey:STATe:POWerup?", _ => Result.Value(Bool(r.SurveyAtPowerUp)));
+        On(":GPS:POSition:SURVey:STATe:POWerup", c => Switch(c, on => r.SurveyAtPowerUp = on));
+        On(":GPS:POSition:SURVey:STATe", c =>
+        {
+            if (!c.Arguments.Equals("ONCE", StringComparison.OrdinalIgnoreCase))
+            {
+                return Result.Fail(-224);
+            }
+
+            // #229: a receiver holding a position refuses with -300, and promptly. Power-up is the
+            // way into a survey.
+            return r.SurveyPercent is null ? Result.Fail(-300) : Result.None();
+        });
+        On(":GPS:POSition", SetPosition);
+
+        // ---- Satellites ---------------------------------------------------------------------
+        On(":GPS:SATellite:TRACking?", _ => Result.Value(PrnList(r.Tracked.Select(s => s.Prn))));
+        On(":GPS:SATellite:TRACking:COUNt?", _ => Result.Value(Int(r.Tracked.Count)));
+        On(":GPS:SATellite:TRACking:EMANgle?", _ => Result.Value(Int(r.ElevationMaskDegrees)));
+        On(":GPS:SATellite:TRACking:EMANgle", c => Number(c, 0, 90, v => r.ElevationMaskDegrees = (int)Math.Round(v)));
+        On(":GPS:SATellite:TRACking:IGNore?", _ => Result.Value(PrnList(r.Ignored)));
+        On(":GPS:SATellite:TRACking:IGNore:COUNt?", _ => Result.Value(Int(r.Ignored.Count)));
+        On(":GPS:SATellite:TRACking:IGNore:STATe?", c => Prn(c, prn => Result.Value(Bool(r.Ignored.Contains(prn)))));
+        On(":GPS:SATellite:TRACking:IGNore", c => Selection(c, prns =>
+        {
+            r.Ignored.Clear();
+            r.Ignored.UnionWith(prns);
+        }));
+
+        // A non-empty inclusion list arrives on the SECOND line, the first being blank (20 Aug 2026,
+        // SatelliteTrackingParser). Nothing else this receiver says is shaped like that.
+        On(":GPS:SATellite:TRACking:INCLude?", _ => Included().Count == 0 ? Result.Value(Int(0)) : Result.Text("\r\n" + PrnList(Included())));
+        On(":GPS:SATellite:TRACking:INCLude:COUNt?", _ => Result.Value(Int(Included().Count)));
+        On(":GPS:SATellite:TRACking:INCLude:STATe?", c => Prn(c, prn => Result.Value(Bool(!r.Ignored.Contains(prn)))));
+        On(":GPS:SATellite:TRACking:INCLude", c => Selection(c, prns =>
+        {
+            r.Ignored.Clear();
+            r.Ignored.UnionWith(Enumerable.Range(1, 32).Except(prns));
+        }));
+        On(":GPS:SATellite:VISibility:PREDicted?", _ => Result.Value(PrnList(Visible())));
+        On(":GPS:SATellite:VISibility:PREDicted:COUNt?", _ => Result.Value(Int(Visible().Count())));
+        foreach (string aid in new[] { "DATE", "TIME", "POSition" })
+        {
+            On($":GPS:INITial:{aid}", c => !c.HasArguments ? Result.Fail(-109) : r.Tracked.Count > 0 ? Result.Fail(-221) : Result.None());
+        }
+
+        // ---- Precision time -----------------------------------------------------------------
+        On(":PTIMe:TCODe?", _ => TimeCode());
+        On(":PTIMe:TCODe:FORMat?", _ => Result.Value("F2"));
+        On(":PTIMe:DATE?", _ => Result.Value(Date(Local())));
+        On(":PTIMe:TIME?", _ => Result.Value(Time(Local()), TimeSpan.FromMilliseconds(40)));
+        On(":PTIMe:TIME:STRing?", _ => Result.Value("\"" + Local().ToString("HH:mm:ss", Invariant) + "\""));
+        On(":PTIMe:TZONe?", _ => Result.Value(Int(r.TimeZone.Hours) + "," + Int(r.TimeZone.Minutes)));
+        On(":PTIMe:TZONe", c =>
+        {
+            string[] parts = c.Arguments.Split(',', StringSplitOptions.TrimEntries);
+            if (parts.Length != 2 ||
+                !int.TryParse(parts[0], NumberStyles.AllowLeadingSign, Invariant, out int hours) ||
+                !int.TryParse(parts[1], NumberStyles.AllowLeadingSign, Invariant, out int minutes))
+            {
+                return Result.Fail(c.HasArguments ? -224 : -109);
+            }
+
+            r.TimeZone = (hours, minutes);
+            return Result.None();
+        });
+        On(":PTIMe:LEAPsecond:ACCumulated?", _ => Result.Value(Int(SimulatedReceiver.LeapSeconds)));
+        On(":PTIMe:LEAPsecond:STATe?", _ => Result.Value("0"));
+
+        // Nothing announced: no answer, E-230 (measured 20 Aug 2026, §10.14). The receiver has no leap second to describe.
+        On(":PTIMe:LEAPsecond:DATE?", _ => Result.Fail(-230));
+        On(":PTIMe:LEAPsecond:DURation?", _ => Result.Fail(-230));
+
+        // ---- Front panel ----------------------------------------------------------------------
+        On(":LED:ALARm?", _ => Result.Value(Bool(!r.Health.AllOk)));
+        On(":LED:GPSLock?", _ => Result.Value(Bool(r.Mode == ClockMode.Locked)));
+        On(":LED:HOLDover?", _ => Result.Value(Bool(r.InHoldover)));
+        On(":LED:ACTive?", _ => Result.Value(Bool(r.ActiveLamp)));
+        On(":LED:ENABled?", _ => Result.Value(Bool(r.EnabledLamp)));
+
+        // A lamp write waits for the receiver's 1 Hz tick: 999 ms measured over ten runs (#440).
+        On(":LED:ACTive", c => Switch(c, on => r.ActiveLamp = on, TimeSpan.FromMilliseconds(900)));
+        On(":LED:ENABled", c => Switch(c, on => r.EnabledLamp = on, TimeSpan.FromMilliseconds(900)));
+
+        // ---- Diagnostics ----------------------------------------------------------------------
+        On(":DIAGnostic:ROSCillator:EFControl:RELative?", _ => Result.Value(Real(r.EfcPercent)));
+        On(":DIAGnostic:LIFetime:COUNt?", _ => Result.Value(Int(r.LifetimeHours)));
+        On(":DIAGnostic:IDENtify:GPS?", _ => Result.Text("\"--\",\"SFTW P/N # 4850266\",\"SOFTWARE VER # 005\",\"--\",\"--\",\"MODEL # FURUNO GT-80\",\"--\",\"--\",\"--\",\"--\""));
+        On(":DIAGnostic:QUERy:RESPonse?", _ => Result.Value("+1"));
+        On(":DIAGnostic:LOG:COUNt?", _ => Result.Value(Int(Log.Count)));
+        On(":DIAGnostic:LOG:READ?", c =>
+        {
+            if (!c.HasArguments)
+            {
+                return Result.Text(Log.ReadAll(), Log.ReadTime);
+            }
+
+            return int.TryParse(c.Arguments, NumberStyles.Integer, Invariant, out int n) && Log.Read(n) is string entry
+                ? Result.Text(entry)
+                : Result.Fail(-222);
+        });
+        On(":DIAGnostic:LOG:READ:ALL?", _ => Result.Text(Log.ReadAll(), Log.ReadTime));
+        On(":DIAGnostic:LOG:CLEar", _ =>
+        {
+            Log.Clear();
+            return Result.None();
+        });
+        On(":DIAGnostic:TEST:RESult?", _ => Result.Value(_lastTest));
+        On(":DIAGnostic:TEST?", c =>
+        {
+            string? subsystem = Subsystems.FirstOrDefault(s => Matches(s, c.Arguments.Trim()));
+            if (subsystem is null)
+            {
+                // "ZZNOSUCH" answered -224 at once and ran nothing (#404).
+                return Result.Fail(c.HasArguments ? -224 : -109);
+            }
+
+            string name = new([.. subsystem.Where(ch => !char.IsLower(ch))]);
+            _lastTest = "+0," + name;
+
+            // Every subsystem test took the receiver out of lock (§8.3, #53). Durations measured:
+            // ALL 12.4 s, GPS 11.6 s, the rest 2.4 to 5.4 s.
+            r.PowerCycle();
+            TimeSpan took = name switch
+            {
+                "ALL" => TimeSpan.FromSeconds(12.4),
+                "GPS" => TimeSpan.FromSeconds(11.6),
+                _ => TimeSpan.FromSeconds(3.5),
+            };
+            return Result.Value("+0,+0,+0", took);
+        });
+
+        // ---- Status registers -------------------------------------------------------------------
+        foreach (string group in new[] { "OPERation", "OPERation:HARDware", "OPERation:HOLDover", "OPERation:POWerup", "QUEStionable" })
+        {
+            string key = group;
+            On($":STATus:{group}:CONDition?", _ => Result.Value(Int(Register(key, "COND"))));
+            On($":STATus:{group}:EVENt?", _ => Result.Value(Int(Register(key, "EVEN"))));
+            foreach (string field in new[] { "ENABle", "NTRansition", "PTRansition" })
+            {
+                string name = field;
+                On($":STATus:{group}:{field}?", _ => Result.Value(Int(Register(key, name))));
+                On($":STATus:{group}:{field}", c => Mask(c, v => _registers[key + ":" + name] = v));
+            }
+        }
+
+        On(":STATus:PRESet:ALARm", _ => Result.None());
+        On(":STATus:QUEStionable:CONDition:USER", c => Choice(c, "SET", "CLEar"));
+        On(":STATus:QUEStionable:EVENt:USER", c => Choice(c, "PTR", "NTR"));
+    }
+
+    // ===========================================================================================
+    // Handlers that are more than a line
+    // ===========================================================================================
+
+    private Result SetPosition(Command command)
+    {
+        // All three commit or tear down a position and took 9.67 s to a clean prompt (#256).
+        TimeSpan took = TimeSpan.FromSeconds(9.67);
+        string arguments = command.Arguments;
+
+        if (arguments.Equals("LAST", StringComparison.OrdinalIgnoreCase))
+        {
+            _receiver.AdoptSurvey();
+            return Result.None(took);
+        }
+
+        if (Matches("SURVey", arguments))
+        {
+            _receiver.AdoptSurvey();
+            return Result.None(took);
+        }
+
+        string[] parts = arguments.Split(',', StringSplitOptions.TrimEntries);
+        if (parts.Length != 9)
+        {
+            return Result.Fail(arguments.Length == 0 ? -109 : -224);
+        }
+
+        if (!TryAngle(parts[0], parts[1], parts[2], parts[3], "N", "S", 90, out double latitude) ||
+            !TryAngle(parts[4], parts[5], parts[6], parts[7], "E", "W", 180, out double longitude) ||
+            !double.TryParse(parts[8], NumberStyles.Float, Invariant, out double height))
+        {
+            return Result.Fail(-224);
+        }
+
+        _receiver.HeldPosition = _receiver.HeldPosition with { Latitude = latitude, Longitude = longitude, Height = height };
+        _receiver.AdoptSurvey();
+        return Result.None(took);
+    }
+
+    private static bool TryAngle(string hemisphere, string d, string m, string s, string positive, string negative, int limit, out double degrees)
+    {
+        degrees = 0;
+        bool north = hemisphere.Equals(positive, StringComparison.OrdinalIgnoreCase);
+        if (!north && !hemisphere.Equals(negative, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (!int.TryParse(d, NumberStyles.AllowLeadingSign, Invariant, out int whole) ||
+            !int.TryParse(m, NumberStyles.AllowLeadingSign, Invariant, out int minutes) ||
+            !double.TryParse(s, NumberStyles.Float, Invariant, out double seconds) ||
+            whole < 0 || whole > limit || minutes is < 0 or > 59 || seconds is < 0 or >= 60)
+        {
+            return false;
+        }
+
+        degrees = (whole + (minutes / 60.0) + (seconds / 3600)) * (north ? 1 : -1);
+        return true;
+    }
+
+    /// <summary>
+    /// <c>:PTIM:TCOD?</c>: answered not on demand but on the receiver's tick, about 509 ms before the
+    /// 1 PPS it names, in format T2 with its checksum (#37).
+    /// </summary>
+    private Result TimeCode()
+    {
+        DateTimeOffset now = _clock.GetUtcNow();
+        DateTimeOffset nextSecond = now.AddTicks(TimeSpan.TicksPerSecond - (now.Ticks % TimeSpan.TicksPerSecond));
+        DateTimeOffset emit = nextSecond.AddMilliseconds(-509);
+        if (emit <= now)
+        {
+            emit = emit.AddSeconds(1);
+            nextSecond = nextSecond.AddSeconds(1);
+        }
+
+        DateTime named = (nextSecond - (SimulatedReceiver.Epoch * _receiver.RolloverEpochs)).UtcDateTime;
+        bool valid = _receiver.Tracked.Count > 0;
+        string body = string.Create(Invariant, $"T2{named:yyyyMMddHHmmss}{_receiver.Tfom}{_receiver.Ffom}00{(valid ? 0 : 1)}");
+        int sum = body.Sum(c => c) % 256;
+        return Result.Text(body + sum.ToString("X2", Invariant), emit - now);
+    }
+
+    private string NextError()
+    {
+        if (_errors.Count == 0)
+        {
+            return "+0,\"No error\"";
+        }
+
+        int error = _errors.Dequeue();
+        return Int(error) + ",\"" + ErrorText.GetValueOrDefault(error, "Unknown error") + "\"";
+    }
+
+    private int Register(string group, string field) => _registers.GetValueOrDefault(group + ":" + field);
+
+    private DateTime Local() =>
+        _receiver.ReportedUtc.AddHours(_receiver.TimeZone.Hours).AddMinutes(_receiver.TimeZone.Minutes);
+
+    private SortedSet<int> Included() => [.. Enumerable.Range(1, 32).Except(_receiver.Ignored)];
+
+    private IEnumerable<int> Visible() =>
+        _receiver.Tracked.Select(s => s.Prn).Concat(_receiver.NotTracked.Select(s => s.Prn)).Order();
+
+    // ===========================================================================================
+    // Arguments
+    // ===========================================================================================
+
+    private static Result Mask(Command command, Action<int> set)
+    {
+        if (!command.HasArguments)
+        {
+            return Result.Fail(-109);
+        }
+
+        if (!int.TryParse(command.Arguments, NumberStyles.AllowLeadingSign, Invariant, out int value) || value is < 0 or > 65535)
+        {
+            return Result.Fail(-224);
+        }
+
+        set(value);
+        return Result.None();
+    }
+
+    private static Result Number(Command command, double minimum, double maximum, Action<double> set)
+    {
+        if (!command.HasArguments)
+        {
+            return Result.Fail(-109);
+        }
+
+        if (!double.TryParse(command.Arguments, NumberStyles.Float, Invariant, out double value))
+        {
+            return Result.Fail(-224);
+        }
+
+        if (value < minimum || value > maximum)
+        {
+            return Result.Fail(-222);
+        }
+
+        set(value);
+        return Result.None();
+    }
+
+    /// <summary>ON, OFF, 1 or 0 — all four accepted on the lamps (ActivityLamp).</summary>
+    private static Result Switch(Command command, Action<bool> set, TimeSpan delay = default)
+    {
+        string value = command.Arguments.ToUpperInvariant();
+        if (value.Length == 0)
+        {
+            return Result.Fail(-109);
+        }
+
+        bool? on = value switch
+        {
+            "ON" or "1" => true,
+            "OFF" or "0" => false,
+            _ => null,
+        };
+        if (on is not bool state)
+        {
+            return Result.Fail(-224);
+        }
+
+        set(state);
+        return Result.None(delay);
+    }
+
+    private static Result Choice(Command command, params string[] choices) =>
+        !command.HasArguments ? Result.Fail(-109)
+        : choices.Any(choice => Matches(choice, command.Arguments)) ? Result.None()
+        : Result.Fail(-224);
+
+    private static Result Prn(Command command, Func<int, Result> answer) =>
+        !command.HasArguments ? Result.Fail(-109)
+        : int.TryParse(command.Arguments, NumberStyles.AllowLeadingSign, Invariant, out int prn) && prn is >= 1 and <= 32
+            ? answer(prn)
+            : Result.Fail(-224);
+
+    private static Result Selection(Command command, Action<IEnumerable<int>> set)
+    {
+        string value = command.Arguments.Trim();
+        if (value.Length == 0)
+        {
+            return Result.Fail(-109);
+        }
+
+        if (value.Equals("ALL", StringComparison.OrdinalIgnoreCase))
+        {
+            set(Enumerable.Range(1, 32));
+            return Result.None();
+        }
+
+        if (value.Equals("NONE", StringComparison.OrdinalIgnoreCase))
+        {
+            set([]);
+            return Result.None();
+        }
+
+        List<int> prns = [];
+        foreach (string part in value.Split(',', StringSplitOptions.TrimEntries))
+        {
+            if (!int.TryParse(part, NumberStyles.AllowLeadingSign, Invariant, out int prn) || prn is < 1 or > 32)
+            {
+                return Result.Fail(-224);
+            }
+
+            prns.Add(prn);
+        }
+
+        set(prns);
+        return Result.None();
+    }
+
+    // ===========================================================================================
+    // Formats
+    // ===========================================================================================
+
+    /// <summary><c>+3</c>, <c>-113</c>: integers carry their sign (<c>:SYNC:TFOM?</c> → <c>+3</c>).</summary>
+    public static string Int(long value) => (value < 0 ? "-" : "+") + Math.Abs(value).ToString(Invariant);
+
+    /// <summary><c>+6.00000E+002</c>: five decimals and a three-digit exponent (<c>:SYNC:HOLD:DUR?</c>).</summary>
+    public static string Real(double value)
+    {
+        string text = value.ToString("0.00000E+000", Invariant);
+        return value < 0 ? text : "+" + text;
+    }
+
+    /// <summary>
+    /// <c>-5.4E-009</c>, <c>-3.56E-008</c>: the time interval at its 0.1 ns resolution, with a mantissa
+    /// as long as that needs and no longer.
+    /// </summary>
+    public static string Short(double value)
+    {
+        value = Math.Round(value * 1e10) / 1e10;
+        string text = value.ToString("0.0##E+000", Invariant);
+        return value < 0 ? text : "+" + text;
+    }
+
+    /// <summary>Booleans unsigned, as <c>:PTIM:LEAP:STAT?</c> answered <c>0</c>.</summary>
+    public static string Bool(bool value) => value ? "1" : "0";
+
+    /// <summary><c>+2006,+12,+27</c>: unpadded and signed.</summary>
+    private static string Date(DateTime date) => Int(date.Year) + "," + Int(date.Month) + "," + Int(date.Day);
+
+    /// <summary><c>+14,+45,+1</c>: unpadded and signed.</summary>
+    private static string Time(DateTime time) => Int(time.Hour) + "," + Int(time.Minute) + "," + Int(time.Second);
+
+    /// <summary>An empty list is <c>+0</c>; otherwise signed PRNs joined by commas.</summary>
+    private static string PrnList(IEnumerable<int> prns)
+    {
+        string joined = string.Join(",", prns.Select(p => Int(p)));
+        return joined.Length == 0 ? Int(0) : joined;
+    }
+
+    /// <summary>
+    /// A position as the manual's nine parts. The bench unit has never been asked for one, so this is
+    /// the manual's shape and a guess at the number formats.
+    /// </summary>
+    private static string Position(PositionPanel position)
+    {
+        static string Part(double degrees, string positive, string negative)
+        {
+            double abs = Math.Abs(degrees);
+            int whole = (int)abs;
+            int minutes = (int)((abs - whole) * 60);
+            double seconds = (abs - whole - (minutes / 60.0)) * 3600;
+            return (degrees < 0 ? negative : positive) + "," + Int(whole) + "," + Int(minutes) + "," + Real(seconds);
+        }
+
+        return Part(position.Latitude, "N", "S") + "," + Part(position.Longitude, "E", "W") + "," + Real(position.Height);
+    }
+
+    /// <summary>One parsed command line.</summary>
+    private sealed record Command(string Header, string Arguments)
+    {
+        public bool HasArguments => Arguments.Length > 0;
+    }
+
+    /// <summary>What a handler decided.</summary>
+    private sealed record Result(string? Body, int? Error, TimeSpan Delay, bool IsValue)
+    {
+        private static readonly TimeSpan Typical = TimeSpan.FromMilliseconds(30);
+
+        public static Result Value(string body, TimeSpan delay = default) =>
+            new(body, null, delay == default ? Typical : delay, IsValue: true);
+
+        public static Result Text(string body, TimeSpan delay = default) =>
+            new(body, null, delay == default ? Typical : delay, IsValue: false);
+
+        public static Result None(TimeSpan delay = default) =>
+            new(null, null, delay == default ? Typical : delay, IsValue: false);
+
+        public static Result Fail(int error) => new(null, error, Typical, IsValue: false);
+    }
+}
+
+/// <summary>Bytes for the wire, and how long the receiver takes before it starts sending them.</summary>
+/// <param name="Text">The reply, prompt included. Latin-1 on the wire.</param>
+/// <param name="Delay">The receiver's own latency, before any wire time at the line rate.</param>
+public sealed record Reply(string Text, TimeSpan Delay);
+
+/// <summary>
+/// The receiver's diagnostic log: <c>Log NNN:YYYYMMDD.HH:MM:SS:  message</c>, unquoted, on the
+/// rolled-over date, exactly as the bench unit printed it (DiagnosticLogParserTests).
+/// </summary>
+public sealed class DiagnosticLog(TimeProvider clock)
+{
+    /// <summary>The bench unit's log was full at 222 entries.</summary>
+    public const int Capacity = 222;
+
+    private readonly List<(int Number, DateTime At, string Message)> _entries = [];
+    private int _next = 1;
+
+    /// <summary>How many entries the log holds.</summary>
+    public int Count => _entries.Count;
+
+    /// <summary>How long a full read takes: about 16 s for 222 entries at 9600 baud, most of it wire time.</summary>
+    public TimeSpan ReadTime => TimeSpan.FromMilliseconds(200);
+
+    /// <summary>Adds an entry stamped with the receiver's own (rolled-over) clock.</summary>
+    public void Add(string message, int rolloverEpochs = 1)
+    {
+        DateTime at = (clock.GetUtcNow() - (SimulatedReceiver.Epoch * rolloverEpochs)).UtcDateTime;
+        _entries.Add((_next++, at, message));
+
+        // What a full log does next is unknown; this keeps the newest, numbered on.
+        if (_entries.Count > Capacity)
+        {
+            _entries.RemoveAt(0);
+        }
+    }
+
+    /// <summary>Removes every entry.</summary>
+    public void Clear()
+    {
+        _entries.Clear();
+        _next = 1;
+    }
+
+    /// <summary>One entry by its number, or null.</summary>
+    public string? Read(int number) =>
+        _entries.Where(e => e.Number == number).Select(Format).FirstOrDefault();
+
+    /// <summary>Every entry, one per line, oldest first.</summary>
+    public string ReadAll() => _entries.Count == 0 ? string.Empty : string.Join("\r\n", _entries.Select(Format));
+
+    private static string Format((int Number, DateTime At, string Message) entry) =>
+        string.Create(CultureInfo.InvariantCulture, $"Log {entry.Number:000}:{entry.At:yyyyMMdd.HH:mm:ss}:  {entry.Message}");
+}
