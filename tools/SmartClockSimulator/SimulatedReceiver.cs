@@ -7,13 +7,13 @@ namespace WinZ3805A.Simulation.SmartClock;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>The states and their order come from the bench unit; their durations do not.</b> The captures
-/// under <c>tests/WinZ3805A.Tests/Fixtures/</c> show a Z3805A going through power-up (GPS acquisition,
-/// then fine frequency adjustment), locked and stabilizing, locked, holdover with the antenna pulled,
-/// holdover with the signal back, and recovery. They show the order and what each state prints. How
-/// long each lasts depends on the oscillator, the sky and the antenna, so the durations are
-/// <see cref="Timing"/> settings with defaults that make a run watchable, and <see cref="Speed"/> runs
-/// the whole timeline faster still.
+/// <b>The states, their order and what each one answers come from the bench unit; their durations
+/// mostly do not.</b> The captures under <c>tests/WinZ3805A.Tests/Fixtures/</c> and the state runs of
+/// 2 Oct 2026 (<c>comparisons/states-2026-10-02.md</c>) took a Z3805A through power-up, lock, a forced
+/// holdover, a pulled antenna, recovery and two power cycles, and recorded what every read-only query
+/// answered in each. How long each state lasts depends on the oscillator, the sky and the antenna, so
+/// the durations are <see cref="Timing"/> settings with defaults close to what was seen, and
+/// <see cref="Speed"/> runs the timeline faster.
 /// </para>
 /// <para>
 /// Everything is computed from elapsed time on the injected <see cref="TimeProvider"/>, so a test pins
@@ -28,6 +28,18 @@ public sealed class SimulatedReceiver
     /// <summary>GPS time leads UTC by this many seconds (since 2017).</summary>
     public const int LeapSeconds = 18;
 
+    /// <summary>
+    /// The receiver's factory initial position, shown before a first fix: 34° 44′ N 135° 21′ E, height
+    /// zero. Seen on the second power cycle of 2 Oct 2026.
+    /// </summary>
+    public static readonly PositionPanel FactoryInitialPosition = new()
+    {
+        Latitude = 34 + (44 / 60.0),
+        Longitude = 135 + (21 / 60.0),
+        Height = 0,
+        Initial = true,
+    };
+
     private readonly TimeProvider _clock;
     private readonly Random _noise;
     private readonly List<Orbit> _sky;
@@ -36,13 +48,21 @@ public sealed class SimulatedReceiver
     private TimeSpan _simulatedElapsed;
     private TimeSpan _phaseStarted;
     private Phase _phase = Phase.Acquiring;
+    private Phase _coastingFrom = Phase.Locked;
     private TimeSpan? _holdoverStarted;
     private TimeSpan _lastHoldover;
     private bool _manualHoldover;
     private double _timeInterval;
-    private double _efc = -16.8528;
+    private double _efc = -16.7426;
     private TimeSpan? _surveyStarted;
+    private bool _surveyArmed;
+    private bool _cold;
     private bool _antennaConnected = true;
+    private bool _poweredOn = true;
+    // A new simulator is a receiver already in power-up when the link opened, not one whose power has
+    // just returned, so it has neither the lost first command nor the slow first screens. PowerOn does.
+    private bool _firstCommandPending;
+    private int _screensSincePowerUp = 2;
     private double _speed = 1.0;
 
     /// <summary>Starts a receiver that has just been powered up.</summary>
@@ -55,6 +75,7 @@ public sealed class SimulatedReceiver
         _noise = new Random(seed);
         _lastRealTime = clock.GetUtcNow();
         _sky = Orbit.Constellation(seed);
+        _surveyArmed = SurveyAtPowerUp;
     }
 
     /// <summary>What <c>*IDN?</c> answers: the bench unit's own identity.</summary>
@@ -94,11 +115,14 @@ public sealed class SimulatedReceiver
         }
     }
 
+    /// <summary>Whether the receiver has power. While it has none it says nothing at all.</summary>
+    public bool PoweredOn => _poweredOn;
+
     /// <summary>The six health items, any of which can be made to fail.</summary>
     public HealthPanel Health { get; set; } = new();
 
-    /// <summary>The antenna cable delay, in seconds as the receiver stores it.</summary>
-    public double AntennaDelaySeconds { get; set; } = 77e-9;
+    /// <summary>The antenna cable delay, in seconds as the receiver stores it. 60 ns on the bench unit.</summary>
+    public double AntennaDelaySeconds { get; set; } = 60e-9;
 
     /// <summary>The elevation mask in degrees.</summary>
     public int ElevationMaskDegrees { get; set; } = 10;
@@ -112,12 +136,12 @@ public sealed class SimulatedReceiver
     /// <summary>The time zone offset the receiver applies to local time.</summary>
     public (int Hours, int Minutes) TimeZone { get; set; }
 
-    /// <summary>The held position.</summary>
+    /// <summary>The held position: where the bench unit was holding on 2 Oct 2026.</summary>
     public PositionPanel HeldPosition { get; set; } = new()
     {
-        Latitude = 47 + (31 / 60.0) + (18.582 / 3600),
-        Longitude = -(122 + (12 / 60.0) + (22.092 / 3600)),
-        Height = 25.20,
+        Latitude = 47 + (31 / 60.0) + (18.546 / 3600),
+        Longitude = -(122 + (12 / 60.0) + (22.128 / 3600)),
+        Height = 38.00,
     };
 
     /// <summary>Whether a survey starts by itself at power-up. On, as the bench unit is set.</summary>
@@ -133,7 +157,7 @@ public sealed class SimulatedReceiver
     public bool EnabledLamp { get; set; }
 
     /// <summary>Hours of running time, as <c>:DIAG:LIF:COUN?</c> reports them.</summary>
-    public int LifetimeHours { get; set; } = 37_014;
+    public int LifetimeHours { get; set; } = 37_015;
 
     /// <summary>Raised when the SmartClock mode changes, which is what the diagnostic log records.</summary>
     public event EventHandler<ModeChange>? ModeChanged;
@@ -149,21 +173,55 @@ public sealed class SimulatedReceiver
     }
 
     /// <summary>The disciplining state as <c>:SYNC:STAT?</c> spells it.</summary>
-    public string SyncState => Mode switch
+    /// <remarks>
+    /// <b>Two words for holdover, and the difference is the cause.</b> A forced holdover answers
+    /// <c>HOLD</c>. One the receiver fell into because GPS went away answers <c>WAIT</c>, waiting for
+    /// GPS to come back, while its screen says <c>Holdover: GPS 1PPS invalid</c> (2 Oct 2026). Through
+    /// the minute after the antenna goes, before holdover starts, it still answers <c>LOCK</c>.
+    /// </remarks>
+    public string SyncState
     {
-        ClockMode.Locked => "LOCK",
-        ClockMode.Recovery => "REC",
-        ClockMode.Holdover => "HOLD",
-        _ => "POW",
-    };
+        get
+        {
+            Advance();
+            return _phase switch
+            {
+                Phase.Stabilizing or Phase.Locked or Phase.Coasting => "LOCK",
+                Phase.Recovery => "REC",
+                Phase.Holdover or Phase.SignalBack => _manualHoldover ? "HOLD" : "WAIT",
+                _ => "POW",
+            };
+        }
+    }
 
-    /// <summary>Whether the 1 PPS is locked to GPS, which is when <c>:SYNC:TINT?</c> has an answer.</summary>
+    /// <summary>What <c>:SYNC:HOLD:WAIT?</c> says holdover is waiting for: <c>GPS</c>, or <c>NONE</c>.</summary>
+    public string WaitingFor
+    {
+        get
+        {
+            Advance();
+            return _phase is Phase.Holdover or Phase.SignalBack && !_manualHoldover ? "GPS" : "NONE";
+        }
+    }
+
+    /// <summary>Whether the 1 PPS can be measured against GPS, which is when <c>:SYNC:TINT?</c> answers.</summary>
+    /// <remarks>
+    /// Locked, recovering, and in a forced holdover with the antenna still connected, where GPS is
+    /// still there to measure against. After the antenna goes it answers for about 18 seconds more,
+    /// then not (2 Oct 2026).
+    /// </remarks>
     public bool HasTimeInterval
     {
         get
         {
             Advance();
-            return _phase is Phase.Stabilizing or Phase.Locked or Phase.Recovery;
+            return _phase switch
+            {
+                Phase.Stabilizing or Phase.Locked or Phase.Recovery => true,
+                Phase.Coasting => _simulatedElapsed - _phaseStarted < Timing.TimeIntervalAfterLoss,
+                Phase.Holdover or Phase.SignalBack => _manualHoldover && AntennaConnected,
+                _ => false,
+            };
         }
     }
 
@@ -187,7 +245,7 @@ public sealed class SimulatedReceiver
         }
     }
 
-    /// <summary>The time figure of merit.</summary>
+    /// <summary>The time figure of merit: 9 in power-up, 4 locked while surveying, otherwise 3.</summary>
     public int Tfom
     {
         get
@@ -196,7 +254,7 @@ public sealed class SimulatedReceiver
             return _phase switch
             {
                 Phase.Acquiring or Phase.FineFrequency => 9,
-                Phase.Stabilizing when SurveyPercent is not null => 4,
+                Phase.Stabilizing or Phase.Locked when _surveyStarted is not null => 4,
                 _ => 3,
             };
         }
@@ -208,7 +266,8 @@ public sealed class SimulatedReceiver
         get
         {
             Advance();
-            return _phase switch
+            Phase phase = _phase == Phase.Coasting ? _coastingFrom : _phase;
+            return phase switch
             {
                 Phase.Locked => 0,
                 Phase.Stabilizing => 1,
@@ -218,18 +277,136 @@ public sealed class SimulatedReceiver
         }
     }
 
+    /// <summary>Whether a survey is running or about to, as <c>:GPS:POS:SURV:STAT?</c> reports it.</summary>
+    public bool Surveying
+    {
+        get
+        {
+            Advance();
+            return _surveyStarted is not null || _surveyArmed;
+        }
+    }
+
     /// <summary>The survey's progress in percent, or null when holding a position.</summary>
+    /// <remarks>Zero before the first fix of a cold start, when the survey is armed but suspended.</remarks>
     public double? SurveyPercent
     {
         get
         {
-            if (_surveyStarted is not TimeSpan started)
+            if (_surveyStarted is TimeSpan started)
             {
-                return null;
+                double percent = 0.3 + ((_simulatedElapsed - started) / Timing.Survey * 99.7);
+                return Math.Min(100, Math.Round(percent, 1));
             }
 
-            double percent = 0.3 + ((_simulatedElapsed - started) / Timing.Survey * 99.7);
-            return Math.Min(100, Math.Round(percent, 1));
+            return _surveyArmed && _cold && _phase == Phase.Acquiring ? 0 : null;
+        }
+    }
+
+    /// <summary>Whether the GPS reference is valid, as <c>:GPS:REF:VAL?</c> reports it.</summary>
+    public bool ReferenceValid
+    {
+        get
+        {
+            Advance();
+            return _phase switch
+            {
+                Phase.Acquiring => false,
+                Phase.Holdover => _manualHoldover && AntennaConnected,
+                _ => true,
+            };
+        }
+    }
+
+    /// <summary>Whether the receiver is anywhere in power-up, when most of its time queries are refused.</summary>
+    public bool InPowerUp
+    {
+        get
+        {
+            Advance();
+            return _phase is Phase.Acquiring or Phase.FineFrequency;
+        }
+    }
+
+    /// <summary>Whether the receiver is still acquiring, before it has a position.</summary>
+    public bool Acquiring
+    {
+        get
+        {
+            Advance();
+            return _phase == Phase.Acquiring;
+        }
+    }
+
+    /// <summary>The first seconds after power-up, while the GPS engine itself is still starting.</summary>
+    public bool Booting
+    {
+        get
+        {
+            Advance();
+            return _phase == Phase.Acquiring && _simulatedElapsed - _phaseStarted < Timing.Boot;
+        }
+    }
+
+    /// <summary><c>:STAT:OPER:COND?</c> as the bench unit answered it in each state (2 Oct 2026).</summary>
+    public int OperationCondition
+    {
+        get
+        {
+            Advance();
+            return _phase switch
+            {
+                Phase.Acquiring when _simulatedElapsed - _phaseStarted < Timing.Boot => 64,
+                Phase.Acquiring => 65,
+                Phase.FineFrequency => 81,
+                Phase.Stabilizing or Phase.Locked or Phase.Coasting => _surveyStarted is null ? 90 : 83,
+                Phase.Holdover when !_manualHoldover => 72,
+                _ => 88,
+            };
+        }
+    }
+
+    /// <summary><c>:STAT:OPER:HOLD:COND?</c>: 1 forced, 2 waiting for GPS, 4 once GPS is back, else 0.</summary>
+    public int HoldoverCondition
+    {
+        get
+        {
+            Advance();
+            return _phase switch
+            {
+                Phase.Holdover or Phase.SignalBack when _manualHoldover => 1,
+                Phase.Holdover => 2,
+                Phase.SignalBack or Phase.Recovery => 4,
+                _ => 0,
+            };
+        }
+    }
+
+    /// <summary><c>:STAT:OPER:POW:COND?</c>: 2 while booting, 3 through power-up, 7 after.</summary>
+    public int PowerCondition
+    {
+        get
+        {
+            Advance();
+            return _phase switch
+            {
+                Phase.Acquiring when _simulatedElapsed - _phaseStarted < Timing.Boot => 2,
+                Phase.Acquiring or Phase.FineFrequency => 3,
+                _ => 7,
+            };
+        }
+    }
+
+    /// <summary>The GPS Lock lamp: lit while locked, including the minute after the antenna goes.</summary>
+    public bool GpsLockLamp => Mode == ClockMode.Locked;
+
+    /// <summary>The Holdover lamp: lit from the start of holdover until lock, through recovery.</summary>
+    public bool HoldoverLamp
+    {
+        get
+        {
+            Advance();
+            return _holdoverStarted is not null;
         }
     }
 
@@ -246,7 +423,7 @@ public sealed class SimulatedReceiver
     /// <summary>The last holdover's duration, or the present one's while it runs.</summary>
     public TimeSpan LastHoldover => HoldoverDuration ?? _lastHoldover;
 
-    /// <summary>Whether the receiver is in holdover now.</summary>
+    /// <summary>Whether the receiver is in holdover now, forced or not.</summary>
     public bool InHoldover => Mode == ClockMode.Holdover;
 
     /// <summary>The time the receiver believes it is, in UTC, before the rollover is applied.</summary>
@@ -275,15 +452,72 @@ public sealed class SimulatedReceiver
         }
     }
 
-    /// <summary>Starts again from power-up, as a power cycle does.</summary>
-    public void PowerCycle()
+    /// <summary>Takes the power away. Nothing is answered until <see cref="PowerOn"/>.</summary>
+    public void PowerOff()
     {
         Advance();
+        _poweredOn = false;
+    }
+
+    /// <summary>Restores power: the receiver starts again from power-up.</summary>
+    /// <param name="cold">
+    /// Start as the second power cycle of 2 Oct 2026 did, with no position: the factory initial one
+    /// shown, a satellite tracked before the almanac places it, the survey suspended, and a long
+    /// acquisition. Otherwise as the first did, which found its satellites in about forty seconds.
+    /// </param>
+    public void PowerOn(bool cold = false)
+    {
+        Advance();
+        _poweredOn = true;
         _holdoverStarted = null;
         _manualHoldover = false;
         _surveyStarted = null;
+        _surveyArmed = SurveyAtPowerUp;
+        _cold = cold;
+        _firstCommandPending = true;
+        _screensSincePowerUp = 0;
         Enter(Phase.Acquiring);
     }
+
+    /// <summary>
+    /// Back to power-up without losing power, as the subsystem self-tests did (LOCK to POW, #53): no
+    /// lost first command and no slow first screen, which belong to a power cycle.
+    /// </summary>
+    public void RestartAfterSelfTest()
+    {
+        PowerOn();
+        _firstCommandPending = false;
+        _screensSincePowerUp = 2;
+    }
+
+    /// <summary>Power off and straight back on, as a power cycle does.</summary>
+    public void PowerCycle(bool cold = false)
+    {
+        PowerOff();
+        PowerOn(cold);
+    }
+
+    /// <summary>
+    /// Whether this is the first command since power came back, which the bench unit lost: it answered
+    /// a bare <c>scpi &gt; </c> with no data and no error. Asking clears it.
+    /// </summary>
+    public bool TakeFirstCommand()
+    {
+        bool first = _firstCommandPending;
+        _firstCommandPending = false;
+        return first;
+    }
+
+    /// <summary>
+    /// How long the receiver takes to start a status screen. The first after a power-up took longer
+    /// than fifteen seconds and the second 7.3 (2 Oct 2026); after that about 1.2.
+    /// </summary>
+    public TimeSpan NextScreenLatency() => _screensSincePowerUp++ switch
+    {
+        0 => Timing.FirstScreen,
+        1 => Timing.SecondScreen,
+        _ => TimeSpan.FromMilliseconds(1200),
+    };
 
     /// <summary>
     /// Jumps to a settled lock with a held position, as a receiver that has been running for a day is.
@@ -295,9 +529,14 @@ public sealed class SimulatedReceiver
     public void StartLocked()
     {
         Advance();
+        _poweredOn = true;
         _holdoverStarted = null;
         _manualHoldover = false;
         _surveyStarted = null;
+        _surveyArmed = false;
+        _cold = false;
+        _firstCommandPending = false;
+        _screensSincePowerUp = 2;
         _simulatedElapsed += TimeSpan.FromDays(1);
         _timeInterval = 1.0;
         Enter(Phase.Locked);
@@ -323,6 +562,7 @@ public sealed class SimulatedReceiver
         _manualHoldover = false;
         if (_phase is Phase.Holdover or Phase.SignalBack && AntennaConnected)
         {
+            _timeInterval = -14.0;
             Enter(Phase.Recovery);
         }
     }
@@ -339,6 +579,7 @@ public sealed class SimulatedReceiver
     {
         Advance();
         _surveyStarted = null;
+        _surveyArmed = false;
     }
 
     /// <summary>The screen <c>:SYST:STAT?</c> prints right now.</summary>
@@ -348,11 +589,13 @@ public sealed class SimulatedReceiver
 
         bool acquiring = _phase == Phase.Acquiring;
         (IReadOnlyList<TrackedSatellite> tracked, IReadOnlyList<UntrackedSatellite> notTracked) = Sky();
-        ClockMode mode = ModeOf(_phase);
-        bool gpsValid = tracked.Count > 0;
+        bool positioned = !(acquiring && _cold);
+        bool gpsValid = tracked.Count > 0 && !acquiring;
         DateTime reported = ReportedUtc;
-        bool provisional = _phase is Phase.Acquiring or Phase.FineFrequency;
-        bool gpsScale = acquiring;
+
+        // A warm start showed "Invalid: not tracking", ANT DLY 0 ns and ELEV MASK 0 deg until it had
+        // satellites (Aug and Oct 2026); a cold one showed its real settings and "inacc position".
+        bool warmAcquiring = acquiring && !_cold;
 
         return new ScreenSnapshot
         {
@@ -360,14 +603,16 @@ public sealed class SimulatedReceiver
             {
                 Phase.Acquiring or Phase.FineFrequency => OutputsSummary.Invalid,
                 Phase.Locked => OutputsSummary.Valid,
+                Phase.Coasting when _coastingFrom == Phase.Locked => OutputsSummary.Valid,
                 _ => OutputsSummary.ValidReducedAccuracy,
             },
-            Mode = mode,
+            Mode = ModeOf(_phase),
             ModeDetail = _phase switch
             {
                 Phase.Acquiring => "GPS acquisition",
                 Phase.FineFrequency or Phase.Recovery => "fine freq adj",
                 Phase.Stabilizing => "stabilizing frequency",
+                Phase.Coasting when _coastingFrom == Phase.Stabilizing => "stabilizing frequency",
                 Phase.Holdover or Phase.SignalBack => _manualHoldover ? "manually initiated" : "GPS 1PPS invalid",
                 _ => null,
             },
@@ -382,19 +627,23 @@ public sealed class SimulatedReceiver
             GpsOnePpsValid = gpsValid,
             Tracked = tracked,
             NotTracked = notTracked,
-            TimeScale = gpsScale ? "GPS" : "UTC",
-            Time = gpsScale ? reported.AddSeconds(LeapSeconds) : reported,
-            TimeProvisional = provisional,
-            ClockAdvisory = gpsValid ? "Synchronized to UTC" : "Invalid: not tracking",
-
-            // During GPS acquisition the bench unit printed ANT DLY 0 ns and ELEV MASK 0 deg, then
-            // its real settings from the next screen on: the settings are not shown until the GPS
-            // engine is up. Seen once (power-up-gps-acquisition.txt), reproduced as seen.
-            AntennaDelayNanoseconds = acquiring ? 0 : (int)Math.Round(AntennaDelaySeconds * 1e9),
-            ElevationMaskDegrees = acquiring ? 0 : ElevationMaskDegrees,
-            Position = SurveyPercent is double percent
-                ? HeldPosition with { SurveyPercent = percent, Height = HeldPosition.Height + 10.6 }
-                : HeldPosition,
+            TimeScale = acquiring ? "GPS" : "UTC",
+            Time = acquiring ? reported.AddSeconds(LeapSeconds) : reported,
+            TimeProvisional = _phase is Phase.Acquiring or Phase.FineFrequency,
+            ClockAdvisory = gpsValid ? "Synchronized to UTC"
+                : acquiring && _cold && tracked.Count > 0 ? "Invalid: inacc position"
+                : "Invalid: not tracking",
+            AntennaDelayNanoseconds = warmAcquiring ? 0 : (int)Math.Round(AntennaDelaySeconds * 1e9),
+            ElevationMaskDegrees = warmAcquiring ? 0 : ElevationMaskDegrees,
+            Position = !positioned
+                ? FactoryInitialPosition with
+                {
+                    SurveyPercent = SurveyPercent,
+                    SurveySuspended = SurveyPercent is not null && tracked.Count < 4 ? "track <4 sats" : null,
+                }
+                : _surveyStarted is not null && SurveyPercent is double percent
+                    ? HeldPosition with { SurveyPercent = percent, Height = HeldPosition.Height - 15.7 }
+                    : HeldPosition,
             Health = Health,
         };
     }
@@ -405,7 +654,7 @@ public sealed class SimulatedReceiver
         DateTimeOffset now = _clock.GetUtcNow();
         TimeSpan real = now - _lastRealTime;
         _lastRealTime = now;
-        if (real <= TimeSpan.Zero)
+        if (real <= TimeSpan.Zero || !_poweredOn)
         {
             return;
         }
@@ -435,7 +684,12 @@ public sealed class SimulatedReceiver
                 case Phase.FineFrequency:
                     Enter(Phase.Acquiring);
                     return;
-                case Phase.Stabilizing or Phase.Locked or Phase.Recovery:
+                case Phase.Stabilizing or Phase.Locked:
+                    // Not holdover yet: for about a minute it goes on saying LOCK with nothing tracked.
+                    _coastingFrom = _phase;
+                    Enter(Phase.Coasting);
+                    return;
+                case Phase.Recovery:
                     StartHoldover();
                     return;
                 case Phase.SignalBack:
@@ -446,18 +700,19 @@ public sealed class SimulatedReceiver
 
         switch (_phase)
         {
-            case Phase.Acquiring when AntennaConnected && inPhase >= Timing.Acquisition:
-                _timeInterval = 108.5;
+            case Phase.Acquiring when AntennaConnected && inPhase >= (_cold ? Timing.ColdAcquisition : Timing.Acquisition):
+                _timeInterval = 160;
                 Enter(Phase.FineFrequency);
-                if (SurveyAtPowerUp)
+                if (_surveyArmed)
                 {
                     _surveyStarted = _simulatedElapsed;
+                    _surveyArmed = false;
                 }
 
                 break;
 
             case Phase.FineFrequency:
-                _timeInterval = Decay(_timeInterval, 2.0, seconds);
+                _timeInterval = Decay(_timeInterval, 1.2, seconds);
                 if (inPhase >= Timing.FineFrequency)
                 {
                     Enter(Phase.Stabilizing);
@@ -480,17 +735,25 @@ public sealed class SimulatedReceiver
                 _timeInterval = Wander(_timeInterval, 3, seconds);
                 break;
 
-            case Phase.Holdover when AntennaConnected:
+            case Phase.Coasting when AntennaConnected:
+                Enter(_coastingFrom);
+                break;
+
+            case Phase.Coasting when inPhase >= Timing.CoastBeforeHoldover:
+                StartHoldover();
+                break;
+
+            case Phase.Holdover when AntennaConnected && !_manualHoldover:
                 Enter(Phase.SignalBack);
                 break;
 
             case Phase.SignalBack when !_manualHoldover && inPhase >= Timing.HoldoverRelease:
-                _timeInterval = -17.0;
+                _timeInterval = -12.5;
                 Enter(Phase.Recovery);
                 break;
 
             case Phase.Recovery:
-                _timeInterval = Decay(_timeInterval, 1.0, seconds);
+                _timeInterval = Wander(_timeInterval, 20, seconds);
                 if (inPhase >= Timing.Recovery)
                 {
                     _lastHoldover = _simulatedElapsed - (_holdoverStarted ?? _simulatedElapsed);
@@ -543,14 +806,13 @@ public sealed class SimulatedReceiver
     /// <summary>
     /// The predicted 24-hour holdover uncertainty, in microseconds: large just after power-up,
     /// falling as the oscillator is learned. The captures show 432.0 two minutes after power-up,
-    /// 2.0 to 6.8 within the first hours, and the comparison 0.8 after weeks of running.
+    /// 2.0 to 6.8 within the first hours, and 0.8 after weeks of running, holdover or not.
     /// </summary>
-    private double Predict()
-    {
-        double learned = Math.Max(0, (_simulatedElapsed - Timing.Acquisition - Timing.FineFrequency).TotalSeconds);
-        double settling = (432.0 * Math.Exp(-learned / 300.0)) + (2.0 * Math.Exp(-learned / 21_600.0));
-        return 0.8 + settling + (_holdoverStarted is null ? 0 : 3.0);
-    }
+    /// <remarks>
+    /// The simulator keeps the two ends: 432.0 while stabilizing straight after a power-up, which both
+    /// power cycles of 2 Oct 2026 showed, and 0.8 otherwise, holdover included, as it read all day.
+    /// </remarks>
+    private double Predict() => _phase == Phase.Stabilizing && _surveyStarted is not null ? 432.0 : 0.8;
 
     /// <summary>The present holdover uncertainty in microseconds, growing with time in holdover.</summary>
     private double Present()
@@ -563,7 +825,10 @@ public sealed class SimulatedReceiver
     private (IReadOnlyList<TrackedSatellite> Tracked, IReadOnlyList<UntrackedSatellite> NotTracked) Sky()
     {
         double t = _simulatedElapsed.TotalSeconds;
-        bool canTrack = AntennaConnected && _phase is not Phase.Acquiring && _phase is not Phase.Holdover;
+        bool acquiring = _phase == Phase.Acquiring;
+        bool booting = acquiring && _simulatedElapsed - _phaseStarted < Timing.Boot;
+        bool canTrack = AntennaConnected && _phase is not Phase.Holdover && _phase is not Phase.Coasting &&
+            (!acquiring || (_cold && !booting));
 
         List<TrackedSatellite> tracked = [];
         List<UntrackedSatellite> notTracked = [];
@@ -575,16 +840,21 @@ public sealed class SimulatedReceiver
                 continue;
             }
 
-            if (canTrack && el >= ElevationMaskDegrees + 3 && !Ignored.Contains(orbit.Prn))
+            // A cold start tracks a few before it has a position, the first one before the almanac
+            // places it: "  4  -- ---   --" on the bench unit.
+            bool coldLimit = acquiring && _cold && tracked.Count >= 3;
+            if (canTrack && !coldLimit && el >= ElevationMaskDegrees + 3 && !Ignored.Contains(orbit.Prn))
             {
                 int cn = Math.Clamp(30 + (el / 7) + _noise.Next(-1, 2), 26, 55);
-                tracked.Add(new TrackedSatellite(orbit.Prn, el, az, cn));
+                tracked.Add(acquiring && tracked.Count == 0
+                    ? new TrackedSatellite(orbit.Prn, null, null, null)
+                    : new TrackedSatellite(orbit.Prn, el, az, cn));
             }
             else
             {
-                // While acquiring, the receiver marks the satellites it is trying for; the bench unit
-                // starred about half of them.
-                bool attempting = _phase == Phase.Acquiring && AntennaConnected && orbit.Prn % 2 == 0;
+                // While a warm start acquires, it stars the satellites it is trying for; the bench
+                // unit starred about half of them.
+                bool attempting = acquiring && !_cold && AntennaConnected && orbit.Prn % 2 == 0;
                 notTracked.Add(new UntrackedSatellite(orbit.Prn, el, az, attempting));
             }
         }
@@ -595,15 +865,16 @@ public sealed class SimulatedReceiver
 
     private static ClockMode ModeOf(Phase phase) => phase switch
     {
-        Phase.Stabilizing or Phase.Locked => ClockMode.Locked,
+        Phase.Stabilizing or Phase.Locked or Phase.Coasting => ClockMode.Locked,
         Phase.Recovery => ClockMode.Recovery,
         Phase.Holdover or Phase.SignalBack => ClockMode.Holdover,
         _ => ClockMode.PowerUp,
     };
 
     /// <inheritdoc/>
-    public override string ToString() =>
-        string.Create(CultureInfo.InvariantCulture, $"{_phase} ({SyncState}), antenna {(AntennaConnected ? "connected" : "disconnected")}, {Tracked.Count} tracked");
+    public override string ToString() => !_poweredOn
+        ? "powered off"
+        : string.Create(CultureInfo.InvariantCulture, $"{_phase} ({SyncState}), antenna {(AntennaConnected ? "connected" : "disconnected")}, {Tracked.Count} tracked");
 
     /// <summary>The steps the bench unit was seen to pass through.</summary>
     private enum Phase
@@ -620,7 +891,10 @@ public sealed class SimulatedReceiver
         /// <summary>Locked to GPS.</summary>
         Locked,
 
-        /// <summary>Holdover with no GPS.</summary>
+        /// <summary>Still saying locked, with the antenna gone and nothing tracked, before holdover.</summary>
+        Coasting,
+
+        /// <summary>Holdover: forced, or with no GPS.</summary>
         Holdover,
 
         /// <summary>Holdover with the GPS back and the mode not yet changed.</summary>
@@ -647,7 +921,7 @@ public sealed class SimulatedReceiver
         public static List<Orbit> Constellation(int seed)
         {
             Random random = new(seed);
-            int[] prns = [1, 2, 5, 7, 8, 10, 14, 15, 17, 18, 19, 20, 22, 23, 24, 27, 30, 32];
+            int[] prns = [1, 2, 3, 4, 6, 7, 9, 11, 16, 17, 21, 26, 27, 30, 31];
             return [.. prns.Select(prn => new Orbit(
                 prn,
                 random.NextDouble() * 2 * Math.PI,
@@ -665,27 +939,44 @@ public sealed record ModeChange(ClockMode From, ClockMode To, bool Manual);
 
 /// <summary>How long each timed state lasts, in simulated time.</summary>
 /// <remarks>
-/// Defaults are chosen so a full power-up runs in a few minutes at normal speed. The bench unit took
-/// 22 seconds from acquisition to fine adjustment on a warm restart; a cold start or a long
-/// stabilization is much slower, and a run that needs realism sets these.
+/// The defaults are close to what the bench unit did on 2 Oct 2026 where it was measured, and chosen
+/// to keep a run watchable where it was not.
 /// </remarks>
 public sealed record ReceiverTiming
 {
-    /// <summary>Power-up: GPS acquisition, once the antenna is connected.</summary>
-    public TimeSpan Acquisition { get; init; } = TimeSpan.FromSeconds(30);
+    /// <summary>A warm start's GPS acquisition. About 40 s on the first power cycle of 2 Oct 2026.</summary>
+    public TimeSpan Acquisition { get; init; } = TimeSpan.FromSeconds(40);
 
-    /// <summary>Power-up: fine freq adj.</summary>
-    public TimeSpan FineFrequency { get; init; } = TimeSpan.FromSeconds(90);
+    /// <summary>A cold start's GPS acquisition, with no position. About 6 minutes on the second.</summary>
+    public TimeSpan ColdAcquisition { get; init; } = TimeSpan.FromMinutes(6);
 
-    /// <summary>Locked to GPS: stabilizing frequency.</summary>
+    /// <summary>The first seconds of power-up, while the GPS engine is starting and refuses some queries.</summary>
+    public TimeSpan Boot { get; init; } = TimeSpan.FromSeconds(30);
+
+    /// <summary>Power-up: fine freq adj. About 1 to 2 minutes on the bench unit.</summary>
+    public TimeSpan FineFrequency { get; init; } = TimeSpan.FromSeconds(110);
+
+    /// <summary>Locked to GPS: stabilizing frequency. Much longer on hardware; shortened to be watchable.</summary>
     public TimeSpan Stabilizing { get; init; } = TimeSpan.FromSeconds(180);
 
-    /// <summary>Holdover with the signal back, before recovery starts.</summary>
-    public TimeSpan HoldoverRelease { get; init; } = TimeSpan.FromSeconds(30);
+    /// <summary>How long it goes on saying LOCK after the antenna goes. About 54 s on the bench unit.</summary>
+    public TimeSpan CoastBeforeHoldover { get; init; } = TimeSpan.FromSeconds(54);
 
-    /// <summary>Recovery: fine freq adj.</summary>
-    public TimeSpan Recovery { get; init; } = TimeSpan.FromSeconds(60);
+    /// <summary>How long the time interval goes on answering after the antenna goes. About 18 s.</summary>
+    public TimeSpan TimeIntervalAfterLoss { get; init; } = TimeSpan.FromSeconds(18);
+
+    /// <summary>Holdover with the signal back, before recovery starts. About 54 s on the bench unit.</summary>
+    public TimeSpan HoldoverRelease { get; init; } = TimeSpan.FromSeconds(54);
+
+    /// <summary>Recovery: fine freq adj. 20 s to a minute on the bench unit.</summary>
+    public TimeSpan Recovery { get; init; } = TimeSpan.FromSeconds(55);
 
     /// <summary>A position survey from start to finish. The manual says about two hours.</summary>
     public TimeSpan Survey { get; init; } = TimeSpan.FromHours(2);
+
+    /// <summary>How long the first status screen after power-up takes to start: over 15 s on the bench unit.</summary>
+    public TimeSpan FirstScreen { get; init; } = TimeSpan.FromSeconds(16.5);
+
+    /// <summary>How long the second status screen after power-up takes to start: 7.3 s end to end.</summary>
+    public TimeSpan SecondScreen { get; init; } = TimeSpan.FromSeconds(5.3);
 }

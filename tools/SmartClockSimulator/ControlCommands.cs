@@ -18,7 +18,8 @@ public static class ControlCommands
     public const string Help =
         """
         antenna off | on          pull or reconnect the antenna (holdover, then recovery)
-        power-cycle               start again from power-up
+        power-cycle [cold]        start again from power-up; cold starts with no position
+        power off | on [cold]     take the power away (silence) and give it back
         start locked              jump straight to a settled lock
         holdover | recover        force holdover, or start recovery, as the commands would
         health <item> fail | ok   item: selftest intpwr ovenpwr ocxo efc gpsrcv
@@ -60,6 +61,22 @@ public static class ControlCommands
                 case ["power-cycle"]:
                     receiver.PowerCycle();
                     return "ok: power-up";
+
+                case ["power-cycle", "cold"]:
+                    receiver.PowerCycle(cold: true);
+                    return "ok: power-up with no position";
+
+                case ["power", "off"]:
+                    receiver.PowerOff();
+                    return "ok: powered off; nothing will be answered";
+
+                case ["power", "on"]:
+                    receiver.PowerOn();
+                    return "ok: power-up";
+
+                case ["power", "on", "cold"]:
+                    receiver.PowerOn(cold: true);
+                    return "ok: power-up with no position";
 
                 case ["start", "locked"]:
                     receiver.StartLocked();

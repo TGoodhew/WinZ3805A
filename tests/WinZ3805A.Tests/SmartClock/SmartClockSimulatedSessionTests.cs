@@ -82,7 +82,7 @@ public sealed class SmartClockSimulatedSessionTests
         SmartClockDriver driver = new(clock);
         await Connect(protocol, transport);
         receiver.AntennaConnected = false;
-        clock.Advance(TimeSpan.FromSeconds(2));
+        clock.Advance(receiver.Timing.CoastBeforeHoldover + TimeSpan.FromSeconds(2));
 
         Transaction refused = await protocol.ExecuteAsync(":SYNC:TINT?", Timeout);
         SweepInterpretation sweep = driver.InterpretSweep(await Sweep(protocol, driver));
@@ -90,11 +90,71 @@ public sealed class SmartClockSimulatedSessionTests
         Assert.True(refused.WasRejected);
         Assert.Equal("E-230", refused.PromptStatus);
         Assert.Null(sweep.Rejection);
-        Assert.Equal(ReceiverMode.Holdover, driver.InterpretSyncState(sweep.Readings.SyncState));
+        Assert.Equal("WAIT", sweep.Readings.SyncState);
         Assert.Null(sweep.Readings.TimeIntervalNanoseconds);
     }
 
-    public static TheoryData<string> States => new(["powerup", "fine", "stabilizing", "locked", "holdover", "signal-back", "recovery", "manual", "health"]);
+    /// <summary>
+    /// The first screen after a power-up arrives after its timeout: the sweep it lands in is rejected
+    /// rather than stored, and the next sweep is aligned again.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// On 2 Oct 2026 the bench unit took more than fifteen seconds to start its first screen after a
+    /// power cycle, which is longer than <c>TransactionTimeouts</c> allows a screen. The watch tool,
+    /// which reads naively, then read that screen as the next command's answer, and every answer
+    /// after it was one command late for a whole cycle. The application reads through
+    /// <see cref="LineProtocol"/>, which resynchronises after a timeout (#209), so the question was
+    /// whether that is enough when what arrives late is a 1.9 kB screen.
+    /// </para>
+    /// <para>
+    /// <b>It is not enough, and this test pins what is.</b> <see cref="LineProtocol"/> resynchronises
+    /// only after a timeout that received part of a reply; one that received nothing is taken to be
+    /// a silent receiver, so as not to slow a reconnect. A screen that is slow to <i>start</i> looks
+    /// exactly like that, so its bytes arrive after the next command and are read as its answer, and
+    /// every answer after it is one late until the link pauses. What holds the line is the sweep
+    /// guard (#209): the shifted sweep reads a screen line as its sync state and is rejected whole,
+    /// and the pause before the next sweep drains the stray reply. The defect is #643;
+    /// this test stays true either way.
+    /// </para>
+    /// <para>
+    /// Scaled down so it runs in seconds: the first screen is made 1.5 s late against a 1 s timeout,
+    /// the same shape as 16.5 s against 15.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AScreenArrivingAfterItsTimeoutCostsOneRejectedSweepAndNoBadReadings()
+    {
+        FakeTimeProvider clock = new(new DateTimeOffset(2026, 10, 2, 12, 0, 0, TimeSpan.Zero));
+        SimulatedReceiver receiver = new(clock)
+        {
+            Timing = new ReceiverTiming { FirstScreen = TimeSpan.FromSeconds(1.5), SecondScreen = TimeSpan.FromMilliseconds(200) },
+        };
+        receiver.StartLocked();
+        SimulatorTransport transport = new(new ScpiEngine(receiver, clock)) { HonourDelays = true };
+        LineProtocol protocol = new(transport, TimeProvider.System);
+        await Connect(protocol, transport);
+
+        SmartClockDriver driver = new(clock);
+        receiver.PowerCycle();
+        await protocol.ExecuteAsync("*CLS", Timeout);
+        Transaction late = await protocol.ExecuteAsync(":SYST:STAT?", TimeSpan.FromSeconds(1));
+        SweepInterpretation shifted = driver.InterpretSweep(await Sweep(protocol, driver));
+
+        // The poll cadence leaves a pause before the next sweep; that is what drains the stray reply.
+        await Task.Delay(TimeSpan.FromMilliseconds(500));
+        SweepInterpretation aligned = driver.InterpretSweep(await Sweep(protocol, driver));
+        Transaction screen = await protocol.ExecuteAsync(":SYST:STAT?", Timeout);
+
+        Assert.Equal(TransactionOutcome.TimedOut, late.Outcome);
+        Assert.NotNull(shifted.Rejection);
+        Assert.Null(aligned.Rejection);
+        Assert.Equal("POW", aligned.Readings.SyncState);
+        Assert.Equal(9, aligned.Readings.Tfom);
+        Assert.Equal(SmartClockMode.PowerUp, driver.Parse(screen.Text).Mode);
+    }
+
+    public static TheoryData<string> States => new(["powerup", "cold-powerup", "fine", "stabilizing", "locked", "coasting", "holdover", "signal-back", "recovery", "manual", "health"]);
 
     [Theory]
     [MemberData(nameof(States))]
@@ -105,6 +165,8 @@ public sealed class SmartClockSimulatedSessionTests
         await Connect(protocol, transport);
         SmartClockMode expected = Arrange(state, receiver, clock);
 
+        // A power cycle loses the first command after it, as the bench unit did; spend it.
+        await protocol.ExecuteAsync("*CLS", Timeout);
         Transaction screen = await protocol.ExecuteAsync(":SYST:STAT?", Timeout);
         ReceiverStatus status = driver.Parse(screen.Text);
         ScreenSnapshot truth = receiver.Snapshot();
@@ -139,6 +201,15 @@ public sealed class SmartClockSimulatedSessionTests
                 return SmartClockMode.Locked;
             case "locked":
                 return SmartClockMode.Locked;
+            case "coasting":
+                // The minute after the antenna goes: still locked, nothing tracked.
+                receiver.AntennaConnected = false;
+                clock.Advance(TimeSpan.FromSeconds(30));
+                return SmartClockMode.Locked;
+            case "cold-powerup":
+                receiver.PowerCycle(cold: true);
+                clock.Advance(receiver.Timing.Boot + TimeSpan.FromSeconds(5));
+                return SmartClockMode.PowerUp;
             case "holdover":
                 receiver.AntennaConnected = false;
                 clock.Advance(TimeSpan.FromMinutes(11));
@@ -196,7 +267,14 @@ internal sealed class SimulatorTransport(ScpiEngine engine) : ITransport
 {
     private readonly Pipe _pipe = new();
     private readonly LineAssembler _lines = new();
+    private Task _sending = Task.CompletedTask;
     private bool _open;
+
+    /// <summary>
+    /// Sends each reply after the receiver's own latency, in real time and in order, instead of at
+    /// once. For the tests about timing; everything else wants the replies immediately.
+    /// </summary>
+    public bool HonourDelays { get; init; }
 
     public string Description => "simulated Z3805A";
 
@@ -216,7 +294,14 @@ internal sealed class SimulatorTransport(ScpiEngine engine) : ITransport
         {
             if (engine.Receive(line) is Reply reply)
             {
-                await EmitAsync(reply.Text, cancellationToken);
+                if (HonourDelays)
+                {
+                    _sending = SendLaterAsync(_sending, reply);
+                }
+                else
+                {
+                    await EmitAsync(reply.Text, cancellationToken);
+                }
             }
         }
     }
@@ -229,6 +314,13 @@ internal sealed class SimulatorTransport(ScpiEngine engine) : ITransport
     {
         _open = false;
         await _pipe.Writer.CompleteAsync();
+    }
+
+    private async Task SendLaterAsync(Task before, Reply reply)
+    {
+        await before;
+        await Task.Delay(reply.Delay);
+        await EmitAsync(reply.Text, CancellationToken.None);
     }
 
     private async ValueTask EmitAsync(string text, CancellationToken cancellationToken)

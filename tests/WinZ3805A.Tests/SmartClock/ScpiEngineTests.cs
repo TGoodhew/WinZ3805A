@@ -219,6 +219,97 @@ public sealed class ScpiEngineTests
     }
 
     [Fact]
+    public void WithNoPowerNothingIsAnsweredAndTheFirstCommandBackIsLost()
+    {
+        // 2 Oct 2026: silence while off, then a bare prompt to whatever came first, with no error.
+        (ScpiEngine engine, SimulatedReceiver receiver, _) = Bench();
+
+        receiver.PowerOff();
+        Assert.Null(engine.Receive("*IDN?"));
+
+        receiver.PowerOn();
+        Assert.Equal("scpi > ", Send(engine, ":SYNC:STAT?"));
+        Assert.Empty(engine.QueuedErrors);
+        Assert.Equal("POW\r\nscpi > ", Send(engine, ":SYNC:STAT?"));
+    }
+
+    [Fact]
+    public void TheFirstScreensAfterPowerUpAreSlow()
+    {
+        // Over 15 s for the first and 7.3 s end to end for the second, on the bench unit.
+        (ScpiEngine engine, SimulatedReceiver receiver, _) = Bench();
+        receiver.PowerCycle();
+        Send(engine, "*CLS");
+
+        Assert.Equal(receiver.Timing.FirstScreen, engine.Receive(":SYST:STAT?")!.Delay);
+        Assert.Equal(receiver.Timing.SecondScreen, engine.Receive(":SYST:STAT?")!.Delay);
+        Assert.True(engine.Receive(":SYST:STAT?")!.Delay < TimeSpan.FromSeconds(2));
+    }
+
+    [Theory]
+    [InlineData(":SYST:DATE?")]
+    [InlineData(":SYST:TIME?")]
+    [InlineData(":PTIM:DATE?")]
+    [InlineData(":PTIM:TIME?")]
+    [InlineData(":PTIM:TIME:STR?")]
+    [InlineData(":PTIM:LEAP:ACC?")]
+    [InlineData(":SYNC:HOLD:TUNC:PRED?")]
+    [InlineData(":GPS:POS?")]
+    [InlineData(":DIAG:IDEN:GPS?")]
+    [InlineData(":GPS:SAT:TRAC:COUN?")]
+    public void ThesePowerUpRefusalsAreTheBenchUnits(string query)
+    {
+        (ScpiEngine engine, SimulatedReceiver receiver, _) = Bench();
+        receiver.PowerCycle();
+        Send(engine, "*CLS");
+
+        Assert.Equal("E-230> ", Send(engine, query));
+    }
+
+    [Fact]
+    public void AQueryResponseRepeatsThePreviousAnswer()
+    {
+        // It answered the running hours straight after :DIAG:LIF:COUN?, and the GPS engine's
+        // identity straight after :DIAG:IDEN:GPS? (2 Oct 2026).
+        (ScpiEngine engine, _, _) = Bench();
+
+        Send(engine, ":DIAG:LIF:COUN?");
+        Assert.Equal("+37015\r\nscpi > ", Send(engine, ":DIAG:QUER:RESP?"));
+        Send(engine, ":DIAG:IDEN:GPS?");
+        Assert.StartsWith("\"--\",\"SFTW P/N", Send(engine, ":DIAG:QUER:RESP?"), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AHoldoverFromLosingGpsWaitsForGps()
+    {
+        (ScpiEngine engine, SimulatedReceiver receiver, FakeTimeProvider clock) = Bench();
+        receiver.AntennaConnected = false;
+        clock.Advance(receiver.Timing.CoastBeforeHoldover + TimeSpan.FromSeconds(1));
+
+        Assert.Equal("WAIT\r\nscpi > ", Send(engine, ":SYNC:STAT?"));
+        Assert.Equal("GPS\r\nscpi > ", Send(engine, ":SYNC:HOLD:WAIT?"));
+        Assert.Equal("0\r\nscpi > ", Send(engine, ":GPS:REF:VAL?"));
+        Assert.Equal("0\r\nscpi > ", Send(engine, ":LED:GPSL?"));
+        Assert.Equal("1\r\nscpi > ", Send(engine, ":LED:HOLD?"));
+        Assert.Equal("+72\r\nscpi > ", Send(engine, ":STAT:OPER:COND?"));
+        Assert.Equal("+2\r\nscpi > ", Send(engine, ":STAT:OPER:HOLD:COND?"));
+    }
+
+    [Fact]
+    public void ASurveyAtPowerUpAnswersOnceAndItsProgressToADecimal()
+    {
+        (ScpiEngine engine, SimulatedReceiver receiver, FakeTimeProvider clock) = Bench();
+        receiver.PowerCycle();
+        Send(engine, "*CLS");
+
+        Assert.Equal("ONCE\r\nscpi > ", Send(engine, ":GPS:POS:SURV:STAT?"));
+        Assert.Equal("0\r\nscpi > ", Send(engine, ":GPS:POS:HOLD:STAT?"));
+
+        clock.Advance(receiver.Timing.Acquisition + TimeSpan.FromMinutes(2));
+        Assert.Matches(@"^\+\d+\.\d\r\nscpi > $", Send(engine, ":GPS:POS:SURV:PROG?"));
+    }
+
+    [Fact]
     public void AHeldPositionRefusesASurvey()
     {
         // #229: -300, and the route into a survey is power-up.
