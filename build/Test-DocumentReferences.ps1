@@ -398,7 +398,10 @@ foreach ($relative in $documents) {
     $full = Join-Path $repoRoot $relative
     if (-not (Test-Path $full)) { continue }
 
-    $lines = Get-Content -LiteralPath $full
+    # Wrapped, because Get-Content returns a bare string for a one-line file and nothing at all for
+    # an empty one, and strict mode refuses .Count on either. The first empty tracked document was a
+    # screen reply kept while a receiver was switched off (#639).
+    $lines = @(Get-Content -LiteralPath $full)
     $inFence = $false
 
     for ($i = 0; $i -lt $lines.Count; $i++) {
