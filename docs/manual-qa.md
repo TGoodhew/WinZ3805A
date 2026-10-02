@@ -940,6 +940,25 @@ session reading *Connecting* with the port held (#607); that half is now a test.
 - **Success:** with the cable reconnected, Connect settled on 9600-8-N-1 in about 2 s, the dialog closed itself, and the main window showed *Locked to GPS*.
 - **Before the fix,** a mouse click on Cancel nine seconds in, and Esc later, reached no handler, and the walk ran on.
 
+## 25. A second launch brings the window forward (#46, #627)
+
+**Why.** One instance runs at a time (#46): a second launch hands its activation to the running
+one and exits, and the running one brings its window back. Reopening a window hidden in the
+notification area always worked, because showing a hidden window takes the foreground. A window
+that was open but **covered** stayed behind on both Windows 10 and Windows 11 until #627, and it
+survived because nothing checked that case: section 19 reopens a hidden window. Which window is in
+front is only knowable on screen.
+
+| | |
+|---|---|
+| **Do** | With the main window open, cover it with another application's window, then click **WinZ3805A** in the Start menu. Then close the window to the notification area and click it in the Start menu again. |
+| **Pass** | Both times the window comes to the front, and no second copy starts. `app.log` has *Brought to the front: took the foreground.* for the covered window and *Brought to the front: it already was.* for the hidden one. *…the taskbar button flashes* means Windows refused the foreground: record it as a failure, because the window did not come forward. |
+
+**Last run:** 1 Oct 2026, the build with #629.
+- **Windows 10 22H2 VM, dry-run release build:** both pass, with the two log lines as above.
+- **Windows 11, Tony's development machine, Debug build:** the covered window passes (*took the foreground*).
+- **Before the fix,** the covered window stayed behind on both.
+
 ## Before a release
 
 Sections 1–4, 8, 9, 11 and 13 in full, then **12 on the published artifact** — which means the release
@@ -957,7 +976,8 @@ other check in this list would notice; **section 18 if the tray icon's code has 
 costs half a minute; **section 22 if the pin, the tray menu or the main window's title bar has
 changed**; **section 19 if window placement has changed and a second display is to hand**; **section 23 if
 window placement or the main window's layout heights have changed**; **section 24 if the
-connection dialog or the session's connect paths have changed**; **section 20 if
+connection dialog or the session's connect paths have changed**; **section 25 if single-instance
+redirection or how the main window is shown or activated has changed**; **section 20 if
 anything on the launch or connect-on-launch path has changed**, since only a real sign-in reaches it;
 **section 21 whenever `trend.db`'s schema or the history export has changed**, since an export that
 a later version cannot import loses the history of everyone who relied on it. Section 15 is not a release
