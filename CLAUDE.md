@@ -200,10 +200,14 @@ must be clean with zero warnings** — including code-style rules. Block-scoped
 namespaces are a build error (`IDE0161` is `Convert to file-scoped namespace`),
 not a suggestion — the tree is file-scoped throughout.
 
-Three things the tree does not make obvious. **Both** simulators under `tools/` are referenced
-by the test project, so changing either changes the tests; each README says how to run it
+Three things the tree does not make obvious. **All three** simulators under `tools/` are referenced
+by the test project, so changing any of them changes the tests; each README says how to run it
 against a port or to stdout, and `UccmSimulator`'s now also says which of the behaviours it
-reproduces a real module has since contradicted. `docs/how-to-use.md` and its images ship inside the package
+reproduces a real module has since contradicted. `SmartClockSimulator` (#639) is the odd one out:
+it references **nothing** from the application, the Device library included, so that running the
+parser against it is two independent readings of the receiver rather than one reading agreeing with
+itself; its screens are held byte for byte to the captures, and its README says which of its
+answers are measured and which are guesses. `docs/how-to-use.md` and its images ship inside the package
 as linked `Content` items, and `HelpDocumentTests` parses the real document and checks
 every image it names, so editing the guide can fail the tests. And `Themes/Colors.xaml`
 is also an `EmbeddedResource` that `ThemePalette` reads at run time, so colours are never
@@ -686,6 +690,7 @@ tests/WinZ3805A.Tests/        xUnit, with Fixtures/ for captured status screens 
                               Nmea/Captures/ and Uccm/Captures/ for the other two families
 tools/NmeaSimulator/          the NMEA 0183 talker the tests and the tutorial run against
 tools/UccmSimulator/          the UCCM shapes the driver was written against, before hardware
+tools/SmartClockSimulator/    a Z3805A, its screens byte for byte the captures', its states and faults on demand
 build/                        the gate scripts, the five capture, transitions and soak harnesses,
                               the two guide-image capture scripts, the sideload packager, the
                               repair-measurement harness for a test VM (#597), the palette

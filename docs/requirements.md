@@ -196,7 +196,8 @@ C:\Users\Tony\source\WinZ3805A\
 │       └── Uccm/Captures/             Captured UCCM sittings, bytes verbatim (#416, #481, #534)
 └── tools/
     ├── NmeaSimulator/                 Console NMEA talker for driving the §7 seam without hardware (#310)
-    └── UccmSimulator/                 The UCCM shapes the driver was written against, before hardware (#416)
+    ├── UccmSimulator/                 The UCCM shapes the driver was written against, before hardware (#416)
+    └── SmartClockSimulator/           A Z3805A whose screens match the captures byte for byte; states and faults on demand (#639)
 ```
 
 *(Tree regenerated from the working copy on 29 Aug 2026, #316. The original named a `SettingsService` and a `HealthState` model, neither of which exists: settings are the `*Preferences` records persisted through `JsonPreferenceFile`, and health is carried on `ReceiverStatus` as its health items and `ClockAdvisory`.)*

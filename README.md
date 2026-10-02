@@ -376,6 +376,7 @@ src/WinZ3805A.Device/         class library — no UI references
 tests/WinZ3805A.Tests/        xUnit, with Fixtures/ for captured SmartClock status screens, Nmea/Captures/ for captured talker cycles and Uccm/Captures/ for captured UCCM sittings
 tools/NmeaSimulator/          the NMEA 0183 talker the tests and the tutorial run against
 tools/UccmSimulator/          a UCCM module that is not one — the shapes the driver was written against, before hardware
+tools/SmartClockSimulator/    a Z3805A that is not one — its screens match the captures byte for byte, and its states and faults come on demand
 build/                        the CI gate scripts and their inputs (palette/, fluent-stock-colours.txt), the three capture harnesses, the UCCM transitions watcher, the soak watcher, the two guide-image capture scripts, the asset generator, and the sideload, signing and WACK packaging scripts
 .github/workflows/ci.yml      the gates in their own jobs, alongside the Debug and Release x64 builds and the tests
 ```
