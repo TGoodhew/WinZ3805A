@@ -72,7 +72,7 @@ internal static class Program
         {
             BaudRate = Integer(args, "--baud") ?? 9600,
             Announce = args.Contains("--announce"),
-            Trace = line => Console.WriteLine(line),
+            Trace = line => Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"{DateTimeOffset.Now:HH:mm:ss.fff} {line}")),
         };
 
         if (args.Contains("--stdout"))
@@ -182,14 +182,20 @@ internal static class Program
     /// <summary>One control client at a time, a line in and a line out.</summary>
     private static async Task ServeControlAsync(string name, SimulatedReceiver receiver, ScpiEngine engine, SimulatorLink link, CancellationToken stop)
     {
+        // Everything for one client sits inside the try, disposal included. The first version caught
+        // only the reading loop, so a client that hung up after its answer made the writer's flush on
+        // disposal throw outside it, the task faulted with nobody watching, and the control pipe
+        // stopped accepting after its second command (the QA pass, 2 Oct 2026). Any number of
+        // instances is allowed so the next one can be created before the last is fully released.
         while (!stop.IsCancellationRequested)
         {
-            await using NamedPipeServerStream pipe = new(name, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
-            await pipe.WaitForConnectionAsync(stop);
-            using StreamReader reader = new(pipe, Encoding.ASCII, leaveOpen: true);
-            await using StreamWriter writer = new(pipe, Encoding.ASCII, leaveOpen: true) { AutoFlush = true, NewLine = "\n" };
             try
             {
+                await using NamedPipeServerStream pipe = new(
+                    name, PipeDirection.InOut, NamedPipeServerStream.MaxAllowedServerInstances, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+                await pipe.WaitForConnectionAsync(stop);
+                using StreamReader reader = new(pipe, Encoding.ASCII, leaveOpen: true);
+                StreamWriter writer = new(pipe, Encoding.ASCII, leaveOpen: true) { AutoFlush = true, NewLine = "\n" };
                 while (await reader.ReadLineAsync(stop) is string line)
                 {
                     string answer = ControlCommands.Apply(line, receiver, engine, link);
@@ -197,9 +203,14 @@ internal static class Program
                     await writer.WriteLineAsync(answer.ReplaceLineEndings(" | "));
                 }
             }
-            catch (IOException)
+            catch (OperationCanceledException) when (stop.IsCancellationRequested)
             {
-                // The client went; wait for the next one.
+                return;
+            }
+            catch (Exception ex) when (ex is IOException or ObjectDisposedException or InvalidOperationException)
+            {
+                // The client went mid-conversation. Say so, and wait for the next one.
+                Console.WriteLine($"[control] client went: {ex.Message}");
             }
         }
     }
@@ -276,10 +287,19 @@ internal static class Program
         Console.WriteLine($@"Z3805A on \\.\pipe\{name}. Ctrl+C to stop.");
         while (!stop.IsCancellationRequested)
         {
-            await using NamedPipeServerStream pipe = new(name, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
-            await pipe.WaitForConnectionAsync(stop);
-            Console.WriteLine("* client connected");
-            await link.RunAsync(pipe, stop);
+            try
+            {
+                await using NamedPipeServerStream pipe = new(
+                    name, PipeDirection.InOut, NamedPipeServerStream.MaxAllowedServerInstances, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+                await pipe.WaitForConnectionAsync(stop);
+                Console.WriteLine("* client connected");
+                await link.RunAsync(pipe, stop);
+            }
+            catch (IOException ex)
+            {
+                // A client leaving can make the pipe's disposal throw; serve the next one regardless.
+                Console.WriteLine($"* client went: {ex.Message}");
+            }
         }
 
         return 0;
@@ -294,18 +314,27 @@ internal static class Program
         Console.WriteLine($@"Z3805A connecting to \\.\pipe\{name}. Ctrl+C to stop.");
         while (!stop.IsCancellationRequested)
         {
-            await using NamedPipeClientStream pipe = new(".", name, PipeDirection.InOut, PipeOptions.Asynchronous);
             try
             {
-                await pipe.ConnectAsync(TimeSpan.FromSeconds(5), stop);
+                await using NamedPipeClientStream pipe = new(".", name, PipeDirection.InOut, PipeOptions.Asynchronous);
+                try
+                {
+                    await pipe.ConnectAsync(TimeSpan.FromSeconds(5), stop);
+                }
+                catch (TimeoutException)
+                {
+                    continue;
+                }
+
+                Console.WriteLine("* connected");
+                await link.RunAsync(pipe, stop);
             }
-            catch (TimeoutException)
+            catch (IOException ex)
             {
-                continue;
+                // The VM went, or its pipe was busy; try again, as a cable plugged back in would.
+                Console.WriteLine($"* pipe went: {ex.Message}");
             }
 
-            Console.WriteLine("* connected");
-            await link.RunAsync(pipe, stop);
             await Task.Delay(1000, stop);
         }
 
