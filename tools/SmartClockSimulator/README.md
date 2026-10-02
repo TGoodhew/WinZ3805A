@@ -23,7 +23,7 @@ even the Device library. It is checked against the bench unit in two ways:
 1. **Its screens are the bench unit's, byte for byte.** `StatusScreenWriterTests` types out the values
    each capture under [`tests/WinZ3805A.Tests/Fixtures/`](../../tests/WinZ3805A.Tests/Fixtures/README.md)
    shows. It then requires the simulator to print that capture exactly, every space, underscore and
-   CRLF. All ten captures pass, and a new capture without a matching test fails `EveryCaptureHasASnapshot`.
+   CRLF. All eleven captures pass, and a new capture without a matching test fails `EveryCaptureHasASnapshot`.
 2. **Its wire behaviour is §7.2's**, which was itself corrected against the bench unit (#78).
    `ScpiEngineTests` checks the rules that once cost a client its connection:
    - the error prompt names the error queue, not the last command;
@@ -54,15 +54,15 @@ dotnet run --project tools\SmartClockSimulator -- --pipe-client winz-qa --start 
 | `--speed <factor>` | `1` | Runs the timeline faster. The clock the receiver reports stays real. |
 | `--baud <rate>` | `9600` | Paces replies at the line rate, so a status screen takes the ~2 s of wire time it takes on hardware. Use `0` for instant. |
 | `--echo` | off | Echo each command, as `FDUPLEX ON` does. The bench unit does not echo. |
-| `--no-leading-space` | | Values without the space §7.2 records before them. See the table below. |
-| `--no-announce` | | No banner and no framing glitch when a client connects. |
+| `--leading-space` | off | A space before each value, as §7.2 records. The bench unit sends none. |
+| `--announce` | off | The banner and framing glitch §7.2 records on connecting. The bench unit showed neither on 2 Oct 2026. |
 | `--control <name>` | | Also take control commands on `\\.\pipe\<name>`. |
 | `--compare COMn` | | Compare against a real receiver. See *Comparing it with the bench unit*. |
 
 **Connecting a VM to it.** A VM's serial port behind a named pipe carries no DTR, so the simulator
-cannot see the guest open its port. In `--pipe-client` mode, give `--no-announce`. Otherwise the
-banner goes out to nobody and the glitch fires on whatever the guest sends first. The application
-copes either way: §7.2's connect sequence is built for a receiver that says nothing.
+cannot see the guest open its port. Leave `--announce` off there. Otherwise the banner goes out to
+nobody and the glitch fires on whatever the guest sends first. The application copes either way:
+§7.2's connect sequence is built for a receiver that says nothing.
 
 ### Control commands
 
@@ -105,33 +105,39 @@ because that depends on the oscillator, the sky and how long the unit was off. T
 
 ## What is measured and what is not
 
-Read this before trusting a green test that runs through the simulator. The comparison session
-settles the right-hand column a row at a time.
+Read this before trusting a green test that runs through the simulator.
+
+**Compared with the bench unit on 2 Oct 2026.** `--compare` asked both the same 71 read-only
+queries. 65 answers first differed in shape. After the fixes below, 4 differ, and all 4 only in
+their values: a checksum digit, which log entry comes first, and the readings on the screen and
+in the log. The screens match line for line in width and structure. The error queue the run left
+behind read back identically, four entries deep.
 
 | Behaviour | Source |
 |---|---|
-| The status screen's layout: every column, width, label, underscore and trailing space, in all ten captured states | **Bench unit**, byte for byte |
+| The status screen's layout: every column, width, label, underscore and trailing space, in all eleven captured states | **Bench unit**, byte for byte |
+| Readings scaled to the unit that keeps them at one or more: `+300 ps`, `800 ns` | **Bench unit**, 2 Oct 2026 (`locked-to-gps-sub-unit-readings.txt`) |
 | `ANT DLY 0 ns` and `ELEV MASK 0 deg` during GPS acquisition | **Bench unit**, once (`power-up-gps-acquisition.txt`) |
-| The `scpi > ` and `E-nnn> ` prompts: the newest error shown, the oldest read, the clean prompt on the read that empties the queue | **Bench unit** (§7.2) |
+| The `scpi > ` and `E-nnn> ` prompts: the newest error shown, the oldest read, the clean prompt on the read that empties the queue | **Bench unit** (§7.2), and replayed identically by the comparison |
 | No echo; CR, LF and CRLF all end a command | **Bench unit** (§7.2) |
-| The banner on opening the port, and `-362` on the first command | **Bench unit** (§7.2). The banner's exact bytes were never captured: it is the identity, CRLF and a prompt here |
+| **No space before a value**: `+3`, `LOCK` | **Bench unit**, 2 Oct 2026: none in 70 replies. §7.2 records one; `--leading-space` reproduces that |
+| **No banner and no `-362`** on connecting | **Bench unit**, 2 Oct 2026, in two openings, one with DTR asserted at open and one raising it later. §7.2 records both on 21 Aug 2026; `--announce` reproduces that, with the banner as the identity, CRLF and a prompt |
 | `:SYNC:TINT?` unlocked, and `:PTIM:LEAP:DATE?`/`DUR?` with nothing announced: no data, `E-230` | **Bench unit** (§7.3.1, §10.14) |
+| `:SYNC:HOLD:TUNC:PRES?` outside holdover and `:GPS:POS:SURV:PROG?` with no survey: no data, `E-221` | **Bench unit**, 2 Oct 2026. The 58503A guide gives `-230` for the first |
 | The §8.5 undocumented queries answer `-113` | **Bench unit** (§8.5) |
-| `*IDN?`, `:SYST:DATE?`, `:SYST:TIME?`, `:PTIM:DATE?`, `:PTIM:TIME?`, `:SYNC:TFOM?`, `:SYNC:FFOM?`, `:SYNC:TINT?`, `:SYNC:HOLD:DUR?`, `:GPS:REF:ADEL?`, `:DIAG:ROSC:EFC:REL?`, `:GPS:SAT:TRAC:COUN?`, `:SYST:STAT:LENG?`, `:PTIM:LEAP:ACC?`, `:PTIM:TCOD:FORM?`, `:DIAG:IDEN:GPS?`, `:DIAG:TEST:RES?`, `:DIAG:TEST?` | **Bench unit**, formats from `Fixtures/README.md`, §7.3, #37 and the parser tests |
-| `:GPS:SAT:TRAC:IGN?` answering `+0`, and `:GPS:SAT:TRAC:INCL?` putting its list on the second line | **Bench unit** (`SatelliteTrackingParser`) |
-| The diagnostic log's form, `Log NNN:YYYYMMDD.HH:MM:SS:  message`, and its two messages | **Bench unit** (`DiagnosticLogParserTests`) |
+| Every other query's form: the integers signed, the reals five decimals and a three-digit exponent, the threshold an integer (`+86400`), the uncertainties `+0.8E-006`, booleans `0` and `1`, `:SYNC:HOLD:WAIT?` `NONE`, `:SYST:COMM?` `SER1`, `:DIAG:QUER:RESP?` the GPS engine's identity, the position as nine parts, the tracking lists on their first line, `*SRE?` `+136`, the condition registers `+90` and `+7` | **Bench unit**, 2 Oct 2026, for all 71 queries in `Comparison.cs` |
+| `:SYST:ERR?` with nothing queued: `+0,"No error"` | **Bench unit**, 2 Oct 2026 |
+| The full log: a status line (`Log status: 222 entries (overwriting)`), a blank line, unquoted entries with two spaces after the time, two blank lines. A single entry: quoted, one space | **Bench unit**, 2 Oct 2026 |
 | `:PTIM:TCOD?`, format T2 with its checksum, sent on the receiver's tick about 509 ms before the second | **Bench unit** (#37) |
-| A survey refused with `-300` while a position is held | **Bench unit** (#229) |
-| Timings: 30 ms for a query, 1.5 s for a screen before its wire time, 0.9 s for a lamp write, 9.67 s for a position setter, 12.4 s and 11.6 s for the ALL and GPS tests | **Bench unit** (§7.2, §7.3, #440, #256, #53) |
+| A survey refused with `-300` while a position is held; survey at power-up on | **Bench unit** (#229; 2 Oct 2026) |
+| Timings: 15 to 50 ms for a query, 3.2 to 3.5 s for a screen, 14 s for the whole log, 0.9 s for a lamp write, 9.67 s for a position setter, 12.4 s and 11.6 s for the ALL and GPS tests | **Bench unit** (2 Oct 2026, §7.3, #440, #256, #53) |
 | `*TST?` and the subsystem tests taking the receiver back to power-up | **Bench unit** for the subsystem tests (#53). `*TST?` was never run |
-| **A space before every value** (` +3`) | §7.2 says so. **The identity and the screen have none on the wire**, which the raw captures show; whether the numbers do is the first thing to compare. `--no-leading-space` turns it off |
 | The health failure: `[ Error ]` and `Err` | **Manual** (p. 3-18), never seen |
 | `Holdover: manually initiated` | **Manual** (p. 3-13), never seen |
-| A time interval over a microsecond printed in `us` | **Manual** sample screen; the threshold is a guess |
-| Booleans unsigned (`0`, `1`) | One query (`:PTIM:LEAP:STAT?`) answered `0`. Two commits say the same of `:LED:ACT?`, while one comment says `+0`. **Guess** |
+| A time interval of a microsecond or more printed in `us` | **Manual** sample screen; never seen |
+| `Holdover started, temporary` in the log | **Bench unit** wrote it; what causes it is not known, so the simulator never does |
+| What the condition registers and `:SYNC:HOLD:WAIT?` read in any state but locked | **Guess**: they stay at the locked values |
 | The error queue's capacity, 30 | **Guess**. Five were read back as five; overflow to `-350` was seen but not counted |
-| `:SYST:ERR?` with nothing queued: `+0,"No error"` | **Guess** (SCPI-99). The application accepts either `0,` or the words |
-| `:SYST:COMM?`, `:GPS:POS?` and its siblings, `:GPS:POS:SURV:*?`, `:PTIM:TIME:STR?`, `:PTIM:TZON?`, `:DIAG:QUER:RESP?`, the `:STAT:` registers, `:SYNC:HOLD:TUNC:*?` | **Guess** in form. None has been asked on the bench unit with its answer recorded |
 | A holdover past 99 minutes; a day of the month below ten; satellites beyond twelve rows | **Guess** |
 | How long each state lasts; the sky; the noise on the time interval and the control voltage | **Made up**, to be plausible |
 

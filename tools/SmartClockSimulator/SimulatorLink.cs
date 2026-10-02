@@ -126,11 +126,19 @@ public sealed class SimulatorLink(ScpiEngine engine, TimeProvider clock)
 
     /// <summary>Whether a new connection gets the banner and the framing glitch (§7.2).</summary>
     /// <remarks>
-    /// Off when nothing can see the client open the port — a VM's serial port behind a named pipe
-    /// carries no DTR — because a banner sent then is lost and a glitch armed then fires on the wrong
-    /// command.
+    /// <para>
+    /// Off by default. §7.2 records both on the bench unit on 21 Aug 2026, but the comparison on
+    /// 2 Oct 2026 opened the port with DTR asserted, and then raised DTR on an open port, and saw
+    /// neither: no banner in five seconds, and the first <c>*CLS</c> answered cleanly. Turn it on to
+    /// show a client the behaviour §7.2 describes, which the application is built to survive.
+    /// </para>
+    /// <para>
+    /// Leave it off where nothing can see the client open the port, too: a VM's serial port behind a
+    /// named pipe carries no DTR, so a banner sent on connecting is lost and a glitch armed then
+    /// fires on the wrong command.
+    /// </para>
     /// </remarks>
-    public bool Announce { get; set; } = true;
+    public bool Announce { get; set; }
 
     /// <summary>Written for each command and reply, for a console to show.</summary>
     public Action<string>? Trace { get; set; }

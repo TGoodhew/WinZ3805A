@@ -28,8 +28,8 @@ internal static class Program
           --speed <factor>       run the timeline faster; the reported clock stays real (default 1)
           --baud <rate>          the pace replies are sent at; 0 for instant (default 9600)
           --echo                 echo commands, as FDUPLEX ON does (the bench unit does not)
-          --no-leading-space     values without the space §7.2 records before them
-          --no-announce          no banner and no framing glitch on connect
+          --leading-space        a space before each value, as §7.2 records (the bench unit has none)
+          --announce             the banner and framing glitch §7.2 records on connecting
           --control <name>       also take control commands on \\.\pipe\<name>
           --seed <n>             the noise seed (default 3625)
 
@@ -56,9 +56,9 @@ internal static class Program
         ScpiEngine engine = new(receiver, clock)
         {
             Echo = args.Contains("--echo"),
-            LeadingSpace = !args.Contains("--no-leading-space"),
+            LeadingSpace = args.Contains("--leading-space"),
         };
-        SeedLog(engine);
+        SeedLog(engine, receiver);
 
         if (Option(args, "--start") is "locked")
         {
@@ -68,7 +68,7 @@ internal static class Program
         SimulatorLink link = new(engine, clock)
         {
             BaudRate = Integer(args, "--baud") ?? 9600,
-            Announce = !args.Contains("--no-announce"),
+            Announce = args.Contains("--announce"),
             Trace = line => Console.WriteLine(line),
         };
 
@@ -121,13 +121,9 @@ internal static class Program
         return 1;
     }
 
-    /// <summary>A few entries in the log, so the Diagnostics page has something to read at once.</summary>
-    private static void SeedLog(ScpiEngine engine)
-    {
-        engine.Log.Add("GPS lock started");
-        engine.Log.Add("Holdover started, not tracking GPS");
-        engine.Log.Add("GPS lock started");
-    }
+    /// <summary>A full log, as the bench unit's is, so the Diagnostics page reads what it reads on hardware.</summary>
+    private static void SeedLog(ScpiEngine engine, SimulatedReceiver receiver) =>
+        engine.Log.FillLikeTheBenchUnit(receiver.ReportedUtc.AddHours(-1));
 
     /// <summary>Prints every catalogued query's answer, so the shapes can be eyeballed.</summary>
     private static int Demonstrate(ScpiEngine engine)

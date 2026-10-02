@@ -60,7 +60,7 @@ public sealed class ScpiEngineTests
 
         Assert.Equal("E-113> ", Send(engine, ":NO:SUCH:NODE?"));
         Assert.Equal("SYMMETRICOM,Z3805A,3625A02931,1.01.03-A\r\nE-113> ", Send(engine, "*IDN?"));
-        Assert.Equal(" LOCK\r\nE-113> ", Send(engine, ":SYNC:STAT?"));
+        Assert.Equal("LOCK\r\nE-113> ", Send(engine, ":SYNC:STAT?"));
         Assert.EndsWith("\r\nE-113> ", Send(engine, ":GPS:SAT:TRAC:COUN?"), StringComparison.Ordinal);
     }
 
@@ -72,11 +72,13 @@ public sealed class ScpiEngineTests
         Send(engine, ":NO:SUCH:NODE?");                    // -113
         Assert.Equal("E-109> ", Send(engine, ":GPS:REF:ADEL")); // -109, no value given
 
-        Assert.Equal(" -113,\"Undefined header\"\r\nE-109> ", Send(engine, ":SYST:ERR?"));
+        Assert.Equal("-113,\"Undefined header\"\r\nE-109> ", Send(engine, ":SYST:ERR?"));
 
         // The read that empties the queue already comes back with the ordinary prompt.
-        Assert.Equal(" -109,\"Missing parameter\"\r\nscpi > ", Send(engine, ":SYST:ERR?"));
-        Assert.Equal(" +0,\"No error\"\r\nscpi > ", Send(engine, ":SYST:ERR?"));
+        Assert.Equal("-109,\"Missing parameter\"\r\nscpi > ", Send(engine, ":SYST:ERR?"));
+
+        // The empty queue's answer, confirmed on the bench unit on 2 Oct 2026.
+        Assert.Equal("+0,\"No error\"\r\nscpi > ", Send(engine, ":SYST:ERR?"));
     }
 
     [Fact]
@@ -111,7 +113,7 @@ public sealed class ScpiEngineTests
 
         Send(engine, ":SYST:COMM:SER1:FDUP ON");
 
-        Assert.Equal(":SYNC:TFOM?\r\n +3\r\nscpi > ", Send(engine, ":SYNC:TFOM?"));
+        Assert.Equal(":SYNC:TFOM?\r\n+3\r\nscpi > ", Send(engine, ":SYNC:TFOM?"));
     }
 
     [Theory]
@@ -123,7 +125,7 @@ public sealed class ScpiEngineTests
     {
         (ScpiEngine engine, _, _) = Bench();
 
-        Assert.Equal(" LOCK\r\nscpi > ", Send(engine, command));
+        Assert.Equal("LOCK\r\nscpi > ", Send(engine, command));
     }
 
     [Fact]
@@ -139,16 +141,81 @@ public sealed class ScpiEngineTests
     }
 
     [Fact]
-    public void ANonEmptyInclusionListArrivesOnTheSecondLine()
+    public void ValuesCarryNoLeadingSpace()
     {
-        // SatelliteTrackingParser, from the bench unit on 20 Aug 2026.
+        // §7.2 recorded a space before every value. The bench unit, compared on 2 Oct 2026, sent
+        // none in 70 replies, and the simulator follows the receiver.
         (ScpiEngine engine, _, _) = Bench();
 
-        string[] lines = Send(engine, ":GPS:SAT:TRAC:INCL?").Split("\r\n");
+        Assert.Equal("+3\r\nscpi > ", Send(engine, ":SYNC:TFOM?"));
 
-        Assert.Equal(string.Empty, lines[0]);
-        Assert.StartsWith("+1,+2,+3,", lines[1], StringComparison.Ordinal);
-        Assert.Equal(" +0\r\nscpi > ", Send(engine, ":GPS:SAT:TRAC:IGN?"));
+        engine.LeadingSpace = true;
+        Assert.Equal(" +3\r\nscpi > ", Send(engine, ":SYNC:TFOM?"));
+    }
+
+    [Fact]
+    public void TheTrackingListsAreOnTheFirstLine()
+    {
+        // 2 Oct 2026: no blank line before the inclusion list, and an empty list is +0.
+        (ScpiEngine engine, _, _) = Bench();
+
+        Assert.StartsWith("+1,+2,+3,", Send(engine, ":GPS:SAT:TRAC:INCL?"), StringComparison.Ordinal);
+        Assert.Equal("+0\r\nscpi > ", Send(engine, ":GPS:SAT:TRAC:IGN?"));
+    }
+
+    [Theory]
+    [InlineData(":SYNC:HOLD:DUR:THR?", "+86400")]
+    [InlineData(":SYNC:HOLD:WAIT?", "NONE")]
+    [InlineData(":SYST:COMM?", "SER1")]
+    [InlineData(":GPS:POS:HOLD:STAT?", "1")]
+    [InlineData(":GPS:POS:SURV:STAT?", "0")]
+    [InlineData(":GPS:POS:SURV:STAT:POW?", "1")]
+    [InlineData("*SRE?", "+136")]
+    [InlineData(":STAT:OPER:COND?", "+90")]
+    [InlineData(":STAT:OPER:POW:COND?", "+7")]
+    public void TheseAnswerAsTheBenchUnitDid(string query, string expected)
+    {
+        // Each was a guess until the comparison of 2 Oct 2026, and each guess was wrong.
+        (ScpiEngine engine, _, _) = Bench();
+
+        Assert.Equal(expected + "\r\nscpi > ", Send(engine, query));
+    }
+
+    [Theory]
+    [InlineData(":SYNC:HOLD:TUNC:PRES?")]
+    [InlineData(":GPS:POS:SURV:PROG?")]
+    public void OutsideTheirStateTheseAreASettingsConflict(string query)
+    {
+        // -221 on the bench unit, where the 58503A guide gives -230 for the first.
+        (ScpiEngine engine, _, _) = Bench();
+
+        Assert.Equal("E-221> ", Send(engine, query));
+    }
+
+    [Fact]
+    public void ThePredictedUncertaintyIsMicrosecondsOverAFixedExponent()
+    {
+        // "+0.8E-006,0" on the bench unit.
+        (ScpiEngine engine, _, _) = Bench();
+
+        Assert.Matches(@"^\+\d+\.\dE-006,0\r\nscpi > $", Send(engine, ":SYNC:HOLD:TUNC:PRED?"));
+    }
+
+    [Fact]
+    public void TheLogReadsInBothOfTheBenchUnitsForms()
+    {
+        (ScpiEngine engine, _, _) = Bench();
+        engine.Log.Add("GPS lock started");
+
+        string all = Send(engine, ":DIAG:LOG:READ:ALL?");
+        string one = Send(engine, ":DIAG:LOG:READ? 1");
+
+        // The whole log: a status line, a blank line, unquoted entries with two spaces, blank lines.
+        Assert.StartsWith("Log status: 1 entries\r\n\r\nLog 001:", all, StringComparison.Ordinal);
+        Assert.EndsWith(":  GPS lock started\r\n\r\n\r\nscpi > ", all, StringComparison.Ordinal);
+
+        // One entry: quoted, with one space.
+        Assert.Matches(@"^""Log 001:\d{8}\.\d\d:\d\d:\d\d: GPS lock started""\r\nscpi > $", one);
     }
 
     [Fact]
