@@ -1,0 +1,514 @@
+# Watching COM3 from 2026-10-02 12:53:48 -07:00
+
+## Cycle 1, 12:53:50
+
+- `*IDN?` (78 ms): `SYMMETRICOM,Z3805A,3625A02931,1.01.03-A⏎scpi > `
+- `*ESE?` (31 ms): `+0⏎scpi > `
+- `*SRE?` (16 ms): `+136⏎scpi > `
+- `*STB?` (31 ms): `+0⏎scpi > `
+- `:SYST:STAT:LENG?` (31 ms): `+23⏎scpi > `
+- `:SYST:DATE?` (47 ms): `+2007,+2,+16⏎scpi > `
+- `:SYST:TIME?` (47 ms): `+19,+53,+51⏎scpi > `
+- `:SYST:COMM?` (31 ms): `SER1⏎scpi > `
+- `:SYNC:STAT?` (31 ms): `LOCK⏎scpi > `
+- `:SYNC:TFOM?` (16 ms): `+3⏎scpi > `
+- `:SYNC:FFOM?` (31 ms): `+0⏎scpi > `
+- `:SYNC:TINT?` (32 ms): `-3.9E-009⏎scpi > `
+- `:SYNC:HOLD:DUR?` (46 ms): `+1.44800E+003,0⏎scpi > `
+- `:SYNC:HOLD:DUR:THR?` (47 ms): `+86400⏎scpi > `
+- `:SYNC:HOLD:DUR:THR:EXC?` (32 ms): `0⏎scpi > `
+- `:SYNC:HOLD:TUNC:PRED?` (46 ms): `+0.8E-006,0⏎scpi > `
+- `:SYNC:HOLD:TUNC:PRES?` (47 ms): `E-221> `
+- `:SYNC:HOLD:WAIT?` (32 ms): `NONE⏎E-221> `
+- `:GPS:REF:VAL?` (31 ms): `1⏎E-221> `
+- `:GPS:REF:ADEL?` (47 ms): `+6.00000E-008⏎E-221> `
+- `:GPS:POS?` (93 ms): `N,+47,+31,+1.85450E+001,W,+122,+12,+2.21260E+001,+3.80100E+001⏎E-221> `
+- `:GPS:POS:ACT?` (125 ms): `N,+47,+31,+1.85460E+001,W,+122,+12,+2.21280E+001,+3.80000E+001⏎E-221> `
+- `:GPS:POS:HOLD:LAST?` (125 ms): `N,+47,+31,+1.85450E+001,W,+122,+12,+2.21260E+001,+3.80100E+001⏎E-221> `
+- `:GPS:POS:HOLD:STAT?` (47 ms): `1⏎E-221> `
+- `:GPS:POS:SURV:PROG?` (32 ms): `E-221> `
+- `:GPS:POS:SURV:STAT?` (31 ms): `0⏎E-221> `
+- `:GPS:POS:SURV:STAT:POW?` (47 ms): `1⏎E-221> `
+- `:GPS:SAT:TRAC?` (62 ms): `+3,+4,+6,+7,+9,+16,+26,+31⏎E-221> `
+- `:GPS:SAT:TRAC:COUN?` (47 ms): `+8⏎E-221> `
+- `:GPS:SAT:TRAC:EMAN?` (31 ms): `+10⏎E-221> `
+- `:GPS:SAT:TRAC:IGN?` (32 ms): `+0⏎E-221> `
+- `:GPS:SAT:TRAC:IGN:COUN?` (46 ms): `+0⏎E-221> `
+- `:GPS:SAT:TRAC:IGN:STAT? 5` (32 ms): `0⏎E-221> `
+- `:GPS:SAT:TRAC:INCL?` (172 ms): `+1,+2,+3,+4,+5,+6,+7,+8,+9,+10,+11,+12,+13,+14,+15,+16,+17,+18,+19,+20,+21,+22,+23,+24,+25,+26,+27,+28,+29,+30,+31,+32⏎E-221> `
+- `:GPS:SAT:TRAC:INCL:COUN?` (46 ms): `+32⏎E-221> `
+- `:GPS:SAT:TRAC:INCL:STAT? 5` (47 ms): `1⏎E-221> `
+- `:GPS:SAT:VIS:PRED?` (63 ms): `+3,+4,+6,+7,+9,+11,+16,+26,+28,+31⏎E-221> `
+- `:GPS:SAT:VIS:PRED:COUN?` (47 ms): `+10⏎E-221> `
+- `:PTIM:TCOD?` (500 ms): `T2200702161953553000047⏎E-221> `
+- `:PTIM:TCOD:FORM?` (31 ms): `F2⏎E-221> `
+- `:PTIM:DATE?` (47 ms): `+2007,+2,+16⏎E-221> `
+- `:PTIM:TIME?` (31 ms): `+19,+53,+54⏎E-221> `
+- `:PTIM:TIME:STR?` (47 ms): `"19:53:54"⏎E-221> `
+- `:PTIM:TZON?` (31 ms): `+0,+0⏎E-221> `
+- `:PTIM:LEAP:ACC?` (31 ms): `+18⏎E-221> `
+- `:PTIM:LEAP:STAT?` (32 ms): `0⏎E-221> `
+- `:PTIM:LEAP:DATE?` (15 ms): `E-230> `
+- `:PTIM:LEAP:DUR?` (32 ms): `E-230> `
+- `:LED:ALAR?` (31 ms): `0⏎E-230> `
+- `:LED:GPSL?` (15 ms): `1⏎E-230> `
+- `:LED:HOLD?` (47 ms): `0⏎E-230> `
+- `:LED:ACT?` (16 ms): `0⏎E-230> `
+- `:LED:ENAB?` (31 ms): `0⏎E-230> `
+- `:DIAG:ROSC:EFC:REL?` (47 ms): `-1.67443E+001⏎E-230> `
+- `:DIAG:LIF:COUN?` (47 ms): `+37015⏎E-230> `
+- `:DIAG:IDEN:GPS?` (187 ms): `"--","SFTW P/N # 4850266","SOFTWARE VER # 005","--","--","MODEL # FURUNO GT-80","--","--","--","--"⏎E-230> `
+- `:DIAG:QUER:RESP?` (172 ms): `"--","SFTW P/N # 4850266","SOFTWARE VER # 005","--","--","MODEL # FURUNO GT-80","--","--","--","--"⏎E-230> `
+- `:DIAG:LOG:COUN?` (47 ms): `+222⏎E-230> `
+- `:DIAG:LOG:READ? 1` (78 ms): `"Log 001:20070105.08:24:42: GPS lock started"⏎E-230> `
+- `:DIAG:TEST:RES?` (32 ms): `+0,ALL⏎E-230> `
+- `:STAT:OPER:COND?` (31 ms): `+90⏎E-230> `
+- `:STAT:OPER:HARD:COND?` (47 ms): `+0⏎E-230> `
+- `:STAT:OPER:HOLD:COND?` (31 ms): `+0⏎E-230> `
+- `:STAT:OPER:POW:COND?` (47 ms): `+7⏎E-230> `
+- `:STAT:QUES:COND?` (31 ms): `+0⏎E-230> `
+- `:SYST:ERR?`: `-221,"Settings conflict"⏎E-230> `
+- `:SYST:ERR?`: `-221,"Settings conflict"⏎E-230> `
+- `:SYST:ERR?`: `-230,"Data corrupt or stale"⏎E-230> `
+- `:SYST:ERR?`: `-230,"Data corrupt or stale"⏎scpi > `
+- `:SYST:ERR?`: `+0,"No error"⏎scpi > `
+- screen saved as `screens/001-125357.txt`: >> Locked to GPS
+
+## Cycle 2, 12:53:59
+
+- `*IDN?` (78 ms): `SYMMETRICOM,Z3805A,3625A02931,1.01.03-A⏎scpi > `
+- `*ESE?` (15 ms): `+0⏎scpi > `
+- `*SRE?` (32 ms): `+136⏎scpi > `
+- `*STB?` (15 ms): `+0⏎scpi > `
+- `:SYST:STAT:LENG?` (31 ms): `+23⏎scpi > `
+- `:SYST:DATE?` (32 ms): `+2007,+2,+16⏎scpi > `
+- `:SYST:TIME?` (47 ms): `+19,+54,+1⏎scpi > `
+- `:SYST:COMM?` (31 ms): `SER1⏎scpi > `
+- `:SYNC:STAT?` (15 ms): `LOCK⏎scpi > `
+- `:SYNC:TFOM?` (32 ms): `+3⏎scpi > `
+- `:SYNC:FFOM?` (31 ms): `+0⏎scpi > `
+- `:SYNC:TINT?` (31 ms): `+1.4E-009⏎scpi > `
+- `:SYNC:HOLD:DUR?` (47 ms): `+1.44800E+003,0⏎scpi > `
+- `:SYNC:HOLD:DUR:THR?` (47 ms): `+86400⏎scpi > `
+- `:SYNC:HOLD:DUR:THR:EXC?` (31 ms): `0⏎scpi > `
+- `:SYNC:HOLD:TUNC:PRED?` (63 ms): `+0.8E-006,0⏎scpi > `
+- `:SYNC:HOLD:TUNC:PRES?` (31 ms): `E-221> `
+- `:SYNC:HOLD:WAIT?` (31 ms): `NONE⏎E-221> `
+- `:GPS:REF:VAL?` (31 ms): `1⏎E-221> `
+- `:GPS:REF:ADEL?` (63 ms): `+6.00000E-008⏎E-221> `
+- `:GPS:POS?` (109 ms): `N,+47,+31,+1.85450E+001,W,+122,+12,+2.21260E+001,+3.80100E+001⏎E-221> `
+- `:GPS:POS:ACT?` (141 ms): `N,+47,+31,+1.85460E+001,W,+122,+12,+2.21280E+001,+3.80000E+001⏎E-221> `
+- `:GPS:POS:HOLD:LAST?` (125 ms): `N,+47,+31,+1.85450E+001,W,+122,+12,+2.21260E+001,+3.80100E+001⏎E-221> `
+- `:GPS:POS:HOLD:STAT?` (31 ms): `1⏎E-221> `
+- `:GPS:POS:SURV:PROG?` (31 ms): `E-221> `
+- `:GPS:POS:SURV:STAT?` (47 ms): `0⏎E-221> `
+- `:GPS:POS:SURV:STAT:POW?` (32 ms): `1⏎E-221> `
+- `:GPS:SAT:TRAC?` (62 ms): `+3,+4,+6,+7,+9,+16,+26,+31⏎E-221> `
+- `:GPS:SAT:TRAC:COUN?` (31 ms): `+8⏎E-221> `
+- `:GPS:SAT:TRAC:EMAN?` (47 ms): `+10⏎E-221> `
+- `:GPS:SAT:TRAC:IGN?` (31 ms): `+0⏎E-221> `
+- `:GPS:SAT:TRAC:IGN:COUN?` (32 ms): `+0⏎E-221> `
+- `:GPS:SAT:TRAC:IGN:STAT? 5` (47 ms): `0⏎E-221> `
+- `:GPS:SAT:TRAC:INCL?` (187 ms): `+1,+2,+3,+4,+5,+6,+7,+8,+9,+10,+11,+12,+13,+14,+15,+16,+17,+18,+19,+20,+21,+22,+23,+24,+25,+26,+27,+28,+29,+30,+31,+32⏎E-221> `
+- `:GPS:SAT:TRAC:INCL:COUN?` (47 ms): `+32⏎E-221> `
+- `:GPS:SAT:TRAC:INCL:STAT? 5` (47 ms): `1⏎E-221> `
+- `:GPS:SAT:VIS:PRED?` (94 ms): `+3,+4,+6,+7,+9,+11,+16,+26,+28,+31⏎E-221> `
+- `:GPS:SAT:VIS:PRED:COUN?` (46 ms): `+10⏎E-221> `
+- `:PTIM:TCOD?` (282 ms): `T2200702161954043000042⏎E-221> `
+- `:PTIM:TCOD:FORM?` (31 ms): `F2⏎E-221> `
+- `:PTIM:DATE?` (47 ms): `+2007,+2,+16⏎E-221> `
+- `:PTIM:TIME?` (31 ms): `+19,+54,+3⏎E-221> `
+- `:PTIM:TIME:STR?` (31 ms): `"19:54:03"⏎E-221> `
+- `:PTIM:TZON?` (32 ms): `+0,+0⏎E-221> `
+- `:PTIM:LEAP:ACC?` (31 ms): `+18⏎E-221> `
+- `:PTIM:LEAP:STAT?` (47 ms): `0⏎E-221> `
+- `:PTIM:LEAP:DATE?` (15 ms): `E-230> `
+- `:PTIM:LEAP:DUR?` (32 ms): `E-230> `
+- `:LED:ALAR?` (31 ms): `0⏎E-230> `
+- `:LED:GPSL?` (15 ms): `1⏎E-230> `
+- `:LED:HOLD?` (47 ms): `0⏎E-230> `
+- `:LED:ACT?` (16 ms): `0⏎E-230> `
+- `:LED:ENAB?` (31 ms): `0⏎E-230> `
+- `:DIAG:ROSC:EFC:REL?` (47 ms): `-1.67443E+001⏎E-230> `
+- `:DIAG:LIF:COUN?` (47 ms): `+37015⏎E-230> `
+- `:DIAG:IDEN:GPS?` (172 ms): `"--","SFTW P/N # 4850266","SOFTWARE VER # 005","--","--","MODEL # FURUNO GT-80","--","--","--","--"⏎E-230> `
+- `:DIAG:QUER:RESP?` (187 ms): `"--","SFTW P/N # 4850266","SOFTWARE VER # 005","--","--","MODEL # FURUNO GT-80","--","--","--","--"⏎E-230> `
+- `:DIAG:LOG:COUN?` (32 ms): `+222⏎E-230> `
+- `:DIAG:LOG:READ? 1` (93 ms): `"Log 001:20070105.08:24:42: GPS lock started"⏎E-230> `
+- `:DIAG:TEST:RES?` (32 ms): `+0,ALL⏎E-230> `
+- `:STAT:OPER:COND?` (31 ms): `+90⏎E-230> `
+- `:STAT:OPER:HARD:COND?` (47 ms): `+0⏎E-230> `
+- `:STAT:OPER:HOLD:COND?` (31 ms): `+0⏎E-230> `
+- `:STAT:OPER:POW:COND?` (31 ms): `+7⏎E-230> `
+- `:STAT:QUES:COND?` (31 ms): `+0⏎E-230> `
+- `:SYST:ERR?`: `-221,"Settings conflict"⏎E-230> `
+- `:SYST:ERR?`: `-221,"Settings conflict"⏎E-230> `
+- `:SYST:ERR?`: `-230,"Data corrupt or stale"⏎E-230> `
+- `:SYST:ERR?`: `-230,"Data corrupt or stale"⏎scpi > `
+- `:SYST:ERR?`: `+0,"No error"⏎scpi > `
+
+## Cycle 3, 12:54:08
+
+- `*IDN?` (78 ms): `SYMMETRICOM,Z3805A,3625A02931,1.01.03-A⏎scpi > `
+- `*ESE?` (16 ms): `+0⏎scpi > `
+- `*SRE?` (15 ms): `+136⏎scpi > `
+- `*STB?` (32 ms): `+0⏎scpi > `
+- `:SYST:STAT:LENG?` (31 ms): `+23⏎scpi > `
+- `:SYST:DATE?` (31 ms): `+2007,+2,+16⏎scpi > `
+- `:SYST:TIME?` (47 ms): `+19,+54,+10⏎scpi > `
+- `:SYST:COMM?` (16 ms): `SER1⏎scpi > `
+- `:SYNC:STAT?` (31 ms): `LOCK⏎scpi > `
+- `:SYNC:TFOM?` (31 ms): `+3⏎scpi > `
+- `:SYNC:FFOM?` (31 ms): `+0⏎scpi > `
+- `:SYNC:TINT?` (32 ms): `-6.8E-009⏎scpi > `
+- `:SYNC:HOLD:DUR?` (46 ms): `+1.44800E+003,0⏎scpi > `
+- `:SYNC:HOLD:DUR:THR?` (32 ms): `+86400⏎scpi > `
+- `:SYNC:HOLD:DUR:THR:EXC?` (47 ms): `0⏎scpi > `
+- `:SYNC:HOLD:TUNC:PRED?` (46 ms): `+0.8E-006,0⏎scpi > `
+- `:SYNC:HOLD:TUNC:PRES?` (47 ms): `E-221> `
+- `:SYNC:HOLD:WAIT?` (32 ms): `NONE⏎E-221> `
+- `:GPS:REF:VAL?` (31 ms): `1⏎E-221> `
+- `:GPS:REF:ADEL?` (47 ms): `+6.00000E-008⏎E-221> `
+- `:GPS:POS?` (125 ms): `N,+47,+31,+1.85450E+001,W,+122,+12,+2.21260E+001,+3.80100E+001⏎E-221> `
+- `:GPS:POS:ACT?` (125 ms): `N,+47,+31,+1.85460E+001,W,+122,+12,+2.21280E+001,+3.80000E+001⏎E-221> `
+- `:GPS:POS:HOLD:LAST?` (140 ms): `N,+47,+31,+1.85450E+001,W,+122,+12,+2.21260E+001,+3.80100E+001⏎E-221> `
+- `:GPS:POS:HOLD:STAT?` (32 ms): `1⏎E-221> `
+- `:GPS:POS:SURV:PROG?` (31 ms): `E-221> `
+- `:GPS:POS:SURV:STAT?` (31 ms): `0⏎E-221> `
+- `:GPS:POS:SURV:STAT:POW?` (47 ms): `1⏎E-221> `
+- `:GPS:SAT:TRAC?` (62 ms): `+3,+4,+6,+7,+9,+16,+26,+31⏎E-221> `
+- `:GPS:SAT:TRAC:COUN?` (32 ms): `+8⏎E-221> `
+- `:GPS:SAT:TRAC:EMAN?` (31 ms): `+10⏎E-221> `
+- `:GPS:SAT:TRAC:IGN?` (31 ms): `+0⏎E-221> `
+- `:GPS:SAT:TRAC:IGN:COUN?` (47 ms): `+0⏎E-221> `
+- `:GPS:SAT:TRAC:IGN:STAT? 5` (47 ms): `0⏎E-221> `
+- `:GPS:SAT:TRAC:INCL?` (187 ms): `+1,+2,+3,+4,+5,+6,+7,+8,+9,+10,+11,+12,+13,+14,+15,+16,+17,+18,+19,+20,+21,+22,+23,+24,+25,+26,+27,+28,+29,+30,+31,+32⏎E-221> `
+- `:GPS:SAT:TRAC:INCL:COUN?` (32 ms): `+32⏎E-221> `
+- `:GPS:SAT:TRAC:INCL:STAT? 5` (47 ms): `1⏎E-221> `
+- `:GPS:SAT:VIS:PRED?` (93 ms): `+3,+4,+6,+7,+9,+11,+16,+26,+28,+31⏎E-221> `
+- `:GPS:SAT:VIS:PRED:COUN?` (47 ms): `+10⏎E-221> `
+- `:PTIM:TCOD?` (313 ms): `T2200702161954133000042⏎E-221> `
+- `:PTIM:TCOD:FORM?` (31 ms): `F2⏎E-221> `
+- `:PTIM:DATE?` (47 ms): `+2007,+2,+16⏎E-221> `
+- `:PTIM:TIME?` (31 ms): `+19,+54,+12⏎E-221> `
+- `:PTIM:TIME:STR?` (47 ms): `"19:54:12"⏎E-221> `
+- `:PTIM:TZON?` (31 ms): `+0,+0⏎E-221> `
+- `:PTIM:LEAP:ACC?` (31 ms): `+18⏎E-221> `
+- `:PTIM:LEAP:STAT?` (32 ms): `0⏎E-221> `
+- `:PTIM:LEAP:DATE?` (15 ms): `E-230> `
+- `:PTIM:LEAP:DUR?` (32 ms): `E-230> `
+- `:LED:ALAR?` (31 ms): `0⏎E-230> `
+- `:LED:GPSL?` (15 ms): `1⏎E-230> `
+- `:LED:HOLD?` (47 ms): `0⏎E-230> `
+- `:LED:ACT?` (16 ms): `0⏎E-230> `
+- `:LED:ENAB?` (31 ms): `0⏎E-230> `
+- `:DIAG:ROSC:EFC:REL?` (47 ms): `-1.67444E+001⏎E-230> `
+- `:DIAG:LIF:COUN?` (47 ms): `+37015⏎E-230> `
+- `:DIAG:IDEN:GPS?` (172 ms): `"--","SFTW P/N # 4850266","SOFTWARE VER # 005","--","--","MODEL # FURUNO GT-80","--","--","--","--"⏎E-230> `
+- `:DIAG:QUER:RESP?` (187 ms): `"--","SFTW P/N # 4850266","SOFTWARE VER # 005","--","--","MODEL # FURUNO GT-80","--","--","--","--"⏎E-230> `
+- `:DIAG:LOG:COUN?` (32 ms): `+222⏎E-230> `
+- `:DIAG:LOG:READ? 1` (93 ms): `"Log 001:20070105.08:24:42: GPS lock started"⏎E-230> `
+- `:DIAG:TEST:RES?` (32 ms): `+0,ALL⏎E-230> `
+- `:STAT:OPER:COND?` (31 ms): `+90⏎E-230> `
+- `:STAT:OPER:HARD:COND?` (47 ms): `+0⏎E-230> `
+- `:STAT:OPER:HOLD:COND?` (31 ms): `+0⏎E-230> `
+- `:STAT:OPER:POW:COND?` (31 ms): `+7⏎E-230> `
+- `:STAT:QUES:COND?` (31 ms): `+0⏎E-230> `
+- `:SYST:ERR?`: `-221,"Settings conflict"⏎E-230> `
+- `:SYST:ERR?`: `-221,"Settings conflict"⏎E-230> `
+- `:SYST:ERR?`: `-230,"Data corrupt or stale"⏎E-230> `
+- `:SYST:ERR?`: `-230,"Data corrupt or stale"⏎scpi > `
+- `:SYST:ERR?`: `+0,"No error"⏎scpi > `
+
+## Cycle 4, 12:54:17
+
+- `*IDN?` (94 ms): `SYMMETRICOM,Z3805A,3625A02931,1.01.03-A⏎scpi > `
+- `*ESE?` (15 ms): `+0⏎scpi > `
+- `*SRE?` (32 ms): `+136⏎scpi > `
+- `*STB?` (15 ms): `+0⏎scpi > `
+- `:SYST:STAT:LENG?` (31 ms): `+23⏎scpi > `
+- `:SYST:DATE?` (32 ms): `+2007,+2,+16⏎scpi > `
+- `:SYST:TIME?` (47 ms): `+19,+54,+19⏎scpi > `
+- `:SYST:COMM?` (31 ms): `SER1⏎scpi > `
+- `:SYNC:STAT?` (31 ms): `LOCK⏎scpi > `
+- `:SYNC:TFOM?` (16 ms): `+3⏎scpi > `
+- `:SYNC:FFOM?` (31 ms): `+0⏎scpi > `
+- `:SYNC:TINT?` (31 ms): `+1.0E-009⏎scpi > `
+- `:SYNC:HOLD:DUR?` (47 ms): `+1.44800E+003,0⏎scpi > `
+- `:SYNC:HOLD:DUR:THR?` (47 ms): `+86400⏎scpi > `
+- `:SYNC:HOLD:DUR:THR:EXC?` (31 ms): `0⏎scpi > `
+- `:SYNC:HOLD:TUNC:PRED?` (78 ms): `+0.8E-006,0⏎scpi > `
+- `:SYNC:HOLD:TUNC:PRES?` (32 ms): `E-221> `
+- `:SYNC:HOLD:WAIT?` (31 ms): `NONE⏎E-221> `
+- `:GPS:REF:VAL?` (31 ms): `1⏎E-221> `
+- `:GPS:REF:ADEL?` (47 ms): `+6.00000E-008⏎E-221> `
+- `:GPS:POS?` (125 ms): `N,+47,+31,+1.85450E+001,W,+122,+12,+2.21260E+001,+3.80100E+001⏎E-221> `
+- `:GPS:POS:ACT?` (125 ms): `N,+47,+31,+1.85460E+001,W,+122,+12,+2.21280E+001,+3.80000E+001⏎E-221> `
+- `:GPS:POS:HOLD:LAST?` (141 ms): `N,+47,+31,+1.85450E+001,W,+122,+12,+2.21260E+001,+3.80100E+001⏎E-221> `
+- `:GPS:POS:HOLD:STAT?` (31 ms): `1⏎E-221> `
+- `:GPS:POS:SURV:PROG?` (31 ms): `E-221> `
+- `:GPS:POS:SURV:STAT?` (31 ms): `0⏎E-221> `
+- `:GPS:POS:SURV:STAT:POW?` (32 ms): `1⏎E-221> `
+- `:GPS:SAT:TRAC?` (62 ms): `+3,+4,+6,+7,+9,+16,+26,+31⏎E-221> `
+- `:GPS:SAT:TRAC:COUN?` (31 ms): `+8⏎E-221> `
+- `:GPS:SAT:TRAC:EMAN?` (47 ms): `+10⏎E-221> `
+- `:GPS:SAT:TRAC:IGN?` (31 ms): `+0⏎E-221> `
+- `:GPS:SAT:TRAC:IGN:COUN?` (32 ms): `+0⏎E-221> `
+- `:GPS:SAT:TRAC:IGN:STAT? 5` (47 ms): `0⏎E-221> `
+- `:GPS:SAT:TRAC:INCL?` (187 ms): `+1,+2,+3,+4,+5,+6,+7,+8,+9,+10,+11,+12,+13,+14,+15,+16,+17,+18,+19,+20,+21,+22,+23,+24,+25,+26,+27,+28,+29,+30,+31,+32⏎E-221> `
+- `:GPS:SAT:TRAC:INCL:COUN?` (47 ms): `+32⏎E-221> `
+- `:GPS:SAT:TRAC:INCL:STAT? 5` (47 ms): `1⏎E-221> `
+- `:GPS:SAT:VIS:PRED?` (94 ms): `+3,+4,+6,+7,+9,+11,+16,+26,+28,+31⏎E-221> `
+- `:GPS:SAT:VIS:PRED:COUN?` (46 ms): `+10⏎E-221> `
+- `:PTIM:TCOD?` (282 ms): `T2200702161954223000042⏎E-221> `
+- `:PTIM:TCOD:FORM?` (31 ms): `F2⏎E-221> `
+- `:PTIM:DATE?` (47 ms): `+2007,+2,+16⏎E-221> `
+- `:PTIM:TIME?` (31 ms): `+19,+54,+21⏎E-221> `
+- `:PTIM:TIME:STR?` (47 ms): `"19:54:21"⏎E-221> `
+- `:PTIM:TZON?` (16 ms): `+0,+0⏎E-221> `
+- `:PTIM:LEAP:ACC?` (46 ms): `+18⏎E-221> `
+- `:PTIM:LEAP:STAT?` (32 ms): `0⏎E-221> `
+- `:PTIM:LEAP:DATE?` (15 ms): `E-230> `
+- `:PTIM:LEAP:DUR?` (32 ms): `E-230> `
+- `:LED:ALAR?` (31 ms): `0⏎E-230> `
+- `:LED:GPSL?` (15 ms): `1⏎E-230> `
+- `:LED:HOLD?` (47 ms): `0⏎E-230> `
+- `:LED:ACT?` (16 ms): `0⏎E-230> `
+- `:LED:ENAB?` (31 ms): `0⏎E-230> `
+- `:DIAG:ROSC:EFC:REL?` (47 ms): `-1.67443E+001⏎E-230> `
+- `:DIAG:LIF:COUN?` (47 ms): `+37015⏎E-230> `
+- `:DIAG:IDEN:GPS?` (187 ms): `"--","SFTW P/N # 4850266","SOFTWARE VER # 005","--","--","MODEL # FURUNO GT-80","--","--","--","--"⏎E-230> `
+- `:DIAG:QUER:RESP?` (188 ms): `"--","SFTW P/N # 4850266","SOFTWARE VER # 005","--","--","MODEL # FURUNO GT-80","--","--","--","--"⏎E-230> `
+- `:DIAG:LOG:COUN?` (31 ms): `+222⏎E-230> `
+- `:DIAG:LOG:READ? 1` (78 ms): `"Log 001:20070105.08:24:42: GPS lock started"⏎E-230> `
+- `:DIAG:TEST:RES?` (32 ms): `+0,ALL⏎E-230> `
+- `:STAT:OPER:COND?` (31 ms): `+90⏎E-230> `
+- `:STAT:OPER:HARD:COND?` (47 ms): `+0⏎E-230> `
+- `:STAT:OPER:HOLD:COND?` (31 ms): `+0⏎E-230> `
+- `:STAT:OPER:POW:COND?` (47 ms): `+7⏎E-230> `
+- `:STAT:QUES:COND?` (31 ms): `+0⏎E-230> `
+- `:SYST:ERR?`: `-221,"Settings conflict"⏎E-230> `
+- `:SYST:ERR?`: `-221,"Settings conflict"⏎E-230> `
+- `:SYST:ERR?`: `-230,"Data corrupt or stale"⏎E-230> `
+- `:SYST:ERR?`: `-230,"Data corrupt or stale"⏎scpi > `
+- `:SYST:ERR?`: `+0,"No error"⏎scpi > `
+
+## Cycle 5, 12:54:26
+
+- `*IDN?` (78 ms): `SYMMETRICOM,Z3805A,3625A02931,1.01.03-A⏎scpi > `
+- `*ESE?` (31 ms): `+0⏎scpi > `
+- `*SRE?` (16 ms): `+136⏎scpi > `
+- `*STB?` (31 ms): `+0⏎scpi > `
+- `:SYST:STAT:LENG?` (31 ms): `+23⏎scpi > `
+- `:SYST:DATE?` (31 ms): `+2007,+2,+16⏎scpi > `
+- `:SYST:TIME?` (32 ms): `+19,+54,+28⏎scpi > `
+- `:SYST:COMM?` (31 ms): `SER1⏎scpi > `
+- `:SYNC:STAT?` (31 ms): `LOCK⏎scpi > `
+- `:SYNC:TFOM?` (31 ms): `+3⏎scpi > `
+- `:SYNC:FFOM?` (32 ms): `+0⏎scpi > `
+- `:SYNC:TINT?` (31 ms): `-5.7E-009⏎scpi > `
+- `:SYNC:HOLD:DUR?` (47 ms): `+1.44800E+003,0⏎scpi > `
+- `:SYNC:HOLD:DUR:THR?` (31 ms): `+86400⏎scpi > `
+- `:SYNC:HOLD:DUR:THR:EXC?` (47 ms): `0⏎scpi > `
+- `:SYNC:HOLD:TUNC:PRED?` (47 ms): `+0.8E-006,0⏎scpi > `
+- `:SYNC:HOLD:TUNC:PRES?` (47 ms): `E-221> `
+- `:SYNC:HOLD:WAIT?` (31 ms): `NONE⏎E-221> `
+- `:GPS:REF:VAL?` (31 ms): `1⏎E-221> `
+- `:GPS:REF:ADEL?` (47 ms): `+6.00000E-008⏎E-221> `
+- `:GPS:POS?` (125 ms): `N,+47,+31,+1.85450E+001,W,+122,+12,+2.21260E+001,+3.80100E+001⏎E-221> `
+- `:GPS:POS:ACT?` (125 ms): `N,+47,+31,+1.85460E+001,W,+122,+12,+2.21280E+001,+3.80000E+001⏎E-221> `
+- `:GPS:POS:HOLD:LAST?` (141 ms): `N,+47,+31,+1.85450E+001,W,+122,+12,+2.21260E+001,+3.80100E+001⏎E-221> `
+- `:GPS:POS:HOLD:STAT?` (31 ms): `1⏎E-221> `
+- `:GPS:POS:SURV:PROG?` (31 ms): `E-221> `
+- `:GPS:POS:SURV:STAT?` (47 ms): `0⏎E-221> `
+- `:GPS:POS:SURV:STAT:POW?` (31 ms): `1⏎E-221> `
+- `:GPS:SAT:TRAC?` (63 ms): `+3,+4,+6,+7,+9,+16,+26,+31⏎E-221> `
+- `:GPS:SAT:TRAC:COUN?` (31 ms): `+8⏎E-221> `
+- `:GPS:SAT:TRAC:EMAN?` (47 ms): `+10⏎E-221> `
+- `:GPS:SAT:TRAC:IGN?` (31 ms): `+0⏎E-221> `
+- `:GPS:SAT:TRAC:IGN:COUN?` (31 ms): `+0⏎E-221> `
+- `:GPS:SAT:TRAC:IGN:STAT? 5` (47 ms): `0⏎E-221> `
+- `:GPS:SAT:TRAC:INCL?` (188 ms): `+1,+2,+3,+4,+5,+6,+7,+8,+9,+10,+11,+12,+13,+14,+15,+16,+17,+18,+19,+20,+21,+22,+23,+24,+25,+26,+27,+28,+29,+30,+31,+32⏎E-221> `
+- `:GPS:SAT:TRAC:INCL:COUN?` (47 ms): `+32⏎E-221> `
+- `:GPS:SAT:TRAC:INCL:STAT? 5` (47 ms): `1⏎E-221> `
+- `:GPS:SAT:VIS:PRED?` (78 ms): `+3,+4,+6,+7,+9,+11,+16,+26,+28,+31⏎E-221> `
+- `:GPS:SAT:VIS:PRED:COUN?` (47 ms): `+10⏎E-221> `
+- `:PTIM:TCOD?` (328 ms): `T2200702161954313000042⏎E-221> `
+- `:PTIM:TCOD:FORM?` (31 ms): `F2⏎E-221> `
+- `:PTIM:DATE?` (47 ms): `+2007,+2,+16⏎E-221> `
+- `:PTIM:TIME?` (31 ms): `+19,+54,+30⏎E-221> `
+- `:PTIM:TIME:STR?` (47 ms): `"19:54:30"⏎E-221> `
+- `:PTIM:TZON?` (31 ms): `+0,+0⏎E-221> `
+- `:PTIM:LEAP:ACC?` (31 ms): `+18⏎E-221> `
+- `:PTIM:LEAP:STAT?` (32 ms): `0⏎E-221> `
+- `:PTIM:LEAP:DATE?` (15 ms): `E-230> `
+- `:PTIM:LEAP:DUR?` (32 ms): `E-230> `
+- `:LED:ALAR?` (31 ms): `0⏎E-230> `
+- `:LED:GPSL?` (15 ms): `1⏎E-230> `
+- `:LED:HOLD?` (47 ms): `0⏎E-230> `
+- `:LED:ACT?` (16 ms): `0⏎E-230> `
+- `:LED:ENAB?` (31 ms): `0⏎E-230> `
+- `:DIAG:ROSC:EFC:REL?` (47 ms): `-1.67444E+001⏎E-230> `
+- `:DIAG:LIF:COUN?` (31 ms): `+37015⏎E-230> `
+- `:DIAG:IDEN:GPS?` (188 ms): `"--","SFTW P/N # 4850266","SOFTWARE VER # 005","--","--","MODEL # FURUNO GT-80","--","--","--","--"⏎E-230> `
+- `:DIAG:QUER:RESP?` (187 ms): `"--","SFTW P/N # 4850266","SOFTWARE VER # 005","--","--","MODEL # FURUNO GT-80","--","--","--","--"⏎E-230> `
+- `:DIAG:LOG:COUN?` (32 ms): `+222⏎E-230> `
+- `:DIAG:LOG:READ? 1` (93 ms): `"Log 001:20070105.08:24:42: GPS lock started"⏎E-230> `
+- `:DIAG:TEST:RES?` (32 ms): `+0,ALL⏎E-230> `
+- `:STAT:OPER:COND?` (31 ms): `+90⏎E-230> `
+- `:STAT:OPER:HARD:COND?` (31 ms): `+0⏎E-230> `
+- `:STAT:OPER:HOLD:COND?` (47 ms): `+0⏎E-230> `
+- `:STAT:OPER:POW:COND?` (31 ms): `+7⏎E-230> `
+- `:STAT:QUES:COND?` (31 ms): `+0⏎E-230> `
+- `:SYST:ERR?`: `-221,"Settings conflict"⏎E-230> `
+- `:SYST:ERR?`: `-221,"Settings conflict"⏎E-230> `
+- `:SYST:ERR?`: `-230,"Data corrupt or stale"⏎E-230> `
+- `:SYST:ERR?`: `-230,"Data corrupt or stale"⏎scpi > `
+- `:SYST:ERR?`: `+0,"No error"⏎scpi > `
+
+## Cycle 6, 12:54:35
+
+- `*IDN?` (78 ms): `SYMMETRICOM,Z3805A,3625A02931,1.01.03-A⏎scpi > `
+- `*ESE?` (16 ms): `+0⏎scpi > `
+- `*SRE?` (15 ms): `+136⏎scpi > `
+- `*STB?` (32 ms): `+0⏎scpi > `
+- `:SYST:STAT:LENG?` (31 ms): `+23⏎scpi > `
+- `:SYST:DATE?` (31 ms): `+2007,+2,+16⏎scpi > `
+- `:SYST:TIME?` (31 ms): `+19,+54,+37⏎scpi > `
+- `:SYST:COMM?` (32 ms): `SER1⏎scpi > `
+- `:SYNC:STAT?` (31 ms): `LOCK⏎scpi > `
+- `:SYNC:TFOM?` (31 ms): `+3⏎scpi > `
+- `:SYNC:FFOM?` (31 ms): `+0⏎scpi > `
+- `:SYNC:TINT?` (32 ms): `-5.7E-009⏎scpi > `
+- `:SYNC:HOLD:DUR?` (46 ms): `+1.44800E+003,0⏎scpi > `
+- `:SYNC:HOLD:DUR:THR?` (32 ms): `+86400⏎scpi > `
+- `:SYNC:HOLD:DUR:THR:EXC?` (47 ms): `0⏎scpi > `
+- `:SYNC:HOLD:TUNC:PRED?` (46 ms): `+0.8E-006,0⏎scpi > `
+- `:SYNC:HOLD:TUNC:PRES?` (32 ms): `E-221> `
+- `:SYNC:HOLD:WAIT?` (31 ms): `NONE⏎E-221> `
+- `:GPS:REF:VAL?` (31 ms): `1⏎E-221> `
+- `:GPS:REF:ADEL?` (47 ms): `+6.00000E-008⏎E-221> `
+- `:GPS:POS?` (125 ms): `N,+47,+31,+1.85450E+001,W,+122,+12,+2.21260E+001,+3.80100E+001⏎E-221> `
+- `:GPS:POS:ACT?` (125 ms): `N,+47,+31,+1.85460E+001,W,+122,+12,+2.21280E+001,+3.80000E+001⏎E-221> `
+- `:GPS:POS:HOLD:LAST?` (125 ms): `N,+47,+31,+1.85450E+001,W,+122,+12,+2.21260E+001,+3.80100E+001⏎E-221> `
+- `:GPS:POS:HOLD:STAT?` (47 ms): `1⏎E-221> `
+- `:GPS:POS:SURV:PROG?` (31 ms): `E-221> `
+- `:GPS:POS:SURV:STAT?` (31 ms): `0⏎E-221> `
+- `:GPS:POS:SURV:STAT:POW?` (32 ms): `1⏎E-221> `
+- `:GPS:SAT:TRAC?` (62 ms): `+3,+4,+6,+7,+9,+16,+26,+31⏎E-221> `
+- `:GPS:SAT:TRAC:COUN?` (31 ms): `+8⏎E-221> `
+- `:GPS:SAT:TRAC:EMAN?` (47 ms): `+10⏎E-221> `
+- `:GPS:SAT:TRAC:IGN?` (32 ms): `+0⏎E-221> `
+- `:GPS:SAT:TRAC:IGN:COUN?` (46 ms): `+0⏎E-221> `
+- `:GPS:SAT:TRAC:IGN:STAT? 5` (32 ms): `0⏎E-221> `
+- `:GPS:SAT:TRAC:INCL?` (187 ms): `+1,+2,+3,+4,+5,+6,+7,+8,+9,+10,+11,+12,+13,+14,+15,+16,+17,+18,+19,+20,+21,+22,+23,+24,+25,+26,+27,+28,+29,+30,+31,+32⏎E-221> `
+- `:GPS:SAT:TRAC:INCL:COUN?` (47 ms): `+32⏎E-221> `
+- `:GPS:SAT:TRAC:INCL:STAT? 5` (31 ms): `1⏎E-221> `
+- `:GPS:SAT:VIS:PRED?` (94 ms): `+3,+4,+6,+7,+9,+11,+16,+26,+28,+31⏎E-221> `
+- `:GPS:SAT:VIS:PRED:COUN?` (47 ms): `+10⏎E-221> `
+- `:PTIM:TCOD?` (344 ms): `T2200702161954403000042⏎E-221> `
+- `:PTIM:TCOD:FORM?` (31 ms): `F2⏎E-221> `
+- `:PTIM:DATE?` (47 ms): `+2007,+2,+16⏎E-221> `
+- `:PTIM:TIME?` (31 ms): `+19,+54,+39⏎E-221> `
+- `:PTIM:TIME:STR?` (31 ms): `"19:54:39"⏎E-221> `
+- `:PTIM:TZON?` (32 ms): `+0,+0⏎E-221> `
+- `:PTIM:LEAP:ACC?` (46 ms): `+18⏎E-221> `
+- `:PTIM:LEAP:STAT?` (16 ms): `0⏎E-221> `
+- `:PTIM:LEAP:DATE?` (31 ms): `E-230> `
+- `:PTIM:LEAP:DUR?` (32 ms): `E-230> `
+- `:LED:ALAR?` (31 ms): `0⏎E-230> `
+- `:LED:GPSL?` (15 ms): `1⏎E-230> `
+- `:LED:HOLD?` (47 ms): `0⏎E-230> `
+- `:LED:ACT?` (16 ms): `0⏎E-230> `
+- `:LED:ENAB?` (31 ms): `0⏎E-230> `
+- `:DIAG:ROSC:EFC:REL?` (47 ms): `-1.67443E+001⏎E-230> `
+- `:DIAG:LIF:COUN?` (47 ms): `+37015⏎E-230> `
+- `:DIAG:IDEN:GPS?` (187 ms): `"--","SFTW P/N # 4850266","SOFTWARE VER # 005","--","--","MODEL # FURUNO GT-80","--","--","--","--"⏎E-230> `
+- `:DIAG:QUER:RESP?` (172 ms): `"--","SFTW P/N # 4850266","SOFTWARE VER # 005","--","--","MODEL # FURUNO GT-80","--","--","--","--"⏎E-230> `
+- `:DIAG:LOG:COUN?` (47 ms): `+222⏎E-230> `
+- `:DIAG:LOG:READ? 1` (78 ms): `"Log 001:20070105.08:24:42: GPS lock started"⏎E-230> `
+- `:DIAG:TEST:RES?` (32 ms): `+0,ALL⏎E-230> `
+- `:STAT:OPER:COND?` (31 ms): `+90⏎E-230> `
+- `:STAT:OPER:HARD:COND?` (47 ms): `+0⏎E-230> `
+- `:STAT:OPER:HOLD:COND?` (31 ms): `+0⏎E-230> `
+- `:STAT:OPER:POW:COND?` (47 ms): `+7⏎E-230> `
+- `:STAT:QUES:COND?` (31 ms): `+0⏎E-230> `
+- `:SYST:ERR?`: `-221,"Settings conflict"⏎E-230> `
+- `:SYST:ERR?`: `-221,"Settings conflict"⏎E-230> `
+- `:SYST:ERR?`: `-230,"Data corrupt or stale"⏎E-230> `
+- `:SYST:ERR?`: `-230,"Data corrupt or stale"⏎scpi > `
+- `:SYST:ERR?`: `+0,"No error"⏎scpi > `
+
+## Cycle 7, 12:54:44
+
+- `*IDN?` (78 ms): `SYMMETRICOM,Z3805A,3625A02931,1.01.03-A⏎scpi > `
+- `*ESE?` (32 ms): `+0⏎scpi > `
+- `*SRE?` (15 ms): `+136⏎scpi > `
+- `*STB?` (32 ms): `+0⏎scpi > `
+- `:SYST:STAT:LENG?` (31 ms): `+23⏎scpi > `
+- `:SYST:DATE?` (31 ms): `+2007,+2,+16⏎scpi > `
+- `:SYST:TIME?` (47 ms): `+19,+54,+46⏎scpi > `
+- `:SYST:COMM?` (31 ms): `SER1⏎scpi > `
+- `:SYNC:STAT?` (16 ms): `LOCK⏎scpi > `
+- `:SYNC:TFOM?` (31 ms): `+3⏎scpi > `
+- `:SYNC:FFOM?` (31 ms): `+0⏎scpi > `
+- `:SYNC:TINT?` (32 ms): `+1.6E-009⏎scpi > `
+- `:SYNC:HOLD:DUR?` (46 ms): `+1.44800E+003,0⏎scpi > `
+- `:SYNC:HOLD:DUR:THR?` (47 ms): `+86400⏎scpi > `
+- `:SYNC:HOLD:DUR:THR:EXC?` (32 ms): `0⏎scpi > `
+- `:SYNC:HOLD:TUNC:PRED?` (46 ms): `+0.8E-006,0⏎scpi > `
+- `:SYNC:HOLD:TUNC:PRES?` (47 ms): `E-221> `
+- `:SYNC:HOLD:WAIT?` (32 ms): `NONE⏎E-221> `
+- `:GPS:REF:VAL?` (31 ms): `1⏎E-221> `
+- `:GPS:REF:ADEL?` (47 ms): `+6.00000E-008⏎E-221> `
+- `:GPS:POS?` (125 ms): `N,+47,+31,+1.85450E+001,W,+122,+12,+2.21260E+001,+3.80100E+001⏎E-221> `
+- `:GPS:POS:ACT?` (125 ms): `N,+47,+31,+1.85460E+001,W,+122,+12,+2.21280E+001,+3.80000E+001⏎E-221> `
+- `:GPS:POS:HOLD:LAST?` (140 ms): `N,+47,+31,+1.85450E+001,W,+122,+12,+2.21260E+001,+3.80100E+001⏎E-221> `
+- `:GPS:POS:HOLD:STAT?` (32 ms): `1⏎E-221> `
+- `:GPS:POS:SURV:PROG?` (46 ms): `E-221> `
+- `:GPS:POS:SURV:STAT?` (32 ms): `0⏎E-221> `
+- `:GPS:POS:SURV:STAT:POW?` (31 ms): `1⏎E-221> `
+- `:GPS:SAT:TRAC?` (62 ms): `+3,+4,+6,+7,+9,+16,+26,+31⏎E-221> `
+- `:GPS:SAT:TRAC:COUN?` (32 ms): `+8⏎E-221> `
+- `:GPS:SAT:TRAC:EMAN?` (47 ms): `+10⏎E-221> `
+- `:GPS:SAT:TRAC:IGN?` (31 ms): `+0⏎E-221> `
+- `:GPS:SAT:TRAC:IGN:COUN?` (31 ms): `+0⏎E-221> `
+- `:GPS:SAT:TRAC:IGN:STAT? 5` (47 ms): `0⏎E-221> `
+- `:GPS:SAT:TRAC:INCL?` (187 ms): `+1,+2,+3,+4,+5,+6,+7,+8,+9,+10,+11,+12,+13,+14,+15,+16,+17,+18,+19,+20,+21,+22,+23,+24,+25,+26,+27,+28,+29,+30,+31,+32⏎E-221> `
+- `:GPS:SAT:TRAC:INCL:COUN?` (47 ms): `+32⏎E-221> `
+- `:GPS:SAT:TRAC:INCL:STAT? 5` (32 ms): `1⏎E-221> `
+- `:GPS:SAT:VIS:PRED?` (93 ms): `+3,+4,+6,+7,+9,+11,+16,+26,+31⏎E-221> `
+- `:GPS:SAT:VIS:PRED:COUN?` (47 ms): `+9⏎E-221> `
+- `:PTIM:TCOD?` (313 ms): `T220070216195449300004B⏎E-221> `
+- `:PTIM:TCOD:FORM?` (31 ms): `F2⏎E-221> `
+- `:PTIM:DATE?` (47 ms): `+2007,+2,+16⏎E-221> `
+- `:PTIM:TIME?` (31 ms): `+19,+54,+48⏎E-221> `
+- `:PTIM:TIME:STR?` (47 ms): `"19:54:48"⏎E-221> `
+- `:PTIM:TZON?` (31 ms): `+0,+0⏎E-221> `
+- `:PTIM:LEAP:ACC?` (31 ms): `+18⏎E-221> `
+- `:PTIM:LEAP:STAT?` (32 ms): `0⏎E-221> `
+- `:PTIM:LEAP:DATE?` (15 ms): `E-230> `
+- `:PTIM:LEAP:DUR?` (32 ms): `E-230> `
+- `:LED:ALAR?` (31 ms): `0⏎E-230> `
+- `:LED:GPSL?` (15 ms): `1⏎E-230> `
+- `:LED:HOLD?` (47 ms): `0⏎E-230> `
+- `:LED:ACT?` (16 ms): `0⏎E-230> `
+- `:LED:ENAB?` (31 ms): `0⏎E-230> `
+- `:DIAG:ROSC:EFC:REL?` (47 ms): `-1.67443E+001⏎E-230> `
+- `:DIAG:LIF:COUN?` (47 ms): `+37015⏎E-230> `
+- `:DIAG:IDEN:GPS?` (187 ms): `"--","SFTW P/N # 4850266","SOFTWARE VER # 005","--","--","MODEL # FURUNO GT-80","--","--","--","--"⏎E-230> `
+- `:DIAG:QUER:RESP?` (188 ms): `"--","SFTW P/N # 4850266","SOFTWARE VER # 005","--","--","MODEL # FURUNO GT-80","--","--","--","--"⏎E-230> `
+- `:DIAG:LOG:COUN?` (31 ms): `+222⏎E-230> `
+- `:DIAG:LOG:READ? 1` (78 ms): `"Log 001:20070105.08:24:42: GPS lock started"⏎E-230> `
+- `:DIAG:TEST:RES?` (47 ms): `+0,ALL⏎E-230> `
+- `:STAT:OPER:COND?` (31 ms): `+90⏎E-230> `
+- `:STAT:OPER:HARD:COND?` (32 ms): `+0⏎E-230> `
+- `:STAT:OPER:HOLD:COND?` (47 ms): `+0⏎E-230> `
+- `:STAT:OPER:POW:COND?` (31 ms): `+7⏎E-230> `
+- `:STAT:QUES:COND?` (31 ms): `+0⏎E-230> `
+- `:SYST:ERR?`: `-221,"Settings conflict"⏎E-230> `
+- `:SYST:ERR?`: `-221,"Settings conflict"⏎E-230> `
+- `:SYST:ERR?`: `-230,"Data corrupt or stale"⏎E-230> `
+- `:SYST:ERR?`: `-230,"Data corrupt or stale"⏎scpi > `
+- `:SYST:ERR?`: `+0,"No error"⏎scpi > `
+
