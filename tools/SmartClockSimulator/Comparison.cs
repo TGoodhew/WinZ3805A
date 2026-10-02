@@ -189,6 +189,184 @@ public static class Comparison
         return shape.ToString();
     }
 
+    /// <summary>
+    /// Watches a real receiver through a state change, asking the same read-only queries over and over
+    /// and keeping everything it says (#639).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For the states a person has to cause, such as a pulled antenna or a power cycle. It writes
+    /// three things into <paramref name="outDir"/>:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description><c>cycles.md</c>: every reply of every cycle, raw.</description></item>
+    /// <item><description><c>screens/</c>: the exact bytes of each status screen whose mode line
+    /// differs from the last one kept.</description></item>
+    /// <item><description><c>unsolicited.txt</c>: anything the receiver sends with nothing asked of it,
+    /// which is where a power-up banner would land.</description></item>
+    /// </list>
+    /// <para>
+    /// It sends the same fixed list <see cref="Run"/> does, under the same guard, apart from the whole
+    /// log, which is 14 seconds of wire time a cycle for no new information. It stops at Ctrl+C or when
+    /// <paramref name="duration"/> runs out.
+    /// </para>
+    /// </remarks>
+    public static int Watch(string portName, int baud, string outDir, TimeSpan duration)
+    {
+        string[] queries = [.. Queries.Where(q => q != ":DIAG:LOG:READ:ALL?" && q != ":SYST:ERR?")];
+        string? refused = queries.FirstOrDefault(q => !IsReadOnly(q));
+        if (refused is not null)
+        {
+            Console.Error.WriteLine($"Refusing to run: '{refused}' is not a read-only query.");
+            return 2;
+        }
+
+        using SerialPort port = new(portName, baud, Parity.None, 8, StopBits.One)
+        {
+            Handshake = Handshake.None,
+            DtrEnable = true,
+            RtsEnable = true,
+            ReadTimeout = 200,
+            Encoding = Encoding.Latin1,
+        };
+
+        try
+        {
+            port.Open();
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+        {
+            Console.Error.WriteLine($"Could not open {portName}: {ex.Message}. Is the application still connected to it?");
+            return 1;
+        }
+
+        Directory.CreateDirectory(Path.Combine(outDir, "screens"));
+        string cyclesPath = Path.Combine(outDir, "cycles.md");
+        string unsolicitedPath = Path.Combine(outDir, "unsolicited.txt");
+        UTF8Encoding utf8 = new(encoderShouldEmitUTF8Identifier: false);
+        File.AppendAllText(cyclesPath, string.Create(CultureInfo.InvariantCulture, $"# Watching {portName} from {DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss zzz}\n\n"), utf8);
+
+        using CancellationTokenSource stop = new(duration);
+        Console.CancelKeyPress += (_, e) =>
+        {
+            e.Cancel = true;
+            stop.Cancel();
+        };
+
+        string? lastMode = null;
+        int screens = 0;
+        for (int cycle = 1; !stop.IsCancellationRequested; cycle++)
+        {
+            // Whatever arrived since the last cycle was sent unasked.
+            string unasked = Listen(port, TimeSpan.FromSeconds(2));
+            if (unasked.Length > 0)
+            {
+                File.AppendAllText(unsolicitedPath, string.Create(CultureInfo.InvariantCulture, $"--- {DateTimeOffset.Now:HH:mm:ss.fff}\n{unasked}\n"), Encoding.Latin1);
+                Console.WriteLine($"{DateTimeOffset.Now:HH:mm:ss} UNASKED: {Escape(unasked)}");
+            }
+
+            StringBuilder record = new();
+            record.AppendLine(CultureInfo.InvariantCulture, $"## Cycle {cycle}, {DateTimeOffset.Now:HH:mm:ss}");
+            record.AppendLine();
+            Dictionary<string, string> answers = [];
+            TimeSpan screenTook = TimeSpan.Zero;
+            foreach (string query in queries)
+            {
+                TimeSpan timeout = query is ":SYST:STAT?" ? TimeSpan.FromSeconds(15) : TimeSpan.FromSeconds(3);
+                string reply = Exchange(port, query, timeout, out TimeSpan took);
+                answers[query] = reply;
+                if (query == ":SYST:STAT?")
+                {
+                    screenTook = took;
+                }
+                else
+                {
+                    record.AppendLine(CultureInfo.InvariantCulture, $"- `{query}` ({took.TotalMilliseconds:0} ms): `{Escape(reply)}`");
+                }
+            }
+
+            // Drain the queue, read-only, so each cycle's prompts describe that cycle.
+            for (int i = 0; i < 40; i++)
+            {
+                string error = Exchange(port, ":SYST:ERR?", TimeSpan.FromSeconds(3), out _);
+                record.AppendLine(CultureInfo.InvariantCulture, $"- `:SYST:ERR?`: `{Escape(error)}`");
+                if (error.Contains("No error", StringComparison.Ordinal) || error.Length == 0)
+                {
+                    break;
+                }
+            }
+
+            string screen = answers[":SYST:STAT?"];
+            string mode = ModeLine(screen);
+
+            // A screen that is not a whole screen is kept whatever its mode says: it is where a
+            // power cycle lands, and on 2 Oct 2026 the one reply that could have held a power-up
+            // banner was a screen of this kind, and it was not kept.
+            bool whole = screen.Contains("Receiver Status", StringComparison.Ordinal) &&
+                screen.Contains("GPS Rcv:", StringComparison.Ordinal) &&
+                (screen.EndsWith("scpi > ", StringComparison.Ordinal) || screen.EndsWith("> ", StringComparison.Ordinal));
+            record.AppendLine(CultureInfo.InvariantCulture, $"- `:SYST:STAT?` ({screenTook.TotalMilliseconds:0} ms, {screen.Length} chars{(whole ? string.Empty : ", NOT A WHOLE SCREEN")}), ends `{Escape(screen[Math.Max(0, screen.Length - 60)..])}`");
+            if (!whole || screenTook > TimeSpan.FromSeconds(6))
+            {
+                string odd = string.Create(CultureInfo.InvariantCulture, $"odd-{DateTimeOffset.Now:HHmmss}.txt");
+                File.WriteAllText(Path.Combine(outDir, "screens", odd), screen, Encoding.Latin1);
+                record.AppendLine(CultureInfo.InvariantCulture, $"- unusual screen reply kept as `screens/{odd}`");
+                Console.WriteLine($"{DateTimeOffset.Now:HH:mm:ss} UNUSUAL SCREEN: {screenTook.TotalMilliseconds:0} ms, {screen.Length} chars, kept as {odd}");
+            }
+
+            if (mode != lastMode && screen.Contains("Receiver Status", StringComparison.Ordinal))
+            {
+                screens++;
+                string name = string.Create(CultureInfo.InvariantCulture, $"{screens:000}-{DateTimeOffset.Now:HHmmss}.txt");
+                File.WriteAllText(Path.Combine(outDir, "screens", name), screen, Encoding.Latin1);
+                record.AppendLine(CultureInfo.InvariantCulture, $"- screen saved as `screens/{name}`: {mode}");
+                lastMode = mode;
+            }
+
+            record.AppendLine();
+            File.AppendAllText(cyclesPath, record.ToString(), utf8);
+            Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
+                $"{DateTimeOffset.Now:HH:mm:ss} #{cycle} {First(answers[":SYNC:STAT?"])} TFOM {First(answers[":SYNC:TFOM?"])} FFOM {First(answers[":SYNC:FFOM?"])} tracked {First(answers[":GPS:SAT:TRAC:COUN?"])} | {mode}"));
+        }
+
+        Console.WriteLine($"Stopped. {screens} screens kept in {outDir}.");
+        return 0;
+    }
+
+    /// <summary>Reads whatever arrives within <paramref name="window"/>, asking nothing.</summary>
+    private static string Listen(SerialPort port, TimeSpan window)
+    {
+        StringBuilder text = new();
+        long deadline = Environment.TickCount64 + (long)window.TotalMilliseconds;
+        while (Environment.TickCount64 < deadline)
+        {
+            try
+            {
+                text.Append((char)port.ReadByte());
+            }
+            catch (TimeoutException)
+            {
+                // Silence, which is the usual answer.
+            }
+        }
+
+        return text.ToString();
+    }
+
+    /// <summary>The marked SmartClock mode row of a screen, or what the screen began with.</summary>
+    private static string ModeLine(string screen)
+    {
+        string? marked = screen.Split("\r\n").FirstOrDefault(l => l.StartsWith(">>", StringComparison.Ordinal));
+        return marked is null ? "(no mode marked)" : marked[..Math.Min(46, marked.Length)].TrimEnd();
+    }
+
+    /// <summary>The first line of a reply, without its prompt.</summary>
+    private static string First(string reply)
+    {
+        string line = reply.Split("\r\n")[0];
+        return line.EndsWith("> ", StringComparison.Ordinal) ? "(" + line.Trim() + ")" : line;
+    }
+
     private static string Exchange(SerialPort port, string command, TimeSpan timeout, out TimeSpan took)
     {
         if (!IsReadOnly(command) && command != "*CLS")

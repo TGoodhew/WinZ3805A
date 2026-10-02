@@ -22,6 +22,9 @@ internal static class Program
           --stdout               print one answer to every catalogued query, then exit
           --compare <COMn>       ask a REAL receiver and the simulator the same read-only
                                  queries; write the report to --report (default compare.md)
+          --watch <COMn>         ask a REAL receiver the same read-only queries over and over
+                                 while a person changes its state; keeps every reply and each new
+                                 screen in --out (default watch), for --minutes (default 120)
 
         How it behaves:
           --start powerup|locked how it starts (default powerup)
@@ -75,6 +78,12 @@ internal static class Program
         if (args.Contains("--stdout"))
         {
             return Demonstrate(engine);
+        }
+
+        if (Option(args, "--watch") is string watched)
+        {
+            TimeSpan duration = TimeSpan.FromMinutes(Integer(args, "--minutes") ?? 120);
+            return Comparison.Watch(watched, Integer(args, "--baud") ?? 9600, Option(args, "--out") ?? "watch", duration);
         }
 
         if (Option(args, "--compare") is string real)
