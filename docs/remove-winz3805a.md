@@ -20,7 +20,7 @@ an upgrade that went wrong, or because you have stopped using WinZ3805A.
 | **Asks first** | Whether to save your history and settings to Documents before removing them. **The answer is yes unless you say no.** | Saved as `Documents\WinZ3805A saved data <version> <date>` |
 | **Asks first** | Whether to delete the copies the installer saved when it replaced an older WinZ3805A. **The answer is no unless you say yes.** | `Documents\WinZ3805A earlier copy <version> <date>` |
 | **Leaves** | The Windows App Runtime and .NET 10. Other apps use them too; see [Shared components](#shared-components) | |
-| **Leaves** | A copy of WinZ3805A from the Microsoft Store, or in another Windows account | |
+| **Leaves** | A copy of WinZ3805A in another Windows account | |
 | **Leaves** | The zip you downloaded, the folder you extracted it to, and any history you exported yourself | Wherever you put them |
 
 It asks for administrator permission **once**, and only to remove certificates

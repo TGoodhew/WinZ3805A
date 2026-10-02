@@ -11,7 +11,7 @@
 
 The HP/Symmetricom SmartClock family of GPS-disciplined oscillators (Z3805A, Z3801A, 58503A/B, 59551A, Z3816A) is widely used in home and small labs as a 10 MHz frequency and 1 PPS time reference. The devices expose a rich SCPI command set over RS-232, but the only monitoring tools available are Windows-9x-era applications (SatStat, Z38XX, GPSCon) that require serial-port shims, look badly out of place on modern Windows, and in several cases expose destructive firmware commands directly next to harmless queries.
 
-Users currently either screen-scrape `:SYST:STAT?` in a terminal emulator or run abandoned software under compatibility shims. There is no modern, safe, Store-distributable option.
+Users currently either screen-scrape `:SYST:STAT?` in a terminal emulator or run abandoned software under compatibility shims. There is no modern, safe option.
 
 **Reference device:** HP Z3805A. All behaviour in this spec is written against the Z3805A and the Symmetricom *58503B/59551A Operating and Programming Guide* (097-58503-13, Iss. 1, Mar 2000), which documents the shared command set.
 
@@ -25,7 +25,7 @@ Users currently either screen-scrape `:SYST:STAT?` in a terminal emulator or run
 | G2 | Full receiver status presented as a modern WinUI 3 surface, **not** a reproduction of the 80×24 terminal screen | No fixed-pitch reproduction of the source screen anywhere in the details UI; `WzMonoTextStyle` used only for device-literal text per §9.5.1; all data rendered through the §9.10 component inventory |
 | G3 | Complete coverage of the safe, documented SCPI surface through task-oriented dialogs | Every command in §8 tier S/C reachable from the UI |
 | G4 | Destructive commands are unreachable — not merely warned about | Blocked commands (§8.4) absent from the shipped command catalog; no free-text command path can emit them |
-| G5 | Ships to the Microsoft Store as an MSIX package | Passes Windows App Certification Kit; installs from Store on a clean x64 machine |
+| ~~G5~~ | ~~Ships to the Microsoft Store as an MSIX package~~ | **Dropped 2 Oct 2026 (#575).** The application ships as a signed MSIX package installed from the release zips (§6.3); a Store listing is not planned. |
 | G6 | The app has a visual identity of its own while remaining native to Windows | The §9 token set is implemented in full; §9.13 anti-patterns audit passes; no `SystemAccentColor` used as brand |
 
 ---
@@ -85,7 +85,7 @@ Users currently either screen-scrape `:SYST:STAT?` in a terminal emulator or run
 | Component | Version / choice | Notes |
 |---|---|---|
 | UI framework | **WinUI 3**, shipped in **Windows App SDK 2.3.1** | Current stable as of Aug 2026. WinAppSDK 2.x uses SemVer with the NuGet version matching the SDK version. |
-| Runtime | **.NET 10 (LTS)** — modern .NET, *not* .NET Framework 4.x | WinUI 3 cannot run on .NET Framework, so this is forced. Use the **LTS** release, not the newest STS or preview: Store apps have long tails and LTS gives 3 years of servicing. Do not adopt .NET 11 (Nov 2026, STS) on release. |
+| Runtime | **.NET 10 (LTS)** — modern .NET, *not* .NET Framework 4.x | WinUI 3 cannot run on .NET Framework, so this is forced. Use the **LTS** release, not the newest STS or preview: an instrument monitor stays installed for years, and LTS gives 3 years of servicing. Do not adopt .NET 11 (Nov 2026, STS) on release. |
 | TFM | `net10.0-windows10.0.26100.0` | Confirm against the VS template default at project creation and prefer the template's value if it differs. |
 | Min platform | `10.0.17763.0` (Windows 10 1809) | WinUI 3's floor. Verify WinAppSDK 2.3.1 does not raise it; if it does, follow the SDK. |
 | Architectures | **x64 only** | No AnyCPU — Windows App SDK is native. Omit x86 and ARM64.<br>**Amended 15 Aug 2026**, when the row required x64 *and* ARM64 and said to ship both in the bundle. **Amended again 29 Aug 2026:** ARM64 is not a target of this project at all, and the specification no longer describes it as one — see the note below. |
@@ -157,7 +157,7 @@ C:\Users\Tony\source\WinZ3805A\
 │   ├── how-to-use.md                  The user's guide; the Help window renders it in-app (#312)
 │   ├── adding-a-receiver.md           Driver author's guide (#287), with tutorial-nmea-driver.md (#310)
 │   ├── manual-qa.md                   The release checklist §6.4 and §9.12 point at
-│   ├── privacy.md, store-listing.md   Privacy policy and listing copy for the Store (OQ-6)
+│   ├── privacy.md                     Privacy policy
 │   ├── lady-heather-comparison.md, nmea-against-lady-heather.md   Against the incumbent
 │   ├── porting-to-python-qt.md        The Linux port's work plan (smartclock-monitor)
 │   ├── index.md, _config.yml          GitHub Pages site
@@ -176,7 +176,7 @@ C:\Users\Tony\source\WinZ3805A\
 │   │   ├── Services/                  DeviceSessionService, PollingService, TrendStore,
 │   │   │                              *Preferences + JsonPreferenceFile (settings),
 │   │   │                              FileLoggerProvider, WzMotionService, SurveyLog
-│   │   ├── Assets/                    Store logos, AppIcon.ico
+│   │   ├── Assets/                    Package logos, AppIcon.ico
 │   │   │   └── Fonts/                 CascadiaMono.ttf (OFL 1.1) + licence notice
 │   │   ├── Properties/PublishProfiles/  win-x64.pubxml (§6.3)
 │   │   └── Package.appxmanifest
@@ -212,18 +212,17 @@ The `Device` library must have zero dependency on `Microsoft.UI.*`. All parsing 
 | Repository, solution, root namespace | `WinZ3805A` |
 | App assembly | `WinZ3805A.exe` |
 | Design token prefix | `Wz` — `WzAccentFillBrush`, `WzSpaceMd`, `WzReadoutLargeTextStyle` |
-| MSIX package identity name | `WinZ3805A` (final value issued by Partner Center — see §6.3) |
-| Store display name | See §6.3; **not** necessarily identical to the package name |
+| MSIX package identity name | `WinZ3805A`, publisher `CN=The Schnauzer Group LLC` (see §6.3) |
+| Display name | See §6.3; **not** necessarily identical to the package name |
 
-### 6.3 Microsoft Store packaging
+### 6.3 Packaging
 
 - **Single-project MSIX.** Create from the *Blank App, Packaged (WinUI 3 in Desktop)* template. Do not use a separate Windows Application Packaging Project.
-- **Framework-dependent** deployment of the Windows App SDK, not self-contained. The Store handles the framework package dependency and this keeps the submission small.
+- **Framework-dependent** deployment of the Windows App SDK, not self-contained. The installer provides the framework package when a machine lacks it, and this keeps the package small.
 - **Framework-dependent for .NET too: the package never carries a .NET runtime.** *(Amended 30 Sep 2026, #586, #587, #588.)* .NET 10 is a prerequisite, installed by **Microsoft's own installer**, and serviced by Microsoft Update. It is not serviced by this project. A runtime inside the package was tried (#587) and reverted: Microsoft Update cannot see one, so every .NET security fix would have reached users only when this project released. How .NET reaches a machine depends on the channel:
   - **The online sideload zip** (`WinZ3805A-<version>-x64.zip`) carries no runtime. `Install.cmd` detects a missing .NET 10 and opens Microsoft's download page. Otherwise Windows' own prompt at first launch offers the same page.
   - **The offline sideload zip** (`WinZ3805A-<version>-x64-offline.zip`) adds Microsoft's .NET 10 Runtime installer. `Install.cmd` runs it quietly and machine-wide when .NET 10 is missing, in the same administrator prompt as the certificate. That is the install dotnet.microsoft.com gives, so Microsoft Update services it once the machine is online. The packager fetches the current patch from Microsoft's release metadata at build time and checks its published SHA-512 and its Microsoft signature, so no .NET version is written in the repository.
-  - **The Store** has no .NET framework package and cannot run an installer. The listing therefore states the dependency at the start of its description, as Store Policy 10.2.4 requires, and the certification notes say so too (#575).
-  - **An earlier copy is replaced by the installer** *(#590)*. A release under a different publisher is a different package family, so it cannot upgrade an earlier copy in place: this happened at v1.3.1 and will happen again with the Store identity. `Install.cmd` handles it for every release from v1.0.1 on:
+  - **An earlier copy is replaced by the installer** *(#590)*. A release under a different publisher is a different package family, so it cannot upgrade an earlier copy in place: this happened at v1.3.1. `Install.cmd` handles it for every release from v1.0.1 on:
     - it asks the user to close a running copy;
     - it lists what it will remove before changing anything;
     - after installing, it saves the earlier copy's data folder (`%LOCALAPPDATA%\WinZ3805A`, redirected into the package; every release since v1.0.1 writes only there) to Documents, and moves it into the new copy if that copy has no history yet, never overwriting a file the new copy has;
@@ -231,7 +230,7 @@ The `Device` library must have zero dependency on `Microsoft.UI.*`. All parsing 
     - **on Windows 10 the order is save, remove, install, move** *(#617)*. Windows 10 will not install two packages with the same name and different publishers side by side, and the refused attempt leaves the app unable to start until Windows restarts (#614). So the installer never makes that attempt there: it decides the order from the build number (Windows 11 is 22000 and later) before installing anything. If saving or removing the earlier copy fails, it stops before installing. A refusal on a later build is recorded, the person is told to restart before touching the earlier copy, and later runs on that machine use the Windows 10 order;
     - it removes the certificates earlier releases were signed with from *Trusted People* in the same single administrator prompt. It finds them by thumbprint as well as by the publisher of a copy being removed, because removing an app never removes its certificate.
 
-    Store-signed copies and other Windows accounts are left alone.
+    Other Windows accounts are left alone.
   - **Every run of the installer leaves a log** *(#592)* in `%LOCALAPPDATA%\WinZ3805A Installer\logs`. It records what was found; what was removed or kept and why; the state before and after (Windows build, WinZ3805A packages by publisher ID, the Windows App Runtime and its companions, .NET runtimes, relevant certificates, data folders, Microsoft Update); and every failure with its line. At the end the installer starts the app once. If the app isn't still running 15 s later, the log gets Windows' error events for it and the tail of its own `app.log`: the silent exit #473 was is the case this exists for. It starts the app through the activation manager rather than through Explorer, so a failure is recorded as what it was *(#624)*: Windows' refusal with its code (`0x80270254` is the state #614 found, and the installer then says to restart Windows), or the exit code of a process that closed at once. It falls back to Explorer if the activation manager refuses an elevated caller (`0x80270251`), as Windows documents; an elevated run on Windows 10 22H2 was not refused.
   - **The app makes the Windows App SDK's deployment check itself, once its log exists** *(#625)*. The SDK would otherwise make it from a module initializer before `Main`, and answer a failure with a silent `Environment.Exit` before anything could be logged, which was #473. A status other than Ok is logged with its HRESULT and the app carries on, because nothing it uses needs the runtime's Main and Singleton packages. The check cannot reinstall those packages from inside the app (it is refused with `0x80070005`), so the log says to run the installer again, which can. Measured on Windows 10 with both packages removed: v1.3.3 exited silently; the app with this change logged the failure, then connected, polled and changed its startup task.
   - **Repair is running the latest installer again** *(decided 30 Sep 2026, #597)*. It already repairs the Windows App Runtime and its companions, .NET, the certificate, and earlier copies. Once #600 lands it also repairs a broken copy of the same version, escalating:
@@ -244,7 +243,7 @@ The `Device` library must have zero dependency on `Microsoft.UI.*`. All parsing 
     - Settings' *Repair* keeps the data;
     - Settings' *Reset* deletes it, so the installer never uses it and users are told *Repair*, never *Reset*.
 
-    Development copies, Store copies, other accounts and damaged data are reported, not repaired. Damaged data is the app's to check (#601).
+    Development copies, other accounts and damaged data are reported, not repaired. Damaged data is the app's to check (#601).
   - **In every channel**, Windows patches .NET only when *Receive updates for other Microsoft products* is on. `Install.cmd` reports whether it is and does not change it, since the setting covers every Microsoft product on the machine.
 - **Capabilities in `Package.appxmanifest`:**
   ```xml
@@ -252,20 +251,20 @@ The `Device` library must have zero dependency on `Microsoft.UI.*`. All parsing 
     <rescap:Capability Name="runFullTrust" />
   </Capabilities>
   ```
-  This is the template default and is what permits `System.IO.Ports` (which opens `\\.\COMn` via Win32). `runFullTrust` is a restricted capability requiring justification at submission; it is routinely approved for desktop apps. Justification text to use: *"Desktop application requiring Win32 serial port access to communicate with user-attached RS-232 laboratory instruments."*
-- **Do not** declare the `serialcommunication` DeviceCapability. That is for the UWP `Windows.Devices.SerialCommunication` API, which this app does not use. Declaring unnecessary capabilities adds certification friction.
+  This is the template default and is what permits `System.IO.Ports` (which opens `\\.\COMn` via Win32). `runFullTrust` is a restricted capability, and the one a desktop application needs for Win32 serial-port access to user-attached RS-232 instruments.
+- **Do not** declare the `serialcommunication` DeviceCapability. That is for the UWP `Windows.Devices.SerialCommunication` API, which this app does not use. Declaring a capability the app does not use only widens what it is allowed to do.
 - **Port enumeration** uses `SerialPort.GetPortNames()`, merged with `HKLM\HARDWARE\DEVICEMAP\SERIALCOMM` (a port in the device map but missing from the framework's list is still openable), and enriched with friendly names read from the device tree under `HKLM\SYSTEM\CurrentControlSet\Enum`. **WMI is not used** (corrected 29 Aug 2026, #316): this bullet originally allowed `Win32_PnPEntity` as a best-effort second source, but `Services/SerialPortEnumerator.cs` reads the same `FriendlyName` from the registry without a `System.Management` dependency and without WMI's first-query cost, which on a cold service is seconds rather than milliseconds — the very thing that must never block the UI. Nothing in the enumerator throws; an unreadable key costs that device its description, not the user the port list.
-- **Identity:** `Package/Identity/@Name`, `@Publisher`, and `Properties/PublisherDisplayName` must be replaced with the values Partner Center issues. Leave clear `TODO:` markers in the manifest.
-- **Privacy policy:** the app collects and transmits no user data. State this plainly; a privacy policy URL is still required by Store policy for most listings. The policy is [`docs/privacy.md`](privacy.md), published by GitHub Pages, and the listing copy is [`docs/store-listing.md`](store-listing.md) (OQ-6, #39, closed 21 Aug 2026). The URL is entered in the Partner Center listing rather than declared in the manifest, which carries a comment saying so rather than a `TODO:` (corrected 29 Aug 2026, #316).
-- **Trademark position.** The listing name, package name, and display name must **not** contain "HP", "Hewlett-Packard", "Agilent", "Keysight", or "Symmetricom" — those are company marks and using one implies affiliation. `WinZ3805A` contains a *model designation* rather than a company mark, which is a materially weaker claim and is defensible as nominative descriptive use: the app genuinely is for that device and there is no concise way to say so otherwise. That is the position this project takes.
+- **Identity:** `Package/Identity/@Name` is `WinZ3805A` and `@Publisher` is `CN=The Schnauzer Group LLC`, the subject of the signing certificate, since v1.3.1. These are final: a Store listing, which would have issued its own, was dropped on 2 Oct 2026 (#575). A change of publisher is a change of package family, which the installer handles (#590).
+- **Privacy policy:** the app collects and transmits no user data. State this plainly. The policy is [`docs/privacy.md`](privacy.md).
+- **Trademark position.** The package name and display name must **not** contain "HP", "Hewlett-Packard", "Agilent", "Keysight", or "Symmetricom" — those are company marks and using one implies affiliation. `WinZ3805A` contains a *model designation* rather than a company mark, which is a materially weaker claim and is defensible as nominative descriptive use: the app genuinely is for that device and there is no concise way to say so otherwise. That is the position this project takes.
 
   Two practical hedges follow from it:
 
-  1. **Describe compatibility in the listing body, never in the name.** Body text such as *"works with HP and Symmetricom SCPI GPS receivers including the Z3805A, Z3801A, 58503A/B, and 59551A"* is descriptive use and is fine. The name stays a bare model reference.
-  2. **Keep display name and package identity separable.** `Package/Identity/@Name` is effectively permanent — changing it is a new app with a new listing and no upgrade path for existing users. `Properties/DisplayName` and the Store listing title are one-line changes at any time. If a reviewer objects to `WinZ3805A`, changing the display name to something like *"GPSDO Monitor for Z3805A"* costs nothing, so **do not couple the two in code, resources, or tests**. Read the display name from the manifest; never hard-code the product name in a XAML string.
+  1. **Describe compatibility in descriptions, never in the name.** Text such as *"works with HP and Symmetricom SCPI GPS receivers including the Z3805A, Z3801A, 58503A/B, and 59551A"* is descriptive use and is fine. The name stays a bare model reference.
+  2. **Keep display name and package identity separable.** `Package/Identity/@Name` is effectively permanent — changing it is a new app with no upgrade path for existing users. `Properties/DisplayName` is a one-line change at any time. If `WinZ3805A` ever has to change, changing the display name to something like *"GPSDO Monitor for Z3805A"* costs nothing, so **do not couple the two in code, resources, or tests**. Read the display name from the manifest; never hard-code the product name in a XAML string.
 
   See OQ-8.
-- **No telemetry** in v1. If added later it requires a Store listing disclosure and an in-app opt-in.
+- **No telemetry** in v1. If added later it requires a disclosure in the privacy policy and an in-app opt-in.
 
 ### 6.4 Modern .NET platform usage
 
@@ -2969,8 +2968,8 @@ confirmation.
 
 **History is exported and imported, never copied (#551, added 29 Sep 2026).** `trend.db` lives in
 the package's own data, which Windows deletes with the package. An in-place upgrade keeps it, but an
-uninstall, a new PC, or a switch between the sideloaded and Store builds (a different publisher is a
-different package family) does not. The export is **one SQLite file**: a consistent snapshot taken
+uninstall, a new PC, or a change of publisher (a different publisher is a different package family) does
+not. The export is **one SQLite file**: a consistent snapshot taken
 by `VACUUM INTO` on the store's own connection, so rows still in the WAL are included and the poll
 loop waits a moment instead of racing a copy. A `history_manifest` table records the format, the app
 version, the time and the connected receiver's `*IDN?`. The import works on a private copy of the
@@ -3458,7 +3457,7 @@ something might later branch on.
 9. **`SkyPlotControl`** including its keyboard model and automation peers (A11Y-10, A11Y-11).
 10. **Confirmation dialog infrastructure** per §9.7.4, then wire every tier-C command through it.
 11. **Accessibility pass** against A11Y-1 to A11Y-13, and the §9.13 anti-pattern audit.
-12. **MSIX manifest, assets, WACK**, submission dry run — the manifest and assets shipped with the sideload package (#164); WACK and the submission dry run are deferred with P0-15 (#15, #39), `build/Invoke-Wack.ps1` standing ready if the Store returns (annotated 29 Aug 2026, #316).
+12. **MSIX manifest, assets, WACK**, submission dry run — the manifest and assets shipped with the sideload package (#164); WACK and the submission dry run are deferred with P0-15 (#15, #39), `build/Invoke-Wack.ps1` standing ready if the Store returns (annotated 29 Aug 2026, #316). The Store was dropped on 2 Oct 2026 (#575).
 13. P1 items in listed order.
 
 ---

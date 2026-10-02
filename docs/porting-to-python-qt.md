@@ -443,7 +443,7 @@ fork's own equivalent. None of them should be settled by whoever reaches the fil
 
 | Windows feature | Where it is used | Linux situation |
 |---|---|---|
-| **MSIX / Microsoft Store** | §6.3, and G5 in §2 | Gone. Flatpak or AppImage. G5 becomes a Windows-only goal or is dropped. |
+| **MSIX** | §6.3 | Gone. Flatpak or AppImage. (G5, the Microsoft Store, was dropped on 2 Oct 2026, #575.) |
 | **`Package.Current.DisplayName`** | title bars, per §6.3's rule against hard-coding the name | No package identity. Read the name from one module-level constant instead — but keep the rule that it is read from one place, because the reason for it survives. |
 | **Mica Alt backdrop** | §9.2 | No equivalent. The existing solid-colour fallback becomes the only path, which the code already handles correctly. |
 | **Windows High Contrast** | §9.2, §9.4.1, and two CI gates | **The largest single gap.** See below. |
@@ -537,9 +537,7 @@ intermittent, force the ordering; do not re-run it to see if it reproduces.
   access is a declared device permission (`--device=all` or a udev rule; the user will
   also need to be in `dialout`). AppImage is a reasonable second. Document the serial
   permission prominently; it is the first thing that will go wrong for a new user.
-- **Windows:** PyInstaller one-folder plus an MSI, or a Store submission if G5 is retained.
-  Note that packaging a Python Qt app for the Store is materially harder than packaging the
-  current MSIX, which is a real cost of this port.
+- **Windows:** PyInstaller one-folder plus an MSI.
 - **macOS:** falls out nearly free from PySide6, but nothing here has been thought through
   for it. Do not claim support without a machine to test on.
 
@@ -591,9 +589,8 @@ owns `requirements.md`.
 1. **Which route this is**, per part 0 — an independent port, or one this project adopts and
    amends §2, §3 and §6.1 for. Decide it once, at the start; it determines who owns the rest
    of this list and whether a fix flows back.
-2. **G5 (Microsoft Store).** Retained as a Windows-only goal, or dropped? An independent
-   Linux-first port will almost certainly drop it, which is fine, but it should be stated
-   rather than left to lapse.
+2. **G5 (Microsoft Store).** Settled: dropped for the Windows application too, on 2 Oct 2026
+   (#575).
 3. **High contrast** — option (a) or (b) in part 7. This is the one to be most careful
    about. It is an accessibility promise, the current one is stronger than a hand-authored
    theme can be, and the difference is invisible to anyone not relying on it.

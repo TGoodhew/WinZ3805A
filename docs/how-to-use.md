@@ -713,7 +713,7 @@ pressing Connect or Disconnect, stops the retrying — even if you then cancel t
 The application keeps up to eight weeks of readings (the trend charts show up to 7 days of them),
 and those readings are kept inside the
 application's own data. **Windows deletes that data when the application is uninstalled**, and a
-new PC or a switch between the sideloaded and Store versions starts with none. An ordinary update
+new PC starts with none. An ordinary update
 keeps it. To take it with you, use the two buttons under *History* on the Settings page.
 
 **Export history…** saves every reading kept to one file, with a name you choose. It includes the

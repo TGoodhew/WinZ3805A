@@ -16,7 +16,7 @@ driver interface.
 - [Source code and issues](https://github.com/TGoodhew/WinZ3805A)
 
 This site carries the two documents a person using the application needs — the
-user's guide and the privacy policy the Microsoft Store listing points at — and
+user's guide and the privacy policy — and
 publishes nothing else. The project's other documents live in the repository,
 where a link into the source resolves:
 
@@ -32,8 +32,6 @@ where a link into the source resolves:
   — the release checks that need a person, a receiver, or a machine setting
 - [Against Lady Heather](https://github.com/TGoodhew/WinZ3805A/blob/main/docs/lady-heather-comparison.md)
   — where the application stands against the incumbent tool
-- [Store submission](https://github.com/TGoodhew/WinZ3805A/blob/main/docs/store-listing.md)
-  — the listing's decisions, kept under review with the code
 - [The NMEA driver against Lady Heather's](https://github.com/TGoodhew/WinZ3805A/blob/main/docs/nmea-against-lady-heather.md)
   — the two NMEA implementations compared sentence by sentence
 - [Porting to Python and Qt](https://github.com/TGoodhew/WinZ3805A/blob/main/docs/porting-to-python-qt.md)
