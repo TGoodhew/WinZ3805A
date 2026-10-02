@@ -216,9 +216,12 @@ function Invoke-VmRun {
     $output.TrimEnd()
 }
 
-# Waits until the guest is at a signed-in desktop: Explorer running and no sign-in screen. A guest
-# login can succeed while the automatic sign-in is still under way, which is not a state a UI check
-# can run in; the first QA Clean snapshot was taken there.
+# Waits until the guest is at a signed-in desktop: Explorer running, no sign-in screen, and VMware
+# Tools' user-session half running as the account - the part that runs programs on the desktop. A
+# guest login can succeed while the automatic sign-in is still under way, which is not a state a UI
+# check can run in; the first QA Clean snapshot was taken there. And on Windows 11 the desktop can
+# be up while that Tools process is not, which failed a run with "the specified guest user must be
+# logged in interactively" (2 Oct 2026).
 function Wait-QaDesktop {
     [CmdletBinding()]
     param([Parameter(Mandatory)]$Vm, [int]$Seconds = 180)
@@ -227,7 +230,11 @@ function Wait-QaDesktop {
     while ((Get-Date) -lt $deadline) {
         try {
             $processes = Invoke-VmRun $Vm listProcessesInGuest -Guest
-            if ($processes -match 'explorer\.exe' -and $processes -notmatch 'LogonUI\.exe') { return }
+            # A wildcard, not a regex: the owner is DOMAIN\user, and a backslash built into a regex
+            # here once came out as '\qa', an invalid escape that threw on every poll until the
+            # wait timed out.
+            $userTools = $processes -split "`n" | Where-Object { $_ -like "*\$($Vm.Guest.UserName), cmd=*vmtoolsd*" }
+            if ($processes -match 'explorer\.exe' -and $processes -notmatch 'LogonUI\.exe' -and $userTools) { return }
         }
         catch { }
         Start-Sleep -Seconds 3
@@ -286,13 +293,18 @@ function Invoke-QaGuest {
         [Parameter(Mandatory)][string]$Program,
         [string[]]$Arguments = @()
     )
-    try {
-        Invoke-VmRun $Vm runProgramInGuest -Arguments (@('-activeWindow', '-interactive', $Program) + $Arguments) -Guest | Out-Null
-        return 0
-    }
-    catch {
-        if ($_.Exception.Message -match 'exit code:\s*(-?\d+)') { return [int]$Matches[1] }
-        throw
+    # A guest whose Tools user session is still starting refuses with "must be logged in
+    # interactively"; that is waited out briefly rather than failed.
+    for ($attempt = 1; ; $attempt++) {
+        try {
+            Invoke-VmRun $Vm runProgramInGuest -Arguments (@('-activeWindow', '-interactive', $Program) + $Arguments) -Guest | Out-Null
+            return 0
+        }
+        catch {
+            if ($_.Exception.Message -match 'exit code:\s*(-?\d+)') { return [int]$Matches[1] }
+            if ($_.Exception.Message -match 'logged in interactively' -and $attempt -lt 10) { Start-Sleep -Seconds 5; continue }
+            throw
+        }
     }
 }
 
