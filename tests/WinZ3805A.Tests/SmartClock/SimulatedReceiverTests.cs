@@ -49,19 +49,30 @@ public sealed class SimulatedReceiverTests
         (SimulatedReceiver receiver, FakeTimeProvider clock) = Bench();
         receiver.StartLocked();
 
+        // For about a minute after the antenna goes it still says LOCK, tracking nothing; the time
+        // interval answers for the first 18 seconds of that (2 Oct 2026).
         receiver.AntennaConnected = false;
-        clock.Advance(TimeSpan.FromSeconds(3));
+        clock.Advance(TimeSpan.FromSeconds(10));
+        Assert.Equal(("LOCK", 0), (receiver.SyncState, receiver.Tracked.Count));
+        Assert.True(receiver.HasTimeInterval);
+        clock.Advance(TimeSpan.FromSeconds(10));
+        Assert.False(receiver.HasTimeInterval);
+        Assert.Equal("LOCK", receiver.SyncState);
+
+        // Then holdover, which :SYNC:STAT? calls WAIT, waiting for GPS.
+        clock.Advance(receiver.Timing.CoastBeforeHoldover - TimeSpan.FromSeconds(20) + TimeSpan.FromSeconds(3));
         ScreenSnapshot holdover = receiver.Snapshot();
-        Assert.Equal(("HOLD", "GPS 1PPS invalid", 0, false), (receiver.SyncState, holdover.ModeDetail, holdover.Tracked.Count, holdover.GpsOnePpsValid));
+        Assert.Equal(("WAIT", "GPS", "GPS 1PPS invalid", 0, false), (receiver.SyncState, receiver.WaitingFor, holdover.ModeDetail, holdover.Tracked.Count, holdover.GpsOnePpsValid));
         Assert.Equal(TimeSpan.FromSeconds(3), holdover.HoldoverDuration);
         Assert.NotNull(holdover.PresentMicroseconds);
+        Assert.Equal((72, 2), (receiver.OperationCondition, receiver.HoldoverCondition));
 
         // holdover-gps-1pps-invalid-3.txt: the antenna back and the satellites with it, the mode not
         // yet changed.
         receiver.AntennaConnected = true;
         clock.Advance(TimeSpan.FromSeconds(1));
         ScreenSnapshot signalBack = receiver.Snapshot();
-        Assert.Equal("HOLD", receiver.SyncState);
+        Assert.Equal("WAIT", receiver.SyncState);
         Assert.True(signalBack.GpsOnePpsValid);
 
         clock.Advance(receiver.Timing.HoldoverRelease);
@@ -83,8 +94,12 @@ public sealed class SimulatedReceiverTests
 
         receiver.ForceHoldover();
         clock.Advance(TimeSpan.FromHours(1));
-        Assert.Equal("HOLD", receiver.SyncState);
+        Assert.Equal(("HOLD", "NONE"), (receiver.SyncState, receiver.WaitingFor));
         Assert.Equal("manually initiated", receiver.Snapshot().ModeDetail);
+
+        // GPS is still there, so the offset is still measured (2 Oct 2026).
+        Assert.True(receiver.HasTimeInterval);
+        Assert.Equal((88, 1), (receiver.OperationCondition, receiver.HoldoverCondition));
 
         receiver.Recover();
         Assert.Equal("REC", receiver.SyncState);
@@ -100,7 +115,7 @@ public sealed class SimulatedReceiverTests
         clock.Advance(receiver.Timing.Acquisition / 10);
 
         Assert.Equal("fine freq adj", receiver.Snapshot().ModeDetail);
-        Assert.Equal(TimeSpan.FromSeconds(3), receiver.ReportedUtc - before);
+        Assert.Equal(receiver.Timing.Acquisition / 10, receiver.ReportedUtc - before);
     }
 
     [Fact]
@@ -120,11 +135,11 @@ public sealed class SimulatedReceiverTests
 
         receiver.StartLocked();
         receiver.AntennaConnected = false;
-        clock.Advance(TimeSpan.FromSeconds(2));
+        clock.Advance(receiver.Timing.CoastBeforeHoldover);
         _ = receiver.Mode;
 
         string log = engine.Log.ReadAll();
         Assert.Contains("Log 001:20070216.12:00:00:  GPS lock started", log, StringComparison.Ordinal);
-        Assert.Contains("Log 002:20070216.12:00:00:  Holdover started, not tracking GPS", log, StringComparison.Ordinal);
+        Assert.Contains("Log 002:20070216.12:00:54:  Holdover started, not tracking GPS", log, StringComparison.Ordinal);
     }
 }

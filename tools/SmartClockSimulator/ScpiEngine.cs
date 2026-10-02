@@ -65,13 +65,11 @@ public sealed class ScpiEngine
     private int _newestError;
     private bool _glitchPending;
     private string _lastTest = "+0,ALL";
-    // The bench unit's condition registers while locked (2 Oct 2026). What they read in any other
-    // state is not known, so they stay at these.
-    private readonly Dictionary<string, int> _registers = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["OPERation:COND"] = 90,
-        ["OPERation:POWerup:COND"] = 7,
-    };
+    private Result? _lastBody;
+
+    // Masks set over the wire. The condition registers that move with the state come from the
+    // receiver instead (OperationCondition and its siblings).
+    private readonly Dictionary<string, int> _registers = new(StringComparer.OrdinalIgnoreCase);
 
     private int _eventEnable;
 
@@ -137,12 +135,20 @@ public sealed class ScpiEngine
     {
         ArgumentNullException.ThrowIfNull(line);
         string text = line.Trim();
-        if (text.Length == 0)
+        if (text.Length == 0 || !_receiver.PoweredOn)
         {
+            // A receiver with no power hears nothing and says nothing.
             return null;
         }
 
         string echo = Echo ? line + "\r\n" : string.Empty;
+
+        if (_receiver.TakeFirstCommand())
+        {
+            // The first command after power returned was lost on the bench unit: a bare prompt, no
+            // data, no error (2 Oct 2026). Not the -362 §7.2 records for opening the port.
+            return new Reply(echo + Prompt, TimeSpan.FromMilliseconds(300));
+        }
 
         if (_glitchPending)
         {
@@ -208,11 +214,46 @@ public sealed class ScpiEngine
         {
             if (Matches(pattern, header))
             {
-                return handler(command);
+                Result result = RefusedNow(pattern) ? Result.Fail(-230) : handler(command);
+                if (result.Body is not null && !Matches(":DIAGnostic:QUERy:RESPonse?", header))
+                {
+                    _lastBody = result;
+                }
+
+                return result;
             }
         }
 
         return Result.Fail(-113);
+    }
+
+    /// <summary>
+    /// The queries the bench unit refused with <c>-230</c> in a state, though it answers them in others
+    /// (2 Oct 2026).
+    /// </summary>
+    /// <remarks>
+    /// Through power-up it has no time to give, so every time and date query is refused until lock, as
+    /// are the leap count and the predicted uncertainty. Until it has a position it has none to give.
+    /// And for the first half minute, while its GPS engine is still starting, it cannot say what that
+    /// engine is, what it expects to see or how many it tracks.
+    /// </remarks>
+    private bool RefusedNow(string pattern)
+    {
+        string[] untilLock =
+        [
+            ":SYSTem:DATE?", ":SYSTem:TIME?", ":PTIMe:DATE?", ":PTIMe:TIME?", ":PTIMe:TIME:STRing?",
+            ":PTIMe:LEAPsecond:ACCumulated?", ":SYNChronization:HOLDover:TUNCertainty:PREDicted?",
+        ];
+        string[] untilPositioned = [":GPS:POSition?", ":GPS:POSition:ACTual?"];
+        string[] whileBooting =
+        [
+            ":DIAGnostic:IDENtify:GPS?", ":GPS:SATellite:VISibility:PREDicted?",
+            ":GPS:SATellite:VISibility:PREDicted:COUNt?", ":GPS:SATellite:TRACking:COUNt?",
+        ];
+
+        return (untilLock.Contains(pattern) && _receiver.InPowerUp)
+            || (untilPositioned.Contains(pattern) && _receiver.Acquiring)
+            || (whileBooting.Contains(pattern) && _receiver.Booting);
     }
 
     /// <summary>
@@ -278,12 +319,12 @@ public sealed class ScpiEngine
         {
             // Never run on the bench unit. The subsystem tests took the receiver from LOCK to POW
             // (§8.3, #53), and *TST? runs them all, so it does the same.
-            r.PowerCycle();
+            r.RestartAfterSelfTest();
             return Result.Value(Int(0), TimeSpan.FromSeconds(12));
         });
 
         // ---- System -------------------------------------------------------------------------
-        On(":SYSTem:STATus?", _ => Result.Text(StatusScreenWriter.Write(r.Snapshot()).TrimEnd('\r', '\n'), TimeSpan.FromMilliseconds(1200)));
+        On(":SYSTem:STATus?", _ => Result.Text(StatusScreenWriter.Write(r.Snapshot()).TrimEnd('\r', '\n'), r.NextScreenLatency()));
         On(":SYSTem:STATus:LENGth?", _ => Result.Value(Int(23)));
         On(":SYSTem:ERRor?", _ => Result.Value(NextError()));
         On(":SYSTem:DATE?", _ => Result.Value(Date(r.ReportedUtc)));
@@ -329,8 +370,8 @@ public sealed class ScpiEngine
         // -221 outside holdover on the bench unit, not the -230 the 58503A guide gives.
         On(":SYNChronization:HOLDover:TUNCertainty:PRESent?", _ => r.Snapshot().PresentMicroseconds is double p && r.InHoldover ? Result.Value(Micro(p)) : Result.Fail(-221));
 
-        // "NONE" on the bench unit while locked. What it says while waiting is not known.
-        On(":SYNChronization:HOLDover:WAITing?", _ => Result.Value("NONE"));
+        // "GPS" through a holdover caused by losing GPS, "NONE" otherwise, a forced one included.
+        On(":SYNChronization:HOLDover:WAITing?", _ => Result.Value(r.WaitingFor));
         On(":SYNChronization:HOLDover:INITiate", _ =>
         {
             r.ForceHoldover();
@@ -345,17 +386,20 @@ public sealed class ScpiEngine
         On(":SYNChronization:IMMediate", _ => Result.None());
 
         // ---- GPS reference and position -----------------------------------------------------
-        On(":GPS:REFerence:VALid?", _ => Result.Value(Bool(r.Tracked.Count > 0)));
+        On(":GPS:REFerence:VALid?", _ => Result.Value(Bool(r.ReferenceValid)));
         On(":GPS:REFerence:ADELay?", _ => Result.Value(Real(r.AntennaDelaySeconds)));
         On(":GPS:REFerence:ADELay", c => Number(c, 0, 999_999e-9, v => r.AntennaDelaySeconds = v));
         On(":GPS:POSition?", _ => Result.Value(Position(r.HeldPosition)));
         On(":GPS:POSition:ACTual?", _ => Result.Value(Position(r.HeldPosition)));
         On(":GPS:POSition:HOLD:LAST?", _ => Result.Value(Position(r.HeldPosition)));
-        On(":GPS:POSition:HOLD:STATe?", _ => Result.Value(Bool(r.SurveyPercent is null)));
+        On(":GPS:POSition:HOLD:STATe?", _ => Result.Value(Bool(!r.Surveying)));
 
         // With no survey running the bench unit refuses this with -221 rather than answer a number.
-        On(":GPS:POSition:SURVey:PROGress?", _ => r.SurveyPercent is double percent ? Result.Value(Int((int)percent)) : Result.Fail(-221));
-        On(":GPS:POSition:SURVey:STATe?", _ => Result.Value(Bool(r.SurveyPercent is not null)));
+        // "+1.8" while one runs, to a decimal, and "ONCE" for its state rather than a 1 (2 Oct 2026).
+        On(":GPS:POSition:SURVey:PROGress?", _ => r.Surveying
+            ? Result.Value((r.SurveyPercent ?? 0).ToString("+0.0;-0.0", Invariant))
+            : Result.Fail(-221));
+        On(":GPS:POSition:SURVey:STATe?", _ => Result.Value(r.Surveying ? "ONCE" : "0"));
         On(":GPS:POSition:SURVey:STATe:POWerup?", _ => Result.Value(Bool(r.SurveyAtPowerUp)));
         On(":GPS:POSition:SURVey:STATe:POWerup", c => Switch(c, on => r.SurveyAtPowerUp = on));
         On(":GPS:POSition:SURVey:STATe", c =>
@@ -431,8 +475,8 @@ public sealed class ScpiEngine
 
         // ---- Front panel ----------------------------------------------------------------------
         On(":LED:ALARm?", _ => Result.Value(Bool(!r.Health.AllOk)));
-        On(":LED:GPSLock?", _ => Result.Value(Bool(r.Mode == ClockMode.Locked)));
-        On(":LED:HOLDover?", _ => Result.Value(Bool(r.InHoldover)));
+        On(":LED:GPSLock?", _ => Result.Value(Bool(r.GpsLockLamp)));
+        On(":LED:HOLDover?", _ => Result.Value(Bool(r.HoldoverLamp)));
         On(":LED:ACTive?", _ => Result.Value(Bool(r.ActiveLamp)));
         On(":LED:ENABled?", _ => Result.Value(Bool(r.EnabledLamp)));
 
@@ -445,8 +489,9 @@ public sealed class ScpiEngine
         On(":DIAGnostic:LIFetime:COUNt?", _ => Result.Value(Int(r.LifetimeHours)));
         On(":DIAGnostic:IDENtify:GPS?", _ => Result.Text(GpsIdentity));
 
-        // Answered with the GPS engine's identity on the bench unit, the same as the query above.
-        On(":DIAGnostic:QUERy:RESPonse?", _ => Result.Text(GpsIdentity));
+        // Repeats whatever the previous command answered: the GPS engine's identity after
+        // :DIAG:IDEN:GPS?, the running hours after :DIAG:LIF:COUN? (2 Oct 2026).
+        On(":DIAGnostic:QUERy:RESPonse?", _ => _lastBody ?? Result.Fail(-230));
         On(":DIAGnostic:LOG:COUNt?", _ => Result.Value(Int(Log.Count)));
         On(":DIAGnostic:LOG:READ?", c =>
         {
@@ -480,7 +525,7 @@ public sealed class ScpiEngine
 
             // Every subsystem test took the receiver out of lock (§8.3, #53). Durations measured:
             // ALL 12.4 s, GPS 11.6 s, the rest 2.4 to 5.4 s.
-            r.PowerCycle();
+            r.RestartAfterSelfTest();
             TimeSpan took = name switch
             {
                 "ALL" => TimeSpan.FromSeconds(12.4),
@@ -494,7 +539,14 @@ public sealed class ScpiEngine
         foreach (string group in new[] { "OPERation", "OPERation:HARDware", "OPERation:HOLDover", "OPERation:POWerup", "QUEStionable" })
         {
             string key = group;
-            On($":STATus:{group}:CONDition?", _ => Result.Value(Int(Register(key, "COND"))));
+            On($":STATus:{group}:CONDition?", _ => Result.Value(Int(key switch
+            {
+                // The three that moved with the state on 2 Oct 2026; the others read 0 throughout.
+                "OPERation" => r.OperationCondition,
+                "OPERation:HOLDover" => r.HoldoverCondition,
+                "OPERation:POWerup" => r.PowerCondition,
+                _ => Register(key, "COND"),
+            })));
             On($":STATus:{group}:EVENt?", _ => Result.Value(Int(Register(key, "EVEN"))));
             foreach (string field in new[] { "ENABle", "NTRansition", "PTRansition" })
             {
