@@ -86,6 +86,8 @@ holdover, survey in progress, position hold and the week-rollover date. One is n
 |---|---|
 | Health-monitor failure | Opportunistic: capture whenever the health line is not `[ OK ]`. Leave the harness running during any hardware move (the procedure is `docs/manual-qa.md` §5); it writes one file per state it has not seen and is designed to reconnect when the power goes and the adapter re-enumerates — a path that has not been deliberately exercised. |
 
-Two modes the application distinguishes have no capture either, because neither happened during
-the sitting and §11.1 does not ask for them: *Waiting to recover* — a holdover screen carrying a
-wait reason — and *Diagnostic / off*. The harness will take either the first time it sees one.
+One mode the application distinguishes has no capture, because it has never happened and §11.1
+does not ask for it: *Diagnostic / off*. The harness will take it the first time it sees one. The
+other this paragraph listed, *Waiting to recover*, turned out to be no separate screen at all: it
+is what `:SYNC:STAT?` answers (`WAIT`) through a holdover caused by losing GPS, whose screen is the
+`Holdover: GPS 1PPS invalid` already captured here (2 Oct 2026, #642).
