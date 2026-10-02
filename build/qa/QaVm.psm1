@@ -235,4 +235,101 @@ function Wait-QaDesktop {
     throw "The guest did not reach a signed-in desktop within $Seconds seconds."
 }
 
-Export-ModuleMember -Function Get-QaCredential, Set-QaCredential, New-QaIso, New-QaVm, Invoke-VmRun, Wait-QaDesktop
+# Puts the VM in the state a check starts from: reverted to a snapshot, started without a window,
+# and at a signed-in desktop. A QA pass calls Stop-QaVm when it is done, so nothing is left running.
+function Start-QaVm {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)]$Vm, [string]$Snapshot = 'QA Clean')
+
+    Invoke-VmRun $Vm revertToSnapshot -Arguments $Snapshot | Out-Null
+    $running = & $script:VmRunPath -T ws list
+    if (-not ($running -match [regex]::Escape($Vm.Vmx))) { Invoke-VmRun $Vm start -Arguments 'nogui' | Out-Null }
+    Wait-QaDesktop -Vm $Vm
+}
+
+# Powers the VM off. Hard, because whatever a check left behind is discarded by the next revert
+# anyway, and a soft stop can wait on a guest that is mid-install.
+function Stop-QaVm {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)]$Vm)
+
+    $running = & $script:VmRunPath -T ws list
+    if ($running -match [regex]::Escape($Vm.Vmx)) { Invoke-VmRun $Vm stop -Arguments 'hard' | Out-Null }
+}
+
+# Copies a file into the guest (-ToGuest) or out of it.
+function Copy-QaFile {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]$Vm,
+        [Parameter(Mandatory)][string]$Source,
+        [Parameter(Mandatory)][string]$Destination,
+        [switch]$ToGuest
+    )
+    $command = if ($ToGuest) { 'CopyFileFromHostToGuest' } else { 'CopyFileFromGuestToHost' }
+    Invoke-VmRun $Vm $command -Arguments $Source, $Destination -Guest | Out-Null
+}
+
+# Runs a command on the guest's signed-in desktop and returns its exit code. -interactive is what
+# puts it in the signed-in session, where an installer's start check can open a window; without it
+# the program runs in a session nobody sees. vmrun reports a non-zero exit as a failure of its own,
+# so the code is read out of that message rather than treated as an error.
+#
+# The program's arguments go to vmrun as separate words. Given as one string, vmrun passed them as a
+# single quoted argument: cmd /c coped, because it re-parses its whole command line, but
+# powershell.exe received one argument starting "-NoProfile -Exec..." and exited 1 without running
+# anything (the second guest runner, 2 Oct 2026).
+function Invoke-QaGuest {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]$Vm,
+        [Parameter(Mandatory)][string]$Program,
+        [string[]]$Arguments = @()
+    )
+    try {
+        Invoke-VmRun $Vm runProgramInGuest -Arguments (@('-activeWindow', '-interactive', $Program) + $Arguments) -Guest | Out-Null
+        return 0
+    }
+    catch {
+        if ($_.Exception.Message -match 'exit code:\s*(-?\d+)') { return [int]$Matches[1] }
+        throw
+    }
+}
+
+# Runs a PowerShell script on the guest's signed-in desktop and returns its exit code and output.
+# The script travels as a file and runs with -File, so nothing has to survive being quoted through
+# vmrun and a command line: the first guest runner passed -Command strings, and an Expand-Archive
+# exited 1 with no way to see why. Everything it writes is captured to a file and brought back.
+function Invoke-QaGuestScript {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]$Vm,
+        [Parameter(Mandatory)][string]$Script,
+        [string]$Name = 'step'
+    )
+
+    $stamp = '{0}-{1:HHmmssfff}' -f $Name, (Get-Date)
+    $local = Join-Path ([IO.Path]::GetTempPath()) "qa-$stamp.ps1"
+    $wrapped = "`$ErrorActionPreference = 'Stop'`r`n& {`r`n$Script`r`n} *> C:\qa\$stamp.log`r`nexit `$LASTEXITCODE"
+    [IO.File]::WriteAllText($local, $wrapped, (New-Object Text.UTF8Encoding($true)))
+    try {
+        Invoke-VmRun $Vm createDirectoryInGuest -Arguments 'C:\qa' -Guest -ErrorAction SilentlyContinue | Out-Null
+    }
+    catch { }   # already there
+    Copy-QaFile $Vm -Source $local -Destination "C:\qa\$stamp.ps1" -ToGuest
+    Remove-Item $local -Force
+
+    $code = Invoke-QaGuest $Vm 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe' @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "C:\qa\$stamp.ps1")
+
+    $output = ''
+    $logLocal = Join-Path ([IO.Path]::GetTempPath()) "qa-$stamp.log"
+    try {
+        Copy-QaFile $Vm -Source "C:\qa\$stamp.log" -Destination $logLocal
+        $output = Get-Content $logLocal -Raw
+        Remove-Item $logLocal -Force
+    }
+    catch { $output = '(the script left no output)' }
+    [pscustomobject]@{ ExitCode = $code; Output = "$output".TrimEnd() }
+}
+
+Export-ModuleMember -Function Get-QaCredential, Set-QaCredential, New-QaIso, New-QaVm, Invoke-VmRun, Wait-QaDesktop, Start-QaVm, Stop-QaVm, Copy-QaFile, Invoke-QaGuest, Invoke-QaGuestScript
