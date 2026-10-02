@@ -20,6 +20,10 @@
                               guide in the package and F1, a second launch typed into the Start
                               menu bringing a covered window forward, and the tray icon surviving
                               an Explorer restart (guest\AppChecks.ps1); a screenshot is kept
+      receiver           the app against the simulated Z3805A on the VM's COM2 (#639): connects and
+                              locks, follows a pulled antenna into holdover and back, and comes
+                              back by itself after the receiver goes silent. Needs the VM's
+                              simulator port (Add-QaSimulatorPort)
 
 .PARAMETER Online
     The candidate's online zip. With -Offline, or with -Release instead.
@@ -45,7 +49,7 @@ param(
     [string]$Offline,
     [string]$Release,
     [string[]]$Machines = @('QA-Win10', 'QA-Win11'),
-    [string[]]$Scenarios = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'app-checks'),
+    [string[]]$Scenarios = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'app-checks', 'receiver'),
     [string]$OutDir
 )
 
@@ -56,7 +60,7 @@ Import-Module (Join-Path $PSScriptRoot 'QaVm.psm1') -Force
 # names no scenario - the first run of this script ran nothing and reported success.
 $Machines = @($Machines | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 $Scenarios = @($Scenarios | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-$known = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'app-checks')
+$known = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'app-checks', 'receiver')
 $unknown = @($Scenarios | Where-Object { $known -notcontains $_ })
 if ($unknown.Count) { throw "Unknown scenario(s): $($unknown -join ', '). Known: $($known -join ', ')." }
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
@@ -314,12 +318,145 @@ function Test-AppChecks {
     foreach ($c in $parsed) { Check $Result "[$($c.section)] $($c.name)" ($c.ok -eq $true) "$($c.detail)" }
 }
 
+# Builds the Z3805A simulator once per run, into the run's own folder.
+function Get-Simulator {
+    $exe = Join-Path $OutDir 'simulator\SmartClockSimulator.exe'
+    if (-not (Test-Path $exe)) {
+        $output = & dotnet build (Join-Path $repo 'tools\SmartClockSimulator\SmartClockSimulator.csproj') -c Release -o (Split-Path $exe) 2>&1 | Out-String
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path $exe)) { throw "the simulator did not build: $output" }
+    }
+    $exe
+}
+
+# One control command to a running simulator, and its answer.
+function Send-SimulatorControl {
+    param([string]$Pipe, [string]$Command)
+    $client = New-Object System.IO.Pipes.NamedPipeClientStream('.', $Pipe, [System.IO.Pipes.PipeDirection]::InOut)
+    try {
+        $client.Connect(10000)
+        $writer = New-Object System.IO.StreamWriter($client)
+        $writer.AutoFlush = $true
+        $reader = New-Object System.IO.StreamReader($client)
+        $writer.WriteLine($Command)
+        $reader.ReadLine()
+    }
+    finally { $client.Dispose() }
+}
+
+# Waits in the guest for the app's log to gain a line matching a pattern after a given line count,
+# and returns what it found: { found, line, count }.
+function Wait-AppLog {
+    param($Vm, [string]$Pattern, [int]$After, [int]$Seconds, [string]$Label)
+    $r = Invoke-QaGuestScript $Vm -Name "wait-$Label" -Script @"
+`$pkg = Get-AppxPackage -Name WinZ3805A | Select-Object -First 1
+`$log = Join-Path `$env:LOCALAPPDATA "Packages\`$(`$pkg.PackageFamilyName)\LocalCache\Local\WinZ3805A\logs\app.log"
+`$deadline = (Get-Date).AddSeconds($Seconds)
+do {
+    `$lines = @(if (Test-Path `$log) { Get-Content `$log })
+    `$hit = `$lines | Select-Object -Skip $After | Where-Object { `$_ -match '$Pattern' } | Select-Object -First 1
+    if (`$hit) { break }
+    Start-Sleep -Seconds 2
+} while ((Get-Date) -lt `$deadline)
+[ordered]@{ found = [bool]`$hit; line = "`$hit"; count = `$lines.Count; tail = (`$lines | Select-Object -Last 3) -join ' | ' } | ConvertTo-Json -Compress
+"@
+    $line = $r.Output -split "`r?`n" | Where-Object { $_.StartsWith('{') } | Select-Object -Last 1
+    if (-not $line) { throw "waiting for '$Pattern' printed nothing: $($r.Output)" }
+    $line | ConvertFrom-Json
+}
+
+# The application against the simulated Z3805A, over the VM's second serial port (#639): it connects
+# and locks, follows a pulled antenna into holdover and back, and survives the receiver going silent.
+# Nothing here can be done to a real receiver without a person at the bench.
+function Test-Receiver {
+    param($Vm, $Result)
+    $pipe = Get-QaSimulatorPipe -Vm $Vm
+    if (-not (Select-String -LiteralPath $Vm.Vmx -SimpleMatch "\\.\pipe\$pipe" -Quiet)) {
+        $Result.Error = "skipped: the VM has no simulator port; run Add-QaSimulatorPort (build/qa/README.md)"
+        return
+    }
+
+    Send-Zip $Vm $Offline 'candidate'
+    $code = Install-Candidate $Vm 'candidate'
+
+    # Installed is what this scenario needs; whether the start check passed is fresh-offline's
+    # question. Exit 2 is recorded rather than failed: on the first run here the app took 14 s to
+    # write its log on a freshly snapshotted VM, and the start check had given up at 13.
+    Check $Result 'installed (exit 0, or 2 with the start check timing out)' ($code -in 0, 2) "exit $code"
+
+    # Remembered settings for COM2 with connect-on-launch, as a person choosing the port would leave.
+    $null = Invoke-QaGuestScript $Vm -Name 'connect-com2' -Script @'
+Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue | Stop-Process -Force
+Start-Sleep -Seconds 2
+$pkg = Get-AppxPackage -Name WinZ3805A | Select-Object -First 1
+$dir = Join-Path $env:LOCALAPPDATA "Packages\$($pkg.PackageFamilyName)\LocalCache\Local\WinZ3805A"
+New-Item -ItemType Directory -Force $dir | Out-Null
+'{"PortName":"COM2","AutoDetect":false,"BaudRate":9600,"DataBits":8,"Parity":0,"StopBits":1,"ReconnectAutomatically":true,"ConnectOnLaunch":true}' | Set-Content (Join-Path $dir 'connection.json') -Encoding ascii
+Start-Process "shell:AppsFolder\$($pkg.PackageFamilyName)!App"
+'@
+
+    $simulator = Start-Process (Get-Simulator) -PassThru -WindowStyle Hidden `
+        -ArgumentList '--pipe-client', $pipe, '--start', 'locked', '--speed', '2', '--control', "$pipe-control" `
+        -RedirectStandardOutput (Join-Path $Result.Folder 'simulator.log') -RedirectStandardError (Join-Path $Result.Folder 'simulator.err')
+    try {
+        $seen = Wait-AppLog $Vm 'Session COM2 is now Connected' 0 120 'connected'
+        Check $Result 'connected to the simulated receiver on COM2' $seen.found "$($seen.line)$($seen.tail)"
+        $seen = Wait-AppLog $Vm 'State: LOCK' 0 60 'locked'
+        Check $Result 'locked' $seen.found $seen.line
+        $mark = $seen.count
+
+        $null = Send-SimulatorControl "$pipe-control" 'antenna off'
+        $seen = Wait-AppLog $Vm 'State: (WAIT|HOLD)' $mark 120 'holdover'
+        Check $Result 'a pulled antenna is seen as holdover (WAIT, #642)' $seen.found $seen.line
+        try { Invoke-VmRun $Vm captureScreen -Arguments (Join-Path $Result.Folder 'holdover.png') -Guest | Out-Null } catch { }
+
+        # manual-qa.md section 10, the half a harness can see: "pull the antenna and wait". The app
+        # announces a loss only after a minute of it (LockWatch.Grace), so the antenna stays off
+        # until it has; a second run that plugged it back after 59 s rightly got no notification.
+        # Its title follows the mode when the minute runs out: "Receiver in holdover" in holdover,
+        # "has lost GPS lock" if recovery has already begun (LockWatch.Describe).
+        # Whether they appear on screen, and that none comes with the switch off, stay with a person.
+        $seen = Wait-AppLog $Vm 'Notified: Receiver (in holdover|has lost GPS lock)' $seen.count 120 'notified-lost'
+        Check $Result '[10] a notification that lock was lost, after the grace minute' $seen.found $seen.line
+        $mark = $seen.count
+
+        $null = Send-SimulatorControl "$pipe-control" 'antenna on'
+        $seen = Wait-AppLog $Vm 'State: REC' $mark 120 'recovery'
+        Check $Result 'reconnecting the antenna starts recovery' $seen.found $seen.line
+        $seen = Wait-AppLog $Vm 'State: LOCK' $seen.count 120 'relocked'
+        Check $Result 'and the receiver locks again' $seen.found $seen.line
+        $seen = Wait-AppLog $Vm 'Notified: Receiver has regained GPS lock' $mark 60 'notified-regained'
+        Check $Result '[10] and a notification that it was regained' $seen.found $seen.line
+        $mark = $seen.count
+
+        # manual-qa.md section 2: the receiver power-cycled for 30 s. The far end goes quiet with
+        # nothing thrown, which wedged the app twice on 28 Aug; then it comes back losing its first
+        # command and taking over 15 s for its first screen, as the bench unit did on 2 Oct 2026.
+        # A cycle that never reaches Reconnecting proves nothing, so that is checked too.
+        $null = Send-SimulatorControl "$pipe-control" 'power off'
+        $seen = Wait-AppLog $Vm 'Session COM2 is now Reconnecting' $mark 60 'powered-off'
+        Check $Result '[2] a receiver with no power sends the session to Reconnecting' $seen.found $seen.line
+        $mark = $seen.count
+        Start-Sleep -Seconds 15
+        $null = Send-SimulatorControl "$pipe-control" 'power on'
+        $seen = Wait-AppLog $Vm 'Session COM2 is now Connected' $mark 120 'powered-on'
+        Check $Result '[2] the session reconnects by itself when power returns' $seen.found $seen.line
+        $seen = Wait-AppLog $Vm 'State: ' $seen.count 120 'polling-again'
+        Check $Result '[2] and polls again: a State line after the reconnect' $seen.found $seen.line
+        try { Invoke-VmRun $Vm captureScreen -Arguments (Join-Path $Result.Folder 'screen.png') -Guest | Out-Null } catch { }
+    }
+    finally {
+        if (-not $simulator.HasExited) { $simulator.Kill() }
+        $null = Save-Evidence $Vm $Result.Folder
+    }
+}
+
 $scenarioTable = [ordered]@{
     'fresh-online'     = ${function:Test-FreshOnline}
     'fresh-offline'    = ${function:Test-FreshOffline}
     'upgrade-1.2.0'    = ${function:Test-Upgrade120}
     'leftover-cert'    = ${function:Test-LeftoverCert}
     'app-checks'       = ${function:Test-AppChecks}
+    'receiver'         = ${function:Test-Receiver}
 }
 
 # ---------------------------------------------------------------------------
