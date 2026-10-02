@@ -988,8 +988,10 @@ if ($dotnet -and $installedCopy) {
     # that settled it: activation refused, 0x80270254. IApplicationActivationManager returns that
     # refusal as a result, or the process id; a handle opened at once keeps the exit code however
     # quickly the process ends. It is build/Diagnose-Start.ps1's probe, which got that answer on
-    # Windows 10. Explorer remains the fallback where the manager cannot be used: an elevated run,
-    # which it refuses (0x80270251), or a failed Add-Type.
+    # Windows 10. Explorer remains the fallback where the manager cannot be used: a failed Add-Type,
+    # or 0x80270251, which Windows documents for an elevated caller. On the Windows 10 22H2 VM an
+    # elevated run was NOT refused - it activated and passed (#624, 1 Oct 2026) - so the fallback is
+    # kept for the documented case rather than because it was seen.
     $appLog = Join-Path (Get-DataFolder $installedCopy.PackageFamilyName) 'logs\app.log'
     $aumid = "$($installedCopy.PackageFamilyName)!App"
     $launchedAt = Get-Date
@@ -1097,7 +1099,7 @@ namespace WinZ3805AInstaller
         }
     }
     else {
-        if ($probe) { Write-Log 'start check   the activation manager refuses an elevated run (0x80270251); launching through Explorer' }
+        if ($probe) { Write-Log 'start check   the activation manager refused an elevated caller (0x80270251); launching through Explorer' }
         try {
             Start-Process "shell:AppsFolder\$aumid"
             Start-Sleep -Seconds 15
