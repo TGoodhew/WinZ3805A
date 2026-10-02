@@ -39,12 +39,28 @@
 .PARAMETER Root
     Repository root. Defaults to the parent of this script's directory.
 
+.PARAMETER ScanBinaries
+    A folder of built assemblies to search instead of the source: manual-qa.md §8, the audit of
+    the shipped binary, which the automated QA pass runs on the unpacked package (#633). Every
+    .dll and .exe is read as ASCII and as UTF-16, since .NET keeps its string literals as UTF-16,
+    and its colon-led nodes are tested with the same rule as the source. Only file names and hit
+    counts are printed - never a token - so the tokens stay in the one file allowed them.
+
+    Only the assemblies this repository builds (WinZ3805A*) are judged, and among them the only
+    hits permitted are in WinZ3805A.Device.dll, which carries the exclusion patterns themselves.
+    Third-party assemblies are listed with their hit counts and not judged: the match is
+    case-insensitive and needs only a colon, so markup such as an XML namespace prefix in an HTML
+    library meets it, and §8 is about what this application carries - "the application assembly
+    contains none" - not about text inside a dependency nobody here can change. On v1.3.3's
+    package two did: Markdig and a Windows App SDK background-task assembly.
+
 .EXAMPLE
     pwsh build/Test-NoBlockedCommands.ps1
 #>
 [CmdletBinding()]
 param(
-    [string] $Root = (Split-Path -Parent $PSScriptRoot)
+    [string] $Root = (Split-Path -Parent $PSScriptRoot),
+    [string] $ScanBinaries
 )
 
 Set-StrictMode -Version Latest
@@ -132,6 +148,7 @@ if ($neverTokens.Count -eq 0 -and $queryOnlyTokens.Count -eq 0) {
     Write-Error "Parsed $($blocks.Count) pattern(s) from '$permittedRelative' but extracted no tokens. Fix the parse rather than removing the check."
 }
 
+
 # True when $node - the letters after a colon - names $token.
 #
 # Two ways to name it, and both are hits:
@@ -154,6 +171,51 @@ function Test-ExclusionToken {
 
     return $betweenStemAndFull -or
            $Node.StartsWith($Token.Full, [StringComparison]::OrdinalIgnoreCase)
+}
+
+# ---------------------------------------------------------------------------
+# -ScanBinaries: the built assemblies instead of the source (manual-qa.md §8, #633).
+# ---------------------------------------------------------------------------
+if ($ScanBinaries) {
+    $files = @(Get-ChildItem -LiteralPath $ScanBinaries -Recurse -File -Include '*.dll', '*.exe')
+    if ($files.Count -eq 0) { Write-Error "No assemblies under '$ScanBinaries'." }
+
+    $allowed = 'WinZ3805A.Device.dll'
+    $failures = 0
+    foreach ($file in $files) {
+        $bytes = [System.IO.File]::ReadAllBytes($file.FullName)
+        $texts = @([System.Text.Encoding]::GetEncoding(28591).GetString($bytes), [System.Text.Encoding]::Unicode.GetString($bytes))
+        if ($bytes.Length -gt 1) { $texts += [System.Text.Encoding]::Unicode.GetString($bytes, 1, $bytes.Length - 1) }
+        $hits = 0
+        foreach ($text in $texts) {
+            foreach ($m in [regex]::Matches($text, ':(?<node>[A-Za-z][A-Za-z0-9]{2,})(?<query>\?)?')) {
+                $node = $m.Groups['node'].Value
+                foreach ($token in $neverTokens) { if (Test-ExclusionToken -Node $node -Token $token) { $hits++ } }
+                if (-not $m.Groups['query'].Success) {
+                    foreach ($token in $queryOnlyTokens) { if (Test-ExclusionToken -Node $node -Token $token) { $hits++ } }
+                }
+            }
+        }
+        if ($hits -eq 0) { continue }
+        if ($file.Name -eq $allowed) {
+            Write-Host "  permitted  $($file.Name): $hits hit(s), the exclusion patterns themselves"
+        }
+        elseif ($file.Name -notlike 'WinZ3805A*') {
+            Write-Host "  not ours   $($file.Name): $hits coincidental hit(s), not judged"
+        }
+        else {
+            Write-Host "  FOUND      $($file.Name): $hits hit(s)"
+            $failures++
+        }
+    }
+
+    Write-Host "Scanned $($files.Count) assembl$(if ($files.Count -eq 1) { 'y' } else { 'ies' }) under $ScanBinaries."
+    if ($failures -gt 0) {
+        Write-Host "FAIL: $failures assembl$(if ($failures -eq 1) { 'y names' } else { 'ies name' }) an excluded command outside the exclusion patterns."
+        exit 1
+    }
+    Write-Host 'PASS: no excluded command is named outside the exclusion patterns in the built assemblies.'
+    exit 0
 }
 
 # ---------------------------------------------------------------------------
