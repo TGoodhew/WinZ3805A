@@ -13,9 +13,32 @@ Two places in `requirements.md` name this document and, until 28 Aug 2026, it di
 So the work had been done and recorded in issue comments, which is not something anybody can run
 before a release. This is that list.
 
-**How to use it.** Nothing here is automated and nothing here should be. Each entry says what to do,
-what to look for, and what it is protecting — the last one matters, because a check whose purpose is
-forgotten gets performed carelessly or dropped.
+**How to use it.** Each entry says what to do, what to look for, and what it is protecting — the last
+one matters, because a check whose purpose is forgotten gets performed carelessly or dropped.
+
+**Part of it runs by itself (since 2 Oct 2026, #633).** This document used to say that nothing here
+was automated and nothing should be. That held while every check needed a person at a keyboard. It
+stopped holding once a script could build a clean Windows machine, install a release on it and read
+the outcome. `build/qa/Invoke-QaPass.ps1` does that. It reverts throwaway VMware VMs (Windows 10 and
+Windows 11, built unattended by `build/qa/Install-QaVm.ps1`) to a clean snapshot, runs the checks
+marked **automated** below against a build's two zips, powers the VMs off again, and writes a report
+for the release's QA-run issue. `build/qa/README.md` says how. Everything not marked still needs a
+person, the bench receiver, or hardware the harness does not have.
+
+Screenshots the automated pass keeps are **judged by the agent running it**, not left unread, and
+the verdict goes in the QA-run issue (decided 2 Oct 2026). The checks that ask for a person's eye
+below — section 3's clipping, section 13's images, high contrast, section 23's ellipsis — may be judged the same way,
+with the screenshots attached.
+
+| Section | Status | How |
+|---|---|---|
+| 8 | **automated** | `binary-audit`: `Test-NoBlockedCommands.ps1 -ScanBinaries` on the unpacked package |
+| 11 | **automated** | `app-checks`: the guide and every image it names in the package; F1 opens the guide window |
+| 12 | **partly automated** | `fresh-online`, `fresh-offline`, `upgrade-1.2.0`, `leftover-cert`, on Windows 10 and 11. Still by hand: a browser download with *Unblock* and the thumbprint compared, the offline zip with the network off, a run without unblocking, and a machine an earlier installer left unable to start the app, which does not reproduce under the harness (see `build/qa/README.md`) |
+| 18 | **automated** | `app-checks`: Explorer killed; the app logs re-adding its icon and keeps running |
+| 25 | **automated** | `app-checks`: a second launch typed into the Start menu over Notepad; the app must be in front, alone, and say so in its log |
+| 21, 22, 23 | planned | UI Automation on the same VMs (#633) |
+| the rest | by hand | the receiver, a power switch, a second display, a real sign-in, or a person's eye |
 
 ---
 
@@ -239,6 +262,8 @@ source that a script could check.
 
 ## 8. The shipped binary carries no excluded command (P0-7, §8.4)
 
+> **Automated** by `build/qa/Invoke-QaPass.ps1` (`binary-audit`): the package is unpacked and `Test-NoBlockedCommands.ps1 -ScanBinaries` reads every assembly as ASCII and UTF-16. It judges only the assemblies this repository builds. On v1.3.3, two third-party assemblies had coincidental hits (markup, not SCPI) and were listed, not judged.
+
 **Why.** P0-7's acceptance is a manual audit of the built binary, the only P0 whose stated method
 is manual. `Test-NoBlockedCommands.ps1` proves the *source* holds §8.4's tokens in one file; only a
 search of the *output* proves nothing else — a resource, a generated string, a dependency — carries
@@ -273,6 +298,8 @@ it. It rides on section 5's antenna pull.
 
 ## 11. Help in the installed package (#312)
 
+> **Automated** by `build/qa/Invoke-QaPass.ps1` (`app-checks`), on the sideloaded package in a clean VM: the guide and every image it names are under `Help\` in the installed package, and F1 opens the *Help* window.
+
 **Why.** The guide and its images are linked `Content` items copied into the package; whether the
 *installed* application carries `Help\how-to-use.md` and its images is checkable only there.
 
@@ -284,6 +311,14 @@ it. It rides on section 5's antenna pull.
 ---
 
 ## 12. The published release installs on a machine that has never had it
+
+> **Partly automated** by `build/qa/Invoke-QaPass.ps1`. On Windows 10 and Windows 11 VMs:
+> - a fresh online install with no .NET (exit 3);
+> - a fresh offline install with .NET and the start check (exit 0, one elevation);
+> - replacing a used v1.2.0;
+> - a leftover certificate.
+>
+> The rows below that need a browser, a disconnected network, or a zip left blocked are still by hand, and so is the machine an earlier installer left unable to start the app: that state does not reproduce under the harness. The harness was shown to fail: given v1.3.2 as the candidate, the Windows 10 upgrade fails as #617 did.
 
 **Why.** Everything else here tests the application. This tests the *download* — and it is the only
 check with a stranger at the other end of it. The failure modes are all invisible from a developer
@@ -755,6 +790,8 @@ sent.
 
 ## 18. The tray icon survives an Explorer restart (#549)
 
+> **Automated** by `build/qa/Invoke-QaPass.ps1` (`app-checks`): Explorer is killed in the VM, and the pass requires the log line below and the app still running.
+
 **Why.** When Explorer restarts, every notification icon goes with it, and the shell broadcasts
 `TaskbarCreated` so that each application can add its icon again. Until #549 the icon's window was
 message-only, **and a message-only window receives no broadcasts**, so the icon stayed gone until
@@ -942,6 +979,8 @@ session reading *Connecting* with the port held (#607); that half is now a test.
 
 ## 25. A second launch brings the window forward (#46, #627)
 
+> **Automated** by `build/qa/Invoke-QaPass.ps1` (`app-checks`): Notepad is put in front, *WinZ3805A* is typed into the Start menu with real keystrokes (a launch from a script would not carry the foreground right this checks), and the pass requires WinZ3805A in front, one copy running, and the log line below.
+
 **Why.** One instance runs at a time (#46): a second launch hands its activation to the running
 one and exits, and the running one brings its window back. Reopening a window hidden in the
 notification area always worked, because showing a hidden window takes the foreground. A window
@@ -961,7 +1000,12 @@ front is only knowable on screen.
 
 ## Before a release
 
-Sections 1–4, 8, 9, 11 and 13 in full, then **12 on the published artifact** — which means the release
+**First the automated pass**, on the release's dry-run build, before the tag:
+`build/qa/Invoke-QaPass.ps1 -Online <zip> -Offline <zip>`, with its report posted to the QA-run
+issue. It must have no FAIL and no ERROR before the tag. Then run it again on the published zips
+(`-Release <tag>`). Of the sections below, it covers 8, 11, 18, 25 and most of 12.
+
+Then, by hand: sections 1–4, 9 and 13 in full, then **the rest of 12 on the published artifact** — which means the release
 exists before the last check passes. That is the right way round: a release nobody can install is
 worth catching after it is published rather than not at all, and the fix is another tag. Section 5
 only if the hardware is being moved, with sections 7 and 10 alongside it since they need the same
