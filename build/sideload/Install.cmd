@@ -13,7 +13,13 @@ rem  the UAC prompt authenticated - which on a shared machine is not the person
 rem  who double-clicked it. install.ps1 elevates only the one step that needs it.
 rem ---------------------------------------------------------------------------
 
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0install.ps1"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0install.ps1" %*
+set installexit=%errorlevel%
+
+rem  Install.cmd -Unattended (#633): nobody is there to read the window, so it does
+rem  not wait for a key, and the exit code is install.ps1's - see its help.
+echo %* | findstr /i /c:"-Unattended" >nul && exit /b %installexit%
 
 echo.
 pause
+exit /b %installexit%
