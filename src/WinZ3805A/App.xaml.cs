@@ -706,8 +706,12 @@ public partial class App : Application
     /// </para>
     /// <para>
     /// A status other than Ok is logged and the launch carries on: exiting would put back exactly
-    /// the silence this exists to end. Whether everything this application uses still works in that
-    /// state is what #625's measurement on a machine without the runtime's parts settles.
+    /// the silence this exists to end, and nothing here needs the missing parts. Measured on Windows
+    /// 10 with the runtime's Main and Singleton packages removed (#625, 1 Oct 2026): v1.3.3 exited
+    /// silently with 0x80070005, and this build logged PackageInstallFailed 0x80070005 and then
+    /// connected to the receiver, polled it, and turned start-at-sign-in on and off. The check also
+    /// cannot put the parts back from inside the app - its attempt is refused with access denied -
+    /// which is why the log names the installer, which can.
     /// </para>
     /// </remarks>
     private void CheckWindowsAppRuntime()
