@@ -68,8 +68,10 @@ IF SOMETHING GOES WRONG
   path as it finishes. Please include it when reporting a problem.
 
   If WinZ3805A stops starting, run the newest Install.cmd again: it checks
-  and puts right the pieces it installed, and keeps your data. Windows'
-  own Settings > Apps > WinZ3805A > Advanced options > Repair is also safe.
+  and puts right the pieces it installed, and keeps your data. If the app
+  itself is damaged, it installs it again, saving your data to Documents
+  first and moving it back afterwards. Windows' own Settings > Apps >
+  WinZ3805A > Advanced options > Repair is also safe.
   Do NOT use Reset there unless you mean it: it deletes your history and
   settings.
 

@@ -36,7 +36,7 @@ with the screenshots attached.
 | 8 | **automated** | `binary-audit`: `Test-NoBlockedCommands.ps1 -ScanBinaries` on the unpacked package |
 | 10 | **partly automated** | `receiver`: the simulated antenna pulled and held off past the grace minute; the app must log both notifications. Still by hand: that they appear on screen, and that none comes with the switch off |
 | 11 | **automated** | `app-checks`: the guide and every image it names in the package; Ctrl+D and F1 open Details and the guide, each with its own caption |
-| 12 | **partly automated** | `fresh-online`, `fresh-offline`, `upgrade-1.2.0`, `leftover-cert`, on Windows 10 and 11. Still by hand: a browser download with *Unblock* and the thumbprint compared, the offline zip with the network off, a run without unblocking, and a machine an earlier installer left unable to start the app, which does not reproduce under the harness (see `build/qa/README.md`) |
+| 12 | **partly automated** | `fresh-online`, `fresh-offline`, `upgrade-1.2.0`, `leftover-cert`, `repair-damaged`, on Windows 10 and 11. Still by hand: a browser download with *Unblock* and the thumbprint compared, the offline zip with the network off, a run without unblocking, and a machine an earlier installer left unable to start the app, which does not reproduce under the harness (see `build/qa/README.md`) |
 | 18 | **automated** | `app-checks`: Explorer killed; the app logs re-adding its icon and keeps running |
 | 25 | **automated** | `app-checks`: a second launch typed into the Start menu over Notepad; the app must be in front, alone, and say so in its log |
 | 21, 22, 23 | planned | UI Automation on the same VMs (#633) |
@@ -322,7 +322,8 @@ it. It rides on section 5's antenna pull.
 > - a fresh online install with no .NET (exit 3);
 > - a fresh offline install with .NET and the start check (exit 0, one elevation);
 > - replacing a used v1.2.0;
-> - a leftover certificate.
+> - a leftover certificate;
+> - this version installed, then damaged, and repaired by running the installer again (#600).
 >
 > The rows below that need a browser, a disconnected network, or a zip left blocked are still by hand, and so is the machine an earlier installer left unable to start the app: that state does not reproduce under the harness. The harness was shown to fail: given v1.3.2 as the candidate, the Windows 10 upgrade fails as #617 did.
 
@@ -397,6 +398,8 @@ non-developer can act on. This is expected to fail; the check is that it fails *
 | **Pass** | It opens and works without them. `app.log` has `FAIL  Runtime  Windows App Runtime: PackageInstallFailed, 0x80070005` with the advice to run the installer again, where v1.3.3 exited silently with that code. After the rerun, both companions are back and the next start logs *its parts are in place*. |
 | **Do** | **A certificate left behind.** On a machine where v1.3.0 was uninstalled from *Settings › Apps*, so its certificate is still trusted: run `Install.cmd`. |
 | **Pass** | *Before anything changes* lists the certificate `655D07E3…` and no earlier copy. After the one prompt, *Trusted People* no longer holds it. |
+| **Do** | **This version, damaged (#600).** With this release installed by `Install.cmd`, started once and closed, damage it from an elevated PowerShell. Take ownership of `WinZ3805A.dll` in its install folder (`takeown`, then `icacls … /grant *S-1-5-32-544:F`) and overwrite it with zeros of the same length. Confirm the app no longer starts, then run this release's `Install.cmd` again. Automated as `repair-damaged`. |
+| **Pass** | *Before anything changes* says this version is already installed and how it will be repaired if it does not start. After the start check fails, *Repairing WinZ3805A* registers it again, which does not help, then saves the data to a *WinZ3805A repair backup …* folder in Documents, removes the app, installs it again and moves the data back. The start check then reports it running, the log has `repair        repaired by rung 2`, and the app opens with its history. |
 
 **Last run of the upgrade rows:** 30 Sep 2026, Tony's clean Windows 11 Pro VM (build 26200), from **v1.2.0** rather than v1.3.0. Both share the earlier identity and certificate. The dry-run artifact of #589 + #591 + #593 + #596 was used, with the online zip. The installer log is quoted in #590's thread. Results:
 - it waited for the running 1.2.0 to be closed;

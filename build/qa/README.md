@@ -82,6 +82,7 @@ nothing ran.
 | `fresh-offline` | 12 | Offline zip: .NET and the app in one elevation, exit 0, start check passed |
 | `upgrade-1.2.0` | 12 | A used v1.2.0 replaced: the right order for the build, data saved and moved, old copy and certificate gone |
 | `leftover-cert` | 12 | v1.2.0 uninstalled by hand first: its certificate still removed |
+| `repair-damaged` | 12 | This version installed, its main assembly then overwritten with zeros, and the installer run again: re-registering tried first, then the reinstall repairs it, with the data saved to Documents and back in the repaired copy (#600) |
 | `app-checks` | 11, 18, 25 | On the running app: the guide in the package, and Ctrl+D and F1 opening windows with their own captions, a second launch typed into the Start menu bringing a covered window forward, the tray icon surviving an Explorer restart; a screenshot is kept for the agent to judge |
 | `receiver` | 2, 10 | The app against the simulated Z3805A on the VM's COM2, its settings written for connect-on-launch: it connects and locks; follows a pulled antenna into holdover (`WAIT`, #642), notifies after the grace minute, recovers and notifies again; and comes back by itself after a 30-second power cycle. Needs the simulator port |
 
