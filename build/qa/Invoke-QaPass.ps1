@@ -35,6 +35,10 @@
                               and the notification area's menus, the footer pin; Windows' own
                               topmost flag, the title bar and the medallion measured; a restart
                               keeps it. UI Automation and Win32
+      whole-layout       §23  first launch with no stored placement, at 100 % and 150 %: every row on
+                              screen and nothing clipped; at the minimum width the clock wraps
+                              before the date, and the rows go together as the height shrinks;
+                              Copy gives one plain line. UI Automation and the simulator port
       connect-cancel     §24  an auto-detect walk on a port where nothing answers, stopped by
                               Cancel and by Esc; then Connect works once the receiver answers.
                               Driven through UI Automation (guest\Ui.ps1). Needs the simulator port
@@ -63,7 +67,7 @@ param(
     [string]$Offline,
     [string]$Release,
     [string[]]$Machines = @('QA-Win10', 'QA-Win11'),
-    [string[]]$Scenarios = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact'),
+    [string[]]$Scenarios = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout'),
     [string]$OutDir
 )
 
@@ -74,7 +78,7 @@ Import-Module (Join-Path $PSScriptRoot 'QaVm.psm1') -Force
 # names no scenario - the first run of this script ran nothing and reported success.
 $Machines = @($Machines | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 $Scenarios = @($Scenarios | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-$known = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact')
+$known = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout')
 $unknown = @($Scenarios | Where-Object { $known -notcontains $_ })
 if ($unknown.Count) { throw "Unknown scenario(s): $($unknown -join ', '). Known: $($known -join ', ')." }
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
@@ -1076,6 +1080,206 @@ function Test-PinCompact {
     $null = Save-Evidence $Vm $Result.Folder
 }
 
+# manual-qa.md section 23 (#578, #580, #581). Positions are physical pixels; $scale turns the
+# section's effective pixels into them, so the same checks hold at 100 % and at 150 %.
+$layoutStep = @'
+$facts = [ordered]@{}
+$ids = 'Satellites', 'TfomPill', 'ClockText', 'RolloverBadge', 'ZoneButton', 'FooterText', 'DetailsButton', 'AlwaysOnTopButton', 'ConnectButton'
+
+function Get-Layout {
+    $w = Get-AppWindow
+    $h = Get-Handle $w
+    $r = [QaWin32]::Rect($h)
+    $scale = [QaWin32]::GetDpiForWindow($h) / 96.0
+    $m = [ordered]@{
+        dpi = [QaWin32]::GetDpiForWindow($h)
+        physical = "$($r.Right - $r.Left)x$($r.Bottom - $r.Top)"
+        effective = '{0:N0}x{1:N0}' -f (($r.Right - $r.Left) / $scale), (($r.Bottom - $r.Top) / $scale)
+        missing = @(); outside = @()
+    }
+    $b = @{}
+    foreach ($id in $ids) {
+        $e = Find-Control $w -AutomationId $id -Seconds 1
+        if (-not $e) { $m.missing += $id; continue }
+        $b[$id] = Get-Bounds $e
+        if ($b[$id].Left -lt $r.Left -or $b[$id].Right -gt $r.Right -or $b[$id].Bottom -gt $r.Bottom) { $m.outside += $id }
+    }
+    $clock = Find-Control $w -AutomationId 'ClockText' -Seconds 1
+    if ($clock) {
+        $text = $clock.GetCurrentPattern([System.Windows.Automation.TextPattern]::Pattern)
+        $m.lines = @($text.DocumentRange.GetBoundingRectangles()).Count
+        $first = $text.DocumentRange.Clone()
+        $first.ExpandToEnclosingUnit([System.Windows.Automation.Text.TextUnit]::Line)
+        $m.firstLine = $first.GetText(-1).Trim()
+        $centre = ($b.ClockText.Top + $b.ClockText.Bottom) / 2
+        $m.offCentre = [int][Math]::Max([Math]::Abs(($b.RolloverBadge.Top + $b.RolloverBadge.Bottom) / 2 - $centre), [Math]::Abs(($b.ZoneButton.Top + $b.ZoneButton.Bottom) / 2 - $centre))
+    }
+    if ($b.FooterText -and $b.DetailsButton) { $m.statusClear = $b.FooterText.Right -le $b.DetailsButton.Left }
+    if ($b.ConnectButton) { $m.bottomGap = [int](($r.Bottom - [Math]::Max($b.ConnectButton.Bottom, $b.AlwaysOnTopButton.Bottom)) / $scale) }
+    [pscustomobject]@{ Facts = $m; Handle = $h; Rect = $r; Scale = $scale }
+}
+
+if ($phase -eq 'first') {
+    # Exit from the tray menu, as the section says; the stored placement deleted; started again.
+    if (Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue) { [void](Use-TrayMenu 'Exit'); Start-Sleep -Seconds 3 }
+    Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue | Stop-Process -Force
+    $pkg = Get-AppxPackage -Name WinZ3805A | Select-Object -First 1
+    $dir = Join-Path $env:LOCALAPPDATA "Packages\$($pkg.PackageFamilyName)\LocalCache\Local\WinZ3805A"
+    '{"PortName":"COM2","AutoDetect":false,"BaudRate":9600,"DataBits":8,"Parity":0,"StopBits":1,"ReconnectAutomatically":true,"ConnectOnLaunch":true}' | Set-Content (Join-Path $dir 'connection.json') -Encoding ascii
+    Remove-Item (Join-Path $dir 'window.json') -ErrorAction SilentlyContinue
+    $facts.storedPlacement = Test-Path (Join-Path $dir 'window.json')
+    Start-Process "shell:AppsFolder\$($pkg.PackageFamilyName)!App"
+    # The clock line appears once the receiver has answered, and its rollover badge once the
+    # receiver's date has been read, a few seconds later; measuring at the first left the badge out.
+    $deadline = (Get-Date).AddSeconds(90)
+    do { Start-Sleep -Seconds 2; $w = Get-AppWindow -Seconds 5 } while ((Get-Date) -lt $deadline -and -not ($w -and (Find-Control $w -AutomationId 'ClockText' -Seconds 0) -and (Find-Control $w -AutomationId 'RolloverBadge' -Seconds 0)))
+    Start-Sleep -Seconds 3
+    $facts.layout = (Get-Layout).Facts
+}
+elseif ($phase -eq 'narrow') {
+    $l = Get-Layout
+    $h = $l.Handle; $r = $l.Rect; $scale = $l.Scale
+    $tall = [int](640 * $scale)
+    # As narrow as the window goes, and tall enough for the full layout.
+    [QaWin32]::SetWindowPos($h, [IntPtr]::Zero, $r.Left, 20, 100, $tall, 0x0014) | Out-Null
+    Start-Sleep -Seconds 2
+    $l = Get-Layout
+    $facts.narrow = $l.Facts
+    $r = $l.Rect
+
+    # The height down a step at a time, then back up: the rows that go must go together, and the
+    # clock line must never be clipped on the way.
+    $step = [Math]::Max(2, [int](2 * $scale))
+    $transitions = @(); $clipped = @(); $last = $null
+    $heights = @(); for ($y = $tall; $y -ge [int](460 * $scale); $y -= $step) { $heights += $y }
+    $heights += $heights[($heights.Count - 1)..0]
+    foreach ($y in $heights) {
+        [QaWin32]::SetWindowPos($h, [IntPtr]::Zero, $r.Left, $r.Top, $r.Right - $r.Left, $y, 0x0016) | Out-Null
+        Start-Sleep -Milliseconds 250
+        $now = [QaWin32]::Rect($h)
+        $win = Get-AppWindow -Seconds 2
+        $c = Find-Control $win -AutomationId 'ClockText' -Seconds 0
+        $state = '{0}{1}{2}' -f [int][bool]$c, [int][bool](Find-Control $win -AutomationId 'FooterText' -Seconds 0), [int][bool](Find-Control $win -AutomationId 'Satellites' -Seconds 0)
+        if ($c -and (Get-Bounds $c).Bottom -gt $now.Bottom - [int](8 * $scale)) { $clipped += $now.Bottom - $now.Top }
+        if ($state -ne $last) { $transitions += "$([int](($now.Bottom - $now.Top) / $scale)):$state"; $last = $state }
+    }
+    $facts.transitions = $transitions -join ' '
+    $facts.clipped = $clipped -join ','
+
+    # Copy from the clock line's menu, at full height again.
+    [QaWin32]::SetWindowPos($h, [IntPtr]::Zero, $r.Left, $r.Top, $r.Right - $r.Left, $tall, 0x0016) | Out-Null
+    Start-Sleep -Seconds 2
+    [QaWin32]::SetForegroundWindow($h) | Out-Null
+    Start-Sleep -Seconds 1
+    $c = Find-Control (Get-AppWindow) -AutomationId 'ClockText' -Seconds 2
+    $cb = Get-Bounds $c
+    [QaWin32]::MoveTo($cb.Left + [int](30 * $scale), $cb.Top + [int](9 * $scale)); [QaWin32]::RightClick()
+    $copy = Find-Control $script:Ae::RootElement -Name 'Copy value' -Seconds 4
+    if ($copy) {
+        Invoke-Control $copy
+        Start-Sleep -Seconds 1
+        $text = Get-Clipboard -Raw
+        $facts.copied = $text
+        $facts.copiedOdd = @($text.ToCharArray() | Where-Object { [int]$_ -lt 32 -or [int]$_ -eq 0xA0 -or [int]$_ -eq 0x202F -or [int]$_ -eq 0x2007 } | ForEach-Object { 'U+{0:X4}' -f [int]$_ }) -join ','
+    }
+}
+elseif ($phase -eq 'scale150') {
+    # A screen big enough for a window at 150 %, saved so the sign-out keeps it, and 150 % for the
+    # next sign-in. VMware Tools' own resolution tool changes nothing without a console, so Win32.
+    Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public static class QaDisplay
+{
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    public struct DEVMODE
+    {
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string dmDeviceName;
+        public short dmSpecVersion, dmDriverVersion, dmSize, dmDriverExtra;
+        public int dmFields, dmPositionX, dmPositionY, dmDisplayOrientation, dmDisplayFixedOutput;
+        public short dmColor, dmDuplex, dmYResolution, dmTTOption, dmCollate;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string dmFormName;
+        public short dmLogPixels; public int dmBitsPerPel, dmPelsWidth, dmPelsHeight, dmDisplayFlags, dmDisplayFrequency;
+        public int dmICMMethod, dmICMIntent, dmMediaType, dmDitherType, dmReserved1, dmReserved2, dmPanningWidth, dmPanningHeight;
+    }
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern bool EnumDisplaySettings(string dev, int mode, ref DEVMODE dm);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int ChangeDisplaySettings(ref DEVMODE dm, int flags);
+    public static int Set(int w, int h)
+    {
+        DEVMODE dm = new DEVMODE(); dm.dmSize = (short)Marshal.SizeOf(typeof(DEVMODE));
+        EnumDisplaySettings(null, -1, ref dm);
+        dm.dmPelsWidth = w; dm.dmPelsHeight = h; dm.dmFields = 0x80000 | 0x100000;
+        return ChangeDisplaySettings(ref dm, 1);
+    }
+}
+"@
+    $facts.resolution = [QaDisplay]::Set(1600, 1200)
+    Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name LogPixels -Value 144 -Type DWord
+    Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name Win8DpiScaling -Value 1 -Type DWord
+    Set-Content -LiteralPath 'C:\qa\force.ps1' -Value "Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon' -Name ForceAutoLogon -Value '1' -Type String"
+    Start-Process powershell.exe -Verb RunAs -Wait -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', 'C:\qa\force.ps1'
+}
+$facts | ConvertTo-Json -Compress -Depth 5
+'@
+
+function Test-WholeLayout {
+    param($Vm, $Result)
+    $pipe = Get-QaSimulatorPipe -Vm $Vm
+    if (-not (Select-String -LiteralPath $Vm.Vmx -SimpleMatch "\\.\pipe\$pipe" -Quiet)) {
+        $Result.Error = "skipped: the VM has no simulator port; run Add-QaSimulatorPort (build/qa/README.md)"
+        return
+    }
+    Send-Zip $Vm $Offline 'candidate'
+    $code = Install-Candidate $Vm 'candidate'
+    Check $Result 'installed (exit 0, or 2 with the start check timing out)' ($code -in 0, 2) "exit $code"
+
+    $simulator = Start-Process (Get-Simulator) -PassThru -WindowStyle Hidden `
+        -ArgumentList '--pipe-client', $pipe, '--start', 'locked', '--speed', '2', '--control', "$pipe-control" `
+        -RedirectStandardOutput (Join-Path $Result.Folder 'simulator.log') -RedirectStandardError (Join-Path $Result.Folder 'simulator.err')
+    try {
+        $sizes = @{}
+        foreach ($scaling in '100', '150') {
+            if ($scaling -eq '150') {
+                $null = Invoke-UiStep $Vm 'scale-150' "`$phase = 'scale150'" $layoutStep
+                Invoke-SignOutAndIn $Vm
+            }
+            $s = Invoke-UiStep $Vm "first-$scaling" "`$phase = 'first'" $layoutStep
+            if ($s.error) { Check $Result "[23] $scaling %: the window" $false $s.error; continue }
+            $l = $s.layout
+            $sizes[$scaling] = $l.effective
+            Check $Result "[23] $scaling %: opens with no stored placement at the display's scaling" (-not $s.storedPlacement -and $l.dpi -eq [int]($scaling) * 96 / 100) "dpi $($l.dpi), $($l.physical) physical, $($l.effective) effective"
+            Check $Result "[23] $scaling %: readouts, merits, clock line and footer all showing, none outside" ($l.missing.Count -eq 0 -and $l.outside.Count -eq 0) "missing: $($l.missing -join ','); outside: $($l.outside -join ',')"
+            Check $Result "[23] $scaling %: the whole clock line on one line" ($l.lines -eq 1) "$($l.lines) line(s): $($l.firstLine)"
+            Check $Result "[23] $scaling %: the badge and the globe button centred on it" ($l.offCentre -le 2 * [int]$scaling / 100) "off centre by $($l.offCentre) px"
+            Check $Result "[23] $scaling %: the status line clear of Details, the pin and Connect" ($l.statusClear -eq $true) ''
+            Check $Result "[23] $scaling %: nothing clipped at the bottom, and no taller than it needs" ($l.bottomGap -ge 0 -and $l.bottomGap -le 40) "$($l.bottomGap) effective px below the footer"
+            try { Invoke-VmRun $Vm captureScreen -Arguments (Join-Path $Result.Folder "first-$scaling.png") -Guest | Out-Null } catch { }
+
+            $n = Invoke-UiStep $Vm "narrow-$scaling" "`$phase = 'narrow'" $layoutStep
+            if ($n.error) { Check $Result "[23] $scaling %: narrowing" $false $n.error; continue }
+            $w = $n.narrow
+            Check $Result "[23] $scaling %: at the minimum width the clock wraps onto two lines, before the date" ($w.lines -eq 2 -and $w.firstLine -notmatch '\d{4}' -and $w.firstLine -match 'Time') "$($w.effective) effective; first line '$($w.firstLine)'"
+            Check $Result "[23] $scaling %: the badge and the globe button on screen, centred on both lines" ($w.outside.Count -eq 0 -and $w.offCentre -le 2 * [int]$scaling / 100) "outside: $($w.outside -join ','); off centre by $($w.offCentre) px"
+            Check $Result "[23] $scaling %: the status line stops short of the buttons" ($w.statusClear -eq $true) ''
+            $states = @($n.transitions -split ' ' | ForEach-Object { ($_ -split ':')[1] })
+            Check $Result "[23] $scaling %: shrinking, the footer, readouts and clock line go together, and come back" ((@($states | Where-Object { $_ -notin '111', '000' }).Count -eq 0) -and $states.Count -ge 3) "$($n.transitions) (effective height:clock,footer,readouts)"
+            Check $Result "[23] $scaling %: the clock line is never clipped on the way" (-not $n.clipped) "clipped at: $($n.clipped)"
+            Check $Result "[23] $scaling %: Copy gives one line with ordinary spaces" ($n.copied -and -not $n.copiedOdd) "'$($n.copied)' $($n.copiedOdd)"
+            try { Invoke-VmRun $Vm captureScreen -Arguments (Join-Path $Result.Folder "narrow-$scaling.png") -Guest | Out-Null } catch { }
+        }
+        # The size is applied twice, against 100 % and then at the real scaling; only the second
+        # landing gives the same effective size at 150 % as at 100 %.
+        if ($sizes['100'] -and $sizes['150']) {
+            $a = $sizes['100'] -split 'x'; $b = $sizes['150'] -split 'x'
+            Check $Result '[23] 150 % opens at the same effective size as 100 %' ([Math]::Abs([int]$a[0] - [int]$b[0]) -le 3 -and [Math]::Abs([int]$a[1] - [int]$b[1]) -le 3) "100 %: $($sizes['100']); 150 %: $($sizes['150'])"
+        }
+    }
+    finally {
+        if (-not $simulator.HasExited) { $simulator.Kill() }
+        $null = Save-Evidence $Vm $Result.Folder
+    }
+}
+
 $scenarioTable = [ordered]@{
     'fresh-online'     = ${function:Test-FreshOnline}
     'fresh-offline'    = ${function:Test-FreshOffline}
@@ -1087,6 +1291,7 @@ $scenarioTable = [ordered]@{
     'connect-cancel'   = ${function:Test-ConnectCancel}
     'sign-in'          = ${function:Test-SignIn}
     'pin-compact'      = ${function:Test-PinCompact}
+    'whole-layout'     = ${function:Test-WholeLayout}
 }
 
 # ---------------------------------------------------------------------------
