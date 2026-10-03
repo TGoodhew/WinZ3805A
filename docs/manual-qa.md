@@ -33,6 +33,7 @@ with the screenshots attached.
 | Section | Status | How |
 |---|---|---|
 | 2 | **automated** | `receiver`: the simulated Z3805A on the VM's COM2 powered off for 30 s and back; the session must reach *Reconnecting*, reconnect by itself, and log a `State:` line after (#639) |
+| 4 | **partly automated** | `accessibility`, with the simulated receiver: **A11Y-3**, every icon-only control in both windows named and its tooltip opened by real pointer movement; **A11Y-9**, a listener records the live-region events for a mode change, a lost connection and a tier C outcome, with their live setting (decided 2 Oct 2026: the events being raised is the check, and Narrator's speech is left to bug reports); **A11Y-10**, the medallion's state and every sky-plot marker exposed as sentences; **A11Y-11**, List showing the same satellites with the same data as the plot. Still by hand: A11Y-1, -2, -4 to -8, -12 and -13 |
 | 8 | **automated** | `binary-audit`: `Test-NoBlockedCommands.ps1 -ScanBinaries` on the unpacked package |
 | 10 | **automated** | `receiver`: the simulated antenna pulled and held off past the grace minute; the app must log both notifications, and the screen is photographed as the first fires, for the agent to judge. Then the app is restarted with the switch off, and the same loss must raise none |
 | 11 | **automated** | `app-checks`: the guide and every image it names in the package; Ctrl+D and F1 open Details and the guide, each with its own caption |
@@ -156,6 +157,9 @@ record a result against each number.
   > use the Settings UI. See #218 for what this found the first time it was actually done.
 - **A11Y-9 Announcements.** With Narrator running, force a mode change, a connection change and a
   tier C outcome. Each is spoken; a lost connection assertively rather than politely.
+  *Automated since 3 Oct 2026* (`accessibility`) at the level of the events Narrator listens for; that
+  Narrator then speaks them is left to bug reports, as decided on 2 Oct 2026. The listener's first run
+  found a lost connection announced politely while the app reconnects (#660).
 - **A11Y-10 Automation peers.** Accessibility Insights tree: the medallion exposes its state as a
   sentence, and the sky plot exposes every marker.
 - **A11Y-11 List alternate.** On the Satellites page, **List** shows the same satellites with the
