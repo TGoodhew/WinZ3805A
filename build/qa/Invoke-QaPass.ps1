@@ -59,6 +59,10 @@
       high-contrast      §4   A11Y-8: each of the four contrast themes switched live under the running app;
                               the main window and Details measured for the theme's colours and photographed
                               for the agent to judge. Needs the simulator port
+      display-scaling    §3   100, 150, 200 and 225 %, each after a sign-out: both windows at the display's
+                              scaling, their title-bar buttons clear of the caption buttons the system
+                              reports, a real drag on each title bar, and a photograph of each for the
+                              agent to judge. Needs the simulator port
       connect-cancel     §24  an auto-detect walk on a port where nothing answers, stopped by
                               Cancel and by Esc; then Connect works once the receiver answers.
                               Driven through UI Automation (guest\Ui.ps1). Needs the simulator port
@@ -87,7 +91,7 @@ param(
     [string]$Offline,
     [string]$Release,
     [string[]]$Machines = @('QA-Win10', 'QA-Win11'),
-    [string[]]$Scenarios = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast'),
+    [string[]]$Scenarios = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast', 'display-scaling'),
     [string]$OutDir
 )
 
@@ -98,7 +102,7 @@ Import-Module (Join-Path $PSScriptRoot 'QaVm.psm1') -Force
 # names no scenario - the first run of this script ran nothing and reported success.
 $Machines = @($Machines | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 $Scenarios = @($Scenarios | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-$known = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast')
+$known = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast', 'display-scaling')
 $unknown = @($Scenarios | Where-Object { $known -notcontains $_ })
 if ($unknown.Count) { throw "Unknown scenario(s): $($unknown -join ', '). Known: $($known -join ', ')." }
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
@@ -2474,6 +2478,182 @@ function Test-HighContrast {
     }
 }
 
+# manual-qa.md section 3 (A11Y-7): the display scaling set for the next sign-in, as whole-layout does
+# for 150 %, with the screen sized so the effective desktop is 1280 x 800 at every scaling. The stored
+# placements go too, so each window opens as it would on a display it has never seen. Called with
+# $width, $height and $dpi.
+$scalingSetStep = @'
+Add-Type -TypeDefinition @"
+using System; using System.Runtime.InteropServices;
+public static class QaScale {
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    public struct DEVMODE {
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string dmDeviceName;
+        public short dmSpecVersion, dmDriverVersion, dmSize, dmDriverExtra;
+        public int dmFields, dmPositionX, dmPositionY, dmDisplayOrientation, dmDisplayFixedOutput;
+        public short dmColor, dmDuplex, dmYResolution, dmTTOption, dmCollate;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string dmFormName;
+        public short dmLogPixels; public int dmBitsPerPel, dmPelsWidth, dmPelsHeight, dmDisplayFlags, dmDisplayFrequency;
+        public int dmICMMethod, dmICMIntent, dmMediaType, dmDitherType, dmReserved1, dmReserved2, dmPanningWidth, dmPanningHeight;
+    }
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern bool EnumDisplaySettings(string dev, int mode, ref DEVMODE dm);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int ChangeDisplaySettings(ref DEVMODE dm, int flags);
+    public static int Set(int w, int h) {
+        DEVMODE dm = new DEVMODE(); dm.dmSize = (short)Marshal.SizeOf(typeof(DEVMODE));
+        EnumDisplaySettings(null, -1, ref dm); dm.dmPelsWidth = w; dm.dmPelsHeight = h; dm.dmFields = 0x80000 | 0x100000;
+        return ChangeDisplaySettings(ref dm, 1);
+    }
+}
+"@
+$result = [QaScale]::Set($width, $height)
+Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue | Stop-Process -Force
+$dir = Join-Path $env:LOCALAPPDATA "Packages\$((Get-AppxPackage -Name WinZ3805A).PackageFamilyName)\LocalCache\Local\WinZ3805A"
+Remove-Item (Join-Path $dir 'window.json'), (Join-Path $dir 'details-window.json') -ErrorAction SilentlyContinue
+Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name LogPixels -Value $dpi -Type DWord
+Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name Win8DpiScaling -Value 1 -Type DWord
+Set-Content -LiteralPath 'C:\qa\force.ps1' -Value "Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon' -Name ForceAutoLogon -Value '1' -Type String"
+Start-Process powershell.exe -Verb RunAs -Wait -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', 'C:\qa\force.ps1'
+[ordered]@{ resolution = $result } | ConvertTo-Json -Compress
+'@
+
+# Both windows at the scaling the sign-in brought: the app's own title-bar buttons against the
+# caption buttons, whose bounds come from the system (DWMWA_CAPTION_BUTTON_BOUNDS) rather than from a
+# formula, which is the point section 3 makes; a real drag on the title bar; and a photograph of each.
+# Called with $tag for the photographs' names.
+$scalingCheckStep = @'
+$facts = [ordered]@{}
+Add-Type -TypeDefinition @"
+using System; using System.Runtime.InteropServices;
+public static class QaCaption {
+    [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left, Top, Right, Bottom; }
+    [DllImport("dwmapi.dll")] static extern int DwmGetWindowAttribute(IntPtr h, int attribute, out RECT value, int size);
+    [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
+    [DllImport("user32.dll")] public static extern uint GetDpiForWindow(IntPtr h);
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+    // The caption buttons' bounds, relative to the window's own top left.
+    // DWMWA_EXTENDED_FRAME_BOUNDS: the frame as drawn, without the invisible resize borders.
+    public static RECT Frame(IntPtr h) { RECT r; DwmGetWindowAttribute(h, 9, out r, Marshal.SizeOf(typeof(RECT))); return r; }
+    public static RECT Buttons(IntPtr h) { RECT r; DwmGetWindowAttribute(h, 5, out r, Marshal.SizeOf(typeof(RECT))); return r; }
+    [StructLayout(LayoutKind.Sequential)] public struct TITLEBARINFOEX { public int cbSize; public RECT rcTitleBar; [MarshalAs(UnmanagedType.ByValArray, SizeConst = 6)] public int[] rgstate; [MarshalAs(UnmanagedType.ByValArray, SizeConst = 24)] public int[] rgrect; }
+    [DllImport("user32.dll")] static extern IntPtr SendMessage(IntPtr h, int msg, IntPtr w, ref TITLEBARINFOEX l);
+    // rgrect holds six rectangles; the fourth is the minimise button, in screen coordinates.
+    public static int MinimiseLeft(IntPtr h) { var i = new TITLEBARINFOEX(); i.cbSize = Marshal.SizeOf(typeof(TITLEBARINFOEX)); i.rgstate = new int[6]; i.rgrect = new int[24]; SendMessage(h, 0x033F, IntPtr.Zero, ref i); return i.rgrect[12]; }
+}
+"@
+Add-Type -AssemblyName System.Drawing
+$buttonType = New-Object System.Windows.Automation.PropertyCondition($script:Ae::ControlTypeProperty, [System.Windows.Automation.ControlType]::Button)
+
+function Measure-Window($element, [string]$label) {
+    $m = [ordered]@{}
+    $h = Get-Handle $element
+    [void][QaCaption]::SetForegroundWindow($h)
+    Start-Sleep -Seconds 1
+    $m.dpi = [QaCaption]::GetDpiForWindow($h)
+    $rect = New-Object QaCaption+RECT; [void][QaCaption]::GetWindowRect($h, [ref]$rect)
+    # Opened inside the work area, with nothing stored to restore: the screen less the taskbar. The
+    # visible frame, so the invisible resize borders do not count against it.
+    $frame = [QaCaption]::Frame($h); $work = [System.Windows.Forms.Screen]::FromHandle($h).WorkingArea
+    $m.frame = "$($frame.Left),$($frame.Top) $($frame.Right - $frame.Left)x$($frame.Bottom - $frame.Top)"; $m.work = "$($work.Left),$($work.Top) $($work.Width)x$($work.Height)"
+    $m.inside = $frame.Left -ge $work.Left - 1 -and $frame.Top -ge $work.Top - 1 -and $frame.Right -le $work.Right + 1 -and $frame.Bottom -le $work.Bottom + 1
+    # The caption buttons from UI Automation's Minimize button; failing that, from the window's own
+    # title-bar information. DWMWA_CAPTION_BUTTON_BOUNDS came back empty for these windows (3 Oct 2026).
+    $minimise = $element.FindFirst([System.Windows.Automation.TreeScope]::Descendants, (New-Object System.Windows.Automation.AndCondition($buttonType, (New-Object System.Windows.Automation.PropertyCondition($script:Ae::NameProperty, 'Minimize')))))
+    $captionLeft = if ($minimise -and -not $minimise.Current.BoundingRectangle.IsEmpty) { [int]$minimise.Current.BoundingRectangle.Left } else { [QaCaption]::MinimiseLeft($h) }
+    $m.captionFrom = if ($minimise) { 'UI Automation' } else { 'WM_GETTITLEBARINFOEX' }
+    $bar = Find-Control $element -AutomationId 'AppTitleBar' -Seconds 5
+    $own = @(if ($bar) { $bar.FindAll([System.Windows.Automation.TreeScope]::Descendants, $buttonType) | Where-Object { -not $_.Current.BoundingRectangle.IsEmpty -and $_.Current.Name -notin 'Minimize', 'Maximize', 'Restore', 'Close' } })
+    $ownRight = if ($own.Count) { [int](($own | ForEach-Object { $_.Current.BoundingRectangle.Right } | Measure-Object -Maximum).Maximum) } else { 0 }
+    $m.captionLeft = $captionLeft; $m.ownRight = $ownRight; $m.ownButtons = $own.Count
+    # A title bar with no buttons of its own has nothing to collide with.
+    $m.clear = $captionLeft -gt 0 -and ($own.Count -eq 0 -or $ownRight -lt $captionLeft)
+    # The drag starts just past the title text - the subtitle on Details - which is drag region by
+    # definition. A point that merely looked empty fell in the TitleBar's content area at 200 %, which
+    # passes input through, and the window did not move.
+    $b = $bar.Current.BoundingRectangle
+    $texts = @($bar.FindAll([System.Windows.Automation.TreeScope]::Descendants, (New-Object System.Windows.Automation.PropertyCondition($script:Ae::ControlTypeProperty, [System.Windows.Automation.ControlType]::Text))) | Where-Object { $_.Current.Name -in 'Receiver Details', (Get-Process -Name WinZ3805A | Select-Object -First 1).MainWindowTitle, 'WinZ3805A' -and -not $_.Current.BoundingRectangle.IsEmpty })
+    $point = $null
+    if ($texts.Count) {
+        $right = ($texts | ForEach-Object { $_.Current.BoundingRectangle.Right } | Measure-Object -Maximum).Maximum
+        $point = @([int]($right + 12 * $m.dpi / 96), [int]($b.Top + $b.Height / 2))
+    }    if ($point) {
+        $before = New-Object QaCaption+RECT; [void][QaCaption]::GetWindowRect($h, [ref]$before)
+        [QaWin32]::MoveTo($point[0], $point[1]); Start-Sleep -Milliseconds 300
+        [QaWin32]::LeftDown()
+        foreach ($i in 1..8) { [QaWin32]::MoveTo($point[0] + 12 * $i, $point[1] + 8 * $i); Start-Sleep -Milliseconds 60 }
+        [QaWin32]::LeftUp(); Start-Sleep -Seconds 1
+        $after = New-Object QaCaption+RECT; [void][QaCaption]::GetWindowRect($h, [ref]$after)
+        $m.moved = "$($after.Left - $before.Left),$($after.Top - $before.Top)"
+        $m.dragged = [Math]::Abs(($after.Left - $before.Left) - 96) -le 8 -and [Math]::Abs(($after.Top - $before.Top) - 64) -le 8
+    }
+    else { $m.moved = 'no empty point on the bar'; $m.dragged = $false }
+    [QaWin32]::MoveTo(5, 5); Start-Sleep -Seconds 1
+    $r = $element.Current.BoundingRectangle
+    $bmp = New-Object System.Drawing.Bitmap ([int]$r.Width), ([int]$r.Height)
+    $g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen([int]$r.Left, [int]$r.Top, 0, 0, $bmp.Size); $g.Dispose()
+    $bmp.Save("C:\qa\scaling\$tag-$label.png", [System.Drawing.Imaging.ImageFormat]::Png); $bmp.Dispose()
+    $m
+}
+
+New-Item -ItemType Directory -Force 'C:\qa\scaling' | Out-Null
+Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue | Stop-Process -Force
+Start-Sleep -Seconds 2
+Start-Process "shell:AppsFolder\$((Get-AppxPackage -Name WinZ3805A).PackageFamilyName)!App"
+$deadline = (Get-Date).AddSeconds(60)
+do { Start-Sleep -Seconds 2; $w = Get-AppWindow -Seconds 5 } while ((Get-Date) -lt $deadline -and -not ($w -and (Find-Control $w -AutomationId 'ClockText' -Seconds 0)))
+if (-not $w) { [ordered]@{ error = "no main window ($(Get-WindowReport))" } | ConvertTo-Json -Compress; return }
+Start-Sleep -Seconds 5
+$facts.main = Measure-Window $w 'main'
+$button = Find-Control $w -AutomationId 'DetailsButton' -Seconds 5
+if ($button) { Invoke-Control $button } else { Send-KeyTo $w '^d' }
+$d = Get-AppWindowNamed 'Receiver Details' -Seconds 30
+if (-not $d) {
+    $other = [QaWin32]::WindowOtherThan([uint32](Get-Process -Name WinZ3805A | Select-Object -First 1).Id, (Get-Handle $w))
+    if ($other -ne [IntPtr]::Zero) { $d = $script:Ae::FromHandle($other) }
+}
+if ($d) { Start-Sleep -Seconds 5; $facts.details = Measure-Window $d 'details' }
+$facts | ConvertTo-Json -Compress -Depth 4
+'@
+
+function Test-DisplayScaling {
+    param($Vm, $Result)
+    $pipe = Get-QaSimulatorPipe -Vm $Vm
+    if (-not (Select-String -LiteralPath $Vm.Vmx -SimpleMatch "\\.\pipe\$pipe" -Quiet)) {
+        $Result.Error = "skipped: the VM has no simulator port; run Add-QaSimulatorPort (build/qa/README.md)"
+        return
+    }
+    Send-Zip $Vm $Offline 'candidate'
+    $code = Install-Candidate $Vm 'candidate'
+    Check $Result 'installed (exit 0, or 2 with the start check timing out)' ($code -in 0, 2) "exit $code"
+    $null = Invoke-QaGuestScript $Vm -Name 'connect-com2' -Script $connectCom2
+    $simulator = Start-Process (Get-Simulator) -PassThru -WindowStyle Hidden `
+        -ArgumentList '--pipe-client', $pipe, '--start', 'locked', '--speed', '2', '--control', "$pipe-control" `
+        -RedirectStandardOutput (Join-Path $Result.Folder 'simulator.log') -RedirectStandardError (Join-Path $Result.Folder 'simulator.err')
+    $scales = [ordered]@{ '100' = @(1280, 800, 96); '150' = @(1920, 1200, 144); '200' = @(2560, 1600, 192); '225' = @(2880, 1800, 216) }
+    try {
+        foreach ($scale in $scales.Keys) {
+            $w, $h, $dpi = $scales[$scale]
+            $null = Invoke-UiStep $Vm "scale-$scale" "`$width = $w; `$height = $h; `$dpi = $dpi" $scalingSetStep
+            Invoke-SignOutAndIn $Vm
+            $s = Invoke-UiStep $Vm "scaled-$scale" "`$tag = '$scale'" $scalingCheckStep
+            if ($s.error) { Check $Result "[3] $scale %" $false $s.error; continue }
+            foreach ($part in 'main', 'details') {
+                $m = $s.$part
+                $name = if ($part -eq 'main') { 'the main window' } else { 'Details' }
+                if (-not $m) { Check $Result "[3] $scale %, $name" $false 'not opened'; continue }
+                Check $Result "[3] $scale %, $($name): at the display's scaling" ($m.dpi -eq $dpi) "dpi $($m.dpi)"
+                Check $Result "[3] $scale %, $($name): opens inside the work area" ($m.inside -eq $true) "frame $($m.frame); work area $($m.work)"
+                Check $Result "[3] $scale %, $($name): its title-bar buttons stop short of the caption buttons" ($m.clear -eq $true) "$($m.ownButtons) buttons ending at $($m.ownRight); caption buttons from $($m.captionLeft) ($($m.captionFrom))"
+                Check $Result "[3] $scale %, $($name): a drag on the title bar moves the window" ($m.dragged -eq $true) "moved $($m.moved) for a drag of 96,64"
+                try { Copy-QaFile $Vm -Source "C:\qa\scaling\$scale-$part.png" -Destination (Join-Path $Result.Folder "$scale-$part.png") } catch { }
+            }
+        }
+    }
+    finally {
+        if (-not $simulator.HasExited) { $simulator.Kill() }
+        $null = Save-Evidence $Vm $Result.Folder
+    }
+}
+
 $scenarioTable = [ordered]@{
     'fresh-online'     = ${function:Test-FreshOnline}
     'fresh-offline'    = ${function:Test-FreshOffline}
@@ -2491,6 +2671,7 @@ $scenarioTable = [ordered]@{
     'history-reinstall' = ${function:Test-HistoryReinstall}
     'guide-pages'      = ${function:Test-GuidePages}
     'high-contrast'    = ${function:Test-HighContrast}
+    'display-scaling'  = ${function:Test-DisplayScaling}
 }
 
 # ---------------------------------------------------------------------------
