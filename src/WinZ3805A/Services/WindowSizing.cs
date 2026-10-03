@@ -144,6 +144,37 @@ public static class WindowSizing
     }
 
     /// <summary>
+    /// Where a window goes so that all of it is on the work area, moving it as little as it can.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For a window that had nothing to restore (#675).</b> Windows places a new window by cascading
+    /// from its default spot, before the window has been given the size it opens at, so the size
+    /// arrives afterwards and nothing checks the two together. <see cref="ClampToWorkArea"/> keeps the
+    /// size within the display; this keeps the position. Measured: the Details window opened 207 px
+    /// below the work area at 150 % on a 1920 × 1200 display, its size within limits and its place not.
+    /// </para>
+    /// <para>
+    /// A window larger than the work area - which <see cref="ClampToWorkArea"/> exists to prevent, but
+    /// a caller may not have applied it - is pinned to the top left, so its title bar and its caption
+    /// buttons are the parts that stay reachable.
+    /// </para>
+    /// </remarks>
+    /// <param name="window">The window's outer bounds, in physical pixels.</param>
+    /// <param name="workArea">The work area of its display, or null when unknown - then it stays put.</param>
+    public static (int Left, int Top) KeepInside(WindowRect window, WindowRect? workArea)
+    {
+        if (workArea is not { IsEmpty: false } area)
+        {
+            return (window.Left, window.Top);
+        }
+
+        int left = Math.Max(area.Left, Math.Min(window.Left, area.Right - window.Width));
+        int top = Math.Max(area.Top, Math.Min(window.Top, area.Bottom - window.Height));
+        return (left, top);
+    }
+
+    /// <summary>
     /// The size the main window returns to when it leaves compact mode (#307).
     /// </summary>
     /// <remarks>

@@ -299,4 +299,46 @@ public sealed class WindowSizingTests
     public void TheCompactFloorIsNeverLoweredBelowTheSpecification(double textScale) =>
         Assert.Equal(144, WindowSizing.CompactMinimumHeight(textScale));
 
+    /// <remarks>
+    /// #675's case, measured at 150 % on a 1920 x 1200 display: the window cascaded to 276,266 at a
+    /// size that fits, and ran 207 px off the bottom. It moves up by exactly that, and not sideways.
+    /// </remarks>
+    [Fact]
+    public void AWindowRunningOffTheBottomMovesUpByTheOverlapAlone()
+    {
+        WindowRect work = new(0, 0, 1920, 1140);
+
+        Assert.Equal((276, 59), WindowSizing.KeepInside(new WindowRect(276, 266, 1538, 1081), work));
+    }
+
+    [Fact]
+    public void AWindowAlreadyInsideStaysWhereItIs() =>
+        Assert.Equal((33, 26), WindowSizing.KeepInside(new WindowRect(33, 26, 539, 497), new WindowRect(0, 0, 1280, 760)));
+
+    [Fact]
+    public void AWindowOffTheRightOrAboveTheTopComesBackOnToTheWorkArea()
+    {
+        WindowRect work = new(0, 0, 1280, 760);
+
+        Assert.Equal((254, 0), WindowSizing.KeepInside(new WindowRect(600, -40, 1026, 400), work));
+    }
+
+    /// <remarks>
+    /// A second display to the left has negative coordinates; the work area is wherever it is.
+    /// </remarks>
+    [Fact]
+    public void TheWorkAreaNeedNotStartAtTheOrigin() =>
+        Assert.Equal((-1920, 100), WindowSizing.KeepInside(new WindowRect(-2000, 900, 1000, 900), new WindowRect(-1920, 0, 1920, 1000)));
+
+    /// <remarks>
+    /// Larger than the work area: the title bar and the caption buttons are what must stay reachable,
+    /// so it is pinned to the top left rather than centred with its edges off both sides.
+    /// </remarks>
+    [Fact]
+    public void AWindowLargerThanTheWorkAreaIsPinnedToItsTopLeft() =>
+        Assert.Equal((0, 0), WindowSizing.KeepInside(new WindowRect(50, 50, 3000, 2000), new WindowRect(0, 0, 1920, 1140)));
+
+    [Fact]
+    public void AnUnknownDisplayLeavesTheWindowAlone() =>
+        Assert.Equal((50, 60), WindowSizing.KeepInside(new WindowRect(50, 60, 800, 600), null));
 }

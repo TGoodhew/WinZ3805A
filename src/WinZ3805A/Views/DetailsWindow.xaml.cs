@@ -1014,6 +1014,10 @@ public sealed partial class DetailsWindow : Window
         if (placement is null)
         {
             AppWindow.Resize(_minimum);
+
+            // The system placed the window before it had this size, and its bottom ran off the work
+            // area at every scaling the QA pass tried (#675).
+            DisplayWorkAreas.KeepInside(AppWindow);
             return;
         }
 

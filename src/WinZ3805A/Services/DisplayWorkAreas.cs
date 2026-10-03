@@ -77,4 +77,25 @@ public static class DisplayWorkAreas
         RectInt32 work = display.WorkArea;
         return new WindowRect(work.X, work.Y, work.Width, work.Height);
     }
+
+    /// <summary>
+    /// Moves <paramref name="window"/> the least distance that puts all of it on its display's work
+    /// area, if it is not there already (#675).
+    /// </summary>
+    /// <remarks>
+    /// For a window that had nothing to restore and has just been given its opening size: the system
+    /// chose the position before that size existed. See <see cref="WindowSizing.KeepInside"/>.
+    /// </remarks>
+    public static void KeepInside(AppWindow window)
+    {
+        ArgumentNullException.ThrowIfNull(window);
+
+        WindowRect bounds = new(window.Position.X, window.Position.Y, window.Size.Width, window.Size.Height);
+        (int left, int top) = WindowSizing.KeepInside(bounds, ForWindow(window));
+
+        if (left != bounds.Left || top != bounds.Top)
+        {
+            window.Move(new PointInt32(left, top));
+        }
+    }
 }
