@@ -66,6 +66,9 @@
       text-scaling       §4   A11Y-6: Windows' text size at 100, 150 and 200 % at each of §9.6.1's breakpoints;
                               the size confirmed in the app, a dialog's buttons on screen, and photographs
                               for the agent to judge clipping. Needs the simulator port
+      keyboard-focus     §4   A11Y-1, -2 and -5: each surface walked with Tab alone; every control that takes
+                              the keyboard reached, a focus ring drawn at each stop, and each stop at least
+                              32 x 32. Needs the simulator port
       connect-cancel     §24  an auto-detect walk on a port where nothing answers, stopped by
                               Cancel and by Esc; then Connect works once the receiver answers.
                               Driven through UI Automation (guest\Ui.ps1). Needs the simulator port
@@ -94,7 +97,7 @@ param(
     [string]$Offline,
     [string]$Release,
     [string[]]$Machines = @('QA-Win10', 'QA-Win11'),
-    [string[]]$Scenarios = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast', 'display-scaling', 'text-scaling'),
+    [string[]]$Scenarios = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast', 'display-scaling', 'text-scaling', 'keyboard-focus'),
     [string]$OutDir
 )
 
@@ -105,7 +108,7 @@ Import-Module (Join-Path $PSScriptRoot 'QaVm.psm1') -Force
 # names no scenario - the first run of this script ran nothing and reported success.
 $Machines = @($Machines | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 $Scenarios = @($Scenarios | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-$known = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast', 'display-scaling', 'text-scaling')
+$known = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast', 'display-scaling', 'text-scaling', 'keyboard-focus')
 $unknown = @($Scenarios | Where-Object { $known -notcontains $_ })
 if ($unknown.Count) { throw "Unknown scenario(s): $($unknown -join ', '). Known: $($known -join ', ')." }
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
@@ -2822,6 +2825,176 @@ function Test-TextScaling {
     }
 }
 
+# manual-qa.md section 4, A11Y-1, A11Y-2 and A11Y-5 together, because all three are read at a focus
+# stop: the keyboard alone walks each surface with Tab, and at each stop the focused control is
+# recorded (A11Y-1), the strip around it compared with and without focus for a drawn ring (A11Y-2),
+# and its size measured against §9.6.3's 32 px floor (A11Y-5). Called with $surface naming what to
+# walk: 'main', or a Details page by its navigation label.
+$keyboardStep = @'
+Add-Type -TypeDefinition @"
+using System; using System.Runtime.InteropServices;
+public static class QaKeys {
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+    [DllImport("user32.dll")] public static extern bool MoveWindow(IntPtr h, int x, int y, int w, int t, bool repaint);
+}
+"@
+Add-Type -AssemblyName System.Drawing
+$Ae = [System.Windows.Automation.AutomationElement]
+
+$w = Get-AppWindow
+if (-not $w) { [ordered]@{ error = "no main window ($(Get-WindowReport))" } | ConvertTo-Json -Compress; return }
+$root = $w
+if ($surface -ne 'main') {
+    $d = Get-AppWindowNamed 'Receiver Details' -Seconds 2
+    if (-not $d) {
+        $button = Find-Control $w -AutomationId 'DetailsButton' -Seconds 5
+        if ($button) { Invoke-Control $button } else { Send-KeyTo $w '^d' }
+        $d = Get-AppWindowNamed 'Receiver Details' -Seconds 20
+    }
+    if (-not $d) { [ordered]@{ error = "no Details window ($(Get-WindowReport))" } | ConvertTo-Json -Compress; return }
+    [void](Select-NavigationItem $d $surface)
+    Start-Sleep -Seconds 4
+    $root = $d
+}
+$handle = Get-Handle $root
+[void][QaKeys]::SetForegroundWindow($handle)
+[QaWin32]::MoveTo(2, 2)
+Start-Sleep -Seconds 1
+
+function Get-Shot($r) {
+    $bmp = New-Object System.Drawing.Bitmap ([int]$r.Width), ([int]$r.Height)
+    $g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen([int]$r.X, [int]$r.Y, 0, 0, $bmp.Size); $g.Dispose()
+    $bmp
+}
+# The pixels on a band either side of the element's edge that differ between two shots of it.
+function Get-RingChange($a, $b, [int]$pad) {
+    $changed = 0
+    for ($y = 0; $y -lt $a.Height; $y++) { for ($x = 0; $x -lt $a.Width; $x++) {
+        $inBand = $x -lt 2 * $pad -or $y -lt 2 * $pad -or $x -ge $a.Width - 2 * $pad -or $y -ge $a.Height - 2 * $pad
+        if (-not $inBand) { continue }
+        $p = $a.GetPixel($x, $y); $q = $b.GetPixel($x, $y)
+        if ([Math]::Abs($p.R - $q.R) + [Math]::Abs($p.G - $q.G) + [Math]::Abs($p.B - $q.B) -gt 60) { $changed++ }
+    } }
+    $changed
+}
+
+# Wide enough for focus visuals drawn outside the element, as a toggle switch's are.
+$pad = 8
+$tag = $surface -replace ' ', ''
+New-Item -ItemType Directory -Force 'C:\qa\keys' | Out-Null
+$closedOn = ''
+$stops = New-Object System.Collections.Generic.List[object]
+$seen = @{}
+$prev = $null; $prevShot = $null; $prevRect = $null; $lastKey = ''
+$firstKey = ''; $unnamed = 0
+foreach ($i in 1..400) {
+    [System.Windows.Forms.SendKeys]::SendWait('{TAB}')
+    Start-Sleep -Milliseconds 350
+    $f = $Ae::FocusedElement
+    if (-not $f) { continue }
+    $r = $f.Current.BoundingRectangle
+    $key = ($f.GetRuntimeId() -join '.')
+    # The ring on the previous stop, now that the focus has left it.
+    if ($prev -and $prevShot) {
+        $after = Get-Shot $prevRect
+        $prev.ringPixels = Get-RingChange $prevShot $after $pad
+        # The pair kept for the agent to look at wherever no ring was measured.
+        if ($prev.ringPixels -lt [Math]::Max(20, $prev.perimeter / 2)) {
+            $n = $stops.Count - 1
+            $prevShot.Save("C:\qa\keys\$tag-$n-focused.png", [System.Drawing.Imaging.ImageFormat]::Png)
+            $after.Save("C:\qa\keys\$tag-$n-unfocused.png", [System.Drawing.Imaging.ImageFormat]::Png)
+            $prev.shot = "$tag-$n"
+        }
+        $after.Dispose(); $prevShot.Dispose(); $prevShot = $null
+    }
+    # The same element reported for several Tabs running is focus moving through things UI Automation
+    # does not expose - selectable text reports its enclosing pane - and is counted, not taken as the end.
+    if ($key -eq $lastKey) { $prev.repeats++; continue }
+    $lastKey = $key
+    # The walk ends when the cycle comes back to where it began. A repeat anywhere else is focus moving
+    # through something UI Automation reports as an element already seen - selectable text reports
+    # its enclosing pane - and is counted, because stopping there took a page's log for a trap.
+    if ($seen.ContainsKey($key) -and $key -ne $firstKey) { $unnamed++; continue }
+    if ($seen.ContainsKey($key)) { $closedOn = "$($f.Current.ControlType.ProgrammaticName -replace 'ControlType\.', '') '$($f.Current.Name)' [$($f.Current.AutomationId)]"; break }
+    $seen[$key] = $true
+    if (-not $firstKey) { $firstKey = $key }
+    $stop = [ordered]@{
+        id = "$($f.Current.AutomationId)"; name = "$($f.Current.Name)"; type = "$($f.Current.ControlType.ProgrammaticName -replace 'ControlType\.', '')"
+        left = [int]$r.Left; top = [int]$r.Top; width = [int]$r.Width; height = [int]$r.Height
+        ringPixels = -1; perimeter = [int](2 * ($r.Width + $r.Height)); repeats = 0
+        parent = ($(try { [System.Windows.Automation.TreeWalker]::ControlViewWalker.GetParent($f).GetRuntimeId() -join '.' } catch { '' }))
+    }
+    $stops.Add($stop)
+    $prev = $stop
+    if (-not $r.IsEmpty) {
+        $prevRect = New-Object System.Drawing.Rectangle ([int]$r.Left - $pad), ([int]$r.Top - $pad), ([int]$r.Width + 2 * $pad), ([int]$r.Height + 2 * $pad)
+        $prevShot = Get-Shot $prevRect
+    }
+}
+if ($prevShot) { $prevShot.Dispose() }
+
+# Every control that says it takes the keyboard, on screen and enabled, against the stops reached.
+$focusable = New-Object System.Windows.Automation.AndCondition(
+    (New-Object System.Windows.Automation.PropertyCondition($Ae::IsKeyboardFocusableProperty, $true)),
+    (New-Object System.Windows.Automation.PropertyCondition($Ae::IsEnabledProperty, $true)),
+    (New-Object System.Windows.Automation.PropertyCondition($Ae::IsOffscreenProperty, $false)))
+# A list, and the navigation, is one Tab stop: its items are reached with the arrow keys from the one
+# that has the focus, so an item counts as reached when a sibling in the same list was a stop.
+$stopParents = @{}; foreach ($s in $stops) { if ($s.parent) { $stopParents[$s.parent] = $true } }
+$missed = @($root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $focusable) | Where-Object { -not $seen.ContainsKey(($_.GetRuntimeId() -join '.')) } |
+    Where-Object { -not ($_.Current.ControlType -in [System.Windows.Automation.ControlType]::ListItem, [System.Windows.Automation.ControlType]::TreeItem, [System.Windows.Automation.ControlType]::DataItem -and $stopParents.ContainsKey(([System.Windows.Automation.TreeWalker]::ControlViewWalker.GetParent($_).GetRuntimeId() -join '.'))) } |
+    ForEach-Object { "$($_.Current.ControlType.ProgrammaticName -replace 'ControlType\.', '') '$($_.Current.Name)' [$($_.Current.AutomationId)]" })
+[ordered]@{ surface = $surface; dpi = 96; stops = $stops; missed = $missed; closedOn = $closedOn; unnamed = $unnamed; tabs = $i } | ConvertTo-Json -Compress -Depth 5
+'@
+
+function Test-KeyboardFocus {
+    param($Vm, $Result)
+    $pipe = Get-QaSimulatorPipe -Vm $Vm
+    if (-not (Select-String -LiteralPath $Vm.Vmx -SimpleMatch "\\.\pipe\$pipe" -Quiet)) {
+        $Result.Error = "skipped: the VM has no simulator port; run Add-QaSimulatorPort (build/qa/README.md)"
+        return
+    }
+    Send-Zip $Vm $Offline 'candidate'
+    $code = Install-Candidate $Vm 'candidate'
+    Check $Result 'installed (exit 0, or 2 with the start check timing out)' ($code -in 0, 2) "exit $code"
+    $simulator = Start-Process (Get-Simulator) -PassThru -WindowStyle Hidden `
+        -ArgumentList '--pipe-client', $pipe, '--start', 'locked', '--speed', '2', '--control', "$pipe-control" `
+        -RedirectStandardOutput (Join-Path $Result.Folder 'simulator.log') -RedirectStandardError (Join-Path $Result.Folder 'simulator.err')
+    $null = Invoke-QaGuestScript $Vm -Name 'connect-com2' -Script $connectCom2
+    try {
+        $seen = Wait-AppLog $Vm 'State: LOCK' 0 120 'locked'
+        Check $Result 'connected to the simulated receiver, and locked' $seen.found $seen.line
+        if (-not $seen.found) { return }
+        $null = Invoke-UiStep $Vm 'keys-resolution' '' $resolutionStep
+        $all = [ordered]@{}
+        foreach ($surface in 'main', 'Overview', 'Satellites', 'Position', 'Timing', 'Holdover', 'Time', 'Status Registers', 'Diagnostics', 'Settings') {
+            $k = Invoke-UiStep $Vm "keys-$($surface -replace ' ', '')" "`$surface = '$surface'" $keyboardStep
+            if ($k.error) { Check $Result "[A11Y-1] $surface" $false $k.error; continue }
+            $all[$surface] = $k
+            $stops = @($k.stops)
+            Check $Result "[A11Y-1] $($surface): every control that takes the keyboard is reached by Tab" (@($k.missed).Count -eq 0 -and $stops.Count -gt 0) "$($stops.Count) stops, the cycle closing on $($k.closedOn); missed: $(@($k.missed) -join '; ')"
+            # Not the satellite rows: the list re-sorts as the sky turns, so the shot after the focus moves can be of
+            # another row, which has its own ring, and the two compare as no ring at all. Their ring is the stock
+            # list's, and the crops kept show it.
+            $noRing = @($stops | Where-Object { $_.ringPixels -ge 0 -and $_.ringPixels -lt [Math]::Max(20, $_.perimeter / 2) -and -not ($_.type -eq 'ListItem' -and $_.name -like 'PRN *') } | ForEach-Object { "$($_.type) '$($_.name)' [$($_.id)] $($_.ringPixels)/$($_.perimeter)" })
+            $swallowed = @($stops | Where-Object { $_.repeats -gt 0 } | ForEach-Object { "$($_.type) '$($_.name)' held the focus for $($_.repeats + 1) Tabs" })
+            if ($k.unnamed -gt 0) { $swallowed += "$($k.unnamed) more Tabs landed on elements already seen" }
+            Check $Result "[A11Y-1] $($surface): no stretch of Tab presses goes where UI Automation cannot say" ($swallowed.Count -eq 0) "$($k.tabs) Tabs in the cycle. $($swallowed -join '; ')"
+            Check $Result "[A11Y-2] $($surface): a focus ring is drawn at every stop" ($noRing.Count -eq 0) "no ring at: $($noRing -join '; ')"
+            # §9.10.2 answers the sky-plot markers' flag; their own size is the plot's business.
+            $small = @($stops | Where-Object { $_.width -gt 0 -and ($_.width -lt 32 -or $_.height -lt 32) -and $_.name -notlike 'Satellite*' -and $_.name -notlike 'PRN*' } | ForEach-Object { "$($_.type) '$($_.name)' [$($_.id)] $($_.width)x$($_.height)" })
+            Check $Result "[A11Y-5] $($surface): every focus stop is at least 32 x 32" ($small.Count -eq 0) "under 32: $($small -join '; ')"
+        }
+        $all | ConvertTo-Json -Depth 6 | Set-Content (Join-Path $Result.Folder 'focus-stops.json')
+        $null = Invoke-QaGuestScript $Vm -Name 'keys-zip' -Script "if (Test-Path 'C:\qa\keys') { Compress-Archive -Path 'C:\qa\keys\*' -DestinationPath 'C:\qa\keys.zip' -Force }"
+        try { Copy-QaFile $Vm -Source 'C:\qa\keys.zip' -Destination (Join-Path $Result.Folder 'keys.zip'); Expand-Archive (Join-Path $Result.Folder 'keys.zip') -DestinationPath (Join-Path $Result.Folder 'rings') -Force } catch { }
+    }
+    finally {
+        if (-not $simulator.HasExited) { $simulator.Kill() }
+        $null = Save-Evidence $Vm $Result.Folder
+    }
+}
+
 $scenarioTable = [ordered]@{
     'fresh-online'     = ${function:Test-FreshOnline}
     'fresh-offline'    = ${function:Test-FreshOffline}
@@ -2841,6 +3014,7 @@ $scenarioTable = [ordered]@{
     'high-contrast'    = ${function:Test-HighContrast}
     'display-scaling'  = ${function:Test-DisplayScaling}
     'text-scaling'     = ${function:Test-TextScaling}
+    'keyboard-focus'   = ${function:Test-KeyboardFocus}
 }
 
 # ---------------------------------------------------------------------------
