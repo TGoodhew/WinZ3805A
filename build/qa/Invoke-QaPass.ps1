@@ -56,6 +56,9 @@
       guide-pages        §13  every page the guide illustrates photographed as its images were taken, at an
                               860 x 778 page area, and set beside the guide's own picture for the agent to
                               judge. Needs the simulator port
+      high-contrast      §4   A11Y-8: each of the four contrast themes switched live under the running app;
+                              the main window and Details measured for the theme's colours and photographed
+                              for the agent to judge. Needs the simulator port
       connect-cancel     §24  an auto-detect walk on a port where nothing answers, stopped by
                               Cancel and by Esc; then Connect works once the receiver answers.
                               Driven through UI Automation (guest\Ui.ps1). Needs the simulator port
@@ -84,7 +87,7 @@ param(
     [string]$Offline,
     [string]$Release,
     [string[]]$Machines = @('QA-Win10', 'QA-Win11'),
-    [string[]]$Scenarios = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages'),
+    [string[]]$Scenarios = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast'),
     [string]$OutDir
 )
 
@@ -95,7 +98,7 @@ Import-Module (Join-Path $PSScriptRoot 'QaVm.psm1') -Force
 # names no scenario - the first run of this script ran nothing and reported success.
 $Machines = @($Machines | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 $Scenarios = @($Scenarios | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-$known = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages')
+$known = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast')
 $unknown = @($Scenarios | Where-Object { $known -notcontains $_ })
 if ($unknown.Count) { throw "Unknown scenario(s): $($unknown -join ', '). Known: $($known -join ', ')." }
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
@@ -2261,6 +2264,216 @@ function Test-GuidePages {
     }
 }
 
+# The screen at 1920 x 1200 so the windows fit beside each other. The scaling stays at 100 %, so the
+# resolution changes without a sign-out.
+$resolutionStep = @'
+Add-Type -TypeDefinition @"
+using System; using System.Runtime.InteropServices;
+public static class QaRes {
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    public struct DEVMODE {
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string dmDeviceName;
+        public short dmSpecVersion, dmDriverVersion, dmSize, dmDriverExtra;
+        public int dmFields, dmPositionX, dmPositionY, dmDisplayOrientation, dmDisplayFixedOutput;
+        public short dmColor, dmDuplex, dmYResolution, dmTTOption, dmCollate;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string dmFormName;
+        public short dmLogPixels; public int dmBitsPerPel, dmPelsWidth, dmPelsHeight, dmDisplayFlags, dmDisplayFrequency;
+        public int dmICMMethod, dmICMIntent, dmMediaType, dmDitherType, dmReserved1, dmReserved2, dmPanningWidth, dmPanningHeight;
+    }
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern bool EnumDisplaySettings(string dev, int mode, ref DEVMODE dm);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int ChangeDisplaySettings(ref DEVMODE dm, int flags);
+    public static int Set(int w, int h) {
+        DEVMODE dm = new DEVMODE(); dm.dmSize = (short)Marshal.SizeOf(typeof(DEVMODE));
+        EnumDisplaySettings(null, -1, ref dm); dm.dmPelsWidth = w; dm.dmPelsHeight = h; dm.dmFields = 0x80000 | 0x100000;
+        return ChangeDisplaySettings(ref dm, 0);
+    }
+}
+"@
+New-Item -ItemType Directory -Force 'C:\qa\hc' | Out-Null
+[ordered]@{ resolution = [QaRes]::Set(1920, 1200) } | ConvertTo-Json -Compress
+'@
+
+# High contrast off again, whatever the scenario got to.
+$contrastOff = @'
+Add-Type -TypeDefinition @"
+using System; using System.Runtime.InteropServices;
+public static class QaHcOff {
+    [StructLayout(LayoutKind.Sequential)] public struct HIGHCONTRAST { public int cbSize; public int dwFlags; public IntPtr lpszDefaultScheme; }
+    [DllImport("user32.dll")] static extern bool SystemParametersInfo(int action, int param, ref HIGHCONTRAST hc, int winIni);
+    public static bool Off() { var hc = new HIGHCONTRAST(); hc.cbSize = Marshal.SizeOf(hc); return SystemParametersInfo(0x43, hc.cbSize, ref hc, 3); }
+}
+"@
+[QaHcOff]::Off()
+'@
+
+# manual-qa.md section 4, A11Y-8: each of the four contrast themes, switched live under the running
+# app, measured and photographed. Called with $scheme naming the theme to switch to, and $tag for
+# the photographs' names.
+$contrastStep = @'
+$facts = [ordered]@{}
+Add-Type -TypeDefinition @"
+using System; using System.Runtime.InteropServices;
+public static class QaHc {
+    [StructLayout(LayoutKind.Sequential)] public struct HIGHCONTRAST { public int cbSize; public int dwFlags; public IntPtr lpszDefaultScheme; }
+    // Unicode, or the declaration binds SystemParametersInfoA, reads the scheme name as ANSI and applies
+    // the default theme whatever is asked for: the first run switched to the same theme four times.
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "SystemParametersInfoW")] static extern bool SystemParametersInfo(int action, int param, ref HIGHCONTRAST hc, int winIni);
+    [DllImport("user32.dll")] public static extern int GetSysColor(int index);
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+    [DllImport("user32.dll")] public static extern bool MoveWindow(IntPtr h, int x, int y, int w, int t, bool repaint);
+    public static bool Set(bool on, string scheme) {
+        var hc = new HIGHCONTRAST(); hc.cbSize = Marshal.SizeOf(hc); hc.dwFlags = on ? 1 : 0;
+        hc.lpszDefaultScheme = scheme == null ? IntPtr.Zero : Marshal.StringToHGlobalUni(scheme);
+        try { return SystemParametersInfo(0x43, hc.cbSize, ref hc, 3); } finally { if (hc.lpszDefaultScheme != IntPtr.Zero) Marshal.FreeHGlobal(hc.lpszDefaultScheme); }
+    }
+    public static string Name() {
+        var hc = new HIGHCONTRAST(); hc.cbSize = Marshal.SizeOf(hc);
+        SystemParametersInfo(0x42, hc.cbSize, ref hc, 0);
+        return (hc.dwFlags & 1) == 0 ? "" : Marshal.PtrToStringUni(hc.lpszDefaultScheme);
+    }
+    public static string Hex(int c) { return string.Format("#{0:X2}{1:X2}{2:X2}", c & 0xFF, (c >> 8) & 0xFF, (c >> 16) & 0xFF); }
+}
+"@
+Add-Type -AssemblyName System.Drawing
+
+# Off first, so the scheme named is the one applied, then on with it.
+[void][QaHc]::Set($false, $null)
+Start-Sleep -Seconds 3
+$facts.applied = [QaHc]::Set($true, $scheme)
+Start-Sleep -Seconds 10
+$facts.active = [QaHc]::Name()
+$window = [QaHc]::GetSysColor(5); $text = [QaHc]::GetSysColor(8)
+$facts.windowColour = [QaHc]::Hex($window); $facts.textColour = [QaHc]::Hex($text)
+
+function Save-Window($element, [string]$path, $Highlighted, $Subtitle) {
+    [void][QaHc]::SetForegroundWindow((Get-Handle $element))
+    [QaWin32]::MoveTo(1910, 1190)
+    Start-Sleep -Seconds 2
+    $r = $element.Current.BoundingRectangle
+    $bmp = New-Object System.Drawing.Bitmap ([int]$r.Width), ([int]$r.Height)
+    $g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen([int]$r.Left, [int]$r.Top, 0, 0, $bmp.Size); $g.Dispose()
+    $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
+    # #672: text on the highlight colour must be highlight text. Window-text pixels inside a highlighted
+    # control mean the label is on a backplate; none of the four themes uses one colour for both.
+    $inside = $null
+    if ($Highlighted -and -not $Highlighted.Current.BoundingRectangle.IsEmpty) {
+        $hb = $Highlighted.Current.BoundingRectangle; $inside = 0
+        $tr0 = $text -band 0xFF; $tg0 = ($text -shr 8) -band 0xFF; $tb0 = ($text -shr 16) -band 0xFF
+        for ($y = [int]($hb.Top - $r.Top) + 4; $y -lt [int]($hb.Bottom - $r.Top) - 4; $y++) { for ($x = [int]($hb.Left - $r.Left) + 4; $x -lt [int]($hb.Right - $r.Left) - 4; $x++) {
+            if ($x -lt 0 -or $y -lt 0 -or $x -ge $bmp.Width -or $y -ge $bmp.Height) { continue }
+            $q = $bmp.GetPixel($x, $y); if ($q.R -eq $tr0 -and $q.G -eq $tg0 -and $q.B -eq $tb0) { $inside++ }
+        } }
+    }
+    # The title bar's subtitle, legible against the window colour: at least 3:1 for enough of its pixels.
+    # Turning the framework's adjustment off for the whole application made it vanish in three of the four
+    # Windows 11 themes, while every other check here passed (#672).
+    $legible = $null
+    if ($Subtitle -and -not $Subtitle.Current.BoundingRectangle.IsEmpty) {
+        $sb = $Subtitle.Current.BoundingRectangle; $legible = 0
+        function Get-Lum([double]$v) { $v /= 255; if ($v -le 0.03928) { $v / 12.92 } else { [Math]::Pow(($v + 0.055) / 1.055, 2.4) } }
+        $wl = 0.2126 * (Get-Lum ($window -band 0xFF)) + 0.7152 * (Get-Lum (($window -shr 8) -band 0xFF)) + 0.0722 * (Get-Lum (($window -shr 16) -band 0xFF))
+        for ($y = [int]($sb.Top - $r.Top); $y -lt [int]($sb.Bottom - $r.Top); $y++) { for ($x = [int]($sb.Left - $r.Left); $x -lt [int]($sb.Right - $r.Left); $x++) {
+            if ($x -lt 0 -or $y -lt 0 -or $x -ge $bmp.Width -or $y -ge $bmp.Height) { continue }
+            $q = $bmp.GetPixel($x, $y); $l = 0.2126 * (Get-Lum $q.R) + 0.7152 * (Get-Lum $q.G) + 0.0722 * (Get-Lum $q.B)
+            if (([Math]::Max($l, $wl) + 0.05) / ([Math]::Min($l, $wl) + 0.05) -ge 3) { $legible++ }
+        } }
+    }
+    # The window's commonest colour, and how many samples are the theme's text colour.
+    $counts = @{}; $textSamples = 0
+    $tr = $text -band 0xFF; $tg = ($text -shr 8) -band 0xFF; $tb = ($text -shr 16) -band 0xFF
+    for ($y = 0; $y -lt $bmp.Height; $y += 4) { for ($x = 0; $x -lt $bmp.Width; $x += 4) {
+        $p = $bmp.GetPixel($x, $y); $k = '#{0:X2}{1:X2}{2:X2}' -f $p.R, $p.G, $p.B
+        $counts[$k] = 1 + [int]$counts[$k]
+        if ($p.R -eq $tr -and $p.G -eq $tg -and $p.B -eq $tb) { $textSamples++ }
+    } }
+    $bmp.Dispose()
+    [ordered]@{ commonest = ($counts.GetEnumerator() | Sort-Object Value -Descending | Select-Object -First 1).Key; textSamples = $textSamples; highlightedWindowText = $inside; subtitleLegible = $legible }
+}
+
+$w = Get-AppWindow
+if (-not $w) { [ordered]@{ error = "no main window ($(Get-WindowReport))" } | ConvertTo-Json -Compress; return }
+# The main window alone, Details closed, so nothing owned covers it.
+$d = Get-AppWindowNamed 'Receiver Details' -Seconds 1
+if ($d) { try { $d.GetCurrentPattern([System.Windows.Automation.WindowPattern]::Pattern).Close() } catch { }; Start-Sleep -Seconds 2 }
+[void][QaHc]::MoveWindow((Get-Handle $w), 20, 20, 900, 640, $true)
+Start-Sleep -Seconds 2
+$facts.main = Save-Window $w "C:\qa\hc\$tag-main.png" (Find-Control $w -AutomationId 'ConnectButton' -Seconds 2)
+
+$button = Find-Control $w -AutomationId 'DetailsButton' -Seconds 5
+if ($button) { Invoke-Control $button } else { Send-KeyTo $w '^d' }
+$d = Get-AppWindowNamed 'Receiver Details' -Seconds 20
+if ($d) {
+    [void][QaHc]::MoveWindow((Get-Handle $d), 400, 20, 1200, 1000, $true)
+    foreach ($page in 'Overview', 'Satellites') {
+        [void](Select-NavigationItem $d $page)
+        Start-Sleep -Seconds 4
+        # The navigation item, not the page's heading of the same name.
+        $selected = $d.FindFirst([System.Windows.Automation.TreeScope]::Descendants, (New-Object System.Windows.Automation.AndCondition((New-Object System.Windows.Automation.PropertyCondition($script:Ae::ControlTypeProperty, [System.Windows.Automation.ControlType]::ListItem)), (New-Object System.Windows.Automation.PropertyCondition($script:Ae::NameProperty, $page)))))
+        $subtitle = (Find-Control $d -AutomationId 'AppTitleBar' -Seconds 2).FindFirst([System.Windows.Automation.TreeScope]::Descendants, (New-Object System.Windows.Automation.PropertyCondition($script:Ae::NameProperty, 'Receiver Details')))
+        $facts[$page.ToLowerInvariant()] = Save-Window $d "C:\qa\hc\$tag-$($page.ToLowerInvariant()).png" $selected $subtitle
+    }
+}
+$facts.details = [bool]$d
+$facts | ConvertTo-Json -Compress -Depth 4
+'@
+
+function Test-HighContrast {
+    param($Vm, $Result)
+    $pipe = Get-QaSimulatorPipe -Vm $Vm
+    if (-not (Select-String -LiteralPath $Vm.Vmx -SimpleMatch "\\.\pipe\$pipe" -Quiet)) {
+        $Result.Error = "skipped: the VM has no simulator port; run Add-QaSimulatorPort (build/qa/README.md)"
+        return
+    }
+    Send-Zip $Vm $Offline 'candidate'
+    $code = Install-Candidate $Vm 'candidate'
+    Check $Result 'installed (exit 0, or 2 with the start check timing out)' ($code -in 0, 2) "exit $code"
+    $null = Invoke-QaGuestScript $Vm -Name 'connect-com2' -Script $connectCom2
+    $simulator = Start-Process (Get-Simulator) -PassThru -WindowStyle Hidden `
+        -ArgumentList '--pipe-client', $pipe, '--start', 'locked', '--speed', '2', '--control', "$pipe-control" `
+        -RedirectStandardOutput (Join-Path $Result.Folder 'simulator.log') -RedirectStandardError (Join-Path $Result.Folder 'simulator.err')
+    # The schemes by their internal names, on both systems. Windows 11 shows them as Aquatic, Dusk, Night
+    # sky and Desert, but asked for those names it applies High Contrast Black every time, which is what
+    # the distinct-themes check below caught; asked for the old names, it applies its own four.
+    $build = (Get-Facts $Vm).build
+    $schemes = if ($build -ge 22000) { [ordered]@{ aquatic = 'High Contrast #1'; dusk = 'High Contrast #2'; nightsky = 'High Contrast Black'; desert = 'High Contrast White' } }
+               else { [ordered]@{ hc1 = 'High Contrast #1'; hc2 = 'High Contrast #2'; black = 'High Contrast Black'; white = 'High Contrast White' } }
+    $active = @{}
+    try {
+        $seen = Wait-AppLog $Vm 'State: LOCK' 0 120 'locked'
+        Check $Result 'connected to the simulated receiver, and locked' $seen.found $seen.line
+        if (-not $seen.found) { return }
+        $null = Invoke-UiStep $Vm 'hc-resolution' '' $resolutionStep
+        foreach ($tag in $schemes.Keys) {
+            $name = $schemes[$tag]
+            $s = Invoke-UiStep $Vm "hc-$tag" "`$scheme = '$name'; `$tag = '$tag'" $contrastStep
+            if ($s.error) { Check $Result "[A11Y-8] $name" $false $s.error; continue }
+            $active[$tag] = [pscustomobject]@{ Name = $s.active; Window = $s.windowColour; Text = $s.textColour }
+            Check $Result "[A11Y-8] $name is on ($tag)" ($s.applied -and $s.active -eq $name) "applied $($s.applied); active '$($s.active)'; window $($s.windowColour), text $($s.textColour)"
+            foreach ($part in 'main', 'overview', 'satellites') {
+                $m = $s.$part
+                if (-not $m) { Check $Result "[A11Y-8] $name, $part" $false 'not photographed'; continue }
+                if ($part -ne 'main') {
+                    Check $Result "[A11Y-8] $name, $($part): the title bar's subtitle is legible" ($m.subtitleLegible -ge 20) "$($m.subtitleLegible) pixels at 3:1 or better against the window colour"
+                }
+                if ($null -ne $m.highlightedWindowText) {
+                    $what = if ($part -eq 'main') { 'the Connect button''s label' } else { 'the selected navigation item''s label' }
+                    Check $Result "[A11Y-8] $name, $($part): $what is highlight text, not on a backplate (#672)" ($m.highlightedWindowText -le 10) "$($m.highlightedWindowText) window-text pixels inside it"
+                }
+                Check $Result "[A11Y-8] $name, $($part): the app follows the theme live, in its colours" ($m.commonest -eq $s.windowColour -and $m.textSamples -ge 100) "commonest $($m.commonest) against window $($s.windowColour); $($m.textSamples) text-colour samples"
+                try { Copy-QaFile $Vm -Source "C:\qa\hc\$tag-$part.png" -Destination (Join-Path $Result.Folder "$tag-$part.png") } catch { }
+            }
+        }
+        # By name, not by colour: three of Windows 10's four have a black window.
+        $names = @($active.Values | ForEach-Object Name | Where-Object { $_ } | Select-Object -Unique)
+        Check $Result '[A11Y-8] four distinct contrast themes were applied' ($names.Count -eq $schemes.Count) "$(($active.GetEnumerator() | Sort-Object Key | ForEach-Object { "$($_.Key): '$($_.Value.Name)' window $($_.Value.Window) text $($_.Value.Text)" }) -join '; ')"
+    }
+    finally {
+        $null = Invoke-QaGuestScript $Vm -Name 'hc-off' -Script $contrastOff
+        if (-not $simulator.HasExited) { $simulator.Kill() }
+        $null = Save-Evidence $Vm $Result.Folder
+    }
+}
+
 $scenarioTable = [ordered]@{
     'fresh-online'     = ${function:Test-FreshOnline}
     'fresh-offline'    = ${function:Test-FreshOffline}
@@ -2277,6 +2490,7 @@ $scenarioTable = [ordered]@{
     'sky-export'       = ${function:Test-SkyExport}
     'history-reinstall' = ${function:Test-HistoryReinstall}
     'guide-pages'      = ${function:Test-GuidePages}
+    'high-contrast'    = ${function:Test-HighContrast}
 }
 
 # ---------------------------------------------------------------------------
