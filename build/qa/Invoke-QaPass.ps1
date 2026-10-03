@@ -380,7 +380,8 @@ function Test-Receiver {
 
     # Installed is what this scenario needs; whether the start check passed is fresh-offline's
     # question. Exit 2 is recorded rather than failed: on the first run here the app took 14 s to
-    # write its log on a freshly snapshotted VM, and the start check had given up at 13.
+    # write its log on a freshly snapshotted VM, and the start check had given up at 13. Installers
+    # built since #646 wait up to 45 s for the log; zips from before it, v1.3.3 among them, do not.
     Check $Result 'installed (exit 0, or 2 with the start check timing out)' ($code -in 0, 2) "exit $code"
 
     # Remembered settings for COM2 with connect-on-launch, as a person choosing the port would leave.
