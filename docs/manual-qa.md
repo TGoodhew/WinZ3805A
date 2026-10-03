@@ -41,7 +41,8 @@ with the screenshots attached.
 | 20 | **automated** | `sign-in`: the guest's user signs out and Windows signs them back in (ForceAutoLogon), so the app is started by its own startup task. The setting is changed on the Settings page through UI Automation: in the notification area (started hidden, one copy, its icon, polling, and brought forward when opened from Start), with the window open, and off (nothing starts). A receiver powered off at sign-in must be retried, said once, and connected within about 30 s of answering; the connection dialog opened mid-retry must stop it and connect. The startup task's state written as 1, which Windows reads back as disabled by the user (the state Task Manager's Disable leaves), must lock the box at Off with the note; written back as 2, it shows on again |
 | 24 | **automated** | `connect-cancel`: the simulated receiver powered off, so COM2 is there and silent; an auto-detect walk is stopped by the dialog's Cancel and by Esc, through UI Automation. Each must log the press and *Disconnected. Cancelled.* within 3 s, send no probe after it, and leave the dialog open with Connect usable. Cancel with nothing running closes the dialog, and Connect connects once the receiver answers |
 | 25 | **automated** | `app-checks`: a second launch typed into the Start menu over Notepad; the app must be in front, alone, and say so in its log |
-| 21, 22, 23 | planned | UI Automation on the same VMs (#633) |
+| 22 | **automated** | `pin-compact`: each of the four routes changes Windows' own topmost flag, and Notepad brought to the front over the window covers it only when unpinned. Measured: the title bar stays 32 px, the pushpin ends 8 px before the minimise button, the compact medallion is a whole 64 × 64 inside the window; the pushpin's tooltip opens by real pointer movement; a title-bar drag moves the window. The window's menu and the notification area's menu are read, ticks and keys included, and used. After Exit and a restart it is compact and pinned, and the footer pin agrees |
+| 21, 23 | planned | UI Automation on the same VMs (#633) |
 | 1, 5, 15, 16, 17, 19 | **not applicable** | Decided 2 Oct 2026. Section 5: a pass against the simulator is sufficient. Section 1 (the adapter pulled): a VM's serial port cannot vanish the way a USB device does, so unless that can be simulated a defect there is raised as a bug. Sections 15–17 (a real talker, the lamps, a UCCM's broadcast) and 19 (a second display): raised as bugs when found, not checked per release |
 | the rest | by hand | a real sign-in, a display or theme change, or a person's eye, until #633 reaches them |
 
@@ -935,6 +936,8 @@ thickened the bar by 16 px and clipped the compact medallion.
 - The right-click menu showed both items with the right ticks.
 
 **The tray menu and the tooltips were then confirmed by hand (Tony), on the published v1.3.0, recorded in #573.** The tray menu is a shell popup the automation could not read.
+
+**Automated since 3 Oct 2026** (`pin-compact`). UI Automation still cannot see that popup menu, but Win32 can: the scenario opens it with the icon's own callback message, posted to the app's tray window, reads its items and ticks from the menu, and clicks the item. What it leaves out is only the shell routing a right-click to the icon.
 
 **Hover testing is only real with real input.** `SetCursorPos` moves the pointer without a pointer event, so no tooltip opens, even on the globe button. Only `SendInput` or `mouse_event` movement proves a tooltip.
 

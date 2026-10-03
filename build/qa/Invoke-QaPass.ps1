@@ -31,6 +31,10 @@
                               window, then off; a receiver that answers only a minute after
                               sign-in; the setting turned off in Windows. UI Automation and the
                               simulator port
+      pin-compact        §22  pinning from compact mode by every route: the shortcut, the window's
+                              and the notification area's menus, the footer pin; Windows' own
+                              topmost flag, the title bar and the medallion measured; a restart
+                              keeps it. UI Automation and Win32
       connect-cancel     §24  an auto-detect walk on a port where nothing answers, stopped by
                               Cancel and by Esc; then Connect works once the receiver answers.
                               Driven through UI Automation (guest\Ui.ps1). Needs the simulator port
@@ -59,7 +63,7 @@ param(
     [string]$Offline,
     [string]$Release,
     [string[]]$Machines = @('QA-Win10', 'QA-Win11'),
-    [string[]]$Scenarios = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in'),
+    [string[]]$Scenarios = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact'),
     [string]$OutDir
 )
 
@@ -70,7 +74,7 @@ Import-Module (Join-Path $PSScriptRoot 'QaVm.psm1') -Force
 # names no scenario - the first run of this script ran nothing and reported success.
 $Machines = @($Machines | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 $Scenarios = @($Scenarios | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-$known = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in')
+$known = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact')
 $unknown = @($Scenarios | Where-Object { $known -notcontains $_ })
 if ($unknown.Count) { throw "Unknown scenario(s): $($unknown -join ', '). Known: $($known -join ', ')." }
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
@@ -903,6 +907,175 @@ Set-ItemProperty -Path "HKCU:\Software\Classes\Local Settings\Software\Microsoft
     }
 }
 
+# manual-qa.md section 22 (#568): one pin, four routes, and whether each changes what Windows does
+# with the window. Windows' own answer is the window's WS_EX_TOPMOST flag, and whether Notepad, put
+# over it and brought to the front, is what is on top at its centre.
+$pinStep = @'
+$process = Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue | Select-Object -First 1
+if (-not $process) { Start-Process "shell:AppsFolder\$((Get-AppxPackage -Name WinZ3805A).PackageFamilyName)!App"; Start-Sleep -Seconds 8 }
+$w = Get-AppWindow
+if (-not $w) { [ordered]@{ error = "no main window ($(Get-WindowReport))" } | ConvertTo-Json -Compress; return }
+$h = Get-Handle $w
+$facts = [ordered]@{}
+
+function Measure-Window([string]$Label) {
+    $w = Get-AppWindow
+    $r = [QaWin32]::Rect($h)
+    $bar = Find-Control $w -AutomationId 'AppTitleBar' -Seconds 2
+    $pin = Find-Control $w -AutomationId 'PinnedIndicator' -Seconds 1
+    $min = Find-Control $w -Name 'Minimize' -Seconds 1
+    $med = Find-Control $w -AutomationId 'Medallion' -Seconds 2
+    $m = [ordered]@{
+        topmost = [QaWin32]::IsTopmost($h)
+        height  = $r.Bottom - $r.Top
+        pushpin = [bool]$pin
+    }
+    if ($bar) { $m.bar = (Get-Bounds $bar).Height }
+    if ($pin -and $min) { $m.gap = (Get-Bounds $min).Left - (Get-Bounds $pin).Right }
+    if ($med) { $b = Get-Bounds $med; $m.medallion = "$($b.Width)x$($b.Height)"; $m.medallionInside = $b.Bottom -le $r.Bottom }
+    $facts[$Label] = $m
+}
+
+# Notepad over the window's centre and brought to the front: which window is on top there.
+function Test-Covered([string]$Label) {
+    $r = [QaWin32]::Rect($h)
+    $cx = [int](($r.Left + $r.Right) / 2); $cy = [int](($r.Top + $r.Bottom) / 2)
+    # Windows 11's Notepad starts through a stub, so the process started may not be the one with
+    # the window: the newest Notepad that has one is.
+    Start-Process notepad
+    Start-Sleep -Seconds 3
+    $np = Get-Process -Name notepad -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne [IntPtr]::Zero } |
+        Sort-Object StartTime -Descending | Select-Object -First 1
+    if (-not $np) { $facts[$Label] = 'no notepad window'; return }
+    $nh = $np.MainWindowHandle
+    [QaWin32]::SetWindowPos($nh, [IntPtr]::Zero, $r.Left - 40, $r.Top - 40, $r.Right - $r.Left + 80, $r.Bottom - $r.Top + 80, 0x0040) | Out-Null
+    [QaWin32]::SetForegroundWindow($nh) | Out-Null
+    Start-Sleep -Seconds 1
+    $facts[$Label] = if ([QaWin32]::TopAt($cx, $cy) -eq $h) { 'app' } elseif ([QaWin32]::TopAt($cx, $cy) -eq $nh) { 'notepad' } else { 'other' }
+    Get-Process -Name notepad -ErrorAction SilentlyContinue | Stop-Process -Force
+    Start-Sleep -Milliseconds 500
+}
+
+function Send-ToApp([string]$Keys) {
+    [QaWin32]::SetForegroundWindow($h) | Out-Null
+    Start-Sleep -Milliseconds 300
+    Send-KeyTo (Get-AppWindow) $Keys
+    Start-Sleep -Seconds 2
+}
+
+if ($phase -eq 'routes') {
+    # Standard layout and unpinned, to begin with.
+    if ([QaWin32]::IsTopmost($h)) { Send-ToApp '^+t' }
+    Measure-Window 'standard'
+    Send-ToApp '^+m'
+    Measure-Window 'compact'
+
+    # The shortcut.
+    Send-ToApp '^+t'
+    Measure-Window 'shortcut'
+    Test-Covered 'coveredPinned'
+
+    # The pushpin's tooltip, by real pointer movement.
+    $pin = Find-Control (Get-AppWindow) -AutomationId 'PinnedIndicator' -Seconds 2
+    if ($pin) {
+        $b = Get-Bounds $pin
+        [QaWin32]::MoveTo($b.Left - 60, $b.Top + 60)
+        [QaWin32]::MoveTo($b.Left + 16, $b.Top + 16)
+        Start-Sleep -Seconds 2
+        $tips = $script:Ae::RootElement.FindAll([System.Windows.Automation.TreeScope]::Descendants,
+            (New-Object System.Windows.Automation.PropertyCondition($script:Ae::ControlTypeProperty, [System.Windows.Automation.ControlType]::ToolTip)))
+        $facts.tooltip = @($tips | ForEach-Object { $_.Current.Name }) -join ' | '
+    }
+
+    # A drag on the title bar.
+    $bar = Get-Bounds (Find-Control (Get-AppWindow) -AutomationId 'AppTitleBar')
+    $before = [QaWin32]::Rect($h)
+    [QaWin32]::MoveTo($bar.Left + 120, $bar.Top + 16)
+    [QaWin32]::LeftDown()
+    [QaWin32]::MoveTo($bar.Left + 180, $bar.Top + 56)
+    [QaWin32]::LeftUp()
+    Start-Sleep -Seconds 1
+    $after = [QaWin32]::Rect($h)
+    $facts.dragged = "$($after.Left - $before.Left),$($after.Top - $before.Top)"
+
+    # The window's own right-click menu, read, then used to unpin.
+    $r = [QaWin32]::Rect($h)
+    [QaWin32]::MoveTo([int](($r.Left + $r.Right) / 2), [int](($r.Top + $r.Bottom) / 2) + 20)
+    [QaWin32]::RightClick()
+    Start-Sleep -Seconds 1
+    $keep = Find-Control $script:Ae::RootElement -AutomationId 'KeepAboveMenuItem' -Seconds 3
+    $compact = Find-Control $script:Ae::RootElement -AutomationId 'CompactMenuItem' -Seconds 1
+    if ($keep -and $compact) {
+        $facts.menu = "$($keep.Current.Name) $(Get-ToggleState $keep) $($keep.Current.AcceleratorKey); $($compact.Current.Name) $(Get-ToggleState $compact) $($compact.Current.AcceleratorKey)"
+        $keep.GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern).Toggle()
+        Start-Sleep -Seconds 2
+    }
+    Measure-Window 'menuUnpinned'
+    Test-Covered 'coveredUnpinned'
+
+    # The notification area's menu: read, then used to pin again.
+    $t = Use-TrayMenu 'Keep above other windows'
+    $facts.trayItems = $t.Items -join ' | '
+    Measure-Window 'trayPinned'
+    $facts.trayAfter = (Use-TrayMenu '').Items -join ' | '
+}
+elseif ($phase -eq 'exit') {
+    # Exit as a person would, from the Details window's Settings page, opened by Ctrl+D because the
+    # compact layout has no footer.
+    Send-ToApp '^d'
+    $d = Get-AppWindowNamed 'Receiver Details'
+    [void](Select-NavigationItem $d 'Settings')
+    Start-Sleep -Seconds 3
+    $exit = Find-Control $d -AutomationId 'ExitButton'
+    if ($exit) { Invoke-Control $exit }
+    Start-Sleep -Seconds 5
+    $facts.running = @(Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue).Count
+}
+elseif ($phase -eq 'restarted') {
+    Measure-Window 'restarted'
+    Send-ToApp '^+m'
+    $foot = Find-Control (Get-AppWindow) -AutomationId 'AlwaysOnTopButton' -Seconds 3
+    $facts.footer = if ($foot) { Get-ToggleState $foot } else { 'missing' }
+    $facts.standardTopmost = [QaWin32]::IsTopmost($h)
+}
+$facts | ConvertTo-Json -Compress -Depth 4
+'@
+
+function Test-PinCompact {
+    param($Vm, $Result)
+    Send-Zip $Vm $Offline 'candidate'
+    $code = Install-Candidate $Vm 'candidate'
+    Check $Result 'installed (exit 0, or 2 with the start check timing out)' ($code -in 0, 2) "exit $code"
+
+    $s = Invoke-UiStep $Vm 'pin-routes' "`$phase = 'routes'" $pinStep
+    if ($s.error) { Check $Result '[22] the window' $false $s.error; return }
+    Check $Result '[22] standard layout, unpinned, to begin' (-not $s.standard.topmost) ($s.standard | ConvertTo-Json -Compress)
+    Check $Result '[22] compact mode, still unpinned' (-not $s.compact.topmost -and $s.compact.height -lt $s.standard.height) ($s.compact | ConvertTo-Json -Compress)
+    $k = $s.shortcut
+    Check $Result '[22] Ctrl+Shift+T pins it: Windows keeps it on top' $k.topmost ($k | ConvertTo-Json -Compress)
+    Check $Result '[22] and Notepad, brought to the front over it, does not cover it' ($s.coveredPinned -eq 'app') "on top at its centre: $($s.coveredPinned)"
+    Check $Result '[22] the pushpin shows, just before the minimise button' ($k.pushpin -and $k.gap -ge 0 -and $k.gap -le 16) "gap $($k.gap) px"
+    Check $Result '[22] the title bar stays its normal height' ($k.bar -eq $s.compact.bar) "bar $($k.bar) px, unpinned $($s.compact.bar) px"
+    Check $Result '[22] the compact medallion is whole' ($k.medallion -eq '64x64' -and $k.medallionInside) "$($k.medallion), inside the window $($k.medallionInside)"
+    Check $Result '[22] the pushpin has a tooltip naming the key' ($s.tooltip -match 'Ctrl\+Shift\+T') $s.tooltip
+    Check $Result '[22] dragging the title bar still moves the window' ($s.dragged -eq '60,40') "moved $($s.dragged)"
+    Check $Result '[22] the right-click menu: both ticked, each with its key' ($s.menu -match 'Keep this window above others On Ctrl\+Shift\+T; Compact mode On Ctrl\+Shift\+M') $s.menu
+    Check $Result '[22] choosing it unpins: the flag and the pushpin go' (-not $s.menuUnpinned.topmost -and -not $s.menuUnpinned.pushpin) ($s.menuUnpinned | ConvertTo-Json -Compress)
+    Check $Result '[22] and Notepad can cover it' ($s.coveredUnpinned -eq 'notepad') "on top at its centre: $($s.coveredUnpinned)"
+    Check $Result '[22] the tray menu: Keep above other windows unticked, between Open and Exit' ($s.trayItems -eq 'Open | Keep above other windows | --- | Exit') $s.trayItems
+    Check $Result '[22] choosing it pins again' ($s.trayPinned.topmost -and $s.trayPinned.pushpin) ($s.trayPinned | ConvertTo-Json -Compress)
+    Check $Result '[22] and the tray menu then shows it ticked' ($s.trayAfter -match 'Keep above other windows \[ticked\]') $s.trayAfter
+
+    $x = Invoke-UiStep $Vm 'pin-exit' "`$phase = 'exit'" $pinStep
+    Check $Result '[22] Exit from Settings ends the app' ($x.running -eq 0) "$($x.running) running $($x.error)"
+    $r = Invoke-UiStep $Vm 'pin-restarted' "`$phase = 'restarted'" $pinStep
+    $q = $r.restarted
+    Check $Result '[22] after a restart: compact, pinned, with the pushpin' ($q.topmost -and $q.pushpin -and $q.height -eq $s.compact.height) "$($q | ConvertTo-Json -Compress) $($r.error)"
+    Check $Result '[22] in the standard layout the footer pin agrees' ($r.footer -eq 'On' -and $r.standardTopmost) "footer $($r.footer), topmost $($r.standardTopmost)"
+    try { Invoke-VmRun $Vm captureScreen -Arguments (Join-Path $Result.Folder 'screen.png') -Guest | Out-Null } catch { }
+    $null = Save-Evidence $Vm $Result.Folder
+}
+
 $scenarioTable = [ordered]@{
     'fresh-online'     = ${function:Test-FreshOnline}
     'fresh-offline'    = ${function:Test-FreshOffline}
@@ -913,6 +1086,7 @@ $scenarioTable = [ordered]@{
     'receiver'         = ${function:Test-Receiver}
     'connect-cancel'   = ${function:Test-ConnectCancel}
     'sign-in'          = ${function:Test-SignIn}
+    'pin-compact'      = ${function:Test-PinCompact}
 }
 
 # ---------------------------------------------------------------------------
