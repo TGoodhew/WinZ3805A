@@ -77,6 +77,16 @@ public sealed class LineProtocol
     private TimeSpan? _resynchroniseWithin;
 
     /// <summary>
+    /// The budget of a long transaction that timed out having heard nothing, so the next command
+    /// first listens for its reply starting late; null when nothing is owed (#643). See
+    /// <see cref="ListenForLateReplyAsync"/>.
+    /// </summary>
+    private TimeSpan? _listenAfterSilence;
+
+    /// <summary>How long the next command listens for a reply that may have started late (#643).</summary>
+    private static readonly TimeSpan LateReplyWindow = TimeSpan.FromSeconds(3);
+
+    /// <summary>
     /// Whether the driver buffer might hold bytes this link did not ask for (#395).
     /// </summary>
     /// <remarks>
@@ -460,19 +470,41 @@ public sealed class LineProtocol
     }
 
     /// <summary>
-    /// Notes that a reply was abandoned part-read, so the next command realigns before it is sent.
+    /// Notes that a reply was abandoned part-read, so the next command realigns before it is sent;
+    /// or, for a long transaction that heard nothing, that the next command listens briefly first.
     /// </summary>
     /// <remarks>
-    /// <b>Only when something had already arrived.</b> A transaction that received nothing at all
-    /// was talking to a device that is silent or gone, and there is no tail to drain — waiting for
-    /// a prompt that was never coming would add a second timeout to every one of §7.2's three
-    /// consecutive failures before it reconnects, which is exactly the wrong place to spend time.
+    /// <para>
+    /// <b>A full realignment only when something had already arrived.</b> A transaction that
+    /// received nothing at all was usually talking to a device that is silent or gone, and there is
+    /// no tail to drain — waiting the whole budget for a prompt that was never coming would add a
+    /// second timeout to every one of §7.2's three consecutive failures before it reconnects, which
+    /// is exactly the wrong place to spend time.
+    /// </para>
+    /// <para>
+    /// <b>But a silent timeout is not always a silent device (#643).</b> After a power cycle the
+    /// bench Z3805A took more than fifteen seconds to <i>start</i> its first status screen, past
+    /// that screen's whole budget, so nothing had arrived when it timed out and the screen then
+    /// came in as the next command's answer. So a long transaction that heard nothing earns the
+    /// next command a short listen instead: <see cref="LateReplyWindow"/>, not the full budget.
+    /// </para>
+    /// <para>
+    /// <b>Only a transaction allowed longer than <see cref="TransactionTimeouts.Default"/>.</b> A
+    /// scalar answers in milliseconds or not at all — on the bench even a receiver still booting
+    /// answered at once, with an error — so its silence does mean a silent device. And the connect
+    /// sequence's probes time out silently at every wrong baud rate auto-detect tries, where a
+    /// listen after each would add about a minute to the walk for nothing.
+    /// </para>
     /// </remarks>
     private void NeedsResynchronising(int linesReceived, TimeSpan budget)
     {
         if (linesReceived > 0)
         {
             _resynchroniseWithin = budget;
+        }
+        else if (budget > TransactionTimeouts.Default)
+        {
+            _listenAfterSilence = budget;
         }
     }
 
@@ -509,6 +541,12 @@ public sealed class LineProtocol
     /// </remarks>
     private async Task ResynchroniseAsync()
     {
+        if (_listenAfterSilence is TimeSpan abandoned)
+        {
+            _listenAfterSilence = null;
+            await ListenForLateReplyAsync(abandoned).ConfigureAwait(false);
+        }
+
         if (_resynchroniseWithin is not TimeSpan budget)
         {
             return;
@@ -541,6 +579,73 @@ public sealed class LineProtocol
             // the shape every caller already handles. Throwing a raw transport exception from here
             // would make one path report failure differently from all the others.
             TransportLog.ResynchroniseTimedOut(_logger, budget.TotalMilliseconds, discarded.Count);
+        }
+    }
+
+    /// <summary>
+    /// Listens briefly for a reply that may have started after its transaction timed out, and if
+    /// one starts, reads it to its prompt and discards it (#643).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Why not drain it when it comes.</b> <see cref="DiscardStaleInput"/> clears only what has
+    /// already arrived. A screen starting a second or two after its timeout is still on the wire
+    /// when the next command is written, so it lands in that command's read, and every answer is
+    /// then one command late until the link next pauses. Today that cost one sweep after each power
+    /// cycle, rejected whole by the #209 guard, and the lost screen.
+    /// </para>
+    /// <para>
+    /// <b>Two stages.</b> Up to <see cref="LateReplyWindow"/> for a line or a prompt to appear;
+    /// nothing in that time means nothing is coming, and the command goes out. A line means a reply
+    /// is under way, and it gets the abandoned transaction's own budget to finish, as a realignment
+    /// does. Lines rather than bytes, so a broadcasting family's binary frames, lifted out before
+    /// any line splitting, do not read as a reply. As in <see cref="ResynchroniseAsync"/>, the
+    /// caller's token is not honoured: the wait is bounded instead.
+    /// </para>
+    /// <para>
+    /// A reply that begins in the window's last moments, before its first line is complete, is
+    /// missed. The #209 guard is still behind it, so that costs what every late reply cost before.
+    /// </para>
+    /// </remarks>
+    /// <param name="abandoned">The budget of the transaction that timed out.</param>
+    private async Task ListenForLateReplyAsync(TimeSpan abandoned)
+    {
+        List<string> discarded = [];
+
+        try
+        {
+            using (CancellationTokenSource window = new(LateReplyWindow, _timeProvider))
+            {
+                try
+                {
+                    await ReadUntilPromptAsync(discarded, [], window.Token).ConfigureAwait(false);
+                    TransportLog.LateReplyDiscarded(_logger, abandoned.TotalMilliseconds, discarded.Count);
+                    return;
+                }
+                catch (OperationCanceledException) when (discarded.Count == 0)
+                {
+                    TransportLog.NoLateReply(_logger, LateReplyWindow.TotalMilliseconds);
+                    return;
+                }
+                catch (OperationCanceledException)
+                {
+                    // A reply is under way; let it finish below.
+                }
+            }
+
+            using CancellationTokenSource deadline = new(abandoned, _timeProvider);
+            await ReadUntilPromptAsync(discarded, [], deadline.Token).ConfigureAwait(false);
+            TransportLog.LateReplyDiscarded(_logger, abandoned.TotalMilliseconds, discarded.Count);
+        }
+        catch (OperationCanceledException)
+        {
+            TransportLog.ResynchroniseTimedOut(_logger, abandoned.TotalMilliseconds, discarded.Count);
+        }
+        catch (Exception exception) when (TransportFaults.IsTransportFault(exception))
+        {
+            // Swallowed for the reason ResynchroniseAsync gives: the command that follows touches the
+            // same port and reports the fault in the shape every caller already handles.
+            TransportLog.ResynchroniseTimedOut(_logger, abandoned.TotalMilliseconds, discarded.Count);
         }
     }
 

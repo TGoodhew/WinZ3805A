@@ -279,6 +279,113 @@ public class ResynchronisationTests
         Assert.Equal(["LOCK"], (await second.WaitAsync(Settle)).Lines);
     }
 
+    /// <remarks>
+    /// <b>#643: a long reply that is slow to start.</b> After a power cycle the bench Z3805A took more
+    /// than fifteen seconds to start its first status screen, so the screen's transaction timed out
+    /// having heard nothing, and the screen then arrived while the next command was waiting. The next
+    /// command now listens before it is sent, and gets its own answer.
+    /// </remarks>
+    [Fact]
+    public async Task AReplyThatStartsAfterItsTimeoutIsNotTheNextCommandsAnswer()
+    {
+        FakeTimeProvider clock = new();
+        await using FakeTransport transport = new() { EchoCommands = false, WaitForReaderToConsume = true };
+        await transport.OpenAsync();
+
+        LineProtocol protocol = new(transport, clock);
+
+        Task<Transaction> screen = protocol.ExecuteAsync(
+            ":SYST:STAT?", TimeSpan.FromSeconds(15), CancellationToken.None);
+        await transport.ReadCommandAsync();
+
+        clock.Advance(TimeSpan.FromSeconds(16));
+        Transaction timedOut = await screen.WaitAsync(Settle);
+        Assert.Equal(TransactionOutcome.TimedOut, timedOut.Outcome);
+        Assert.Empty(timedOut.Lines);
+
+        Task<Transaction> next = protocol.ExecuteAsync(
+            ":SYNC:STAT?", TimeSpan.FromSeconds(3), CancellationToken.None);
+
+        // The screen starts now, after its own timeout, while the next command is waiting to go.
+        await transport.EmitAsync("SmartClock Mode ___________\r\n");
+        await transport.EmitAsync($"the rest of the screen\r\n{Prompt}");
+
+        Assert.Equal(":SYNC:STAT?", await transport.ReadCommandAsync().AsTask().WaitAsync(Settle));
+        await transport.EmitAsync($"LOCK\r\n{Prompt}");
+
+        Assert.Equal(["LOCK"], (await next.WaitAsync(Settle)).Lines);
+    }
+
+    /// <remarks>
+    /// The listen is short, and a reply that begins inside it is still read to its end however
+    /// long that takes: a 1.9 kB screen is two seconds of wire at 9600 baud, and it may start late
+    /// in the window.
+    /// </remarks>
+    [Fact]
+    public async Task ALateReplyThatOutlastsTheListenIsStillReadToItsEnd()
+    {
+        FakeTimeProvider clock = new();
+        await using FakeTransport transport = new() { EchoCommands = false, WaitForReaderToConsume = true };
+        await transport.OpenAsync();
+
+        LineProtocol protocol = new(transport, clock);
+
+        Task<Transaction> screen = protocol.ExecuteAsync(
+            ":SYST:STAT?", TimeSpan.FromSeconds(15), CancellationToken.None);
+        await transport.ReadCommandAsync();
+        clock.Advance(TimeSpan.FromSeconds(16));
+        Assert.Equal(TransactionOutcome.TimedOut, (await screen.WaitAsync(Settle)).Outcome);
+
+        Task<Transaction> next = protocol.ExecuteAsync(
+            ":SYNC:STAT?", TimeSpan.FromSeconds(3), CancellationToken.None);
+
+        await transport.EmitAsync("SmartClock Mode ___________\r\n");
+
+        // Past the listen, well short of the screen's own budget.
+        clock.Advance(TimeSpan.FromSeconds(5));
+        await transport.EmitAsync($"the rest of the screen\r\n{Prompt}");
+
+        Assert.Equal(":SYNC:STAT?", await transport.ReadCommandAsync().AsTask().WaitAsync(Settle));
+        await transport.EmitAsync($"LOCK\r\n{Prompt}");
+
+        Assert.Equal(["LOCK"], (await next.WaitAsync(Settle)).Lines);
+    }
+
+    /// <remarks>
+    /// <b>What the listen costs a receiver that is really gone:</b> three seconds on the command
+    /// after a long transaction, and no more. Not the abandoned transaction's whole budget, which
+    /// for a screen would be fifteen.
+    /// </remarks>
+    [Fact]
+    public async Task ASilentLongTransactionCostsTheNextCommandOnlyTheListen()
+    {
+        FakeTimeProvider clock = new();
+        await using FakeTransport transport = new() { EchoCommands = false, WaitForReaderToConsume = true };
+        await transport.OpenAsync();
+
+        LineProtocol protocol = new(transport, clock);
+
+        Task<Transaction> screen = protocol.ExecuteAsync(
+            ":SYST:STAT?", TimeSpan.FromSeconds(15), CancellationToken.None);
+        await transport.ReadCommandAsync();
+        clock.Advance(TimeSpan.FromSeconds(16));
+        Assert.Equal(TransactionOutcome.TimedOut, (await screen.WaitAsync(Settle)).Outcome);
+
+        DateTimeOffset listening = clock.GetUtcNow();
+        Task<Transaction> next = protocol.ExecuteAsync(
+            ":SYNC:STAT?", TimeSpan.FromSeconds(3), CancellationToken.None);
+        Task<string> written = transport.ReadCommandAsync().AsTask();
+
+        await AdvanceUntilCompleteAsync(clock, written, TimeSpan.FromMilliseconds(100), "the next command");
+        TimeSpan held = clock.GetUtcNow() - listening;
+
+        Assert.Equal(":SYNC:STAT?", await written);
+        Assert.InRange(held, TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(4));
+
+        await transport.EmitAsync($"LOCK\r\n{Prompt}");
+        Assert.Equal(["LOCK"], (await next.WaitAsync(Settle)).Lines);
+    }
+
     /// <summary>A realignment that never finds a prompt gives up on its own budget.</summary>
     /// <remarks>
     /// The budget is the abandoned transaction's own, because that is the longest its remaining

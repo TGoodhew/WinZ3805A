@@ -108,27 +108,27 @@ public sealed class SmartClockSimulatedSessionTests
     /// whether that is enough when what arrives late is a 1.9 kB screen.
     /// </para>
     /// <para>
-    /// <b>It is not enough, and this test pins what is.</b> <see cref="LineProtocol"/> resynchronises
-    /// only after a timeout that received part of a reply; one that received nothing is taken to be
-    /// a silent receiver, so as not to slow a reconnect. A screen that is slow to <i>start</i> looks
-    /// exactly like that, so its bytes arrive after the next command and are read as its answer, and
-    /// every answer after it is one late until the link pauses. What holds the line is the sweep
-    /// guard (#209): the shifted sweep reads a screen line as its sync state and is rejected whole,
-    /// and the pause before the next sweep drains the stray reply. The defect is #643;
-    /// this test stays true either way.
+    /// <b>It was not enough until #643.</b> <see cref="LineProtocol"/> realigned only after a timeout
+    /// that received part of a reply; one that received nothing was taken to be a silent receiver,
+    /// so as not to slow a reconnect. A screen that is slow to <i>start</i> looks exactly like that,
+    /// so its bytes arrived after the next command and were read as its answer, and the sweep guard
+    /// (#209) rejected that sweep whole. Now a long transaction that heard nothing makes the next
+    /// command listen briefly first, so the late screen is read and discarded there, and the very
+    /// next sweep is aligned. The cost of a late screen is that screen and nothing else.
     /// </para>
     /// <para>
-    /// Scaled down so it runs in seconds: the first screen is made 1.5 s late against a 1 s timeout,
-    /// the same shape as 16.5 s against 15.
+    /// Scaled down so it runs in seconds: the first screen is made 4 s late against a 3.5 s timeout,
+    /// the same shape as 16.5 s against 15. The timeout must stay above
+    /// <see cref="TransactionTimeouts.Default"/>, because only a long transaction earns the listen.
     /// </para>
     /// </remarks>
     [Fact]
-    public async Task AScreenArrivingAfterItsTimeoutCostsOneRejectedSweepAndNoBadReadings()
+    public async Task AScreenArrivingAfterItsTimeoutCostsOnlyThatScreen()
     {
         FakeTimeProvider clock = new(new DateTimeOffset(2026, 10, 2, 12, 0, 0, TimeSpan.Zero));
         SimulatedReceiver receiver = new(clock)
         {
-            Timing = new ReceiverTiming { FirstScreen = TimeSpan.FromSeconds(1.5), SecondScreen = TimeSpan.FromMilliseconds(200) },
+            Timing = new ReceiverTiming { FirstScreen = TimeSpan.FromSeconds(4), SecondScreen = TimeSpan.FromMilliseconds(200) },
         };
         receiver.StartLocked();
         SimulatorTransport transport = new(new ScpiEngine(receiver, clock)) { HonourDelays = true };
@@ -138,16 +138,14 @@ public sealed class SmartClockSimulatedSessionTests
         SmartClockDriver driver = new(clock);
         receiver.PowerCycle();
         await protocol.ExecuteAsync("*CLS", Timeout);
-        Transaction late = await protocol.ExecuteAsync(":SYST:STAT?", TimeSpan.FromSeconds(1));
-        SweepInterpretation shifted = driver.InterpretSweep(await Sweep(protocol, driver));
+        Transaction late = await protocol.ExecuteAsync(":SYST:STAT?", TimeSpan.FromSeconds(3.5));
 
-        // The poll cadence leaves a pause before the next sweep; that is what drains the stray reply.
-        await Task.Delay(TimeSpan.FromMilliseconds(500));
+        // No pause: the sweep straight after the timeout, which is the one the late screen used to land in.
         SweepInterpretation aligned = driver.InterpretSweep(await Sweep(protocol, driver));
         Transaction screen = await protocol.ExecuteAsync(":SYST:STAT?", Timeout);
 
         Assert.Equal(TransactionOutcome.TimedOut, late.Outcome);
-        Assert.NotNull(shifted.Rejection);
+        Assert.Empty(late.Lines);
         Assert.Null(aligned.Rejection);
         Assert.Equal("POW", aligned.Readings.SyncState);
         Assert.Equal(9, aligned.Readings.Tfom);

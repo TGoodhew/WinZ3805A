@@ -61,4 +61,14 @@ internal static partial class TransportLog
     [LoggerMessage(EventId = 1017, Level = LogLevel.Debug,
         Message = "Lifted a {ByteCount}-byte unsolicited binary frame out of the stream.")]
     internal static partial void BinaryFrameRead(ILogger logger, int byteCount);
+
+    // Information, for the reason Resynchronised is: a reply that began after its own timeout is a
+    // receiver that was slow rather than gone, and it is what a power cycle produces (#643).
+    [LoggerMessage(EventId = 1018, Level = LogLevel.Information,
+        Message = "A reply began after its {Budget} ms timeout and was discarded, {LineCount} line(s).")]
+    internal static partial void LateReplyDiscarded(ILogger logger, double budget, int lineCount);
+
+    [LoggerMessage(EventId = 1019, Level = LogLevel.Debug,
+        Message = "Listened {Window} ms for a late reply after a silent timeout; none came.")]
+    internal static partial void NoLateReply(ILogger logger, double window);
 }
