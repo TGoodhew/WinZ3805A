@@ -82,7 +82,7 @@ nothing ran.
 | `fresh-offline` | 12 | Offline zip: .NET and the app in one elevation, exit 0, start check passed |
 | `upgrade-1.2.0` | 12 | A used v1.2.0 replaced: the right order for the build, data saved and moved, old copy and certificate gone |
 | `leftover-cert` | 12 | v1.2.0 uninstalled by hand first: its certificate still removed |
-| `app-checks` | 11, 18, 25 | On the running app: the guide in the package and F1, a second launch typed into the Start menu bringing a covered window forward, the tray icon surviving an Explorer restart; a screenshot is kept for the agent to judge |
+| `app-checks` | 11, 18, 25 | On the running app: the guide in the package, and Ctrl+D and F1 opening windows with their own captions, a second launch typed into the Start menu bringing a covered window forward, the tray icon surviving an Explorer restart; a screenshot is kept for the agent to judge |
 | `receiver` | 2, 10 | The app against the simulated Z3805A on the VM's COM2, its settings written for connect-on-launch: it connects and locks; follows a pulled antenna into holdover (`WAIT`, #642), notifies after the grace minute, recovers and notifies again; and comes back by itself after a 30-second power cycle. Needs the simulator port |
 
 A candidate built before `-Unattended` existed - any release up to v1.3.3 - gets its prompts
@@ -97,8 +97,7 @@ exactly as #617 did.
   One taken 30 s after a cold boot made the app's first launch take 14 s on Windows 11. That failed
   the installer's 15 s start check in every run from it, `fresh-offline` included, until the snapshot
   was taken again after four quiet minutes. `Save-QaCleanSnapshot` waits for the processor to stay
-  under 10 % for 30 s. A real machine can be that busy too, so since #646 the start check waits up
-  to 45 s for the log while the process is alive.
+  under 10 % for 30 s. A real machine can be that busy too, which is #646.
 
 Each of these cost a failed run on 1 Oct 2026.
 
