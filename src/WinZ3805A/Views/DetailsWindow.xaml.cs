@@ -330,6 +330,13 @@ public sealed partial class DetailsWindow : Window
             FontWeight = LabelWeight(selected: false),
         };
 
+        // Out of the framework's high-contrast text adjustment (#672). The item's own template draws its
+        // selected label in highlight text on the highlight; the adjustment drew it in window text on a
+        // window-coloured backplate instead, a box inside the selection. Only here and on the accent
+        // button: the application keeps the adjustment, because the stock TitleBar's text depends on it
+        // in high contrast - turned off for everything, its subtitle disappeared in three of the four
+        // Windows 11 themes.
+        item.HighContrastAdjustment = ElementHighContrastAdjustment.None;
         AutomationProperties.SetName(item, destination.Label);
         ToolTipService.SetToolTip(item, ToolTipFor(destination));
         return item;
