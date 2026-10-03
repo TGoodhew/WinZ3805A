@@ -97,6 +97,13 @@ public sealed record SkyPlotSatellite(
     /// </summary>
     public bool CanPlot => ElevationDegrees is not null && AzimuthDegrees is not null;
 
+    /// <summary>The automation name, for anything that falls back to the item itself (#688).</summary>
+    /// <remarks>
+    /// The list templates name each row from <see cref="Description"/>; a list item focused before its
+    /// content is realised names itself from this instead, and a record's own text is every field.
+    /// </remarks>
+    public override string ToString() => Description;
+
     /// <summary>The satellite's identity — the plot's key, and the keyboard's order (#424).</summary>
     public SatelliteId Id => new(Constellation, Prn);
 
