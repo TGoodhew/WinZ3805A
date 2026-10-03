@@ -61,7 +61,9 @@ restart (#614). If it still does not open,
 records why, for a report.
 
 If WinZ3805A stops starting later, **run the newest `Install.cmd` again**: it checks and puts right
-what it installed, and keeps your data. Windows' *Settings › Apps › WinZ3805A › Advanced options ›
+what it installed, and keeps your data. From **1.3.4**, if the app itself is damaged, it installs it
+again, saving your history and settings to Documents first and moving them back afterwards (#600).
+Windows' *Settings › Apps › WinZ3805A › Advanced options ›
 **Repair*** is also safe. **Reset** in the same place deletes your history and settings.
 
 ### About the certificate prompt
