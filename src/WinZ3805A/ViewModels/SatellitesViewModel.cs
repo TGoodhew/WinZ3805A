@@ -503,6 +503,13 @@ public sealed class PredictedSatelliteRow
         _ => SkyPlotMarkerKind.Predicted,
     };
 
+    /// <summary>The automation name, for anything that falls back to the item itself (#688).</summary>
+    /// <remarks>
+    /// The not-tracked template names each row from <see cref="Description"/>; a list item focused
+    /// before its content is realised names itself from this, and was announced as the class name.
+    /// </remarks>
+    public override string ToString() => Description;
+
     /// <summary>One sentence naming every column, for the row's automation name.</summary>
     public string Description
     {
