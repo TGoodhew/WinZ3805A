@@ -16,6 +16,8 @@
       fresh-offline      §12  the offline zip installs .NET too: exit 0, the start check passes
       upgrade-1.2.0      §12  a used v1.2.0 replaced: data moved, old copy and certificate gone
       leftover-cert      §12  v1.2.0 uninstalled by hand: its certificate is still removed
+      repair-damaged     §12  this version installed and then damaged: rerunning the installer
+                              repairs it with its data intact (#600)
       app-checks         §11, §25, §18  on the running app, after a clean offline install: the
                               guide in the package and F1, a second launch typed into the Start
                               menu bringing a covered window forward, and the tray icon surviving
@@ -49,7 +51,7 @@ param(
     [string]$Offline,
     [string]$Release,
     [string[]]$Machines = @('QA-Win10', 'QA-Win11'),
-    [string[]]$Scenarios = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'app-checks', 'receiver'),
+    [string[]]$Scenarios = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver'),
     [string]$OutDir
 )
 
@@ -60,7 +62,7 @@ Import-Module (Join-Path $PSScriptRoot 'QaVm.psm1') -Force
 # names no scenario - the first run of this script ran nothing and reported success.
 $Machines = @($Machines | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 $Scenarios = @($Scenarios | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-$known = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'app-checks', 'receiver')
+$known = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver')
 $unknown = @($Scenarios | Where-Object { $known -notcontains $_ })
 if ($unknown.Count) { throw "Unknown scenario(s): $($unknown -join ', '). Known: $($known -join ', ')." }
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
@@ -300,6 +302,51 @@ function Test-LeftoverCert {
 }
 
 
+# #600: the copy of this very version, broken, and the installer run again. The damage is the one
+# measured on 2 Oct 2026 - the app's main assembly overwritten with zeros of the same length - which
+# Windows still reports as Ok, which re-registering does not repair, and which only a reinstall
+# does. So passing means rung 1 was tried, did not do it, and rung 2 did, with the data kept.
+function Test-RepairDamaged {
+    param($Vm, $Result)
+    Send-Zip $Vm $Offline 'candidate'
+    $first = Install-Candidate $Vm 'candidate'
+    Check $Result 'installed and started (exit 0)' ($first -eq 0) "exit $first"
+
+    # A marker in the data folder stands for the history; the damage needs administrator rights,
+    # because the install folder belongs to TrustedInstaller. UAC on these VMs elevates silently.
+    $r = Invoke-QaGuestScript $Vm -Name 'damage' -Script @'
+$pkg = Get-AppxPackage -Name WinZ3805A | Select-Object -First 1
+$data = Join-Path $env:LOCALAPPDATA "Packages\$($pkg.PackageFamilyName)\LocalCache\Local\WinZ3805A"
+Set-Content -LiteralPath (Join-Path $data 'repair-marker.txt') -Value 'kept'
+$target = Join-Path $pkg.InstallLocation 'WinZ3805A.dll'
+# As a file: Start-Process joins its arguments with spaces, so a -Command would arrive in pieces.
+Set-Content -LiteralPath 'C:\qa\damage.ps1' -Value @"
+takeown.exe /f "$target" | Out-Null
+icacls.exe "$target" /grant '*S-1-5-32-544:F' | Out-Null
+[IO.File]::WriteAllBytes('$target', (New-Object byte[] (Get-Item '$target').Length))
+"@
+Start-Process powershell.exe -Verb RunAs -Wait -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', 'C:\qa\damage.ps1'
+$head = [IO.File]::ReadAllBytes($target) | Select-Object -First 2
+"damaged: $(($head -join ',') -eq '0,0')"
+'@
+    Check $Result 'the app''s main assembly damaged' ($r.Output -match 'damaged: True') $r.Output
+
+    $second = Install-Candidate $Vm 'candidate'
+    $log = Save-Evidence $Vm $Result.Folder
+    $after = Invoke-QaGuestScript $Vm -Name 'after' -Script @'
+$pkg = Get-AppxPackage -Name WinZ3805A | Select-Object -First 1
+$data = Join-Path $env:LOCALAPPDATA "Packages\$($pkg.PackageFamilyName)\LocalCache\Local\WinZ3805A"
+"marker: $(Test-Path (Join-Path $data 'repair-marker.txt'))"
+"status: $($pkg.Status)"
+'@
+    Check $Result 'rerunning the installer: exit 0, started' ($second -eq 0) "exit $second"
+    Check $Result 'it said beforehand that it would repair a copy that does not start' ($log -match 'decide repair') ''
+    Check $Result 're-registering was tried first' ($log -match 'Registered it again from its own folder') ''
+    Check $Result 'and the reinstall repaired it' ($log -match 'repair        repaired by rung 2') (($log -split "`r?`n" | Where-Object { $_ -match 'repair  ' }) -join ' | ')
+    Check $Result 'its data was saved to Documents first' ($log -match 'Saved its data to .*WinZ3805A repair backup') ''
+    Check $Result 'and is in the repaired copy' ($after.Output -match 'marker: True') $after.Output
+}
+
 function Test-AppChecks {
     param($Vm, $Result)
     Send-Zip $Vm $Offline 'candidate'
@@ -456,6 +503,7 @@ $scenarioTable = [ordered]@{
     'fresh-offline'    = ${function:Test-FreshOffline}
     'upgrade-1.2.0'    = ${function:Test-Upgrade120}
     'leftover-cert'    = ${function:Test-LeftoverCert}
+    'repair-damaged'   = ${function:Test-RepairDamaged}
     'app-checks'       = ${function:Test-AppChecks}
     'receiver'         = ${function:Test-Receiver}
 }
