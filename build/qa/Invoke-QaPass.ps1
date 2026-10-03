@@ -1533,7 +1533,10 @@ if (-not $d) {
 $facts.detailsCaption = "$($d.Current.Name)"
 [void](Select-NavigationItem $d 'Satellites')
 Start-Sleep -Seconds 5
-$facts.mask = "$((Find-Control $d -AutomationId 'ElevationMaskText' -Seconds 2).Current.Name)"
+# Waited for: the mask once read as a dash on Win11, the page not yet filled five seconds after
+# navigating.
+$deadline = (Get-Date).AddSeconds(15)
+do { $facts.mask = "$((Find-Control $d -AutomationId 'ElevationMaskText' -Seconds 2).Current.Name)"; if ($facts.mask -match '\d') { break }; Start-Sleep -Seconds 1 } while ((Get-Date) -lt $deadline)
 
 # The card's own layout at this width (#664): the heading against the Plot choice beside it, and
 # the legend's last label against the card's content edge, which Save image's right edge marks.
@@ -1765,8 +1768,10 @@ New-Item -ItemType Directory -Force $dir | Out-Null
             }
             # OCR reads the degree sign as a 0 or an o, so '10°' comes back as '100'; anything else after
             # the digits is a different mask.
-            $maskValue = if ($s.mask -match '(\d+)') { $Matches[1] } else { '?' }
-            Check $Result "[7] $($l.Label): the caption, read from the file, is in UTC and gives the page's mask" ($s.ocr -match 'UTC' -and $s.ocr -match "elevation mask $maskValue[°0oO]?(?!\d)") "mask on the page '$($s.mask)'; caption read as '$($s.lastLine)'"
+            # No reading on the page is a failure, not a wildcard: a placeholder here once became a regex
+            # quantifier and passed a caption against a mask nobody had read.
+            $maskValue = if ($s.mask -match '(\d+)') { $Matches[1] } else { $null }
+            Check $Result "[7] $($l.Label): the caption, read from the file, is in UTC and gives the page's mask" ($maskValue -and $s.ocr -match 'UTC' -and $s.ocr -match "elevation mask $maskValue[°0oO]?(?!\d)") "mask on the page '$($s.mask)'; caption read as '$($s.lastLine)'"
         }
         # RenderTargetBitmap truncates rather than throwing when asked for more than it can give, so an
         # over-budget capture opens cleanly and is missing its bottom. The caption is the image's last
