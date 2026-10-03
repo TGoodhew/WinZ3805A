@@ -1000,7 +1000,8 @@ if ($dotnet -and $installedCopy) {
     # alive - to show Windows' "You must install .NET" prompt - so counting processes passed exactly
     # the broken install this exists to catch. Measured on a clean VM on 30 Sep 2026 (#597): app.log
     # was written after the launch in every healthy run and in neither broken one. So it passes only
-    # when the app wrote its log after being started AND is still running 15 s later.
+    # when the app wrote its log after being started AND is still running 15 s later - or, when it is
+    # alive at 15 s with no log yet, once the log appears within 45 s of the launch (#646).
     #
     # LAUNCHED SO THAT A FAILURE SAYS WHAT IT WAS (#624). Started through Explorer, as it was until
     # v1.3.3, this check never saw the process, so it could not tell Windows refusing the launch
@@ -1096,6 +1097,7 @@ namespace WinZ3805AInstaller
     $processId = $null
     $hr = $null
     $exitCode = $null
+    $exitValue = $null
     if ($probe -and ('0x{0:X8}' -f $probe.ActivationResult) -ne '0x80270251') {
         if ($probe.ActivationResult -lt 0) {
             $outcome = 'refused'
@@ -1109,7 +1111,8 @@ namespace WinZ3805AInstaller
             }
             elseif ($probe.Exited) {
                 $outcome = 'exited'
-                $exitCode = '0x{0:X8}' -f $probe.ExitCode
+                $exitValue = $probe.ExitCode
+                $exitCode = '0x{0:X8}' -f $exitValue
                 Write-Log "start check   process $processId exited within 15 s, code $exitCode"
             }
             else {
@@ -1131,7 +1134,33 @@ namespace WinZ3805AInstaller
         catch { Write-Log "could not start it: $($_.Exception.Message)" }
     }
 
-    $logged = (Test-Path $appLog) -and ((Get-Item $appLog).LastWriteTime -ge $launchedAt)
+    $loggedSinceLaunch = { (Test-Path $appLog) -and ((Get-Item $appLog).LastWriteTime -ge $launchedAt) }
+
+    # A SLOW FIRST LAUNCH IS NOT A FAILED ONE (#646). On a clean, quiet Windows 11 VM the first launch
+    # after installing took 14.4 s to write its log (2 Oct 2026), and on a busy one longer - and busy
+    # is what a machine is just after installing .NET and the app together, which is exactly when this
+    # runs. So a process alive at 15 s without a log is given until 45 s from the launch to write one.
+    # Only that case waits: an exit or a refusal is reported at once, and a process that ends while
+    # waiting is reported as having exited. What still fails after the wait is a process that stays up
+    # and never logs, which is Windows' own .NET prompt (#599).
+    if ($outcome -eq 'alive' -and -not (& $loggedSinceLaunch)) {
+        Write-Log "start check   process $processId has written no log yet; waiting up to 45 s from the launch for it"
+        $watched = Get-Process -Id $processId -ErrorAction SilentlyContinue
+        # Opening the handle now is what keeps the exit code readable if it ends while waiting.
+        try { if ($watched) { $null = $watched.Handle } } catch { Write-Log "start check   could not open process ${processId}: $($_.Exception.Message)" }
+        while (-not (& $loggedSinceLaunch) -and (Get-Date) -lt $launchedAt.AddSeconds(45)) {
+            if (-not $watched -or $watched.WaitForExit(500)) {
+                $outcome = 'exited'
+                try { $exitValue = [uint32]($watched.ExitCode -band 0xFFFFFFFFL); $exitCode = '0x{0:X8}' -f $exitValue }
+                catch { $exitCode = 'unknown' }
+                Write-Log "start check   process $processId exited while waiting for its log, code $exitCode"
+                break
+            }
+        }
+        Write-Log ("start check   waited until {0:N1} s after the launch" -f ((Get-Date) - $launchedAt).TotalSeconds)
+    }
+
+    $logged = & $loggedSinceLaunch
     $startedOk = ($outcome -eq 'alive') -and $logged
     $window = $null
     if ($outcome -eq 'alive') {
@@ -1152,7 +1181,7 @@ namespace WinZ3805AInstaller
         Write-Host "  $dotnetPage and start it again." -ForegroundColor Yellow
     }
     else {
-        Write-Log "NOT RUNNING 15 s after being started ($outcome). What Windows recorded:"
+        Write-Log "NOT RUNNING after being started ($outcome). What Windows recorded:"
     }
 
     if (-not $startedOk) {
@@ -1197,7 +1226,7 @@ namespace WinZ3805AInstaller
                 }
             }
             'exited' {
-                if ($probe.ExitCode -ge [uint32]2147483648) {
+                if ($null -ne $exitValue -and $exitValue -ge [uint32]2147483648) {
                     # An HRESULT as the exit code is what the Windows App SDK's deployment check
                     # leaves when it gives up before the application's own code runs (#473, #625).
                     Write-Host "  WinZ3805A closed as soon as it started, with code $exitCode. That is the" -ForegroundColor Yellow
