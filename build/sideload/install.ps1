@@ -32,8 +32,14 @@
          unable to start until a restart (#614). So there the earlier copy's
          data is saved and the copy removed BEFORE step 4, and the data is
          moved in after it.
+      6. Start it once and check it opened (#592, #599). If it does not, and it
+         is a copy of this same version that was already installed - which
+         step 4 cannot touch, installing a version over itself being a no-op -
+         REPAIR it (#600): register it again from its own folder, and if that
+         is not enough, save its data to Documents, remove it, install it again
+         and move the data back. Each is followed by the start check again.
 
-    Steps 3 to 5 run as the person who started this, NOT elevated, and that is
+    Steps 3 to 6 run as the person who started this, NOT elevated, and that is
     deliberate. Installing an app is a per-user operation: elevating the whole
     script would install it for whichever administrator the UAC prompt
     authenticated, which on a shared machine is not the person at the keyboard.
@@ -192,14 +198,14 @@ function Get-DataFolder {
 # it was saved to, or nothing when the copy had no data; throws when there was data and it could not
 # be saved, so that no caller can go on to remove a copy whose data exists only inside it.
 function Save-EarlierData {
-    param($Copy)
+    param($Copy, [string]$Label = 'earlier copy')
     $from = Get-DataFolder $Copy.PackageFamilyName
     if (-not ((Test-Path $from) -and (Get-ChildItem $from -Force -ErrorAction SilentlyContinue))) {
         Write-Log "nothing to save: $from is empty or absent"
         return
     }
 
-    $to = Join-Path ([Environment]::GetFolderPath('MyDocuments')) "WinZ3805A earlier copy $($Copy.Version) $(Get-Date -Format 'yyyy-MM-dd HHmm')"
+    $to = Join-Path ([Environment]::GetFolderPath('MyDocuments')) "WinZ3805A $Label $($Copy.Version) $(Get-Date -Format 'yyyy-MM-dd HHmm')"
     try {
         Copy-Item -Path $from -Destination $to -Recurse -ErrorAction Stop
     }
@@ -295,23 +301,27 @@ function Write-State {
     Write-Log "ms update     $(switch (Test-MicrosoftUpdate) { $true { 'on' } $false { 'off' } default { 'unknown' } })"
 }
 
-# A package file's identity, read from its own manifest rather than guessed from its file name.
+# A package file's identity, read from its own manifest rather than guessed from its file name. A
+# bundle carries its manifest under AppxMetadata, and its identity is the bundle's.
 function Get-PackageIdentity {
     param([string]$Path)
 
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $archive = [IO.Compression.ZipFile]::OpenRead($Path)
     try {
-        $reader = New-Object IO.StreamReader($archive.GetEntry('AppxManifest.xml').Open())
+        $entry = $archive.GetEntry('AppxManifest.xml')
+        if (-not $entry) { $entry = $archive.GetEntry('AppxMetadata/AppxBundleManifest.xml') }
+        $reader = New-Object IO.StreamReader($entry.Open())
         try { [xml]$manifest = $reader.ReadToEnd() } finally { $reader.Dispose() }
     }
     finally {
         $archive.Dispose()
     }
 
+    $identity = if ($manifest.Package) { $manifest.Package.Identity } else { $manifest.Bundle.Identity }
     [pscustomobject]@{
-        Name    = $manifest.Package.Identity.Name
-        Version = [version]$manifest.Package.Identity.Version
+        Name    = $identity.Name
+        Version = [version]$identity.Version
     }
 }
 
@@ -429,6 +439,19 @@ $earlier = @($allCopies | Where-Object { $_.Publisher -ne $publisher -and $_.Sig
 $keptPublishers = @($allCopies | Where-Object { $earlier.PackageFullName -notcontains $_.PackageFullName } |
     ForEach-Object Publisher)
 
+# THIS VERSION, ALREADY INSTALLED (#600). Installing it again is a no-op - measured on a healthy copy
+# (#597) and on a damaged one (#600) - so if that copy is broken, rerunning the installer used to
+# leave it broken. It is repaired after the start check, and only if the start check fails: Windows
+# reported a copy with a damaged file as Ok on both Windows 10 and 11 (2 Oct 2026), so its status is
+# no evidence either way. A development registration is reported, never repaired.
+$bundleIdentity = Get-PackageIdentity $bundle.FullName
+$sameVersion = $allCopies | Where-Object {
+    $_.Publisher -eq $publisher -and [version]$_.Version -eq $bundleIdentity.Version -and -not $_.IsDevelopmentMode
+} | Select-Object -First 1
+if ($sameVersion) {
+    Write-Log "decide repair $($sameVersion.Version) is already installed, status $($sameVersion.Status): repaired if it does not start"
+}
+
 # A certificate is stale if a published release was signed with it, or it vouches for an earlier
 # copy being removed - and in neither case if it is the one being installed, or anything left
 # installed still carries its publisher.
@@ -497,8 +520,19 @@ while (Get-Process -Name 'WinZ3805A' -ErrorAction SilentlyContinue) {
     Read-Host '  Press Enter once it has closed'
 }
 
-if ($earlier.Count -gt 0 -or $staleCertificates.Count -gt 0) {
+if ($earlier.Count -gt 0 -or $staleCertificates.Count -gt 0 -or $sameVersion) {
     Write-Step 'Before anything changes'
+
+    if ($sameVersion) {
+        Write-Info "This version, $($sameVersion.Version), is already installed$(if ("$($sameVersion.Status)" -ne 'Ok') { ", and Windows reports it as $($sameVersion.Status)" })."
+        Write-Info 'If it does not start, this installer will repair it:'
+        Write-Info '  - register it again from its own folder, which keeps its data;'
+        Write-Info '  - if it still does not start, save its data - history, settings and logs -'
+        Write-Info '    to your Documents folder, remove it, install it again from this download,'
+        Write-Info '    and move the data back.'
+        Write-Info 'Nothing is removed until the data has been saved, and the saved copy stays'
+        Write-Info 'in Documents whatever happens next.'
+    }
 
     foreach ($copy in $earlier) {
         Write-Info "An earlier WinZ3805A is installed: version $($copy.Version) ($($copy.PackageFamilyName))."
@@ -608,9 +642,9 @@ else {
 # ---------------------------------------------------------------------------
 $elevationNeeded = $trustNeeded -or $dotnetNeeded -or ($staleCertificates.Count -gt 0)
 
-if (-not $elevationNeeded -and $earlier.Count -gt 0) {
-    # Nothing needs administrator rights, but an earlier copy is about to be replaced, and that is
-    # not something to do without the person having read what it means.
+if (-not $elevationNeeded -and ($earlier.Count -gt 0 -or $sameVersion)) {
+    # Nothing needs administrator rights, but an earlier copy is about to be replaced, or this one
+    # may be repaired, and neither is something to do without the person having read what it means.
     Write-Host ''
     if (-not $Unattended) { Read-Host '  Press Enter to continue, or close this window to stop' }
 }
@@ -1013,12 +1047,20 @@ if ($dotnet -and $installedCopy) {
     # or 0x80270251, which Windows documents for an elevated caller. On the Windows 10 22H2 VM an
     # elevated run was NOT refused - it activated and passed (#624, 1 Oct 2026) - so the fallback is
     # kept for the documented case rather than because it was seen.
-    $appLog = Join-Path (Get-DataFolder $installedCopy.PackageFamilyName) 'logs\app.log'
-    $aumid = "$($installedCopy.PackageFamilyName)!App"
-    $launchedAt = Get-Date
-    $probe = $null
-    try {
-        Add-Type -ErrorAction Stop -TypeDefinition @'
+    #
+    # One launch and its verdict. Returned rather than reported, because a repair (#600) runs it
+    # again after each rung and only the last verdict is the one the person is told.
+    function Invoke-StartCheck {
+        param($Copy)
+
+        $appLog = Join-Path (Get-DataFolder $Copy.PackageFamilyName) 'logs\app.log'
+        $aumid = "$($Copy.PackageFamilyName)!App"
+        $launchedAt = Get-Date
+        $probe = $null
+        try {
+            # Once per run: a type cannot be defined twice, and a repair runs this check again.
+            if (-not ('WinZ3805AInstaller.StartProbe' -as [type])) {
+                Add-Type -ErrorAction Stop -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
 
@@ -1088,86 +1130,182 @@ namespace WinZ3805AInstaller
     }
 }
 '@
-        $probe = [WinZ3805AInstaller.StartProbe]::Run($aumid, 15000)
-    }
-    catch { Write-Log "start check   the activation manager could not be used: $($_.Exception.Message)" }
-
-    # The outcome: alive (and started, if it logged), refused, exited, or gone.
-    $outcome = 'gone'
-    $processId = $null
-    $hr = $null
-    $exitCode = $null
-    $exitValue = $null
-    if ($probe -and ('0x{0:X8}' -f $probe.ActivationResult) -ne '0x80270251') {
-        if ($probe.ActivationResult -lt 0) {
-            $outcome = 'refused'
-            $hr = '0x{0:X8}' -f $probe.ActivationResult
-            Write-Log "start check   Windows refused to start it: $hr"
-        }
-        else {
-            $processId = [int]$probe.ProcessId
-            if (-not $probe.Opened) {
-                Write-Log "start check   process $processId ended before it could be opened (error $($probe.OpenError)), so its exit code is unknown"
             }
-            elseif ($probe.Exited) {
-                $outcome = 'exited'
-                $exitValue = $probe.ExitCode
-                $exitCode = '0x{0:X8}' -f $exitValue
-                Write-Log "start check   process $processId exited within 15 s, code $exitCode"
+            $probe = [WinZ3805AInstaller.StartProbe]::Run($aumid, 15000)
+        }
+        catch { Write-Log "start check   the activation manager could not be used: $($_.Exception.Message)" }
+
+        # The outcome: alive (and started, if it logged), refused, exited, or gone.
+        $outcome = 'gone'
+        $processId = $null
+        $hr = $null
+        $exitCode = $null
+        $exitValue = $null
+        if ($probe -and ('0x{0:X8}' -f $probe.ActivationResult) -ne '0x80270251') {
+            if ($probe.ActivationResult -lt 0) {
+                $outcome = 'refused'
+                $hr = '0x{0:X8}' -f $probe.ActivationResult
+                Write-Log "start check   Windows refused to start it: $hr"
             }
             else {
-                $outcome = 'alive'
-                Write-Log "start check   process $processId still running 15 s later"
+                $processId = [int]$probe.ProcessId
+                if (-not $probe.Opened) {
+                    Write-Log "start check   process $processId ended before it could be opened (error $($probe.OpenError)), so its exit code is unknown"
+                }
+                elseif ($probe.Exited) {
+                    $outcome = 'exited'
+                    $exitValue = $probe.ExitCode
+                    $exitCode = '0x{0:X8}' -f $exitValue
+                    Write-Log "start check   process $processId exited within 15 s, code $exitCode"
+                }
+                else {
+                    $outcome = 'alive'
+                    Write-Log "start check   process $processId still running 15 s later"
+                }
             }
         }
+        else {
+            if ($probe) { Write-Log 'start check   the activation manager refused an elevated caller (0x80270251); launching through Explorer' }
+            try {
+                Start-Process "shell:AppsFolder\$aumid"
+                Start-Sleep -Seconds 15
+                $process = Get-Process -Name 'WinZ3805A' -ErrorAction SilentlyContinue |
+                    Where-Object { "$($_.Path)" -like "$($Copy.InstallLocation)*" } | Select-Object -First 1
+                if ($process) { $outcome = 'alive'; $processId = $process.Id }
+                Write-Log "start check   through Explorer: $(if ($process) { "process $processId running 15 s later" } else { 'no process 15 s later' })"
+            }
+            catch { Write-Log "could not start it: $($_.Exception.Message)" }
+        }
+
+        $loggedSinceLaunch = { (Test-Path $appLog) -and ((Get-Item $appLog).LastWriteTime -ge $launchedAt) }
+
+        # A SLOW FIRST LAUNCH IS NOT A FAILED ONE (#646). On a clean, quiet Windows 11 VM the first launch
+        # after installing took 14.4 s to write its log (2 Oct 2026), and on a busy one longer - and busy
+        # is what a machine is just after installing .NET and the app together, which is exactly when this
+        # runs. So a process alive at 15 s without a log is given until 45 s from the launch to write one.
+        # Only that case waits: an exit or a refusal is reported at once, and a process that ends while
+        # waiting is reported as having exited. What still fails after the wait is a process that stays up
+        # and never logs, which is Windows' own .NET prompt (#599).
+        if ($outcome -eq 'alive' -and -not (& $loggedSinceLaunch)) {
+            Write-Log "start check   process $processId has written no log yet; waiting up to 45 s from the launch for it"
+            $watched = Get-Process -Id $processId -ErrorAction SilentlyContinue
+            # Opening the handle now is what keeps the exit code readable if it ends while waiting.
+            try { if ($watched) { $null = $watched.Handle } } catch { Write-Log "start check   could not open process ${processId}: $($_.Exception.Message)" }
+            while (-not (& $loggedSinceLaunch) -and (Get-Date) -lt $launchedAt.AddSeconds(45)) {
+                if (-not $watched -or $watched.WaitForExit(500)) {
+                    $outcome = 'exited'
+                    try { $exitValue = [uint32]($watched.ExitCode -band 0xFFFFFFFFL); $exitCode = '0x{0:X8}' -f $exitValue }
+                    catch { $exitCode = 'unknown' }
+                    Write-Log "start check   process $processId exited while waiting for its log, code $exitCode"
+                    break
+                }
+            }
+            Write-Log ("start check   waited until {0:N1} s after the launch" -f ((Get-Date) - $launchedAt).TotalSeconds)
+        }
+
+        $logged = & $loggedSinceLaunch
+        $startedOk = ($outcome -eq 'alive') -and $logged
+        $window = $null
+        if ($outcome -eq 'alive') {
+            $window = Get-Process -Id $processId -ErrorAction SilentlyContinue |
+                Where-Object { $_.MainWindowHandle -ne 0 } | ForEach-Object { "'$($_.MainWindowTitle)'" }
+        }
+        Write-Log "start check   $outcome, window $(if ($window) { $window } else { 'none' }), app.log written since launch $logged"
+
+        [pscustomobject]@{
+            Outcome    = $outcome
+            ProcessId  = $processId
+            Hr         = $hr
+            ExitCode   = $exitCode
+            ExitValue  = $exitValue
+            AppLog     = $appLog
+            LaunchedAt = $launchedAt
+            StartedOk  = ($outcome -eq 'alive') -and $logged
+        }
     }
-    else {
-        if ($probe) { Write-Log 'start check   the activation manager refused an elevated caller (0x80270251); launching through Explorer' }
+
+    # Stops whatever the last check left running, so a repair can touch the package.
+    function Stop-CheckedApp {
+        param($Copy)
+        Get-Process -Name 'WinZ3805A' -ErrorAction SilentlyContinue |
+            Where-Object { "$($_.Path)" -like "$($Copy.InstallLocation)*" } | Stop-Process -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 2
+    }
+
+    $check = Invoke-StartCheck $installedCopy
+    $launchedAt = $check.LaunchedAt
+
+    # REPAIR, ON EVIDENCE (#600): the copy of this version that was here before the run, and did not
+    # start. Not a refusal: Windows refusing the launch is put right by a restart (#614), and taking
+    # the package apart would not help. Each rung is followed by the whole start check again.
+    #
+    # Rung 1 re-registers from the copy's own folder. It keeps the data, and it repairs what lives in
+    # the registration rather than in the files - but it did NOT repair a damaged file on either
+    # Windows (2 Oct 2026), because it registers the same files again. Rung 2 is what repaired that:
+    # save the data, remove, install from the zip, move the data back. Removing the package deletes
+    # its data folder (measured), so nothing is removed unless the save succeeded.
+    $repair = $null
+    if (-not $check.StartedOk -and $sameVersion -and $check.Outcome -ne 'refused') {
+        Write-Step 'Repairing WinZ3805A'
+        $repair = [pscustomobject]@{ Rung = 0; Saved = $null; Stopped = $null }
+        Write-Log "repair        $($sameVersion.Version) was already installed and did not start ($($check.Outcome))"
+
+        Stop-CheckedApp $installedCopy
+        $repair.Rung = 1
         try {
-            Start-Process "shell:AppsFolder\$aumid"
-            Start-Sleep -Seconds 15
-            $process = Get-Process -Name 'WinZ3805A' -ErrorAction SilentlyContinue |
-                Where-Object { "$($_.Path)" -like "$($installedCopy.InstallLocation)*" } | Select-Object -First 1
-            if ($process) { $outcome = 'alive'; $processId = $process.Id }
-            Write-Log "start check   through Explorer: $(if ($process) { "process $processId running 15 s later" } else { 'no process 15 s later' })"
+            Add-AppxPackage -Register (Join-Path $installedCopy.InstallLocation 'AppxManifest.xml') -DisableDevelopmentMode -ForceApplicationShutdown -ErrorAction Stop
+            Write-Ok 'Registered it again from its own folder.'
         }
-        catch { Write-Log "could not start it: $($_.Exception.Message)" }
-    }
+        catch { Write-Log "repair        re-registering failed: $($_.Exception.Message)" }
+        $check = Invoke-StartCheck $installedCopy
 
-    $loggedSinceLaunch = { (Test-Path $appLog) -and ((Get-Item $appLog).LastWriteTime -ge $launchedAt) }
+        if (-not $check.StartedOk) {
+            Write-Info 'It still does not start, so it will be installed again.'
+            Stop-CheckedApp $installedCopy
+            $repair.Rung = 2
+            try {
+                $repair.Saved = Save-EarlierData $installedCopy -Label 'repair backup'
+            }
+            catch {
+                $repair.Stopped = "its data could not be saved to Documents, so it has not been removed: $($_.Exception.Message)"
+            }
 
-    # A SLOW FIRST LAUNCH IS NOT A FAILED ONE (#646). On a clean, quiet Windows 11 VM the first launch
-    # after installing took 14.4 s to write its log (2 Oct 2026), and on a busy one longer - and busy
-    # is what a machine is just after installing .NET and the app together, which is exactly when this
-    # runs. So a process alive at 15 s without a log is given until 45 s from the launch to write one.
-    # Only that case waits: an exit or a refusal is reported at once, and a process that ends while
-    # waiting is reported as having exited. What still fails after the wait is a process that stays up
-    # and never logs, which is Windows' own .NET prompt (#599).
-    if ($outcome -eq 'alive' -and -not (& $loggedSinceLaunch)) {
-        Write-Log "start check   process $processId has written no log yet; waiting up to 45 s from the launch for it"
-        $watched = Get-Process -Id $processId -ErrorAction SilentlyContinue
-        # Opening the handle now is what keeps the exit code readable if it ends while waiting.
-        try { if ($watched) { $null = $watched.Handle } } catch { Write-Log "start check   could not open process ${processId}: $($_.Exception.Message)" }
-        while (-not (& $loggedSinceLaunch) -and (Get-Date) -lt $launchedAt.AddSeconds(45)) {
-            if (-not $watched -or $watched.WaitForExit(500)) {
-                $outcome = 'exited'
-                try { $exitValue = [uint32]($watched.ExitCode -band 0xFFFFFFFFL); $exitCode = '0x{0:X8}' -f $exitValue }
-                catch { $exitCode = 'unknown' }
-                Write-Log "start check   process $processId exited while waiting for its log, code $exitCode"
-                break
+            if (-not $repair.Stopped) {
+                try {
+                    Remove-AppxPackage -Package $installedCopy.PackageFullName -ErrorAction Stop
+                    Write-Ok 'Removed it.'
+                    Add-AppxPackage -Path $bundle.FullName -ErrorAction Stop
+                    Write-Ok 'Installed it again.'
+                    if ($repair.Saved) { [void](Move-IntoNewCopy -Saved $repair.Saved) }
+                }
+                catch {
+                    Write-Log "repair        reinstalling failed: $($_.Exception.Message)"
+                    $repair.Stopped = "installing it again failed: $($_.Exception.Message)"
+                }
+
+                $installedCopy = Get-AppxPackage -Name 'WinZ3805A' -ErrorAction SilentlyContinue |
+                    Where-Object { $_.Publisher -eq $publisher } | Select-Object -First 1
+                if ($installedCopy -and -not $repair.Stopped) { $check = Invoke-StartCheck $installedCopy }
             }
         }
-        Write-Log ("start check   waited until {0:N1} s after the launch" -f ((Get-Date) - $launchedAt).TotalSeconds)
+
+        if ($check.StartedOk -and -not $repair.Stopped) {
+            Write-Log "repair        repaired by rung $($repair.Rung)"
+            Write-Ok 'Repaired.'
+        }
+        else {
+            Write-Log "repair        not repaired: $(if ($repair.Stopped) { $repair.Stopped } else { "it still did not start after rung $($repair.Rung)" })"
+        }
+        Write-State 'after repair'
     }
 
-    $logged = & $loggedSinceLaunch
-    $startedOk = ($outcome -eq 'alive') -and $logged
-    $window = $null
-    if ($outcome -eq 'alive') {
-        $window = Get-Process -Id $processId -ErrorAction SilentlyContinue |
-            Where-Object { $_.MainWindowHandle -ne 0 } | ForEach-Object { "'$($_.MainWindowTitle)'" }
-    }
-    Write-Log "start check   $outcome, window $(if ($window) { $window } else { 'none' }), app.log written since launch $logged"
+    $outcome = $check.Outcome
+    $processId = $check.ProcessId
+    $hr = $check.Hr
+    $exitCode = $check.ExitCode
+    $exitValue = $check.ExitValue
+    $appLog = $check.AppLog
+    $startedOk = $check.StartedOk -and -not ($repair -and $repair.Stopped)
 
     if ($startedOk) {
         Write-Ok "It is running (process $processId)."
@@ -1242,6 +1380,13 @@ namespace WinZ3805AInstaller
                 Write-Host '  Start menu: Windows can need a restart before it will start an app that' -ForegroundColor Yellow
                 Write-Host '  replaced an earlier copy.' -ForegroundColor Yellow
             }
+        }
+        # Said after the outcome, because the outcome is what the person can act on.
+        if ($repair) {
+            Write-Host ''
+            Write-Host '  This installer tried to repair it and could not.' -ForegroundColor Yellow
+            if ($repair.Stopped) { Write-Host "  It stopped because $($repair.Stopped)" -ForegroundColor Yellow }
+            if ($repair.Saved) { Write-Host "  Its data is saved in $($repair.Saved)" -ForegroundColor Yellow }
         }
         Write-Host '  If it still does not open, please report it with the install record named below.' -ForegroundColor Yellow
     }
