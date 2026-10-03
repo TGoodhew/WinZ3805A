@@ -16,6 +16,10 @@
          in particular whether a missing .NET, which leaves the process alive on Windows' own
          prompt, reads as "running".
 
+    Scenario H was added 2 Oct 2026 for #600: a file in the package's own install folder damaged,
+    which is the broken copy of the same version that rerunning the installer could not repair.
+    It records what Windows says about such a package and which of #600's rungs put it right.
+
     FOR A TEST MACHINE ONLY. It removes a runtime companion and uninstalls .NET 10 to see what
     breaks, and puts both back; its last step RESETS the app, which deletes its data. Run it on a
     VM holding a packaged WinZ3805A installed by Install.cmd - not a development registration -
@@ -30,7 +34,7 @@
 
 .PARAMETER Bundle
     The .msixbundle from an extracted release zip, of the SAME version as the one installed. Used
-    to reinstall it. Without it, scenario B is skipped.
+    to reinstall it. Without it, scenario B and scenario H's reinstall rungs are skipped.
 
 .PARAMETER DotNetInstaller
     Microsoft's dotnet-runtime-<version>-win-x64.exe - the one in the offline zip's Runtime folder -
@@ -284,6 +288,77 @@ Invoke-Scenario 'G' 'Reset-AppxPackage (deletes the app''s data)' {
     Write-Package 'after Reset'
     Test-Marker 'after Reset'
     Test-Start 'after Reset'
+}
+
+Invoke-Scenario 'H' 'A damaged file in the install folder, and each of #600''s rungs' {
+    Stop-App
+    Set-Marker
+    $app = Get-App
+    $target = Join-Path $app.InstallLocation 'WinZ3805A.dll'
+    $sound = (Get-FileHash $target -Algorithm SHA256).Hash
+    $length = (Get-Item $target).Length
+    Write-Report "  target $target, $length bytes, SHA-256 $($sound.Substring(0, 16))..."
+
+    # The install folder belongs to TrustedInstaller, so even an administrator has to take it first.
+    # Zeros over the whole file: the same length, so nothing that checks only sizes notices.
+    takeown.exe /f $target | Out-Null
+    icacls.exe $target /grant '*S-1-5-32-544:F' | Out-Null
+    [IO.File]::WriteAllBytes($target, (New-Object byte[] $length))
+    Write-Report "  overwritten with zeros: SHA-256 now $((Get-FileHash $target -Algorithm SHA256).Hash.Substring(0, 16))..."
+
+    function Write-Target([string]$Label) {
+        $now = Get-App
+        if (-not $now) { Write-Report "  [$Label] file: package gone"; return }
+        $file = Join-Path $now.InstallLocation 'WinZ3805A.dll'
+        $state = if (-not (Test-Path $file)) { 'MISSING' }
+            elseif ((Get-FileHash $file -Algorithm SHA256).Hash -eq $sound) { 'sound' }
+            else { 'DAMAGED' }
+        Write-Report "  [$Label] file: $state"
+    }
+
+    Write-Package 'damaged'
+    Write-Target 'damaged'
+    Test-Start 'damaged'
+
+    Write-Report '  -- rung 1: re-register from the install folder'
+    try {
+        Add-AppxPackage -Register (Join-Path $app.InstallLocation 'AppxManifest.xml') -DisableDevelopmentMode -ForceApplicationShutdown -ErrorAction Stop
+        Write-Report '  Add-AppxPackage -Register returned without error'
+    }
+    catch { Write-Report "  Add-AppxPackage -Register threw: $($_.Exception.Message -replace '\s+', ' ')" }
+    Write-Package 'rung 1'
+    Write-Target 'rung 1'
+    Test-Marker 'rung 1'
+    Test-Start 'rung 1'
+
+    if (-not $Bundle) { Write-Report '  rungs 2a and 2b skipped: no -Bundle given'; return }
+
+    Write-Report '  -- rung 2a: install the same version again, on a damaged copy'
+    try {
+        Add-AppxPackage -Path $Bundle -ForceApplicationShutdown -ErrorAction Stop
+        Write-Report '  Add-AppxPackage returned without error'
+    }
+    catch { Write-Report "  Add-AppxPackage threw: $($_.Exception.Message -replace '\s+', ' ')" }
+    Write-Package 'rung 2a'
+    Write-Target 'rung 2a'
+    Test-Start 'rung 2a'
+
+    Write-Report '  -- rung 2b: back up the data, remove, reinstall, restore'
+    Stop-App
+    $data = Get-DataFolder (Get-App)
+    $saved = Join-Path $env:TEMP "winz-repair-backup-$stamp"
+    robocopy.exe $data $saved /E /NFL /NDL /NJH /NJS /NP | Out-Null
+    Write-Report "  backup: robocopy exited $LASTEXITCODE, $(@(Get-ChildItem $saved -Recurse -File).Count) file(s)"
+    Remove-AppxPackage -Package (Get-App).PackageFullName -ErrorAction Stop
+    Write-Report "  removed; data folder still there: $(Test-Path $data)"
+    Add-AppxPackage -Path $Bundle -ErrorAction Stop
+    $data = Get-DataFolder (Get-App)
+    robocopy.exe $saved $data /E /NFL /NDL /NJH /NJS /NP | Out-Null
+    Write-Report "  reinstalled and restored: robocopy exited $LASTEXITCODE"
+    Write-Package 'rung 2b'
+    Write-Target 'rung 2b'
+    Test-Marker 'rung 2b'
+    Test-Start 'rung 2b'
 }
 
 Write-Report ''
