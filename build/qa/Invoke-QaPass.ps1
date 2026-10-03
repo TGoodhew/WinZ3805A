@@ -2947,6 +2947,44 @@ $missed = @($root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $f
 [ordered]@{ surface = $surface; dpi = 96; stops = $stops; missed = $missed; closedOn = $closedOn; unnamed = $unnamed; tabs = $i } | ConvertTo-Json -Compress -Depth 5
 '@
 
+# #684: a toggle switch reports a 20 px rectangle; whether its target is that small is measured by
+# pressing outside the rectangle - 6 px above it and 6 px below, 32 px apart - and seeing whether the
+# switch changes. Each press that changes it is put back with the pattern, not the pointer.
+$toggleStep = @'
+$facts = [ordered]@{}
+$w = Get-AppWindow
+$d = Get-AppWindowNamed 'Receiver Details' -Seconds 2
+if (-not $d) {
+    $button = Find-Control $w -AutomationId 'DetailsButton' -Seconds 5
+    if ($button) { Invoke-Control $button } else { Send-KeyTo $w '^d' }
+    $d = Get-AppWindowNamed 'Receiver Details' -Seconds 20
+}
+if (-not $d) { [ordered]@{ error = "no Details window ($(Get-WindowReport))" } | ConvertTo-Json -Compress; return }
+[void](Select-NavigationItem $d 'Settings')
+Start-Sleep -Seconds 3
+$switch = Find-Control $d -AutomationId 'ExperimentalSwitch' -Seconds 5
+if (-not $switch) { [ordered]@{ error = 'no ExperimentalSwitch' } | ConvertTo-Json -Compress; return }
+try { $switch.GetCurrentPattern([System.Windows.Automation.ScrollItemPattern]::Pattern).ScrollIntoView() } catch { }
+Start-Sleep -Seconds 1
+$toggle = $switch.GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern)
+$r = $switch.Current.BoundingRectangle
+$facts.rect = "$([int]$r.Left),$([int]$r.Top) $([int]$r.Width)x$([int]$r.Height)"
+# The switch itself is at the right of the control: press over it.
+$x = [int]($r.Right - 20)
+function Press-At([int]$y) {
+    $before = "$($toggle.Current.ToggleState)"
+    [QaWin32]::MoveTo($x, $y); Start-Sleep -Milliseconds 300; [QaWin32]::LeftDown(); [QaWin32]::LeftUp(); Start-Sleep -Seconds 1
+    $after = "$($toggle.Current.ToggleState)"
+    if ($after -ne $before) { $toggle.Toggle(); Start-Sleep -Milliseconds 500 }
+    $after -ne $before
+}
+$facts.inside = Press-At ([int]($r.Top + $r.Height / 2))
+$facts.above = Press-At ([int]$r.Top - 6)
+$facts.below = Press-At ([int]$r.Bottom + 5)
+[QaWin32]::MoveTo(2, 2)
+$facts | ConvertTo-Json -Compress
+'@
+
 function Test-KeyboardFocus {
     param($Vm, $Result)
     $pipe = Get-QaSimulatorPipe -Vm $Vm
@@ -2966,9 +3004,16 @@ function Test-KeyboardFocus {
         Check $Result 'connected to the simulated receiver, and locked' $seen.found $seen.line
         if (-not $seen.found) { return }
         $null = Invoke-UiStep $Vm 'keys-resolution' '' $resolutionStep
+        # #684: the switches' measured target, so A11Y-5 judges the target and not the rectangle.
+        $hit = Invoke-UiStep $Vm 'keys-toggle-target' '' $toggleStep
+        $switchReach = $hit.inside -eq $true -and $hit.above -eq $true -and $hit.below -eq $true
+        Check $Result '[A11Y-5] a toggle switch takes a press 6 px above and below its 20 px rectangle, so its target is 32 px or more (#684)' $switchReach "rectangle $($hit.rect); pressed inside $($hit.inside), above $($hit.above), below $($hit.below)$(if ($hit.error) { '; ' + $hit.error })"
         $all = [ordered]@{}
         foreach ($surface in 'main', 'Overview', 'Satellites', 'Position', 'Timing', 'Holdover', 'Time', 'Status Registers', 'Diagnostics', 'Settings') {
             $k = Invoke-UiStep $Vm "keys-$($surface -replace ' ', '')" "`$surface = '$surface'" $keyboardStep
+            # Once more when something was missed: the satellite lists fill and empty as the sky turns, and a list
+            # that was empty when Tab passed it was not a stop then. A control still missed twice is missed.
+            if (-not $k.error -and @($k.missed).Count -gt 0) { $k = Invoke-UiStep $Vm "keys-$($surface -replace ' ', '')-again" "`$surface = '$surface'" $keyboardStep }
             if ($k.error) { Check $Result "[A11Y-1] $surface" $false $k.error; continue }
             $all[$surface] = $k
             $stops = @($k.stops)
@@ -2982,7 +3027,7 @@ function Test-KeyboardFocus {
             Check $Result "[A11Y-1] $($surface): no stretch of Tab presses goes where UI Automation cannot say" ($swallowed.Count -eq 0) "$($k.tabs) Tabs in the cycle. $($swallowed -join '; ')"
             Check $Result "[A11Y-2] $($surface): a focus ring is drawn at every stop" ($noRing.Count -eq 0) "no ring at: $($noRing -join '; ')"
             # §9.10.2 answers the sky-plot markers' flag; their own size is the plot's business.
-            $small = @($stops | Where-Object { $_.width -gt 0 -and ($_.width -lt 32 -or $_.height -lt 32) -and $_.name -notlike 'Satellite*' -and $_.name -notlike 'PRN*' } | ForEach-Object { "$($_.type) '$($_.name)' [$($_.id)] $($_.width)x$($_.height)" })
+            $small = @($stops | Where-Object { $_.width -gt 0 -and ($_.width -lt 32 -or $_.height -lt 32) -and $_.name -notlike 'Satellite*' -and $_.name -notlike 'PRN*' -and -not ($switchReach -and $_.id -like '*Switch') } | ForEach-Object { "$($_.type) '$($_.name)' [$($_.id)] $($_.width)x$($_.height)" })
             Check $Result "[A11Y-5] $($surface): every focus stop is at least 32 x 32" ($small.Count -eq 0) "under 32: $($small -join '; ')"
         }
         $all | ConvertTo-Json -Depth 6 | Set-Content (Join-Path $Result.Folder 'focus-stops.json')
