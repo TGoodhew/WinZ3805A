@@ -53,6 +53,9 @@
                               imported back through the app's own pickers and confirmation; then a file
                               naming no receiver and one from a different receiver, with Enter pressed
                               to prove which button is the default. Needs the simulator port
+      guide-pages        §13  every page the guide illustrates photographed as its images were taken, at an
+                              860 x 778 page area, and set beside the guide's own picture for the agent to
+                              judge. Needs the simulator port
       connect-cancel     §24  an auto-detect walk on a port where nothing answers, stopped by
                               Cancel and by Esc; then Connect works once the receiver answers.
                               Driven through UI Automation (guest\Ui.ps1). Needs the simulator port
@@ -81,7 +84,7 @@ param(
     [string]$Offline,
     [string]$Release,
     [string[]]$Machines = @('QA-Win10', 'QA-Win11'),
-    [string[]]$Scenarios = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall'),
+    [string[]]$Scenarios = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages'),
     [string]$OutDir
 )
 
@@ -92,7 +95,7 @@ Import-Module (Join-Path $PSScriptRoot 'QaVm.psm1') -Force
 # names no scenario - the first run of this script ran nothing and reported success.
 $Machines = @($Machines | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 $Scenarios = @($Scenarios | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-$known = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall')
+$known = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages')
 $unknown = @($Scenarios | Where-Object { $known -notcontains $_ })
 if ($unknown.Count) { throw "Unknown scenario(s): $($unknown -join ', '). Known: $($known -join ', ')." }
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
@@ -2046,6 +2049,218 @@ Start-Sleep -Seconds 3
     }
 }
 
+# manual-qa.md section 13: the guide's page screenshots against the application. The pictures are
+# taken the way build\Capture-GuideImages.ps1 takes them - an 860 x 778 page area, one column, each
+# page photographed at the top and, where it scrolls, at the bottom - and every one is set beside the
+# guide's own image for the agent to judge. What a picture shows cannot be checked by a script; that
+# the right thing was photographed at the right size can, and is.
+$guideStep = @'
+$facts = [ordered]@{}
+Add-Type -TypeDefinition @"
+using System; using System.Runtime.InteropServices;
+public static class QaGuide {
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    public struct DEVMODE {
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string dmDeviceName;
+        public short dmSpecVersion, dmDriverVersion, dmSize, dmDriverExtra;
+        public int dmFields, dmPositionX, dmPositionY, dmDisplayOrientation, dmDisplayFixedOutput;
+        public short dmColor, dmDuplex, dmYResolution, dmTTOption, dmCollate;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string dmFormName;
+        public short dmLogPixels; public int dmBitsPerPel, dmPelsWidth, dmPelsHeight, dmDisplayFlags, dmDisplayFrequency;
+        public int dmICMMethod, dmICMIntent, dmMediaType, dmDitherType, dmReserved1, dmReserved2, dmPanningWidth, dmPanningHeight;
+    }
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern bool EnumDisplaySettings(string dev, int mode, ref DEVMODE dm);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int ChangeDisplaySettings(ref DEVMODE dm, int flags);
+    public static int Resolution(int w, int h) {
+        DEVMODE dm = new DEVMODE(); dm.dmSize = (short)Marshal.SizeOf(typeof(DEVMODE));
+        EnumDisplaySettings(null, -1, ref dm); dm.dmPelsWidth = w; dm.dmPelsHeight = h; dm.dmFields = 0x80000 | 0x100000;
+        return ChangeDisplaySettings(ref dm, 0);
+    }
+    [DllImport("user32.dll")] public static extern bool MoveWindow(IntPtr h, int x, int y, int w, int t, bool repaint);
+    [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+    [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left, Top, Right, Bottom; }
+}
+"@
+Add-Type -AssemblyName System.Drawing
+
+# The window at the guide's size does not fit the VMs' 1024 x 768. The scaling stays at 100 %, so
+# the resolution changes without a sign-out.
+$facts.resolution = [QaGuide]::Resolution(1600, 1200)
+Start-Sleep -Seconds 3
+
+$w = Get-AppWindow
+if (-not $w) { [ordered]@{ error = "no main window ($(Get-WindowReport))" } | ConvertTo-Json -Compress; return }
+$d = Get-AppWindowNamed 'Receiver Details' -Seconds 2
+if (-not $d) {
+    $button = Find-Control $w -AutomationId 'DetailsButton' -Seconds 5
+    if ($button) { Invoke-Control $button } else { Send-KeyTo $w '^d' }
+    $d = Get-AppWindowNamed 'Receiver Details' -Seconds 20
+}
+if (-not $d) { [ordered]@{ error = "no Details window ($(Get-WindowReport))" } | ConvertTo-Json -Compress; return }
+$handle = Get-Handle $d
+[void][QaGuide]::SetForegroundWindow($handle)
+
+# The page area sized to 860 x 778 from the navigation pane's measured edge, as the capture script
+# does, and then measured again: the window is clamped at a minimum content width without saying so.
+$pane = Get-Bounds (Find-Control $d -AutomationId 'PaneRoot' -Seconds 10)
+$rect = New-Object QaGuide+RECT
+[void][QaGuide]::GetWindowRect($handle, [ref]$rect)
+$inset = $pane.Left - $rect.Left
+$width = ($rect.Right - $rect.Left) + (860 - (($rect.Right - $inset) - $pane.Right))
+$height = ($rect.Bottom - $rect.Top) + (778 - (($rect.Bottom - $inset) - $pane.Top))
+# Corrected until it is right: one resize landed 96 px short on the first run, the window settling
+# after the resolution change underneath it.
+foreach ($try in 1..4) {
+    [void][QaGuide]::MoveWindow($handle, 40, 20, $width, $height, $true)
+    Start-Sleep -Seconds 2
+    [void][QaGuide]::GetWindowRect($handle, [ref]$rect)
+    $pane = Get-Bounds (Find-Control $d -AutomationId 'PaneRoot' -Seconds 5)
+    $areaWidth = ($rect.Right - $inset) - $pane.Right
+    $areaHeight = ($rect.Bottom - $inset) - $pane.Top
+    if ([Math]::Abs($areaWidth - 860) -le 1 -and [Math]::Abs($areaHeight - 778) -le 1) { break }
+    $width += 860 - $areaWidth; $height += 778 - $areaHeight
+}
+$left = $pane.Right; $top = $pane.Top
+$facts.navPane = $pane.Width
+$facts.area = "$(($rect.Right - $inset) - $left)x$(($rect.Bottom - $inset) - $top)"
+
+$out = 'C:\qa\guide'
+Remove-Item $out -Recurse -Force -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Force $out | Out-Null
+$buttons = New-Object System.Windows.Automation.PropertyCondition($script:Ae::ControlTypeProperty, [System.Windows.Automation.ControlType]::Button)
+$scrollers = New-Object System.Windows.Automation.PropertyCondition($script:Ae::IsScrollPatternAvailableProperty, $true)
+
+function Save-Area([string]$path) {
+    # The pointer off the page, so no tooltip is in the picture.
+    [QaWin32]::MoveTo(1590, 1190)
+    Start-Sleep -Milliseconds 600
+    $bmp = New-Object System.Drawing.Bitmap 860, 778
+    $g = [System.Drawing.Graphics]::FromImage($bmp)
+    $g.CopyFromScreen($left, $top, 0, 0, $bmp.Size)
+    $g.Dispose()
+    $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
+    $bmp.Dispose()
+}
+
+# A page's own Refresh button is disabled while it reads, as the capture script found.
+function Wait-ForRead {
+    $deadline = (Get-Date).AddSeconds(30)
+    do {
+        $busy = @($d.FindAll([System.Windows.Automation.TreeScope]::Descendants, $buttons) | Where-Object { $_.Current.Name -eq 'Refresh' -and -not $_.Current.IsEnabled }).Count
+        if (-not $busy) { return $true }
+        Start-Sleep -Seconds 1
+    } while ((Get-Date) -lt $deadline)
+    $false
+}
+
+# The page's own scrolling pane: the one whose left edge is the page area's.
+function Get-PageScroller {
+    $d.FindAll([System.Windows.Automation.TreeScope]::Descendants, $scrollers) | Where-Object {
+        $r = $_.Current.BoundingRectangle
+        [Math]::Abs($r.Left - $left) -le 4
+    } | Sort-Object { $_.Current.BoundingRectangle.Width } -Descending | Select-Object -First 1
+}
+
+$pages = [ordered]@{ 'Overview' = 'overview'; 'Satellites' = 'satellites'; 'Position' = 'position'; 'Timing' = 'timing'; 'Holdover' = 'holdover'; 'Time' = 'time'; 'Status Registers' = 'status-registers'; 'Diagnostics' = 'diagnostics'; 'Settings' = 'settings'; 'Advanced Console' = 'advanced-console' }
+$taken = @(); $missing = @(); $unread = @()
+foreach ($label in $pages.Keys) {
+    $name = $pages[$label]
+    # The Advanced Console page exists only while its switch is on. Settings is photographed first with
+    # it off, as the guide shows it, and then the switch is turned on there, as a person would.
+    if ($label -eq 'Advanced Console') {
+        $switch = Find-Control $d -AutomationId 'ConsoleSwitch' -Seconds 5
+        if ($switch) {
+            $toggle = $switch.GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern)
+            if ("$($toggle.Current.ToggleState)" -ne 'On') { $toggle.Toggle() }
+            Start-Sleep -Seconds 2
+        }
+    }
+    if (-not (Select-NavigationItem $d $label)) { $missing += $label; continue }
+    Start-Sleep -Seconds 5
+    if (-not (Wait-ForRead)) { $unread += $label }
+    Save-Area "$out\page-$name.png"; $taken += "page-$name.png"
+    # The lower half where there is one; Status Registers has one picture in the guide.
+    if ($name -eq 'status-registers') { continue }
+    $scroller = Get-PageScroller
+    if ($scroller -and $scroller.GetCurrentPattern([System.Windows.Automation.ScrollPattern]::Pattern).Current.VerticallyScrollable) {
+        $pattern = $scroller.GetCurrentPattern([System.Windows.Automation.ScrollPattern]::Pattern)
+        $pattern.SetScrollPercent(-1, 100)
+        Start-Sleep -Seconds 1
+        Save-Area "$out\page-$name-2.png"; $taken += "page-$name-2.png"
+        $pattern.SetScrollPercent(-1, 0)
+    }
+}
+$facts.taken = $taken
+$facts.missing = $missing
+$facts.unread = $unread
+[void][QaGuide]::Resolution(1024, 768)
+$facts | ConvertTo-Json -Compress -Depth 4
+'@
+
+function Test-GuidePages {
+    param($Vm, $Result)
+    $pipe = Get-QaSimulatorPipe -Vm $Vm
+    if (-not (Select-String -LiteralPath $Vm.Vmx -SimpleMatch "\\.\pipe\$pipe" -Quiet)) {
+        $Result.Error = "skipped: the VM has no simulator port; run Add-QaSimulatorPort (build/qa/README.md)"
+        return
+    }
+    Send-Zip $Vm $Offline 'candidate'
+    $code = Install-Candidate $Vm 'candidate'
+    Check $Result 'installed (exit 0, or 2 with the start check timing out)' ($code -in 0, 2) "exit $code"
+    $null = Invoke-QaGuestScript $Vm -Name 'connect-com2' -Script $connectCom2
+    $simulator = Start-Process (Get-Simulator) -PassThru -WindowStyle Hidden `
+        -ArgumentList '--pipe-client', $pipe, '--start', 'locked', '--speed', '2', '--control', "$pipe-control" `
+        -RedirectStandardOutput (Join-Path $Result.Folder 'simulator.log') -RedirectStandardError (Join-Path $Result.Folder 'simulator.err')
+    try {
+        $seen = Wait-AppLog $Vm 'State: LOCK' 0 120 'locked'
+        Check $Result 'connected to the simulated receiver, and locked' $seen.found $seen.line
+        if (-not $seen.found) { return }
+        # Long enough for the trends and the satellite tables to have something in them.
+        Start-Sleep -Seconds 60
+
+        $g = Invoke-UiStep $Vm 'guide-pages' '' $guideStep
+        if ($g.error) { Check $Result '[13] the pages photographed' $false $g.error; return }
+        Check $Result '[13] the page area is the guide''s 860 x 778, with the navigation pane open' ($g.area -match '^(85[89]|86[012])x(77[6-9]|780)$' -and $g.navPane -ge 120) "area $($g.area); navigation pane $($g.navPane) px"
+
+        $guide = Join-Path $repo 'docs\images\how-to-use'
+        $expected = @(Get-ChildItem $guide -Filter 'page-*.png' | ForEach-Object Name | Sort-Object)
+        $taken = @($g.taken | Sort-Object)
+        Check $Result '[13] every page the guide illustrates was photographed, and nothing else' (-not (Compare-Object $expected $taken) -and -not @($g.missing).Count) "taken $($taken.Count) of $($expected.Count); missing pages $(@($g.missing) -join ', '); not in the guide $(@($taken | Where-Object { $expected -notcontains $_ }) -join ', '); in the guide, not taken $(@($expected | Where-Object { $taken -notcontains $_ }) -join ', ')"
+        Check $Result '[13] each page had finished reading when photographed' (-not @($g.unread).Count) "still reading: $(@($g.unread) -join ', ')"
+
+        # Each photograph beside the guide's own picture, for the agent to judge.
+        $pairs = Join-Path $Result.Folder 'pairs'
+        New-Item -ItemType Directory -Force $pairs | Out-Null
+        Add-Type -AssemblyName System.Drawing
+        foreach ($name in $taken) {
+            $now = Join-Path $Result.Folder $name
+            try { Copy-QaFile $Vm -Source "C:\qa\guide\$name" -Destination $now } catch { continue }
+            $old = Join-Path $guide $name
+            if (-not (Test-Path $old)) { continue }
+            $a = [System.Drawing.Image]::FromFile($old); $b = [System.Drawing.Image]::FromFile($now)
+            try {
+                $pair = New-Object System.Drawing.Bitmap ($a.Width + $b.Width + 16), ([Math]::Max($a.Height, $b.Height) + 28)
+                $gr = [System.Drawing.Graphics]::FromImage($pair)
+                $gr.Clear([System.Drawing.Color]::White)
+                $font = New-Object System.Drawing.Font 'Segoe UI', 11
+                $gr.DrawString("guide: $name", $font, [System.Drawing.Brushes]::Black, 4, 4)
+                $gr.DrawString("now: $($Result.Machine)", $font, [System.Drawing.Brushes]::Black, ($a.Width + 20), 4)
+                $gr.DrawImage($a, 0, 28, $a.Width, $a.Height)
+                $gr.DrawImage($b, ($a.Width + 16), 28, $b.Width, $b.Height)
+                $gr.Dispose(); $font.Dispose()
+                $pair.Save((Join-Path $pairs $name), [System.Drawing.Imaging.ImageFormat]::Png); $pair.Dispose()
+            }
+            finally { $a.Dispose(); $b.Dispose() }
+        }
+        Check $Result '[13] each photograph set beside the guide''s, for the agent to judge' (@(Get-ChildItem $pairs -Filter *.png).Count -eq $expected.Count) "$(@(Get-ChildItem $pairs -Filter *.png).Count) pairs in $pairs"
+    }
+    finally {
+        if (-not $simulator.HasExited) { $simulator.Kill() }
+        $null = Save-Evidence $Vm $Result.Folder
+    }
+}
+
 $scenarioTable = [ordered]@{
     'fresh-online'     = ${function:Test-FreshOnline}
     'fresh-offline'    = ${function:Test-FreshOffline}
@@ -2061,6 +2276,7 @@ $scenarioTable = [ordered]@{
     'accessibility'    = ${function:Test-Accessibility}
     'sky-export'       = ${function:Test-SkyExport}
     'history-reinstall' = ${function:Test-HistoryReinstall}
+    'guide-pages'      = ${function:Test-GuidePages}
 }
 
 # ---------------------------------------------------------------------------
