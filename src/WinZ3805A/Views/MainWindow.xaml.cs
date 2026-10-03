@@ -728,6 +728,9 @@ public sealed partial class MainWindow : Window
         (int width, int height) = WindowSizeFor(contentWidth, contentHeight);
 
         AppWindow.Resize(new SizeInt32(Math.Max(width, _minimum.Width), Math.Max(height, _minimum.Height)));
+
+        // The position is still the one the system chose before this size existed (#675).
+        DisplayWorkAreas.KeepInside(AppWindow);
     }
 
     /// <summary>Recomputes the floor, and applies an opening size still owed at this scaling.</summary>
