@@ -499,7 +499,7 @@
                                        Text="Differences averaged" />
                         </Grid>
 
-                        <ItemsControl x:Name="StabilityRows">
+                        <ItemsControl x:Name="StabilityRows" IsTabStop="False">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="viewmodels:StabilityRow">
                                     <Grid ColumnSpacing="{ThemeResource WzSpaceMd}"

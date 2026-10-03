@@ -160,7 +160,7 @@
                                    HorizontalAlignment="Left"
                                    MaxWidth="{ThemeResource WzProseMaxWidth}" />
 
-                        <ItemsControl x:Name="SelfTestRows">
+                        <ItemsControl x:Name="SelfTestRows" IsTabStop="False">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="viewmodels:SelfTestRow">
                                     <Grid ColumnSpacing="{ThemeResource WzSpaceMd}"
@@ -316,7 +316,7 @@
                                       VerticalScrollBarVisibility="Auto"
                                       HorizontalScrollMode="Disabled"
                                       HorizontalScrollBarVisibility="Disabled">
-                            <ItemsControl x:Name="LogRows">
+                            <ItemsControl x:Name="LogRows" IsTabStop="False">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="models:DiagnosticLogEntry">
                                     <TextBlock Style="{ThemeResource WzMonoTextStyle}"
@@ -455,7 +455,7 @@
                         <!--
                             Mono, selectable, one per line: these exist to be pasted into an issue.
                         -->
-                        <ItemsControl x:Name="ParseWarningItems">
+                        <ItemsControl x:Name="ParseWarningItems" IsTabStop="False">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="x:String">
                                     <TextBlock Style="{ThemeResource WzMonoTextStyle}"
@@ -608,7 +608,7 @@
                                    controls:CopyMenu.IsCopyable="True"
                                    Style="{ThemeResource WzMonoTextStyle}" />
 
-                        <ItemsControl x:Name="GpsEngineRows">
+                        <ItemsControl x:Name="GpsEngineRows" IsTabStop="False">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="x:String">
                                     <TextBlock controls:CopyMenu.IsCopyable="True"
@@ -650,7 +650,7 @@
                                    Style="{ThemeResource WzBodyTextStyle}"
                                    Foreground="{ThemeResource WzTextSecondaryBrush}" />
 
-                        <ItemsControl x:Name="ErrorRows">
+                        <ItemsControl x:Name="ErrorRows" IsTabStop="False">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="x:String">
                                     <TextBlock Style="{ThemeResource WzMonoTextStyle}"
@@ -693,7 +693,7 @@
                                    MaxWidth="{ThemeResource WzProseMaxWidth}"
                                    Text="Present in the receiver's command parser but absent from the published manual. They may return errors or nonsense. No setting is changed." />
 
-                        <ItemsControl x:Name="ExperimentalRows">
+                        <ItemsControl x:Name="ExperimentalRows" IsTabStop="False">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="vm:ExperimentalQueryRow">
                                     <Grid ColumnSpacing="{ThemeResource WzSpaceMd}"

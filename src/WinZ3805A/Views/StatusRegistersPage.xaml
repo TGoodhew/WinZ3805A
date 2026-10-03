@@ -149,7 +149,7 @@
                                        Foreground="{ThemeResource WzTextSecondaryBrush}" Text="Meaning" />
                         </Grid>
 
-                        <ItemsControl x:Name="BitRows">
+                        <ItemsControl x:Name="BitRows" IsTabStop="False">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="vm:RegisterBitRow">
                                     <Grid ColumnSpacing="{ThemeResource WzSpaceSm}" Padding="0,4"
