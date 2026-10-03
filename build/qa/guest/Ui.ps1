@@ -29,6 +29,8 @@ public static class QaWin32
     [DllImport("user32.dll")] public static extern void mouse_event(uint flags, int dx, int dy, uint data, UIntPtr extra);
     [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
+    [DllImport("user32.dll")] public static extern uint GetDpiForWindow(IntPtr hWnd);
 
     public static bool IsTopmost(IntPtr hWnd) { return (GetWindowLong(hWnd, -20) & 0x8) != 0; }
     public static RECT Rect(IntPtr hWnd) { RECT r; GetWindowRect(hWnd, out r); return r; }
@@ -146,6 +148,10 @@ function Use-TrayMenu {
     elseif ([QaTray]::IsOpen()) { [System.Windows.Forms.SendKeys]::SendWait('{ESC}') }
     [pscustomobject]@{ Items = $items; Chosen = $chosen }
 }
+
+# Physical pixels, whatever the display's scaling. Windows PowerShell is not DPI-aware, so without
+# this, at 150 % every rectangle it reads of another process's window comes back scaled down.
+[void][QaWin32]::SetProcessDPIAware()
 
 # An element's on-screen rectangle as left, top, width, height in physical pixels.
 function Get-Bounds {
