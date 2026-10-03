@@ -123,6 +123,7 @@ public sealed partial class DetailsWindow : Window
 
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
+        WindowCaption.Keep(this, AppTitleBar, Title);
         AppWindow.SetIcon("Assets/AppIcon.ico");
 
         // Navigated rather than straight after Navigate, and the page comes from the event args
