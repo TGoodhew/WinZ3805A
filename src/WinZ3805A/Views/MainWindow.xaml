@@ -34,7 +34,7 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <TitleBar x:Name="AppTitleBar">
+        <TitleBar x:Name="AppTitleBar" IsTabStop="False">
             <!--
                 #568. Two of the control's own theme resources, overridden for this title bar only.
 

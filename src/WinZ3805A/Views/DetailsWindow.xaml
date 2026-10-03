@@ -40,7 +40,7 @@
             AppWindowTitleBar.RightInset/LeftInset itself, which is what makes it correct in RTL and
             at non-100% scaling. A hard-coded 138 px is the failure §9.7.3 calls out by name.
         -->
-        <TitleBar x:Name="AppTitleBar" Height="48">
+        <TitleBar x:Name="AppTitleBar" IsTabStop="False" Height="48">
             <TitleBar.IconSource>
                 <ImageIconSource ImageSource="ms-appx:///Assets/AppIcon.ico" />
             </TitleBar.IconSource>
