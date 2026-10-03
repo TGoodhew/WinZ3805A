@@ -49,6 +49,10 @@
                               corners, markers not in the surface colour), its caption read by OCR,
                               and the on-screen caption gone after Save and after Cancel. Needs the
                               simulator port
+      history-reinstall §21 the history exported, the package uninstalled and reinstalled, and the file
+                              imported back through the app's own pickers and confirmation; then a file
+                              naming no receiver and one from a different receiver, with Enter pressed
+                              to prove which button is the default. Needs the simulator port
       connect-cancel     §24  an auto-detect walk on a port where nothing answers, stopped by
                               Cancel and by Esc; then Connect works once the receiver answers.
                               Driven through UI Automation (guest\Ui.ps1). Needs the simulator port
@@ -77,7 +81,7 @@ param(
     [string]$Offline,
     [string]$Release,
     [string[]]$Machines = @('QA-Win10', 'QA-Win11'),
-    [string[]]$Scenarios = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export'),
+    [string[]]$Scenarios = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall'),
     [string]$OutDir
 )
 
@@ -88,7 +92,7 @@ Import-Module (Join-Path $PSScriptRoot 'QaVm.psm1') -Force
 # names no scenario - the first run of this script ran nothing and reported success.
 $Machines = @($Machines | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 $Scenarios = @($Scenarios | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-$known = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export')
+$known = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall')
 $unknown = @($Scenarios | Where-Object { $known -notcontains $_ })
 if ($unknown.Count) { throw "Unknown scenario(s): $($unknown -join ', '). Known: $($known -join ', ')." }
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
@@ -1787,6 +1791,242 @@ New-Item -ItemType Directory -Force $dir | Out-Null
     }
 }
 
+# manual-qa.md section 21 (#551): the history across an uninstall, through the app's own pickers
+# and confirmation. Called with $action ('export' or 'import'), $file, and for an import $choice:
+# 'cancel' and 'import' press those buttons, 'enter' presses Enter so the default button decides.
+$historyStep = @'
+$facts = [ordered]@{}
+$w = Get-AppWindow
+if (-not $w) { [ordered]@{ error = "no main window ($(Get-WindowReport))" } | ConvertTo-Json -Compress; return }
+$d = Get-AppWindowNamed 'Receiver Details' -Seconds 2
+if (-not $d) {
+    $button = Find-Control $w -AutomationId 'DetailsButton' -Seconds 5
+    if ($button) { Invoke-Control $button } else { Send-KeyTo $w '^d' }
+    $d = Get-AppWindowNamed 'Receiver Details' -Seconds 20
+}
+if (-not $d) { [ordered]@{ error = "no Details window ($(Get-WindowReport))" } | ConvertTo-Json -Compress; return }
+[void](Select-NavigationItem $d 'Settings')
+Start-Sleep -Seconds 3
+$before = (Get-AppLogLines).Count
+$dialogClass = New-Object System.Windows.Automation.PropertyCondition($script:Ae::ClassNameProperty, '#32770')
+
+function Wait-FileDialog {
+    $deadline = (Get-Date).AddSeconds(15)
+    do {
+        Start-Sleep -Milliseconds 500
+        $dlg = $d.FindFirst([System.Windows.Automation.TreeScope]::Children, $dialogClass)
+    } while (-not $dlg -and (Get-Date) -lt $deadline)
+    $dlg
+}
+
+# The file name typed into the dialog's own box, which UI Automation can neither set nor focus, so it
+# is clicked: 1148 in an Open dialog, 1001 in a Save dialog.
+function Enter-FileName($dlg, [string]$path) {
+    $field = Find-Control $dlg -AutomationId '1148' -Seconds 2
+    if (-not $field) { $field = Find-Control $dlg -AutomationId '1001' -Seconds 2 }
+    $b = Get-Bounds $field
+    [QaWin32]::MoveTo($b.Left + [int]($b.Width / 2), $b.Top + [int]($b.Height / 2)); [QaWin32]::LeftDown(); [QaWin32]::LeftUp()
+    Start-Sleep -Milliseconds 500
+    [System.Windows.Forms.SendKeys]::SendWait('^a')
+    [System.Windows.Forms.SendKeys]::SendWait($path)
+    Start-Sleep -Milliseconds 500
+    [System.Windows.Forms.SendKeys]::SendWait('{ENTER}')
+}
+
+function Read-Status {
+    $deadline = (Get-Date).AddSeconds(10)
+    do {
+        $status = "$((Find-Control $d -AutomationId 'HistoryStatus' -Seconds 1).Current.Name)"
+        if ($status) { return $status }
+        Start-Sleep -Milliseconds 500
+    } while ((Get-Date) -lt $deadline)
+    ''
+}
+
+if ($action -eq 'export') {
+    Remove-Item $file -ErrorAction SilentlyContinue
+    Invoke-Control (Find-Control $d -AutomationId 'ExportHistoryButton')
+    $dlg = Wait-FileDialog
+    $facts.dialog = [bool]$dlg
+    if ($dlg) { Enter-FileName $dlg $file }
+    $deadline = (Get-Date).AddSeconds(20)
+    while (-not (Test-Path $file) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 500 }
+    Start-Sleep -Seconds 2
+    $facts.saved = Test-Path $file
+    if ($facts.saved) {
+        $facts.size = (Get-Item $file).Length
+        $facts.header = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($file), 0, 15)
+    }
+    $facts.status = Read-Status
+}
+else {
+    Invoke-Control (Find-Control $d -AutomationId 'ImportHistoryButton')
+    $dlg = Wait-FileDialog
+    $facts.dialog = [bool]$dlg
+    if ($dlg) { Enter-FileName $dlg $file }
+    $primary = Find-Control $d -AutomationId 'PrimaryButton' -Seconds 20
+    $facts.confirmation = [bool]$primary
+    $texts = @($d.FindAll([System.Windows.Automation.TreeScope]::Descendants, (New-Object System.Windows.Automation.PropertyCondition($script:Ae::ControlTypeProperty, [System.Windows.Automation.ControlType]::Text))) | ForEach-Object { $_.Current.Name })
+    $facts.text = "$($texts | Where-Object { $_ -like 'This file holds*' } | Select-Object -First 1)"
+    if ($primary) {
+        # Which button has the keyboard when the dialog opens is which one Enter presses.
+        Start-Sleep -Seconds 1
+        $facts.focused = "$([System.Windows.Automation.AutomationElement]::FocusedElement.Current.AutomationId)"
+        switch ($choice) {
+            'cancel' { Invoke-Control (Find-Control $d -AutomationId 'CloseButton') }
+            'import' { Invoke-Control $primary }
+            'enter'  { [System.Windows.Forms.SendKeys]::SendWait('{ENTER}') }
+        }
+        Start-Sleep -Seconds 5
+        $facts.dialogClosed = -not (Find-Control $d -AutomationId 'PrimaryButton' -Seconds 1)
+    }
+    else {
+        $facts.problem = ($texts | Where-Object { $_ -match 'import|history' }) -join ' / '
+        $close = Find-Control $d -AutomationId 'CloseButton' -Seconds 1
+        if ($close) { Invoke-Control $close }
+    }
+    $facts.status = if ($facts.dialogClosed -and $choice -ne 'cancel') { Read-Status } else { "$((Find-Control $d -AutomationId 'HistoryStatus' -Seconds 1).Current.Name)" }
+}
+$lines = @(Get-AppLogLines | Select-Object -Skip $before)
+$facts.exported = "$($lines | Where-Object { $_ -match 'History exported' } | Select-Object -Last 1)"
+$facts.imported = "$($lines | Where-Object { $_ -match 'History imported' } | Select-Object -Last 1)"
+$facts | ConvertTo-Json -Compress -Depth 4
+'@
+
+# The Details window's Overview at its 7 d range, for the photograph section 21's pass criterion is.
+$trendStep = @'
+$d = Get-AppWindowNamed 'Receiver Details' -Seconds 5
+if (-not $d) { [ordered]@{ error = "no Details window ($(Get-WindowReport))" } | ConvertTo-Json -Compress; return }
+[void](Select-NavigationItem $d 'Overview')
+$range = Find-Control $d -AutomationId 'OverviewRange7d' -Seconds 10
+if ($range) { $range.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select() }
+# Maximised, and the chart scrolled into view: on the VMs' 1024 x 768 screen the window runs off the
+# right and the trend is below the fold, so the first photograph showed neither.
+try { $d.GetCurrentPattern([System.Windows.Automation.WindowPattern]::Pattern).SetWindowVisualState([System.Windows.Automation.WindowVisualState]::Maximized) } catch { }
+Start-Sleep -Seconds 2
+if ($range) { try { $range.GetCurrentPattern([System.Windows.Automation.ScrollItemPattern]::Pattern).ScrollIntoView() } catch { } }
+# Scrolling the buttons into view leaves them on the bottom edge with the chart below them, so the
+# page is scrolled one screen further.
+$scrollable = $d.FindAll([System.Windows.Automation.TreeScope]::Descendants, (New-Object System.Windows.Automation.PropertyCondition($script:Ae::IsScrollPatternAvailableProperty, $true))) | Where-Object { $_.GetCurrentPattern([System.Windows.Automation.ScrollPattern]::Pattern).Current.VerticallyScrollable } | Select-Object -First 1
+if ($scrollable) { try { $scrollable.GetCurrentPattern([System.Windows.Automation.ScrollPattern]::Pattern).ScrollVertical([System.Windows.Automation.ScrollAmount]::LargeIncrement) } catch { } }
+Start-Sleep -Seconds 4
+[ordered]@{ range = [bool]$range; selected = [bool]($range -and $range.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Current.IsSelected) } | ConvertTo-Json -Compress
+'@
+
+# Remembered settings for COM2 with connect-on-launch, then the app started: as a person choosing
+# the port would leave it, and again after the reinstall has removed them.
+$connectCom2 = @'
+Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue | Stop-Process -Force
+Start-Sleep -Seconds 2
+$pkg = Get-AppxPackage -Name WinZ3805A | Select-Object -First 1
+$dir = Join-Path $env:LOCALAPPDATA "Packages\$($pkg.PackageFamilyName)\LocalCache\Local\WinZ3805A"
+New-Item -ItemType Directory -Force $dir | Out-Null
+'{"PortName":"COM2","AutoDetect":false,"BaudRate":9600,"DataBits":8,"Parity":0,"StopBits":1,"ReconnectAutomatically":true,"ConnectOnLaunch":true}' | Set-Content (Join-Path $dir 'connection.json') -Encoding ascii
+Start-Process "shell:AppsFolder\$($pkg.PackageFamilyName)!App"
+'@
+
+function Test-HistoryReinstall {
+    param($Vm, $Result)
+    $pipe = Get-QaSimulatorPipe -Vm $Vm
+    if (-not (Select-String -LiteralPath $Vm.Vmx -SimpleMatch "\\.\pipe\$pipe" -Quiet)) {
+        $Result.Error = "skipped: the VM has no simulator port; run Add-QaSimulatorPort (build/qa/README.md)"
+        return
+    }
+    Send-Zip $Vm $Offline 'candidate'
+    $code = Install-Candidate $Vm 'candidate'
+    Check $Result 'installed (exit 0, or 2 with the start check timing out)' ($code -in 0, 2) "exit $code"
+    $null = Invoke-QaGuestScript $Vm -Name 'connect-com2' -Script $connectCom2
+
+    $simulator = Start-Process (Get-Simulator) -PassThru -WindowStyle Hidden `
+        -ArgumentList '--pipe-client', $pipe, '--start', 'locked', '--speed', '2', '--control', "$pipe-control" `
+        -RedirectStandardOutput (Join-Path $Result.Folder 'simulator.log') -RedirectStandardError (Join-Path $Result.Folder 'simulator.err')
+    $here = 'Z3805A serial 3625A02931'
+    $warnings = "older than|newer version|can't be separated|doesn't say|different receiver"
+    function Step([string]$Name, [string]$Action, [string]$File, [string]$Choice = '') {
+        Invoke-UiStep $Vm "history-$Name" "`$action = '$Action'; `$file = '$File'; `$choice = '$Choice'" $historyStep
+    }
+    try {
+        $seen = Wait-AppLog $Vm 'Session COM2 is now Connected' 0 120 'connected'
+        Check $Result 'connected to the simulated receiver on COM2' $seen.found $seen.line
+        if (-not $seen.found) { return }
+        # A trend sample is appended on every fast poll, so a minute connected is some history.
+        Start-Sleep -Seconds 60
+
+        $a = Step 'export' 'export' 'C:\qa\history-a.sqlite'
+        if ($a.error) { Check $Result '[21] Export history' $false $a.error; return }
+        $rows = if ($a.status -match 'Exported ([\d,]+) readings') { [int]($Matches[1] -replace ',', '') } else { 0 }
+        Check $Result '[21] Export history writes a SQLite file, and says how many readings over which dates' ($a.saved -and $a.header -eq 'SQLite format 3' -and $rows -gt 0 -and $a.status -match ' from \d{1,2} \w+ \d{4}') "status '$($a.status)'; $($a.size) bytes; header '$($a.header)'"
+        Check $Result '[21] and logs the same count' ($a.exported -match "History exported: $rows samples") $a.exported
+        try { Copy-QaFile $Vm -Source 'C:\qa\history-a.sqlite' -Destination (Join-Path $Result.Folder 'history-a.sqlite') } catch { }
+
+        $b = Step 'back-cancel' 'import' 'C:\qa\history-a.sqlite' 'cancel'
+        if ($b.error) { Check $Result '[21] importing it straight back' $false $b.error; return }
+        Check $Result '[21] imported straight back, the confirmation names this receiver and warns about nothing' ($b.text -match [regex]::Escape("It came from the receiver connected now, $here.") -and $b.text -notmatch $warnings) "'$($b.text)'"
+        Check $Result '[21] Import is the default for the receiver''s own file' ($b.focused -eq 'PrimaryButton') "focused '$($b.focused)'"
+        Check $Result '[21] Cancel closes it and imports nothing' ($b.dialogClosed -and -not $b.imported) "closed $($b.dialogClosed); '$($b.imported)'"
+
+        # A file that names no receiver: exported while the receiver has no power.
+        $null = Send-SimulatorControl "$pipe-control" 'power off'
+        $seen = Wait-AppLog $Vm 'Session COM2 is now Reconnecting' $seen.count 60 'powered-off'
+        $c = Step 'export-none' 'export' 'C:\qa\history-none.sqlite'
+        Check $Result '[21] exported again with no receiver connected' ($seen.found -and $c.saved) "reconnecting $($seen.found); saved $($c.saved); '$($c.status)'"
+        $null = Send-SimulatorControl "$pipe-control" 'power on'
+        $seen = Wait-AppLog $Vm 'Session COM2 is now Connected' $seen.count 120 'powered-on'
+
+        # The uninstall, which is the point: the history goes with the package, the files must not.
+        $r = Invoke-QaGuestScript $Vm -Name 'uninstall' -Script @'
+Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue | Stop-Process -Force
+Start-Sleep -Seconds 2
+$pkg = Get-AppxPackage -Name WinZ3805A | Select-Object -First 1
+$data = Join-Path $env:LOCALAPPDATA "Packages\$($pkg.PackageFamilyName)\LocalCache\Local\WinZ3805A\trend.db"
+$had = Test-Path $data
+$pkg | Remove-AppxPackage
+Start-Sleep -Seconds 3
+[ordered]@{ had = $had; package = [bool](Get-AppxPackage -Name WinZ3805A); data = (Test-Path $data); files = @(Get-ChildItem 'C:\qa\history-*.sqlite' | ForEach-Object Name) } | ConvertTo-Json -Compress
+'@
+        $u = ($r.Output -split "`r?`n" | Where-Object { $_.StartsWith('{') } | Select-Object -Last 1) | ConvertFrom-Json
+        Check $Result '[21] uninstalled: the package and its history are gone, the exported files are not' ($u.had -and -not $u.package -and -not $u.data -and @($u.files).Count -eq 2) "history before $($u.had); package after $($u.package); history after $($u.data); files $(@($u.files) -join ', ')"
+
+        $code = Install-Candidate $Vm 'candidate'
+        Check $Result '[21] reinstalled (exit 0, or 2)' ($code -in 0, 2) "exit $code"
+        $null = Invoke-QaGuestScript $Vm -Name 'reconnect-com2' -Script $connectCom2
+        $seen = Wait-AppLog $Vm 'Session COM2 is now Connected' 0 120 'reconnected'
+        Check $Result '[21] and reconnected to the same receiver' $seen.found $seen.line
+        Start-Sleep -Seconds 30
+
+        $e = Step 'restore' 'import' 'C:\qa\history-a.sqlite' 'import'
+        if ($e.error) { Check $Result '[21] the import after the reinstall' $false $e.error; return }
+        Check $Result '[21] after the reinstall, the confirmation names the receiver connected now and warns about nothing' ($e.text -match [regex]::Escape("It came from the receiver connected now, $here.") -and $e.text -notmatch $warnings) "'$($e.text)'"
+        Check $Result '[21] Import adds every exported reading back' ($e.imported -match "$rows samples added, 0 already present; receiver Same" -and $e.status -like "Imported $($rows.ToString('N0', [cultureinfo]::InvariantCulture)) readings from history-a.sqlite*") "'$($e.imported)'; status '$($e.status)'"
+
+        $f = Step 'again' 'import' 'C:\qa\history-a.sqlite' 'import'
+        Check $Result '[21] importing the same file again adds nothing' ($f.imported -match "0 samples added, $rows already present") "'$($f.imported)'; status '$($f.status)'"
+
+        $g = Step 'unknown' 'import' 'C:\qa\history-none.sqlite' 'enter'
+        Check $Result '[21] a file naming no receiver says so, naming the one connected now' ($g.text -match [regex]::Escape("It doesn't say which receiver it came from. If that wasn't $here, the one connected now")) "'$($g.text)'"
+        Check $Result '[21] and Import is its default: Enter imports' ($g.focused -eq 'PrimaryButton' -and $g.imported -match 'receiver Unknown') "focused '$($g.focused)'; '$($g.imported)'"
+
+        # Another unit on the cable, and the session reconnected so it is the one asked.
+        $null = Send-SimulatorControl "$pipe-control" 'serial 3625A99999'
+        $null = Send-SimulatorControl "$pipe-control" 'power off'
+        $seen = Wait-AppLog $Vm 'Session COM2 is now Reconnecting' $seen.count 60 'other-off'
+        $null = Send-SimulatorControl "$pipe-control" 'power on'
+        $seen = Wait-AppLog $Vm 'Session COM2 is now Connected' $seen.count 120 'other-on'
+        $h = Step 'different' 'import' 'C:\qa\history-a.sqlite' 'enter'
+        Check $Result '[21] a file from a different receiver names both, and says they can''t be separated' ($h.text -match [regex]::Escape("It came from a different receiver, $here, and the one connected now is Z3805A serial 3625A99999.") -and $h.text -match "can't be separated") "'$($h.text)'"
+        Check $Result '[21] and Cancel is its default: Enter imports nothing' ($h.focused -eq 'CloseButton' -and $h.dialogClosed -and -not $h.imported) "focused '$($h.focused)'; closed $($h.dialogClosed); '$($h.imported)'"
+        # The pass criterion's own picture: the Overview trend at 7 d, the history from before the
+        # uninstall joined to what the reinstalled copy has recorded since, for the agent to judge.
+        $trend = Invoke-UiStep $Vm 'history-trend' '' $trendStep
+        Check $Result '[21] the Overview trend shown at 7 d, photographed for the agent to judge' ($trend.selected -eq $true) "$(if ($trend.error) { $trend.error } else { "7 d selected $($trend.selected)" })"
+        try { Invoke-VmRun $Vm captureScreen -Arguments (Join-Path $Result.Folder 'trend-7d.png') -Guest | Out-Null } catch { }
+    }
+    finally {
+        if (-not $simulator.HasExited) { $simulator.Kill() }
+        $null = Save-Evidence $Vm $Result.Folder
+    }
+}
+
 $scenarioTable = [ordered]@{
     'fresh-online'     = ${function:Test-FreshOnline}
     'fresh-offline'    = ${function:Test-FreshOffline}
@@ -1801,6 +2041,7 @@ $scenarioTable = [ordered]@{
     'whole-layout'     = ${function:Test-WholeLayout}
     'accessibility'    = ${function:Test-Accessibility}
     'sky-export'       = ${function:Test-SkyExport}
+    'history-reinstall' = ${function:Test-HistoryReinstall}
 }
 
 # ---------------------------------------------------------------------------
