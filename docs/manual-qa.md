@@ -34,6 +34,7 @@ with the screenshots attached.
 |---|---|---|
 | 2 | **automated** | `receiver`: the simulated Z3805A on the VM's COM2 powered off for 30 s and back; the session must reach *Reconnecting*, reconnect by itself, and log a `State:` line after (#639) |
 | 4 | **partly automated** | `accessibility`, with the simulated receiver: **A11Y-3**, every icon-only control in both windows named and its tooltip opened by real pointer movement; **A11Y-9**, a listener records the live-region events for a mode change, a lost connection and a tier C outcome, with their live setting (decided 2 Oct 2026: the events being raised is the check, and Narrator's speech is left to bug reports); **A11Y-10**, the medallion's state and every sky-plot marker exposed as sentences; **A11Y-11**, List showing the same satellites with the same data as the plot. Still by hand: A11Y-1, -2, -4 to -8, -12 and -13 |
+| 3 | **automated, judged by the agent** | `display-scaling`: 100, 150, 200 and 225 %, each after a sign-out, both windows at the display's scaling and inside the work area, their title-bar buttons clear of the caption buttons, a real drag on each title bar, and both photographed. See section 3 |
 | 4 (A11Y-8) | **automated, judged by the agent** | `high-contrast`, with the simulated receiver: each of the four contrast themes switched live under the running app, confirmed by name, and the main window and the Details Overview and Satellites pages measured and photographed. See A11Y-8 below |
 | 7 | **automated** | `sky-export`, with the simulated receiver: the plot saved through the app's Save dialog in Light and Dark (Windows' app mode), in high contrast (the whole desktop, through `SPI_SETHIGHCONTRAST`) and at 225 % (2880 × 1800, then a sign-out). Each file is measured: every pixel opaque, the corners the theme's page background, or the live window colour under high contrast, which must be neither page background, and under high contrast the markers in the window-text colour, not the surface (#218). The caption is read back out of the file with Windows' OCR: in UTC, with the page's elevation mask. The caption must be gone from the page after Save and after Cancel, and at 225 % the caption must still be the image's last row, so nothing is cropped from the bottom. The Details window's caption is checked on every leg; at 225 % it is wrong (#663). The card's layout is measured on every leg too, through UI Automation: the heading clear of the Plot choice, and the legend's last entry inside the card; at the width Details first opens at, both fail (#664). The saved images are kept for the agent to judge, which is how #664 was found |
 | 8 | **automated** | `binary-audit`: `Test-NoBlockedCommands.ps1 -ScanBinaries` on the unpacked package |
@@ -100,8 +101,10 @@ Log location: *Show log folder* on the Diagnostics page opens it; the path is in
 
 ## 3. Display scaling (A11Y-7, #27)
 
-**Why.** Not automatable. Programmatic scaling reports success, changes nothing, and leaves registry
-state behind. It needs a person at **Settings → Display → Scale**.
+**Why.** The layout at each scaling, and the title bar's reach, are what no test sees. Changing the
+scaling from a script *and expecting it to apply at once* reports success and changes nothing; written
+to the profile with a sign-out after it, it applies, which is how the QA pass does it (`display-scaling`,
+below; corrected 3 Oct 2026, #633).
 
 | | |
 |---|---|
@@ -110,6 +113,12 @@ state behind. It needs a person at **Settings → Display → Scale**.
 
 Restore the original scaling afterwards and **read it back to confirm**.
 
+> **Automated since 3 Oct 2026** (`display-scaling`). At 100, 150, 200 and 225 % in turn, each set as
+> LogPixels with the screen sized to a 1280 × 800 effective desktop and applied by signing out and in,
+> with no stored placements: both windows checked at the display's scaling and inside the work area, their
+> title-bar buttons ending before the caption buttons UI Automation reports, a real drag on each title bar
+> moving the window, and both photographed for the agent to judge clipping. Its first run found #675.
+>
 > **225 %, not 350 %** (amended 28 Aug 2026, #27). Windows derives its scaling list from the panel's
 > size and resolution, and on the 5120 × 1440 reference display it stops at 225 %. Higher figures need
 > *Custom scaling*, which is system-wide and needs a sign-out. If you are ever running this on a
