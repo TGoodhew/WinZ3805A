@@ -97,7 +97,8 @@ exactly as #617 did.
   One taken 30 s after a cold boot made the app's first launch take 14 s on Windows 11. That failed
   the installer's 15 s start check in every run from it, `fresh-offline` included, until the snapshot
   was taken again after four quiet minutes. `Save-QaCleanSnapshot` waits for the processor to stay
-  under 10 % for 30 s. A real machine can be that busy too, which is #646.
+  under 10 % for 30 s. A real machine can be that busy too, so since #646 the start check waits up
+  to 45 s for the log while the process is alive.
 
 Each of these cost a failed run on 1 Oct 2026.
 
