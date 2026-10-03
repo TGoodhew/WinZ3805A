@@ -109,24 +109,27 @@
                 -->
                 <Border x:Name="SkyCard" Style="{ThemeResource WzCardStyle}">
                     <StackPanel Spacing="{ThemeResource WzSpaceSm}">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-
+                        <!--
+                            A FlowPanel rather than a */Auto grid (#664). The grid kept the actions at
+                            their full width however narrow the card got, so at the width the Details
+                            window first opens at the Plot choice was drawn over the heading. Here the
+                            actions sit opposite the heading while both fit, and under it once they do
+                            not; and the actions wrap among themselves if even they do not fit.
+                        -->
+                        <controls:FlowPanel ColumnSpacing="{ThemeResource WzSpaceMd}"
+                                            RowSpacing="{ThemeResource WzSpaceXs}"
+                                            PushLastToEnd="True">
                             <!--
                                 §9.9's custom sky-plot icon (#320): the polar grid itself, which is the
                                 drawing SkyPlotControl below actually makes and which no Fluent glyph
                                 has. Raw to assistive technology - the heading beside it already says
                                 what the card is, and an icon repeating it aloud is noise.
 
-                                The heading keeps its name and its column; the StackPanel around it is
-                                what moved, because SatellitesPage.xaml.cs sets SkyCardHeading.Text as
-                                the view toggle changes.
+                                The heading keeps its name; the StackPanel around it is what moved,
+                                because SatellitesPage.xaml.cs sets SkyCardHeading.Text as the view
+                                toggle changes.
                             -->
-                            <StackPanel Grid.Column="0"
-                                        Orientation="Horizontal"
+                            <StackPanel Orientation="Horizontal"
                                         Spacing="{ThemeResource WzSpaceXs}"
                                         VerticalAlignment="Center">
                                 <PathIcon Data="{StaticResource WzIconSkyPlot}"
@@ -148,10 +151,9 @@
                                 control a keyboard user meets on the way in rather than one they have to
                                 already know about.
                             -->
-                            <StackPanel Grid.Column="1"
-                                        Orientation="Horizontal"
-                                        Spacing="{ThemeResource WzSpaceMd}"
-                                        AutomationProperties.Name="Sky view">
+                            <controls:FlowPanel ColumnSpacing="{ThemeResource WzSpaceMd}"
+                                                RowSpacing="{ThemeResource WzSpaceXs}"
+                                                AutomationProperties.Name="Sky view">
                                 <RadioButton x:Name="PlotViewChoice"
                                              GroupName="SkyView"
                                              Content="Plot"
@@ -170,8 +172,8 @@
                                 <Button x:Name="ExportImageButton"
                                         Content="Save image"
                                         Click="OnExportImageClicked" />
-                            </StackPanel>
-                        </Grid>
+                            </controls:FlowPanel>
+                        </controls:FlowPanel>
 
                         <controls:SkyPlotControl x:Name="SkyPlot"
                                                  MaxPlotSize="360"
