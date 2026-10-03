@@ -75,6 +75,18 @@ public sealed partial class DetailsWindow : Window
     private readonly DispatcherTimer _bannerCountdown = new() { Interval = TimeSpan.FromSeconds(1) };
 
     private WindowRect? _restoredBounds;
+
+    /// <summary>
+    /// Set when nothing was restored, until the window has been kept inside the work area at the size
+    /// it really opens at (#675).
+    /// </summary>
+    /// <remarks>
+    /// Not at <see cref="RestorePlacement"/>: that runs in the constructor, before there is a
+    /// XamlRoot, so the floor is worked out at 100 % and the window grows to its real size only when
+    /// <see cref="ApplyMinimumSize"/> runs again with the display's scaling. Kept inside at the first
+    /// size, it still ran 207 px off the bottom at 150 %.
+    /// </remarks>
+    private bool _openingPlacementPending;
     private readonly bool _ready;
     private SizeInt32 _minimum;
 
@@ -1016,8 +1028,9 @@ public sealed partial class DetailsWindow : Window
             AppWindow.Resize(_minimum);
 
             // The system placed the window before it had this size, and its bottom ran off the work
-            // area at every scaling the QA pass tried (#675).
+            // area at every scaling the QA pass tried (#675). Again once the size is the real one.
             DisplayWorkAreas.KeepInside(AppWindow);
+            _openingPlacementPending = true;
             return;
         }
 
@@ -1077,6 +1090,12 @@ public sealed partial class DetailsWindow : Window
             AppWindow.Resize(new SizeInt32(
                 Math.Max(AppWindow.Size.Width, width),
                 Math.Max(AppWindow.Size.Height, height)));
+        }
+
+        if (_openingPlacementPending && Content?.XamlRoot is not null)
+        {
+            _openingPlacementPending = false;
+            DisplayWorkAreas.KeepInside(AppWindow);
         }
     }
 
