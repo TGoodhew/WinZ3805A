@@ -78,7 +78,7 @@ public sealed class StateAnnouncer
 
         if (connection != previousConnection)
         {
-            return ConnectionAnnouncement(connection, portName);
+            return ConnectionAnnouncement(connection, previousConnection, portName);
         }
 
         // §10.3 calls this the single most useful diagnostic the application surfaces, and it is
@@ -105,15 +105,31 @@ public sealed class StateAnnouncer
     }
 
     /// <remarks>
+    /// <para>
     /// §9.11 keeps "Disconnected" and "Connection lost" apart, and the difference is the whole
     /// point of announcing at all: one is what the user asked for and the other is what happened to
     /// them. Only the second interrupts.
+    /// </para>
+    /// <para>
+    /// <b>A loss the app will retry is still a loss (#660).</b> With <i>Reconnect automatically</i>
+    /// on, which is the default, a link that fails goes straight from Connected to Reconnecting and
+    /// never through Faulted, so only Faulted interrupting meant the common case never did: the
+    /// automated QA pass's live-region listener heard a polite "Reconnecting." when the receiver's
+    /// power was cut. §9.11 calls that state Connection lost, retry countdown and all. So the step
+    /// from Connected to Reconnecting is said as the loss it is; a Reconnecting reached any other way
+    /// is not news, and waits its turn.
+    /// </para>
     /// </remarks>
-    private static Announcement ConnectionAnnouncement(ConnectionStatus connection, string? portName) =>
+    private static Announcement ConnectionAnnouncement(
+        ConnectionStatus connection,
+        ConnectionStatus? previous,
+        string? portName) =>
         connection switch
         {
             ConnectionStatus.Faulted =>
                 new Announcement("Connection lost.", AnnouncementUrgency.Assertive),
+            ConnectionStatus.Reconnecting when previous == ConnectionStatus.Connected =>
+                new Announcement("Connection lost. Reconnecting.", AnnouncementUrgency.Assertive),
             ConnectionStatus.Connected => new Announcement(
                 string.IsNullOrWhiteSpace(portName) ? "Connected." : $"Connected on {portName}.",
                 AnnouncementUrgency.Polite),
