@@ -26,6 +26,7 @@ public static class ControlCommands
         fault silent | garbage | truncate | latency <ms> | drop | none
         echo on | off             the receiver's FDUPLEX setting
         speed <factor>            run the timeline faster (the reported clock stays real)
+        serial <number>           a different unit on the cable: *IDN? answers this serial
         status                    one line describing the receiver and the link
         """;
 
@@ -124,6 +125,22 @@ public static class ControlCommands
                 case ["speed", string factor] when double.TryParse(factor, NumberStyles.Float, CultureInfo.InvariantCulture, out double speed) && speed > 0:
                     receiver.Speed = speed;
                     return string.Create(CultureInfo.InvariantCulture, $"ok: speed {speed}");
+
+                // Another unit on the same cable, which is a change to the world rather than to the
+                // receiver's settings: the QA pass imports a history under a receiver other than the
+                // one it was exported from (manual-qa.md section 21). The serial keeps its case, so it
+                // is read from the line rather than from the lowered words.
+                case ["serial", _]:
+                    string serial = line.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries)[1];
+                    string[] fields = receiver.Identity.Split(',');
+                    if (fields.Length != 4)
+                    {
+                        return "error: the identity is not four fields: " + receiver.Identity;
+                    }
+
+                    fields[2] = serial;
+                    receiver.Identity = string.Join(',', fields);
+                    return "ok: *IDN? now answers " + receiver.Identity;
 
                 case ["status"]:
                     return $"{receiver}; faults: {link.Faults}; errors queued: {engine.QueuedErrors.Count}";

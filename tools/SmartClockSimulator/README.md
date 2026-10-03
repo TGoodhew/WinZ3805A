@@ -75,13 +75,15 @@ real one would.
 
 ```
 antenna off | on          pull or reconnect the antenna (holdover, then recovery)
-power-cycle               start again from power-up
+power-cycle [cold]        start again from power-up; cold starts with no position
+power off | on [cold]     take the power away (silence) and give it back
 start locked              jump straight to a settled lock
 holdover | recover        force holdover, or start recovery, as the commands would
 health <item> fail | ok   item: selftest intpwr ovenpwr ocxo efc gpsrcv
 fault silent | garbage | truncate | latency <ms> | drop | none
 echo on | off             the receiver's FDUPLEX setting
-speed <factor>            run the timeline faster
+speed <factor>            run the timeline faster (the reported clock stays real)
+serial <number>           a different unit on the cable: *IDN? answers this serial
 status                    one line describing the receiver and the link
 ```
 
