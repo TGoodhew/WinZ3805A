@@ -69,7 +69,7 @@ public sealed partial class HelpWindow : Window
 
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
-        WindowCaption.Keep(this, AppTitleBar, Title);
+        WindowCaption.Keep(this, AppTitleBar, Title, services.GetService<ILoggerFactory>()?.CreateLogger("Window"));
         AppWindow.SetIcon("Assets/AppIcon.ico");
 
         Render(displayName);

@@ -1,3 +1,7 @@
+using System.Runtime.InteropServices;
+
+using Microsoft.Extensions.Logging;
+using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
@@ -5,7 +9,7 @@ namespace WinZ3805A.Services;
 
 /// <summary>
 /// Keeps a window's caption — the text Windows has, which the taskbar, Alt+Tab and Narrator name
-/// the window by — when a <see cref="TitleBar"/> control draws its title (#637).
+/// the window by — when a <see cref="TitleBar"/> control draws its title (#637, #663).
 /// </summary>
 /// <remarks>
 /// <para>
@@ -19,19 +23,108 @@ namespace WinZ3805A.Services;
 /// <para>
 /// The drawn title is right as it is — the display name, with the window's name as the subtitle —
 /// so the caption is set again after the control has had its say, rather than changing what it
-/// draws. On every load, not the first only, since a load is when it writes.
+/// draws.
+/// </para>
+/// <para>
+/// <b>Not on load only (#663).</b> At 225 % the Details window reached Windows as the bare display
+/// name again, with #637's load handler in place. So the caption Windows actually holds is read
+/// back with <c>GetWindowText</c> at each point the title bar might have written it, and set again
+/// through <see cref="AppWindow.Title"/> whenever it is wrong — never compared with
+/// <see cref="Window.Title"/>, which is the value this class asked for rather than the value the
+/// window has. Each correction is logged with the event that found it.
 /// </para>
 /// </remarks>
 internal static class WindowCaption
 {
-    /// <summary>Gives <paramref name="window"/> <paramref name="caption"/>, now and each time <paramref name="titleBar"/> loads.</summary>
+    /// <summary>Gives <paramref name="window"/> <paramref name="caption"/>, and keeps it there.</summary>
+    /// <param name="window">The window whose caption to keep.</param>
+    /// <param name="titleBar">The title bar that overwrites it.</param>
+    /// <param name="caption">The caption Windows should name the window by.</param>
+    /// <param name="logger">Where corrections are recorded, if anywhere.</param>
+    public static void Keep(Window window, TitleBar titleBar, string caption, ILogger? logger = null) =>
+        _ = new Keeper(window, titleBar, caption, logger);
+
+    /// <summary>The handlers, as methods so the one on the framework's XamlRoot can be removed.</summary>
     /// <remarks>
-    /// The subscription is not undone: the title bar is part of the window's own content and dies
-    /// with it, so the handler holds nothing that would outlive either.
+    /// The title bar and the AppWindow die with the window, so their subscriptions need no undoing.
+    /// The XamlRoot is the framework's and outlives the window, so that one is removed on Closed —
+    /// a handler left there holds the window, which is #487's leak.
     /// </remarks>
-    public static void Keep(Window window, TitleBar titleBar, string caption)
+    private sealed class Keeper
     {
-        window.Title = caption;
-        titleBar.Loaded += (_, _) => window.Title = caption;
+        private readonly Window _window;
+        private readonly string _caption;
+        private readonly ILogger? _logger;
+        private readonly nint _handle;
+        private XamlRoot? _root;
+
+        public Keeper(Window window, TitleBar titleBar, string caption, ILogger? logger)
+        {
+            _window = window;
+            _caption = caption;
+            _logger = logger;
+            _handle = WinRT.Interop.WindowNative.GetWindowHandle(window);
+
+            window.Title = caption;
+            titleBar.Loaded += OnTitleBarLoaded;
+            titleBar.SizeChanged += (_, _) => Restore("the title bar's size changed");
+            window.Activated += (_, _) => Restore("the window was activated");
+            window.AppWindow.Changed += OnAppWindowChanged;
+            window.Closed += OnClosed;
+        }
+
+        private void OnTitleBarLoaded(object sender, RoutedEventArgs e)
+        {
+            Restore("the title bar loaded");
+
+            if (_root is null && sender is FrameworkElement element && element.XamlRoot is { } root)
+            {
+                _root = root;
+                _root.Changed += OnRootChanged;
+            }
+        }
+
+        private void OnRootChanged(XamlRoot sender, XamlRootChangedEventArgs args) =>
+            Restore("the XamlRoot changed");
+
+        private void OnAppWindowChanged(AppWindow sender, AppWindowChangedEventArgs args)
+        {
+            if (args.DidSizeChange || args.DidPositionChange || args.DidPresenterChange)
+            {
+                Restore("the window moved or resized");
+            }
+        }
+
+        private void OnClosed(object sender, WindowEventArgs args)
+        {
+            _root?.Changed -= OnRootChanged;
+            _root = null;
+        }
+
+        private void Restore(string when)
+        {
+            string actual = Read(_handle);
+            if (string.Equals(actual, _caption, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _window.AppWindow.Title = _caption;
+            _logger?.LogInformation(
+                "Window caption restored when {When}: it was \"{Actual}\", it is \"{Now}\"",
+                when,
+                actual,
+                Read(_handle));
+        }
     }
+
+    private static string Read(nint handle)
+    {
+        char[] buffer = new char[256];
+        int length = GetWindowTextW(handle, buffer, buffer.Length);
+        return new string(buffer, 0, Math.Max(length, 0));
+    }
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetWindowTextW(nint window, [Out] char[] text, int maxCount);
 }
