@@ -11,6 +11,159 @@ Add-Type -AssemblyName System.Windows.Forms
 
 $script:Ae = [System.Windows.Automation.AutomationElement]
 
+# What UI Automation does not say: whether Windows keeps a window above others, which window is on
+# top at a point, and input that Windows treats as a person's. SetCursorPos alone moves the pointer
+# without a pointer event, so no tooltip opens (manual-qa.md section 22); mouse_event does.
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class QaWin32
+{
+    [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left, Top, Right, Bottom; }
+    [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X, Y; }
+    [DllImport("user32.dll")] public static extern int GetWindowLong(IntPtr hWnd, int index);
+    [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
+    [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(POINT point);
+    [DllImport("user32.dll")] public static extern IntPtr GetAncestor(IntPtr hWnd, uint flags);
+    [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
+    [DllImport("user32.dll")] public static extern void mouse_event(uint flags, int dx, int dy, uint data, UIntPtr extra);
+    [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    public static bool IsTopmost(IntPtr hWnd) { return (GetWindowLong(hWnd, -20) & 0x8) != 0; }
+    public static RECT Rect(IntPtr hWnd) { RECT r; GetWindowRect(hWnd, out r); return r; }
+    public static IntPtr TopAt(int x, int y) { POINT p; p.X = x; p.Y = y; return GetAncestor(WindowFromPoint(p), 2); }
+
+    // Moves the pointer there in small steps, so the window under it sees it arrive.
+    public static void MoveTo(int x, int y)
+    {
+        POINT now; GetCursorPos(out now);
+        for (int i = 1; i <= 10; i++)
+        {
+            SetCursorPos(now.X + (x - now.X) * i / 10, now.Y + (y - now.Y) * i / 10);
+            mouse_event(0x0001, 0, 0, 0, UIntPtr.Zero);
+            System.Threading.Thread.Sleep(15);
+        }
+    }
+    [DllImport("user32.dll")] public static extern bool GetCursorPos(out POINT point);
+    public static void RightClick() { mouse_event(0x0008, 0, 0, 0, UIntPtr.Zero); mouse_event(0x0010, 0, 0, 0, UIntPtr.Zero); }
+    public static void LeftDown() { mouse_event(0x0002, 0, 0, 0, UIntPtr.Zero); }
+    public static void LeftUp() { mouse_event(0x0004, 0, 0, 0, UIntPtr.Zero); }
+}
+'@
+
+# The notification-area menu (#568). UI Automation cannot see a Win32 popup menu here, which is why
+# this was a person's check until 3 Oct 2026; Win32 can. The menu is opened the way a right-click on
+# the icon opens it: the icon's callback message, posted to the app's hidden tray window, which then
+# runs its own handler. What that leaves out is only the shell routing a click to the icon. Items
+# are read from the menu itself, ticks included, and chosen with a real click, because keyboard
+# focus on a popup menu is not reliable from here - a key chose an item once and missed the next.
+Add-Type -TypeDefinition @'
+using System;
+using System.Text;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
+public static class QaTray
+{
+    delegate bool EnumProc(IntPtr w, IntPtr p);
+    [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc f, IntPtr p);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr w, StringBuilder s, int n);
+    [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr w, out uint pid);
+    [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr w, uint m, IntPtr wp, IntPtr lp);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr FindWindow(string cls, string title);
+    [DllImport("user32.dll")] static extern IntPtr SendMessage(IntPtr w, uint m, IntPtr wp, IntPtr lp);
+    [DllImport("user32.dll")] static extern int GetMenuItemCount(IntPtr menu);
+    [DllImport("user32.dll")] static extern uint GetMenuState(IntPtr menu, uint item, uint flags);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetMenuString(IntPtr menu, uint item, StringBuilder s, int n, uint flags);
+    [StructLayout(LayoutKind.Sequential)] struct RECT { public int Left, Top, Right, Bottom; }
+    [DllImport("user32.dll")] static extern bool GetMenuItemRect(IntPtr w, IntPtr menu, uint item, out RECT r);
+
+    // The app's tray window: its class is WinZ3805A.TrayIcon.<guid>, one per icon (TrayIconWindow).
+    public static IntPtr Window(uint pid)
+    {
+        IntPtr found = IntPtr.Zero;
+        EnumWindows((w, p) => {
+            uint owner; GetWindowThreadProcessId(w, out owner);
+            var s = new StringBuilder(256); GetClassName(w, s, 256);
+            if (owner == pid && s.ToString().StartsWith("WinZ3805A.TrayIcon.")) { found = w; return false; }
+            return true; }, IntPtr.Zero);
+        return found;
+    }
+
+    // As a right-click on the icon: WM_USER + 1 with WM_RBUTTONUP, TrayIcon's callback message.
+    public static void Open(IntPtr trayWindow) { PostMessage(trayWindow, 0x0401, IntPtr.Zero, (IntPtr)0x0205); }
+
+    static IntPtr Menu()
+    {
+        IntPtr popup = FindWindow("#32768", null);
+        return popup == IntPtr.Zero ? IntPtr.Zero : SendMessage(popup, 0x01E1, IntPtr.Zero, IntPtr.Zero);
+    }
+
+    public static bool IsOpen() { return FindWindow("#32768", null) != IntPtr.Zero; }
+
+    // Each item of the open menu, its accelerator marks removed: "Keep above other windows [ticked]".
+    public static string[] Items()
+    {
+        IntPtr menu = Menu();
+        var list = new List<string>();
+        if (menu == IntPtr.Zero) return list.ToArray();
+        for (uint i = 0; i < GetMenuItemCount(menu); i++)
+        {
+            uint state = GetMenuState(menu, i, 0x400);
+            var s = new StringBuilder(128); GetMenuString(menu, i, s, 128, 0x400);
+            list.Add(((state & 0x800) != 0 ? "---" : s.ToString().Replace("&", "")) + ((state & 0x8) != 0 ? " [ticked]" : ""));
+        }
+        return list.ToArray();
+    }
+
+    // The centre of an item of the open menu, by position; empty when there is no menu.
+    public static int[] Centre(uint index)
+    {
+        IntPtr menu = Menu();
+        RECT r;
+        if (menu == IntPtr.Zero || !GetMenuItemRect(IntPtr.Zero, menu, index, out r)) return new int[0];
+        return new int[] { (r.Left + r.Right) / 2, (r.Top + r.Bottom) / 2 };
+    }
+}
+'@
+
+# Opens the tray menu, returns its items, and clicks the one named, if any; then waits for it to act.
+function Use-TrayMenu {
+    param([string]$Choose)
+    $process = Get-Process -Name WinZ3805A | Select-Object -First 1
+    $tray = [QaTray]::Window([uint32]$process.Id)
+    if ($tray -eq [IntPtr]::Zero) { return [pscustomobject]@{ Items = @(); Chosen = $false } }
+    [QaTray]::Open($tray)
+    Start-Sleep -Seconds 2
+    $items = @([QaTray]::Items())
+    $chosen = $false
+    $index = [Array]::FindIndex([string[]]$items, [Predicate[string]]{ param($i) $i -like "$Choose*" })
+    if ($Choose -and $index -ge 0) {
+        $c = [QaTray]::Centre([uint32]$index)
+        if ($c.Count -eq 2) { [QaWin32]::MoveTo($c[0], $c[1]); [QaWin32]::LeftDown(); [QaWin32]::LeftUp(); $chosen = $true }
+        Start-Sleep -Seconds 2
+    }
+    elseif ([QaTray]::IsOpen()) { [System.Windows.Forms.SendKeys]::SendWait('{ESC}') }
+    [pscustomobject]@{ Items = $items; Chosen = $chosen }
+}
+
+# An element's on-screen rectangle as left, top, width, height in physical pixels.
+function Get-Bounds {
+    param($Element)
+    $r = $Element.Current.BoundingRectangle
+    [pscustomobject]@{ Left = [int]$r.Left; Top = [int]$r.Top; Width = [int]$r.Width; Height = [int]$r.Height; Right = [int]$r.Right; Bottom = [int]$r.Bottom }
+}
+
+# A window handle as UI Automation knows it.
+function Get-Handle { param($Element) [IntPtr]$Element.Current.NativeWindowHandle }
+
+# The toggle state of a control that has one: On, Off or Indeterminate.
+function Get-ToggleState {
+    param($Element)
+    "$($Element.GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern).Current.ToggleState)"
+}
+
+
 function Get-AppWindow {
     param([int]$Seconds = 30)
     $deadline = (Get-Date).AddSeconds($Seconds)
