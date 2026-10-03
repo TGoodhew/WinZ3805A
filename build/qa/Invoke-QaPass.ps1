@@ -63,6 +63,9 @@
                               scaling, their title-bar buttons clear of the caption buttons the system
                               reports, a real drag on each title bar, and a photograph of each for the
                               agent to judge. Needs the simulator port
+      text-scaling       §4   A11Y-6: Windows' text size at 100, 150 and 200 % at each of §9.6.1's breakpoints;
+                              the size confirmed in the app, a dialog's buttons on screen, and photographs
+                              for the agent to judge clipping. Needs the simulator port
       connect-cancel     §24  an auto-detect walk on a port where nothing answers, stopped by
                               Cancel and by Esc; then Connect works once the receiver answers.
                               Driven through UI Automation (guest\Ui.ps1). Needs the simulator port
@@ -91,7 +94,7 @@ param(
     [string]$Offline,
     [string]$Release,
     [string[]]$Machines = @('QA-Win10', 'QA-Win11'),
-    [string[]]$Scenarios = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast', 'display-scaling'),
+    [string[]]$Scenarios = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast', 'display-scaling', 'text-scaling'),
     [string]$OutDir
 )
 
@@ -102,7 +105,7 @@ Import-Module (Join-Path $PSScriptRoot 'QaVm.psm1') -Force
 # names no scenario - the first run of this script ran nothing and reported success.
 $Machines = @($Machines | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 $Scenarios = @($Scenarios | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-$known = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast', 'display-scaling')
+$known = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast', 'display-scaling', 'text-scaling')
 $unknown = @($Scenarios | Where-Object { $known -notcontains $_ })
 if ($unknown.Count) { throw "Unknown scenario(s): $($unknown -join ', '). Known: $($known -join ', ')." }
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
@@ -1962,11 +1965,12 @@ function Test-HistoryReinstall {
     Send-Zip $Vm $Offline 'candidate'
     $code = Install-Candidate $Vm 'candidate'
     Check $Result 'installed (exit 0, or 2 with the start check timing out)' ($code -in 0, 2) "exit $code"
-    $null = Invoke-QaGuestScript $Vm -Name 'connect-com2' -Script $connectCom2
-
+    # The simulator first: an app that finds nothing on the port at launch goes to Disconnected and
+    # does not retry, and a step between the two once let it look before the simulator was there.
     $simulator = Start-Process (Get-Simulator) -PassThru -WindowStyle Hidden `
         -ArgumentList '--pipe-client', $pipe, '--start', 'locked', '--speed', '2', '--control', "$pipe-control" `
         -RedirectStandardOutput (Join-Path $Result.Folder 'simulator.log') -RedirectStandardError (Join-Path $Result.Folder 'simulator.err')
+    $null = Invoke-QaGuestScript $Vm -Name 'connect-com2' -Script $connectCom2
     $here = 'Z3805A serial 3625A02931'
     $warnings = "older than|newer version|can't be separated|doesn't say|different receiver"
     function Step([string]$Name, [string]$Action, [string]$File, [string]$Choice = '') {
@@ -2215,10 +2219,12 @@ function Test-GuidePages {
     Send-Zip $Vm $Offline 'candidate'
     $code = Install-Candidate $Vm 'candidate'
     Check $Result 'installed (exit 0, or 2 with the start check timing out)' ($code -in 0, 2) "exit $code"
-    $null = Invoke-QaGuestScript $Vm -Name 'connect-com2' -Script $connectCom2
+    # The simulator first: an app that finds nothing on the port at launch goes to Disconnected and
+    # does not retry, and a step between the two once let it look before the simulator was there.
     $simulator = Start-Process (Get-Simulator) -PassThru -WindowStyle Hidden `
         -ArgumentList '--pipe-client', $pipe, '--start', 'locked', '--speed', '2', '--control', "$pipe-control" `
         -RedirectStandardOutput (Join-Path $Result.Folder 'simulator.log') -RedirectStandardError (Join-Path $Result.Folder 'simulator.err')
+    $null = Invoke-QaGuestScript $Vm -Name 'connect-com2' -Script $connectCom2
     try {
         $seen = Wait-AppLog $Vm 'State: LOCK' 0 120 'locked'
         Check $Result 'connected to the simulated receiver, and locked' $seen.found $seen.line
@@ -2431,10 +2437,12 @@ function Test-HighContrast {
     Send-Zip $Vm $Offline 'candidate'
     $code = Install-Candidate $Vm 'candidate'
     Check $Result 'installed (exit 0, or 2 with the start check timing out)' ($code -in 0, 2) "exit $code"
-    $null = Invoke-QaGuestScript $Vm -Name 'connect-com2' -Script $connectCom2
+    # The simulator first: an app that finds nothing on the port at launch goes to Disconnected and
+    # does not retry, and a step between the two once let it look before the simulator was there.
     $simulator = Start-Process (Get-Simulator) -PassThru -WindowStyle Hidden `
         -ArgumentList '--pipe-client', $pipe, '--start', 'locked', '--speed', '2', '--control', "$pipe-control" `
         -RedirectStandardOutput (Join-Path $Result.Folder 'simulator.log') -RedirectStandardError (Join-Path $Result.Folder 'simulator.err')
+    $null = Invoke-QaGuestScript $Vm -Name 'connect-com2' -Script $connectCom2
     # The schemes by their internal names, on both systems. Windows 11 shows them as Aquatic, Dusk, Night
     # sky and Desert, but asked for those names it applies High Contrast Black every time, which is what
     # the distinct-themes check below caught; asked for the old names, it applies its own four.
@@ -2624,10 +2632,12 @@ function Test-DisplayScaling {
     Send-Zip $Vm $Offline 'candidate'
     $code = Install-Candidate $Vm 'candidate'
     Check $Result 'installed (exit 0, or 2 with the start check timing out)' ($code -in 0, 2) "exit $code"
-    $null = Invoke-QaGuestScript $Vm -Name 'connect-com2' -Script $connectCom2
+    # The simulator first: an app that finds nothing on the port at launch goes to Disconnected and
+    # does not retry, and a step between the two once let it look before the simulator was there.
     $simulator = Start-Process (Get-Simulator) -PassThru -WindowStyle Hidden `
         -ArgumentList '--pipe-client', $pipe, '--start', 'locked', '--speed', '2', '--control', "$pipe-control" `
         -RedirectStandardOutput (Join-Path $Result.Folder 'simulator.log') -RedirectStandardError (Join-Path $Result.Folder 'simulator.err')
+    $null = Invoke-QaGuestScript $Vm -Name 'connect-com2' -Script $connectCom2
     $scales = [ordered]@{ '100' = @(1280, 800, 96); '150' = @(1920, 1200, 144); '200' = @(2560, 1600, 192); '225' = @(2880, 1800, 216) }
     try {
         foreach ($scale in $scales.Keys) {
@@ -2654,6 +2664,164 @@ function Test-DisplayScaling {
     }
 }
 
+# manual-qa.md section 4, A11Y-6: Windows' text size at 100, 150 and 200 %, at each of §9.6.1's
+# breakpoints, which the screen's size sets at 100 % scaling with no sign-out. Called with $text (the
+# percentage), $width and $height (the screen), and $tag for the photographs' names.
+$textStep = @'
+$facts = [ordered]@{}
+Add-Type -TypeDefinition @"
+using System; using System.Runtime.InteropServices;
+public static class QaText {
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    public struct DEVMODE {
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string dmDeviceName;
+        public short dmSpecVersion, dmDriverVersion, dmSize, dmDriverExtra;
+        public int dmFields, dmPositionX, dmPositionY, dmDisplayOrientation, dmDisplayFixedOutput;
+        public short dmColor, dmDuplex, dmYResolution, dmTTOption, dmCollate;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string dmFormName;
+        public short dmLogPixels; public int dmBitsPerPel, dmPelsWidth, dmPelsHeight, dmDisplayFlags, dmDisplayFrequency;
+        public int dmICMMethod, dmICMIntent, dmMediaType, dmDitherType, dmReserved1, dmReserved2, dmPanningWidth, dmPanningHeight;
+    }
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern bool EnumDisplaySettings(string dev, int mode, ref DEVMODE dm);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int ChangeDisplaySettings(ref DEVMODE dm, int flags);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr SendMessageTimeout(IntPtr h, int msg, IntPtr w, string l, int flags, int timeout, out IntPtr result);
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+    public static int Resolution(int w, int h) {
+        DEVMODE dm = new DEVMODE(); dm.dmSize = (short)Marshal.SizeOf(typeof(DEVMODE));
+        EnumDisplaySettings(null, -1, ref dm); dm.dmPelsWidth = w; dm.dmPelsHeight = h; dm.dmFields = 0x80000 | 0x100000;
+        return ChangeDisplaySettings(ref dm, 0);
+    }
+    // What Settings does after writing the value: tell every window the accessibility settings changed.
+    public static void Broadcast() { IntPtr r; SendMessageTimeout((IntPtr)0xFFFF, 0x001A, IntPtr.Zero, "Accessibility", 2, 5000, out r); }
+}
+"@
+Add-Type -AssemblyName System.Drawing
+
+Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue | Stop-Process -Force
+$facts.resolution = [QaText]::Resolution($width, $height)
+Set-ItemProperty -Path 'HKCU:\Software\Microsoft\Accessibility' -Name TextScaleFactor -Value $text -Type DWord
+[QaText]::Broadcast()
+# Each window opens as it would on a display it has never seen at this size.
+$dir = Join-Path $env:LOCALAPPDATA "Packages\$((Get-AppxPackage -Name WinZ3805A).PackageFamilyName)\LocalCache\Local\WinZ3805A"
+Remove-Item (Join-Path $dir 'window.json'), (Join-Path $dir 'details-window.json') -ErrorAction SilentlyContinue
+Start-Sleep -Seconds 3
+Start-Process "shell:AppsFolder\$((Get-AppxPackage -Name WinZ3805A).PackageFamilyName)!App"
+$deadline = (Get-Date).AddSeconds(60)
+do { Start-Sleep -Seconds 2; $w = Get-AppWindow -Seconds 5 } while ((Get-Date) -lt $deadline -and -not ($w -and (Find-Control $w -AutomationId 'ClockText' -Seconds 0)))
+if (-not $w) { [ordered]@{ error = "no main window ($(Get-WindowReport))" } | ConvertTo-Json -Compress; return }
+Start-Sleep -Seconds 5
+
+# At the Minimal breakpoint the navigation pane is closed behind its button, and its items are not
+# there to select until it is opened.
+function Go-To([string]$label) {
+    if (Select-NavigationItem $d $label) { return $true }
+    $toggle = Find-Control $d -AutomationId 'TogglePaneButton' -Seconds 2
+    if (-not $toggle) { return $false }
+    Invoke-Control $toggle; Start-Sleep -Seconds 2
+    Select-NavigationItem $d $label
+}
+
+function Save-Shot($element, [string]$label) {
+    [void][QaText]::SetForegroundWindow((Get-Handle $element))
+    [QaWin32]::MoveTo(2, 2); Start-Sleep -Seconds 1
+    $r = $element.Current.BoundingRectangle
+    $left = [Math]::Max(0, [int]$r.Left); $top = [Math]::Max(0, [int]$r.Top)
+    $bmp = New-Object System.Drawing.Bitmap ([Math]::Min([int]$r.Width, $width - $left)), ([Math]::Min([int]$r.Height, $height - $top))
+    $g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen($left, $top, 0, 0, $bmp.Size); $g.Dispose()
+    $bmp.Save("C:\qa\text\$tag-$label.png", [System.Drawing.Imaging.ImageFormat]::Png); $bmp.Dispose()
+}
+
+# How much the clock's text grew, which is the text size reaching the app.
+$clock = Find-Control $w -AutomationId 'ClockText' -Seconds 5
+# Empty when the row is collapsed, which is what the page does when it has no room for it.
+$facts.clockHeight = if ($clock -and -not $clock.Current.BoundingRectangle.IsEmpty) { [int]$clock.Current.BoundingRectangle.Height } else { 0 }
+Save-Shot $w 'main'
+
+$button = Find-Control $w -AutomationId 'DetailsButton' -Seconds 5
+if ($button) { Invoke-Control $button } else { Send-KeyTo $w '^d' }
+$d = Get-AppWindowNamed 'Receiver Details' -Seconds 20
+if ($d) {
+    $facts.detailsWidth = [int]$d.Current.BoundingRectangle.Width
+    foreach ($page in 'Overview', 'Settings') {
+        $facts["went-$page"] = [bool](Go-To $page)
+        Start-Sleep -Seconds 4
+        Save-Shot $d $page.ToLowerInvariant()
+    }
+    # A dialog with lists in it: its buttons must stay on screen, because a dialog that scrolls
+    # keeps them and one that truncates loses them.
+    $facts.wentSatellites = [bool](Go-To 'Satellites')
+    Start-Sleep -Seconds 4
+    $manage = Find-Control $d -AutomationId 'ManageButton' -Seconds 5
+    if ($manage) {
+        try { $manage.GetCurrentPattern([System.Windows.Automation.ScrollItemPattern]::Pattern).ScrollIntoView() } catch { }
+        Invoke-Control $manage
+        $close = Find-Control $d -AutomationId 'CloseButton' -Seconds 15
+        Start-Sleep -Seconds 3
+        if ($close) {
+            $cb = $close.Current.BoundingRectangle
+            $facts.dialogButton = "$([int]$cb.Left),$([int]$cb.Top) $([int]$cb.Width)x$([int]$cb.Height)"
+            $facts.dialogButtonOnScreen = -not $cb.IsEmpty -and $cb.Left -ge 0 -and $cb.Top -ge 0 -and $cb.Right -le $width -and $cb.Bottom -le $height
+            Save-Shot $d 'dialog'
+            Invoke-Control $close
+        }
+        else { $facts.dialogButtonOnScreen = $false; $facts.dialogButton = 'no dialog' }
+    }
+}
+$facts.details = [bool]$d
+$facts | ConvertTo-Json -Compress -Depth 4
+'@
+
+function Test-TextScaling {
+    param($Vm, $Result)
+    $pipe = Get-QaSimulatorPipe -Vm $Vm
+    if (-not (Select-String -LiteralPath $Vm.Vmx -SimpleMatch "\\.\pipe\$pipe" -Quiet)) {
+        $Result.Error = "skipped: the VM has no simulator port; run Add-QaSimulatorPort (build/qa/README.md)"
+        return
+    }
+    Send-Zip $Vm $Offline 'candidate'
+    $code = Install-Candidate $Vm 'candidate'
+    Check $Result 'installed (exit 0, or 2 with the start check timing out)' ($code -in 0, 2) "exit $code"
+    # The simulator first: an app that finds nothing on the port at launch goes to Disconnected and
+    # does not retry, and a step between the two once let it look before the simulator was there.
+    $simulator = Start-Process (Get-Simulator) -PassThru -WindowStyle Hidden `
+        -ArgumentList '--pipe-client', $pipe, '--start', 'locked', '--speed', '2', '--control', "$pipe-control" `
+        -RedirectStandardOutput (Join-Path $Result.Folder 'simulator.log') -RedirectStandardError (Join-Path $Result.Folder 'simulator.err')
+    $null = Invoke-QaGuestScript $Vm -Name 'text-folder' -Script "New-Item -ItemType Directory -Force 'C:\qa\text' | Out-Null"
+    $null = Invoke-QaGuestScript $Vm -Name 'connect-com2' -Script $connectCom2
+    # §9.6.1's breakpoints, reached through the screen's size: the Details window is clamped to it.
+    $breakpoints = [ordered]@{ medium = @(1280, 800); compact = @(800, 600); minimal = @(640, 480) }
+    $clock = @{}
+    try {
+        $seen = Wait-AppLog $Vm 'State: LOCK' 0 120 'locked'
+        Check $Result 'connected to the simulated receiver, and locked' $seen.found $seen.line
+        if (-not $seen.found) { return }
+        foreach ($text in 100, 150, 200) {
+            foreach ($bp in $breakpoints.Keys) {
+                $w, $h = $breakpoints[$bp]
+                $tag = "$text-$bp"
+                $s = Invoke-UiStep $Vm "text-$tag" "`$text = $text; `$width = $w; `$height = $h; `$tag = '$tag'" $textStep
+                if ($s.error) { Check $Result "[A11Y-6] text $text %, $bp" $false $s.error; continue }
+                if ($bp -eq 'medium') { $clock[$text] = $s.clockHeight }
+                Check $Result "[A11Y-6] text $text %, $bp ($w x $h): the Manage dialog's buttons stay on screen" ($s.dialogButtonOnScreen -eq $true) "Close at $($s.dialogButton); Details $($s.detailsWidth) px wide"
+                foreach ($part in 'main', 'overview', 'settings', 'dialog') {
+                    try { Copy-QaFile $Vm -Source "C:\qa\text\$tag-$part.png" -Destination (Join-Path $Result.Folder "$tag-$part.png") } catch { }
+                }
+            }
+        }
+        # The text size really reached the app: the clock's line grows with it at each step. Not in
+        # proportion - Windows scales large type less than body text, and the clock grew x1.22 and x1.56
+        # at 150 and 200 % - so the check is that it grows, by a tenth at least, each time.
+        $ratio150 = if ($clock[100]) { [Math]::Round($clock[150] / $clock[100], 2) } else { 0 }
+        $ratio200 = if ($clock[100]) { [Math]::Round($clock[200] / $clock[100], 2) } else { 0 }
+        Check $Result '[A11Y-6] the text size reaches the app: the clock line grows with it' ($clock[150] -ge 1.1 * $clock[100] -and $clock[200] -ge 1.1 * $clock[150]) "clock line $($clock[100]) / $($clock[150]) / $($clock[200]) px at 100 / 150 / 200 % (x$ratio150, x$ratio200)"
+    }
+    finally {
+        $null = Invoke-QaGuestScript $Vm -Name 'text-reset' -Script "Set-ItemProperty -Path 'HKCU:\Software\Microsoft\Accessibility' -Name TextScaleFactor -Value 100 -Type DWord"
+        if (-not $simulator.HasExited) { $simulator.Kill() }
+        $null = Save-Evidence $Vm $Result.Folder
+    }
+}
+
 $scenarioTable = [ordered]@{
     'fresh-online'     = ${function:Test-FreshOnline}
     'fresh-offline'    = ${function:Test-FreshOffline}
@@ -2672,6 +2840,7 @@ $scenarioTable = [ordered]@{
     'guide-pages'      = ${function:Test-GuidePages}
     'high-contrast'    = ${function:Test-HighContrast}
     'display-scaling'  = ${function:Test-DisplayScaling}
+    'text-scaling'     = ${function:Test-TextScaling}
 }
 
 # ---------------------------------------------------------------------------

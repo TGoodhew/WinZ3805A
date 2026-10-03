@@ -35,6 +35,7 @@ with the screenshots attached.
 | 2 | **automated** | `receiver`: the simulated Z3805A on the VM's COM2 powered off for 30 s and back; the session must reach *Reconnecting*, reconnect by itself, and log a `State:` line after (#639) |
 | 4 | **partly automated** | `accessibility`, with the simulated receiver: **A11Y-3**, every icon-only control in both windows named and its tooltip opened by real pointer movement; **A11Y-9**, a listener records the live-region events for a mode change, a lost connection and a tier C outcome, with their live setting (decided 2 Oct 2026: the events being raised is the check, and Narrator's speech is left to bug reports); **A11Y-10**, the medallion's state and every sky-plot marker exposed as sentences; **A11Y-11**, List showing the same satellites with the same data as the plot. Still by hand: A11Y-1, -2, -4 to -8, -12 and -13 |
 | 3 | **automated, judged by the agent** | `display-scaling`: 100, 150, 200 and 225 %, each after a sign-out, both windows at the display's scaling and inside the work area, their title-bar buttons clear of the caption buttons, a real drag on each title bar, and both photographed. See section 3 |
+| 4 (A11Y-6) | **automated, judged by the agent** | `text-scaling`: Windows' text size at 100, 150 and 200 % at each of §9.6.1's breakpoints, confirmed in the app, with a dialog's buttons on screen and photographs for the agent. See A11Y-6 below |
 | 4 (A11Y-8) | **automated, judged by the agent** | `high-contrast`, with the simulated receiver: each of the four contrast themes switched live under the running app, confirmed by name, and the main window and the Details Overview and Satellites pages measured and photographed. See A11Y-8 below |
 | 7 | **automated** | `sky-export`, with the simulated receiver: the plot saved through the app's Save dialog in Light and Dark (Windows' app mode), in high contrast (the whole desktop, through `SPI_SETHIGHCONTRAST`) and at 225 % (2880 × 1800, then a sign-out). Each file is measured: every pixel opaque, the corners the theme's page background, or the live window colour under high contrast, which must be neither page background, and under high contrast the markers in the window-text colour, not the surface (#218). The caption is read back out of the file with Windows' OCR: in UTC, with the page's elevation mask. The caption must be gone from the page after Save and after Cancel, and at 225 % the caption must still be the image's last row, so nothing is cropped from the bottom. The Details window's caption is checked on every leg; at 225 % it is wrong (#663). The card's layout is measured on every leg too, through UI Automation: the heading clear of the Plot choice, and the legend's last entry inside the card; at the width Details first opens at, both fail (#664). The saved images are kept for the agent to judge, which is how #664 was found |
 | 8 | **automated** | `binary-audit`: `Test-NoBlockedCommands.ps1 -ScanBinaries` on the unpacked package |
@@ -161,6 +162,12 @@ record a result against each number.
 - **A11Y-6 Text scaling.** Settings → Accessibility → Text size at 100, 150 and 200 %, at each of
   §9.6.1's breakpoints — Minimal (below 640), Compact (640–1023) and Medium (1024 and up). Nothing
   clips; dialogs scroll rather than truncate.
+  *Automated since 3 Oct 2026* (`text-scaling`): TextScaleFactor at 100, 150 and 200 % with the
+  accessibility broadcast Settings sends, at each breakpoint reached through the screen's size (1280 × 800,
+  800 × 600, 640 × 480) at 100 % scaling, with no stored placements. The size is confirmed by the clock line
+  growing with it; the Satellites page's Manage dialog must keep its buttons on screen; the main window,
+  Overview, Settings and the dialog are photographed for the agent to judge clipping. Its first run found
+  #678.
 - **A11Y-7 Display scaling** is section 3.
 - **A11Y-8 High contrast.** Switch the desktop into each of the four contrast themes. Every reading
   stays legible; no foreground is painted in the surface behind it; the medallion and the severity
