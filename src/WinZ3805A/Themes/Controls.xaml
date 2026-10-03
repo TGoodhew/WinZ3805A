@@ -106,8 +106,15 @@
         (§9.8.2's "brush change only, no scale"). See Controls/PressEffect.cs, which also explains
         why this is a behaviour and not a fork of the stock template.
     -->
+    <!--
+        §9.6.3's 32 px pointer floor, declared (#681). The stock button is as tall as its text and padding,
+        which is 32 px under Windows 11's Segoe UI Variable and 30 px under Windows 10's Segoe UI, so
+        every text button in the application was under the floor on Windows 10 and on it by coincidence
+        on Windows 11. Every named Button style below is BasedOn this one, so they all carry it.
+    -->
     <Style x:Key="WzPressableButtonStyle" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
         <Setter Property="controls:PressEffect.IsEnabled" Value="True" />
+        <Setter Property="MinHeight" Value="32" />
     </Style>
 
     <Style TargetType="Button" BasedOn="{StaticResource WzPressableButtonStyle}" />
@@ -127,6 +134,8 @@
     <Style x:Key="WzAccentButtonStyle" TargetType="Button" BasedOn="{StaticResource AccentButtonStyle}">
         <Setter Property="controls:PressEffect.IsEnabled" Value="True" />
         <Setter Property="HighContrastAdjustment" Value="None" />
+        <!-- §9.6.3's floor, as on WzPressableButtonStyle above; this one is based on the stock accent style (#681). -->
+        <Setter Property="MinHeight" Value="32" />
     </Style>
 
     <Style TargetType="ToggleButton" BasedOn="{StaticResource DefaultToggleButtonStyle}">
