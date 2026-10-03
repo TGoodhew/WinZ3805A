@@ -55,6 +55,42 @@ public static class QaWin32
         }
     }
     [DllImport("user32.dll")] public static extern bool GetCursorPos(out POINT point);
+
+    delegate bool EnumProc(IntPtr hWnd, IntPtr parameter);
+    [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc callback, IntPtr parameter);
+    [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowText(IntPtr hWnd, System.Text.StringBuilder text, int length);
+    [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr hWnd);
+
+    // The process's other visible WinUI window: how the Details window is found when its caption is
+    // wrong, as it was at 225 % (#663).
+    public static IntPtr WindowOtherThan(uint processId, IntPtr exclude)
+    {
+        IntPtr found = IntPtr.Zero;
+        EnumWindows((w, p) => {
+            uint owner; GetWindowThreadProcessId(w, out owner);
+            if (owner != processId || w == exclude || !IsWindowVisible(w)) return true;
+            var c = new System.Text.StringBuilder(256); GetClassName(w, c, 256);
+            if (c.ToString() == "WinUIDesktopWin32WindowClass") { found = w; return false; }
+            return true; }, IntPtr.Zero);
+        return found;
+    }
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr hWnd, System.Text.StringBuilder text, int length);
+
+    // A visible top-level window of the process whose title starts so, by Win32 rather than UI
+    // Automation: at 225 % the Details window was on screen and missing from UI Automation's list
+    // of top-level windows (3 Oct 2026).
+    public static IntPtr WindowTitled(uint processId, string prefix)
+    {
+        IntPtr found = IntPtr.Zero;
+        EnumWindows((w, p) => {
+            uint owner; GetWindowThreadProcessId(w, out owner);
+            if (owner != processId || !IsWindowVisible(w)) return true;
+            var s = new System.Text.StringBuilder(256); GetWindowText(w, s, 256);
+            if (s.ToString().StartsWith(prefix)) { found = w; return false; }
+            return true; }, IntPtr.Zero);
+        return found;
+    }
     public static void RightClick() { mouse_event(0x0008, 0, 0, 0, UIntPtr.Zero); mouse_event(0x0010, 0, 0, 0, UIntPtr.Zero); }
     public static void LeftDown() { mouse_event(0x0002, 0, 0, 0, UIntPtr.Zero); }
     public static void LeftUp() { mouse_event(0x0004, 0, 0, 0, UIntPtr.Zero); }
@@ -291,6 +327,8 @@ function Get-AppWindowNamed {
             foreach ($window in $script:Ae::RootElement.FindAll([System.Windows.Automation.TreeScope]::Children, $condition)) {
                 if ($window.Current.Name -like "$Prefix*") { return $window }
             }
+            $handle = [QaWin32]::WindowTitled([uint32]$process.Id, $Prefix)
+            if ($handle -ne [IntPtr]::Zero) { try { return $script:Ae::FromHandle($handle) } catch { } }
         }
         Start-Sleep -Milliseconds 500
     } while ((Get-Date) -lt $deadline)
