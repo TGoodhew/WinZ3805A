@@ -118,8 +118,15 @@
         the application's most-pressed control (Connect on §10.3), so leaving it out would have made
         the one button people actually use the only one that did not respond.
     -->
+    <!--
+        Out of the framework's high-contrast text adjustment (#672). The stock template already draws
+        its label in highlight text on the highlight; the adjustment drew it in window text on a
+        window-coloured backplate, a box inside the button. Per control rather than for the whole
+        application, because the stock TitleBar's text depends on the adjustment in high contrast.
+    -->
     <Style x:Key="WzAccentButtonStyle" TargetType="Button" BasedOn="{StaticResource AccentButtonStyle}">
         <Setter Property="controls:PressEffect.IsEnabled" Value="True" />
+        <Setter Property="HighContrastAdjustment" Value="None" />
     </Style>
 
     <Style TargetType="ToggleButton" BasedOn="{StaticResource DefaultToggleButtonStyle}">
