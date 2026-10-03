@@ -200,6 +200,18 @@ public sealed partial class MainPage : Page
     /// </remarks>
     public event EventHandler? CompactChanged;
 
+    /// <summary>
+    /// Raised when the page moves into the whole §10.3 layout, every row showing (#678).
+    /// </summary>
+    /// <remarks>
+    /// The window sizes itself from <see cref="WholeLayoutSize"/> when it has nothing to restore, and
+    /// that is only an answer while the rows are laid out: a collapsed row measures as nothing.
+    /// </remarks>
+    public event EventHandler? WholeLayoutShown;
+
+    /// <summary>Whether every row of the whole layout is laid out, so that it can be measured.</summary>
+    public bool IsWholeLayoutShowing => _layout == Layout.Normal && ActualHeight > 0;
+
     /// <summary>Whether the window is in the §10.3 compact layout.</summary>
     public bool IsCompact
     {
@@ -295,6 +307,11 @@ public sealed partial class MainPage : Page
     /// </remarks>
     public Windows.Foundation.Size WholeLayoutSize()
     {
+        // The rows as they are now, not as the last layout pass left them: the caller may have just
+        // moved the page into the whole layout, and until a pass has run the rows that were collapsed
+        // still measure as nothing (#678).
+        UpdateLayout();
+
         Thickness margin = RootGrid.Padding;
 
         double clockRow = WidestClockText()
@@ -425,6 +442,7 @@ public sealed partial class MainPage : Page
     /// </remarks>
     private void ApplyLayoutState()
     {
+        Layout before = _layout;
         _layout = _compact
             ? Layout.Compact
             : ActualHeight < ShortLayoutHeight + _clockOverflow ? Layout.Short : Layout.Normal;
@@ -435,6 +453,11 @@ public sealed partial class MainPage : Page
             _ => "Normal",
         });
         RenderLayoutVisibility();
+
+        if (_layout == Layout.Normal && before != Layout.Normal && ActualHeight > 0)
+        {
+            WholeLayoutShown?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     /// <summary>Which of the three §10.3 layouts <see cref="ApplyLayoutState"/> last chose.</summary>

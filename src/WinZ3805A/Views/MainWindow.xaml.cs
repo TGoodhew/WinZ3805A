@@ -100,6 +100,12 @@ public sealed partial class MainWindow : Window
     /// </remarks>
     private bool _openingSizePending;
 
+    /// <summary>
+    /// Set when the opening size was owed while the page was not showing its whole layout, until it
+    /// does and the size can be measured (#678).
+    /// </summary>
+    private bool _openingSizeAwaitingLayout;
+
     /// <summary>Creates the window over the application's services.</summary>
     /// <param name="services">
     /// The §12 composition root. Passed on to the page as the navigation parameter rather than
@@ -141,6 +147,7 @@ public sealed partial class MainWindow : Window
         // OnNavigatedTo - is exactly the shape that has twice killed this application at start-up.
         MainPage page = new(services);
         page.CompactChanged += OnCompactChanged;
+        page.WholeLayoutShown += OnWholeLayoutShown;
         page.AlwaysOnTopChanged += (_, _) =>
         {
             ApplyAlwaysOnTop();
@@ -717,6 +724,23 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        // #678: the rows are only measurable while they are laid out. Collapsed into the short layout,
+        // or not laid out at all yet, they measure as nothing, the 495 floor wins, and at 150 % text the
+        // window opened too short and cut the clock line in half. So until the page shows its whole
+        // layout the window opens as tall as the work area, and the size is taken from the rows once
+        // they have been laid out there (OnWholeLayoutShown).
+        if (!page.IsWholeLayoutShowing)
+        {
+            _openingSizeAwaitingLayout = true;
+            int tall = DisplayWorkAreas.ForWindow(AppWindow) is { IsEmpty: false } work ? work.Height : AppWindow.Size.Height;
+            AppWindow.Resize(new SizeInt32(
+                Math.Max(AppWindow.Size.Width, _minimum.Width),
+                Math.Max(tall, _minimum.Height)));
+            DisplayWorkAreas.KeepInside(AppWindow);
+            return;
+        }
+
+        _openingSizeAwaitingLayout = false;
         Windows.Foundation.Size whole = page.WholeLayoutSize();
         double titleBar = AppTitleBar.ActualHeight > 0 ? AppTitleBar.ActualHeight : TitleBarHeight;
 
@@ -731,6 +755,15 @@ public sealed partial class MainWindow : Window
 
         // The position is still the one the system chose before this size existed (#675).
         DisplayWorkAreas.KeepInside(AppWindow);
+    }
+
+    /// <summary>Takes the opening size from the rows, now that they are laid out (#678).</summary>
+    private void OnWholeLayoutShown(object? sender, EventArgs e)
+    {
+        if (_openingSizeAwaitingLayout)
+        {
+            ApplyOpeningSize();
+        }
     }
 
     /// <summary>Recomputes the floor, and applies an opening size still owed at this scaling.</summary>
