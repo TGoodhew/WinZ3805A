@@ -27,6 +27,10 @@
                               back by itself after the receiver goes silent; the lock
                               notification on screen, and none with the switch off (§10). Needs
                               the VM's simulator port (Add-QaSimulatorPort)
+      sign-in            §20  start at sign-in, signed out and in for real: hidden, then with the
+                              window, then off; a receiver that answers only a minute after
+                              sign-in; the setting turned off in Windows. UI Automation and the
+                              simulator port
       connect-cancel     §24  an auto-detect walk on a port where nothing answers, stopped by
                               Cancel and by Esc; then Connect works once the receiver answers.
                               Driven through UI Automation (guest\Ui.ps1). Needs the simulator port
@@ -55,7 +59,7 @@ param(
     [string]$Offline,
     [string]$Release,
     [string[]]$Machines = @('QA-Win10', 'QA-Win11'),
-    [string[]]$Scenarios = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel'),
+    [string[]]$Scenarios = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in'),
     [string]$OutDir
 )
 
@@ -66,7 +70,7 @@ Import-Module (Join-Path $PSScriptRoot 'QaVm.psm1') -Force
 # names no scenario - the first run of this script ran nothing and reported success.
 $Machines = @($Machines | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 $Scenarios = @($Scenarios | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-$known = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel')
+$known = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in')
 $unknown = @($Scenarios | Where-Object { $known -notcontains $_ })
 if ($unknown.Count) { throw "Unknown scenario(s): $($unknown -join ', '). Known: $($known -join ', ')." }
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
@@ -687,6 +691,218 @@ if ($primary) { Invoke-Control $primary }
     }
 }
 
+# Signs the guest's user out and waits for the automatic sign-in that follows. The answer file's
+# AutoLogon only signs in at boot; ForceAutoLogon, set by the scenario, is what signs the user back
+# in after a sign-out. The new session is told from the old by Explorer's process id, read from the
+# process list: a guest program run while nobody is signed in can block for minutes, which is how
+# the first try of this waited out its own timeout (2 Oct 2026).
+function Invoke-SignOutAndIn {
+    param($Vm)
+    $explorerBefore = @((Invoke-VmRun $Vm listProcessesInGuest -Guest) -split "`n" | Where-Object { $_ -match 'explorer\.exe' }) -join '|'
+    # -noWait: vmrun otherwise waits for shutdown.exe to finish, in a session that the sign-out has
+    # just ended, and never returns (the second try of this, 2 Oct 2026).
+    try { Invoke-VmRun $Vm runProgramInGuest -Arguments '-noWait', '-activeWindow', '-interactive', 'C:\Windows\System32\shutdown.exe', '/l' -Guest | Out-Null } catch { }
+    Start-Sleep -Seconds 15
+    $deadline = (Get-Date).AddSeconds(300)
+    while ((Get-Date) -lt $deadline) {
+        try {
+            $now = (Invoke-VmRun $Vm listProcessesInGuest -Guest) -split "`n"
+            $explorer = @($now | Where-Object { $_ -match 'explorer\.exe' }) -join '|'
+            $tools = $now | Where-Object { $_ -like "*\$($Vm.Guest.UserName), cmd=*vmtoolsd*" }
+            if ($explorer -and $tools -and -not ($now -match 'LogonUI\.exe') -and $explorer -ne $explorerBefore) {
+                $tries = Wait-QaGuestReady -Vm $Vm
+                if ($tries -gt 1) { Say "  the guest ran a program again on try $tries after signing in" }
+                # Windows holds startup apps back for a few seconds after the desktop appears.
+                Start-Sleep -Seconds 20
+                return
+            }
+        }
+        catch { }
+        Start-Sleep -Seconds 5
+    }
+    throw 'the guest did not sign back in within five minutes'
+}
+
+# Sets the "Start when I sign in to Windows" box on the Details window's Settings page, as a person
+# would. Launched from Start first: that opens the app, or brings back a window it started hidden.
+$setSignInStep = @'
+Start-Process "shell:AppsFolder\$((Get-AppxPackage -Name WinZ3805A).PackageFamilyName)!App"
+Start-Sleep -Seconds 5
+$main = Get-AppWindow
+if (-not $main) { [ordered]@{ error = "no main window ($(Get-WindowReport))" } | ConvertTo-Json -Compress; return }
+$details = Get-AppWindowNamed 'Receiver Details' -Seconds 2
+if (-not $details) { Invoke-Control (Find-Control $main -Name 'Details'); $details = Get-AppWindowNamed 'Receiver Details' }
+[void](Select-NavigationItem $details 'Settings')
+Start-Sleep -Seconds 3
+$box = Find-Control $details -AutomationId 'SignInStartBox'
+$ok = if ($box.Current.IsEnabled) { Select-ComboItem $box $choice } else { $false }
+Start-Sleep -Seconds 4
+$note = Find-Control $details -AutomationId 'SignInStartNote' -Seconds 2
+[ordered]@{ ok = $ok; enabled = $box.Current.IsEnabled; value = (Get-Selection $box); note = "$($note.Current.Name)" } | ConvertTo-Json -Compress
+'@
+
+# What is running after a sign-in, before anything has touched it.
+$afterSignInStep = @'
+$processes = @(Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue)
+[ordered]@{
+    processes = $processes.Count
+    visible   = [bool]($processes | Where-Object { $_.MainWindowHandle -ne [IntPtr]::Zero })
+} | ConvertTo-Json -Compress
+'@
+
+# manual-qa.md section 20 (#548). Every sign-in is real: the user signs out and Windows signs them
+# back in, so the app is started by Windows' own startup task, as it would be on the bench.
+function Test-SignIn {
+    param($Vm, $Result)
+    $pipe = Get-QaSimulatorPipe -Vm $Vm
+    if (-not (Select-String -LiteralPath $Vm.Vmx -SimpleMatch "\\.\pipe\$pipe" -Quiet)) {
+        $Result.Error = "skipped: the VM has no simulator port; run Add-QaSimulatorPort (build/qa/README.md)"
+        return
+    }
+
+    Send-Zip $Vm $Offline 'candidate'
+    $code = Install-Candidate $Vm 'candidate'
+    Check $Result 'installed (exit 0, or 2 with the start check timing out)' ($code -in 0, 2) "exit $code"
+
+    # The receiver remembered on COM2 with connect-on-launch, which is what a sign-in start retries;
+    # and the automatic sign-in made to follow a sign-out too, which needs administrator rights.
+    $null = Invoke-QaGuestScript $Vm -Name 'prefs-sign-in' -Script @'
+Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue | Stop-Process -Force
+Start-Sleep -Seconds 2
+$pkg = Get-AppxPackage -Name WinZ3805A | Select-Object -First 1
+$dir = Join-Path $env:LOCALAPPDATA "Packages\$($pkg.PackageFamilyName)\LocalCache\Local\WinZ3805A"
+New-Item -ItemType Directory -Force $dir | Out-Null
+'{"PortName":"COM2","AutoDetect":false,"BaudRate":9600,"DataBits":8,"Parity":0,"StopBits":1,"ReconnectAutomatically":true,"ConnectOnLaunch":true}' | Set-Content (Join-Path $dir 'connection.json') -Encoding ascii
+Set-Content -LiteralPath 'C:\qa\force.ps1' -Value "Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon' -Name ForceAutoLogon -Value '1' -Type String"
+Start-Process powershell.exe -Verb RunAs -Wait -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', 'C:\qa\force.ps1'
+'@
+
+    $simulator = Start-Process (Get-Simulator) -PassThru -WindowStyle Hidden `
+        -ArgumentList '--pipe-client', $pipe, '--start', 'locked', '--speed', '2', '--control', "$pipe-control" `
+        -RedirectStandardOutput (Join-Path $Result.Folder 'simulator.log') -RedirectStandardError (Join-Path $Result.Folder 'simulator.err')
+    try {
+        # 1. In the notification area.
+        $s = Invoke-UiStep $Vm 'sign-in-hidden' "`$choice = 'In the notification area'" $setSignInStep
+        Check $Result '[20] set to start in the notification area' ($s.ok -eq $true) "$($s.value) $($s.error)"
+        $mark = (Wait-AppLog $Vm 'enable returned Enabled' 0 20 'enabled').count
+        Invoke-SignOutAndIn $Vm
+        $state = Invoke-UiStep $Vm 'after-hidden' '' $afterSignInStep
+        $seen = Wait-AppLog $Vm 'Started by Windows at sign-in; hidden: True' $mark 90 'started-hidden'
+        Check $Result '[20] started by Windows at sign-in, hidden' $seen.found "$($seen.line)$(if (-not $seen.found) { $seen.tail })"
+        Check $Result '[20] no window, one copy running' ($state.processes -eq 1 -and -not $state.visible) "processes $($state.processes), a window visible $($state.visible)"
+        $seen = Wait-AppLog $Vm 'Tray icon started' $mark 30 'tray'
+        Check $Result '[20] its icon is in the notification area' $seen.found $seen.line
+        # "Readings now come from" is written once per new session, when polling starts, so after the
+        # sign-out it can only be the copy Windows started. A State line would not do: one is written
+        # only when the state changes, so the copy running before the sign-out wrote the last, and
+        # an earlier version of this check passed on it.
+        $seen = Wait-AppLog $Vm 'Readings now come from COM2' $mark 120 'polled'
+        Check $Result '[20] and the receiver is polled from the copy Windows started' $seen.found $seen.line
+        $mark = $seen.count
+
+        # Opened from Start afterwards: the window comes forward, and no second copy starts.
+        $front = Invoke-UiStep $Vm 'open-from-start' '' @'
+Start-Process "shell:AppsFolder\$((Get-AppxPackage -Name WinZ3805A).PackageFamilyName)!App"
+Start-Sleep -Seconds 6
+$processes = @(Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue)
+[ordered]@{ processes = $processes.Count; visible = [bool]($processes | Where-Object { $_.MainWindowHandle -ne [IntPtr]::Zero }) } | ConvertTo-Json -Compress
+'@
+        $seen = Wait-AppLog $Vm 'Brought to the front' $mark 20 'brought'
+        Check $Result '[20] opened from Start after it: the window comes forward, still one copy' ($front.processes -eq 1 -and $front.visible -and $seen.found) "processes $($front.processes), visible $($front.visible); $($seen.line)"
+
+        # 2. With the window open.
+        $s = Invoke-UiStep $Vm 'sign-in-window' "`$choice = 'With the window open'" $setSignInStep
+        Check $Result '[20] set to start with the window open' ($s.ok -eq $true) "$($s.value) $($s.error)"
+        $mark = (Wait-AppLog $Vm 'Start at sign-in' 0 5 'mark-window').count
+        Invoke-SignOutAndIn $Vm
+        $seen = Wait-AppLog $Vm 'Started by Windows at sign-in; hidden: False' $mark 90 'started-window'
+        $state = Invoke-UiStep $Vm 'after-window' '' $afterSignInStep
+        Check $Result '[20] started by Windows at sign-in, with its window open' ($seen.found -and $state.visible) "$($seen.line); window visible $($state.visible)"
+
+        # 3. Off.
+        $s = Invoke-UiStep $Vm 'sign-in-off' "`$choice = 'Off'" $setSignInStep
+        Check $Result '[20] set to off' ($s.ok -eq $true) "$($s.value) $($s.error)"
+        $mark = (Wait-AppLog $Vm 'disable returned Disabled' 0 20 'disabled').count
+        Invoke-SignOutAndIn $Vm
+        Start-Sleep -Seconds 20
+        $state = Invoke-UiStep $Vm 'after-off' '' $afterSignInStep
+        $quiet = Wait-AppLog $Vm 'Started by Windows at sign-in' $mark 5 'not-started'
+        Check $Result '[20] off: nothing starts at sign-in' ($state.processes -eq 0 -and -not $quiet.found) "processes $($state.processes); $($quiet.line)"
+
+        # 4. A receiver that answers only a minute after sign-in.
+        $s = Invoke-UiStep $Vm 'sign-in-retry' "`$choice = 'In the notification area'" $setSignInStep
+        Check $Result '[20] set to start in the notification area again' ($s.ok -eq $true) "$($s.value) $($s.error)"
+        $mark = (Wait-AppLog $Vm 'enable returned Enabled' 0 20 'enabled-again').count
+        $null = Send-SimulatorControl "$pipe-control" 'power off'
+        Invoke-SignOutAndIn $Vm
+        $seen = Wait-AppLog $Vm 'did not answer; trying again every 30 s until it does' $mark 120 'retrying'
+        Check $Result '[20] a silent receiver at sign-in: it says it will keep trying' $seen.found "$($seen.line)$(if (-not $seen.found) { $seen.tail })"
+        Start-Sleep -Seconds 60
+        $null = Send-SimulatorControl "$pipe-control" 'power on'
+        $seen = Wait-AppLog $Vm 'Connected to COM2 after \d+ attempts since sign-in' $mark 120 'connected-after'
+        Check $Result '[20] and connects within about 30 s of the receiver answering' $seen.found "$($seen.line)$(if (-not $seen.found) { $seen.tail })"
+        $count = Invoke-QaGuestScript $Vm -Name 'count-retry' -Script ($(Get-Content (Join-Path $PSScriptRoot 'guest\Ui.ps1') -Raw) + "`r`n" + "@(Get-AppLogLines | Select-Object -Skip $mark | Where-Object { `$_ -match 'trying again every' }).Count")
+        $said = [int](($count.Output -split "`r?`n" | Where-Object { $_ -match '^\d+$' } | Select-Object -Last 1))
+        Check $Result '[20] saying so once, not every 30 s' ($said -eq 1) "$said time(s)"
+
+        # 5. The connection dialog opened while the retry is still running stops it, and connects.
+        $null = Send-SimulatorControl "$pipe-control" 'power off'
+        $mark = (Wait-AppLog $Vm 'Connected to COM2' 0 5 'mark-dialog').count
+        Invoke-SignOutAndIn $Vm
+        $seen = Wait-AppLog $Vm 'did not answer; trying again every 30 s' $mark 120 'retrying-again'
+        $dialog = Invoke-UiStep $Vm 'dialog-stops-retry' '' @'
+Start-Process "shell:AppsFolder\$((Get-AppxPackage -Name WinZ3805A).PackageFamilyName)!App"
+Start-Sleep -Seconds 5
+$window = Get-AppWindow
+$footer = Find-Control $window -Name 'Connect'
+if ($footer) { Invoke-Control $footer }
+$primary = Find-Control $window -AutomationId 'PrimaryButton'
+$opened = (Get-AppLogLines).Count
+Start-Sleep -Seconds 70
+$attempts = @(Get-AppLogLines | Select-Object -Skip $opened | Where-Object { $_ -match 'is now Connecting' }).Count
+[ordered]@{ dialog = [bool]$primary; attemptsWhileOpen = $attempts } | ConvertTo-Json -Compress
+'@
+        Check $Result '[20] the dialog opened while it retries: no attempt in the next 70 s' ($seen.found -and $dialog.dialog -and $dialog.attemptsWhileOpen -eq 0) "retrying $($seen.found); dialog $($dialog.dialog); $($dialog.attemptsWhileOpen) attempt(s) while open $($dialog.error)"
+        $null = Send-SimulatorControl "$pipe-control" 'power on'
+        Start-Sleep -Seconds 5
+        $mark = (Wait-AppLog $Vm 'Connected' 0 5 'mark-connect').count
+        $press = Invoke-UiStep $Vm 'dialog-connects' '' @'
+$window = Get-AppWindow
+$primary = Find-Control $window -AutomationId 'PrimaryButton'
+if ($primary) { Invoke-Control $primary }
+[ordered]@{ pressed = [bool]$primary } | ConvertTo-Json -Compress
+'@
+        $seen = Wait-AppLog $Vm 'Session COM2 is now Connected' $mark 60 'dialog-connected'
+        Check $Result '[20] and the dialog connects' ($press.pressed -and $seen.found) "$($seen.line) $($press.error)"
+
+        # 6. Turned off in Windows. The startup task's State written as 1 is read back as
+        # DisabledByUser (measured, 2 Oct 2026), the state Task Manager's Disable leaves; 2 is
+        # Enabled. Written directly, because Task Manager has no interface a script can drive. The
+        # page must refuse to change it, and say where to instead.
+        $null = Invoke-QaGuestScript $Vm -Name 'disable-in-windows' -Script @'
+Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue | Stop-Process -Force
+Start-Sleep -Seconds 2
+$pfn = (Get-AppxPackage -Name WinZ3805A).PackageFamilyName
+Set-ItemProperty -Path "HKCU:\Software\Classes\Local Settings\Software\Microsoft\Windows\CurrentVersion\AppModel\SystemAppData\$pfn\WinZ3805AStartAtSignIn" -Name State -Value 1 -Type DWord
+'@
+        $s = Invoke-UiStep $Vm 'disabled-by-user' "`$choice = 'With the window open'" $setSignInStep
+        Check $Result '[20] turned off in Windows: the page shows Off and cannot change it' (-not $s.enabled -and $s.value -eq 'Off' -and -not $s.ok) "enabled $($s.enabled), value $($s.value)"
+        Check $Result '[20] and says to turn it on in Windows Settings' ($s.note -match 'Windows Settings') $s.note
+        $null = Invoke-QaGuestScript $Vm -Name 'enable-in-windows' -Script @'
+Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue | Stop-Process -Force
+Start-Sleep -Seconds 2
+$pfn = (Get-AppxPackage -Name WinZ3805A).PackageFamilyName
+Set-ItemProperty -Path "HKCU:\Software\Classes\Local Settings\Software\Microsoft\Windows\CurrentVersion\AppModel\SystemAppData\$pfn\WinZ3805AStartAtSignIn" -Name State -Value 2 -Type DWord
+'@
+        $s = Invoke-UiStep $Vm 'enabled-by-user' "`$choice = 'In the notification area'" $setSignInStep
+        Check $Result '[20] turned back on there: the page shows it on again' ($s.enabled -and $s.value -ne 'Off') "enabled $($s.enabled), value $($s.value)"
+    }
+    finally {
+        if (-not $simulator.HasExited) { $simulator.Kill() }
+        $null = Save-Evidence $Vm $Result.Folder
+    }
+}
+
 $scenarioTable = [ordered]@{
     'fresh-online'     = ${function:Test-FreshOnline}
     'fresh-offline'    = ${function:Test-FreshOffline}
@@ -696,6 +912,7 @@ $scenarioTable = [ordered]@{
     'app-checks'       = ${function:Test-AppChecks}
     'receiver'         = ${function:Test-Receiver}
     'connect-cancel'   = ${function:Test-ConnectCancel}
+    'sign-in'          = ${function:Test-SignIn}
 }
 
 # ---------------------------------------------------------------------------
