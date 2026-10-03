@@ -738,10 +738,15 @@
                             Each entry differs from its neighbours in SHAPE as well as colour, per
                             §9.4.3: filled, hollow, hollow-and-heavy, hollow-and-dimmed. Acquiring
                             takes the heavy stroke because it is the one the reader wants to find.
+
+                            A FlowPanel rather than a horizontal StackPanel (#664): six entries do not
+                            fit the card at the width the Details window first opens at, and the
+                            StackPanel clipped the last one - the mask, which is the entry a saved
+                            image is most often filed for. Wrapped, every entry stays readable.
                         -->
-                        <StackPanel Orientation="Horizontal"
-                                    Spacing="{ThemeResource WzSpaceMd}"
-                                    AutomationProperties.AccessibilityView="Raw">
+                        <controls:FlowPanel ColumnSpacing="{ThemeResource WzSpaceMd}"
+                                            RowSpacing="{ThemeResource WzSpaceXxs}"
+                                            AutomationProperties.AccessibilityView="Raw">
                             <StackPanel Orientation="Horizontal" Spacing="{ThemeResource WzSpaceXxs}">
                                 <Ellipse Width="10" Height="10"
                                          VerticalAlignment="Center"
@@ -822,7 +827,7 @@
                                            Style="{ThemeResource WzCaptionTextStyle}"
                                            Foreground="{ThemeResource WzTextSecondaryBrush}" />
                             </StackPanel>
-                        </StackPanel>
+                        </controls:FlowPanel>
                     </StackPanel>
                 </ControlTemplate>
             </Setter.Value>
