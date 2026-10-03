@@ -100,18 +100,22 @@ Result '25' 'one copy still running' ($copies -eq 1) "$copies running"
 Result '25' 'the app logged taking the foreground' ((Get-Content $appLog -Raw) -match 'Brought to the front') ''
 $notepad | Stop-Process -Force -ErrorAction SilentlyContinue
 
-# --- §11: F1 opens the guide window ---------------------------------------------------------
+# --- §11: Ctrl+D and F1 open their windows, each with its own caption ------------------------
 # Sent to whatever is in front, which is the app if §25 passed - so a §25 failure fails this too,
-# and the detail says what was in front.
-# Judged by a window appearing, not by its caption: the guide's caption reaches Windows as plain
-# "WinZ3805A", not the "Help - WinZ3805A" its code sets (seen on Windows 10 and 11, 2 Oct 2026), so
-# the first version of this check failed while the screenshot showed the guide open.
+# and the detail says what was in front. F1 goes to the Details window, which also answers it.
+# The captions are what the taskbar, Alt+Tab and Narrator name the windows by. Both reached Windows
+# as the bare display name until #637, so the first version of this check counted windows instead.
+$displayName = (Get-AppxPackageManifest $package).Package.Properties.DisplayName
 $front = Get-ForegroundName
-$windowsBefore = @([QaWindows]::Titles([uint32]$app.Id)).Count
+[System.Windows.Forms.SendKeys]::SendWait('^d')
+Start-Sleep -Seconds 5
+$titles = @([QaWindows]::Titles([uint32]$app.Id))
+Result '11' 'Ctrl+D opens Details, captioned as Details' ($titles -contains "Receiver Details - $displayName") "Ctrl+D went to $front; app windows: $($titles -join ' / ')"
+
 [System.Windows.Forms.SendKeys]::SendWait('{F1}')
 Start-Sleep -Seconds 5
 $titles = @([QaWindows]::Titles([uint32]$app.Id))
-Result '11' 'F1 opens the guide window' ($titles.Count -gt $windowsBefore) "F1 went to $front; app windows before: $windowsBefore, after: $($titles.Count) ($($titles -join ' / '))"
+Result '11' 'F1 opens the guide, captioned as Help' ($titles -contains "Help - $displayName") "app windows: $($titles -join ' / ')"
 
 # --- §18: the tray icon survives an Explorer restart ----------------------------------------
 $lines = @(Get-Content $appLog).Count

@@ -35,7 +35,7 @@ with the screenshots attached.
 | 2 | **automated** | `receiver`: the simulated Z3805A on the VM's COM2 powered off for 30 s and back; the session must reach *Reconnecting*, reconnect by itself, and log a `State:` line after (#639) |
 | 8 | **automated** | `binary-audit`: `Test-NoBlockedCommands.ps1 -ScanBinaries` on the unpacked package |
 | 10 | **partly automated** | `receiver`: the simulated antenna pulled and held off past the grace minute; the app must log both notifications. Still by hand: that they appear on screen, and that none comes with the switch off |
-| 11 | **automated** | `app-checks`: the guide and every image it names in the package; F1 opens the guide window |
+| 11 | **automated** | `app-checks`: the guide and every image it names in the package; Ctrl+D and F1 open Details and the guide, each with its own caption |
 | 12 | **partly automated** | `fresh-online`, `fresh-offline`, `upgrade-1.2.0`, `leftover-cert`, on Windows 10 and 11. Still by hand: a browser download with *Unblock* and the thumbprint compared, the offline zip with the network off, a run without unblocking, and a machine an earlier installer left unable to start the app, which does not reproduce under the harness (see `build/qa/README.md`) |
 | 18 | **automated** | `app-checks`: Explorer killed; the app logs re-adding its icon and keeps running |
 | 25 | **automated** | `app-checks`: a second launch typed into the Start menu over Notepad; the app must be in front, alone, and say so in its log |
@@ -304,7 +304,7 @@ it. It rides on section 5's antenna pull.
 
 ## 11. Help in the installed package (#312)
 
-> **Automated** by `build/qa/Invoke-QaPass.ps1` (`app-checks`), on the sideloaded package in a clean VM: the guide and every image it names are under `Help\` in the installed package, and F1 opens the *Help* window.
+> **Automated** by `build/qa/Invoke-QaPass.ps1` (`app-checks`), on the sideloaded package in a clean VM: the guide and every image it names are under `Help\` in the installed package, and Ctrl+D and F1 open the *Receiver Details* and *Help* windows. Windows must know each by its own caption, which is what the taskbar, Alt+Tab and Narrator name them by (#637).
 
 **Why.** The guide and its images are linked `Content` items copied into the package; whether the
 *installed* application carries `Help\how-to-use.md` and its images is checkable only there.
