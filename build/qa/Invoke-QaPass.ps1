@@ -314,7 +314,11 @@ function Test-RepairDamaged {
 
     # A marker in the data folder stands for the history; the damage needs administrator rights,
     # because the install folder belongs to TrustedInstaller. UAC on these VMs elevates silently.
+    # The start check left the app running, which locks the file and makes an unattended rerun
+    # refuse to start, so it is closed first, as the person would.
     $r = Invoke-QaGuestScript $Vm -Name 'damage' -Script @'
+Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue | Stop-Process -Force
+Start-Sleep -Seconds 3
 $pkg = Get-AppxPackage -Name WinZ3805A | Select-Object -First 1
 $data = Join-Path $env:LOCALAPPDATA "Packages\$($pkg.PackageFamilyName)\LocalCache\Local\WinZ3805A"
 Set-Content -LiteralPath (Join-Path $data 'repair-marker.txt') -Value 'kept'
