@@ -317,6 +317,12 @@ public sealed class StatusMedallion : Control
         var medallion = (StatusMedallion)d;
         medallion.RecordShown(e);
         medallion.UpdateVisualState();
+
+        // The centre depends on the mode too: whether it gets §9.9's custom icon. Without this it was
+        // chosen again only when the count changed, and a lost antenna takes the count to 0 a minute
+        // before holdover begins, so a holdover waiting for GPS kept the stock fallback glyph for as
+        // long as it lasted (seen in the QA pass, 2 Oct 2026, #642).
+        medallion.UpdateCentre();
     }
 
     private static void OnVisualChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
