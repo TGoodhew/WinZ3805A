@@ -242,6 +242,37 @@ function Wait-QaDesktop {
     throw "The guest did not reach a signed-in desktop within $Seconds seconds."
 }
 
+# Waits until a guest program can be run again after a sign-in, and returns how many tries it took.
+# The first runProgramInGuest after a sign-out and automatic sign-in can hang for good, while the
+# next one runs at once (seen on QA-Win10, 2 Oct 2026: a scenario waited 20 minutes on it). So each
+# try is a trivial program (whoami, which always exits 0) with its own time limit, killed when it
+# overruns, and tried again.
+function Wait-QaGuestReady {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)]$Vm, [int]$Seconds = 300, [int]$TryFor = 30)
+
+    $gp = $Vm.Guest.GetNetworkCredential().Password
+    $parts = @('-T', 'ws')
+    if ($Vm.Encryption) { $parts += @('-vp', "`"$($Vm.Encryption.GetNetworkCredential().Password)`"") }
+    $parts += @('-gu', $Vm.Guest.UserName, '-gp', $(if ($gp) { "`"$gp`"" } else { '""' }),
+        'runProgramInGuest', "`"$($Vm.Vmx)`"", '-activeWindow', '-interactive', 'C:\Windows\System32\whoami.exe')
+    $deadline = (Get-Date).AddSeconds($Seconds)
+    for ($try = 1; (Get-Date) -lt $deadline; $try++) {
+        $process = Start-Process $script:VmRunPath -ArgumentList ($parts -join ' ') -PassThru -WindowStyle Hidden
+        # The handle is taken now because a process object that never held one reports no exit code
+        # once the process has gone, which read as a failure on every try.
+        $null = $process.Handle
+        if ($process.WaitForExit($TryFor * 1000)) {
+            if ($process.ExitCode -eq 0) { return $try }
+        }
+        else {
+            try { $process.Kill() } catch { }
+        }
+        Start-Sleep -Seconds 5
+    }
+    throw "The guest did not run a program within $Seconds seconds of signing in."
+}
+
 # Puts the VM in the state a check starts from: reverted to a snapshot, started without a window,
 # and at a signed-in desktop. A QA pass calls Stop-QaVm when it is done, so nothing is left running.
 function Start-QaVm {
@@ -432,4 +463,4 @@ function Invoke-QaGuestScript {
     [pscustomobject]@{ ExitCode = $code; Output = "$output".TrimEnd() }
 }
 
-Export-ModuleMember -Function Get-QaCredential, Set-QaCredential, New-QaIso, New-QaVm, Invoke-VmRun, Wait-QaDesktop, Wait-QaQuiet, Start-QaVm, Stop-QaVm, Save-QaCleanSnapshot, Get-QaSimulatorPipe, Add-QaSimulatorPort, Copy-QaFile, Invoke-QaGuest, Invoke-QaGuestScript
+Export-ModuleMember -Function Get-QaCredential, Set-QaCredential, New-QaIso, New-QaVm, Invoke-VmRun, Wait-QaDesktop, Wait-QaQuiet, Start-QaVm, Stop-QaVm, Save-QaCleanSnapshot, Get-QaSimulatorPipe, Add-QaSimulatorPort, Copy-QaFile, Invoke-QaGuest, Invoke-QaGuestScript, Wait-QaGuestReady

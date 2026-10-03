@@ -65,6 +65,66 @@ function Invoke-Control {
     $Element.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
 }
 
+# What a selection control has selected now, by name.
+function Get-Selection {
+    param($Element)
+    @($Element.GetCurrentPattern([System.Windows.Automation.SelectionPattern]::Pattern).Current.GetSelection() |
+        ForEach-Object { $_.Current.Name }) -join ','
+}
+
+# Chooses an item of a ComboBox by its text, and returns whether the box then shows it. The list is
+# opened first, because its items exist to UI Automation only while it is: they live in a popup,
+# found from the desktop rather than under the box. More than one element can carry the text - the
+# item's own TextBlock, and an item of a list that has just closed - so only an on-screen list item
+# is tried, and the box's own selection is the judge, not a call that returned without throwing.
+function Select-ComboItem {
+    param($Box, [string]$Name, [int]$Attempts = 6)
+    $expand = $Box.GetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern)
+    $condition = New-Object System.Windows.Automation.AndCondition(
+        (New-Object System.Windows.Automation.PropertyCondition($script:Ae::ControlTypeProperty, [System.Windows.Automation.ControlType]::ListItem)),
+        (New-Object System.Windows.Automation.PropertyCondition($script:Ae::NameProperty, $Name)))
+    for ($i = 0; $i -lt $Attempts -and (Get-Selection $Box) -ne $Name; $i++) {
+        try { $expand.Expand() } catch { }
+        Start-Sleep -Milliseconds 700
+        foreach ($item in $script:Ae::RootElement.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condition)) {
+            if ($item.Current.IsOffscreen) { continue }
+            try { $item.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select(); break } catch { }
+        }
+        Start-Sleep -Milliseconds 500
+    }
+    try { if ($expand.Current.ExpandCollapseState -ne 'Collapsed') { $expand.Collapse() } } catch { }
+    (Get-Selection $Box) -eq $Name
+}
+
+# A navigation item of a window's NavigationView, by its text: a list item, so that a button of the
+# same name elsewhere - the Details title bar has a Settings button too - is never the one chosen.
+function Select-NavigationItem {
+    param($Window, [string]$Name)
+    $condition = New-Object System.Windows.Automation.AndCondition(
+        (New-Object System.Windows.Automation.PropertyCondition($script:Ae::ControlTypeProperty, [System.Windows.Automation.ControlType]::ListItem)),
+        (New-Object System.Windows.Automation.PropertyCondition($script:Ae::NameProperty, $Name)))
+    $item = $Window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $condition)
+    if (-not $item) { return $false }
+    $item.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+    $true
+}
+
+# The app's window whose title starts with this, such as 'Receiver Details'.
+function Get-AppWindowNamed {
+    param([string]$Prefix, [int]$Seconds = 15)
+    $deadline = (Get-Date).AddSeconds($Seconds)
+    do {
+        foreach ($process in @(Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue)) {
+            $condition = New-Object System.Windows.Automation.PropertyCondition($script:Ae::ProcessIdProperty, $process.Id)
+            foreach ($window in $script:Ae::RootElement.FindAll([System.Windows.Automation.TreeScope]::Children, $condition)) {
+                if ($window.Current.Name -like "$Prefix*") { return $window }
+            }
+        }
+        Start-Sleep -Milliseconds 500
+    } while ((Get-Date) -lt $deadline)
+    $null
+}
+
 # Every button under the window, for a failure's detail: what was there instead.
 function Get-ButtonList {
     param($Root)
