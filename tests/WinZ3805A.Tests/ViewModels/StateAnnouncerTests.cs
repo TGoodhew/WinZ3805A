@@ -79,6 +79,43 @@ public sealed class StateAnnouncerTests
     }
 
     /// <remarks>
+    /// #660: with Reconnect automatically on, the default, a lost link goes straight to Reconnecting
+    /// and never through Faulted, and was announced as a polite "Reconnecting.". The automated QA
+    /// pass's live-region listener heard exactly that when the simulated receiver lost its power.
+    /// </remarks>
+    [Fact]
+    public void ALossTheAppWillRetryStillInterrupts()
+    {
+        StateAnnouncer announcer = new();
+        announcer.Observe(ConnectionStatus.Connected, ReceiverMode.Locked, isCoasting: false);
+
+        Announcement? announcement =
+            announcer.Observe(ConnectionStatus.Reconnecting, ReceiverMode.Locked, isCoasting: false);
+
+        Assert.NotNull(announcement);
+        Assert.Equal("Connection lost. Reconnecting.", announcement.Text);
+        Assert.Equal(AnnouncementUrgency.Assertive, announcement.Urgency);
+    }
+
+    /// <remarks>
+    /// Only the step from Connected is the loss. Reconnecting reached another way - from a connect
+    /// attempt still in progress, say - is not news, and waits its turn.
+    /// </remarks>
+    [Fact]
+    public void ReconnectingThatIsNotAFreshLossWaitsItsTurn()
+    {
+        StateAnnouncer announcer = new();
+        announcer.Observe(ConnectionStatus.Connecting, ReceiverMode.Disconnected, isCoasting: false);
+
+        Announcement? announcement =
+            announcer.Observe(ConnectionStatus.Reconnecting, ReceiverMode.Disconnected, isCoasting: false);
+
+        Assert.NotNull(announcement);
+        Assert.Equal("Reconnecting.", announcement.Text);
+        Assert.Equal(AnnouncementUrgency.Polite, announcement.Urgency);
+    }
+
+    /// <remarks>
     /// §9.11 keeps the two apart on screen; the difference is exactly what a listener cannot see.
     /// </remarks>
     [Fact]
