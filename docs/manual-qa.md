@@ -34,6 +34,7 @@ with the screenshots attached.
 |---|---|---|
 | 2 | **automated** | `receiver`: the simulated Z3805A on the VM's COM2 powered off for 30 s and back; the session must reach *Reconnecting*, reconnect by itself, and log a `State:` line after (#639) |
 | 4 | **partly automated** | `accessibility`, with the simulated receiver: **A11Y-3**, every icon-only control in both windows named and its tooltip opened by real pointer movement; **A11Y-9**, a listener records the live-region events for a mode change, a lost connection and a tier C outcome, with their live setting (decided 2 Oct 2026: the events being raised is the check, and Narrator's speech is left to bug reports); **A11Y-10**, the medallion's state and every sky-plot marker exposed as sentences; **A11Y-11**, List showing the same satellites with the same data as the plot. Still by hand: A11Y-1, -2, -4 to -8, -12 and -13 |
+| 4 (A11Y-8) | **automated, judged by the agent** | `high-contrast`, with the simulated receiver: each of the four contrast themes switched live under the running app, confirmed by name, and the main window and the Details Overview and Satellites pages measured and photographed. See A11Y-8 below |
 | 7 | **automated** | `sky-export`, with the simulated receiver: the plot saved through the app's Save dialog in Light and Dark (Windows' app mode), in high contrast (the whole desktop, through `SPI_SETHIGHCONTRAST`) and at 225 % (2880 × 1800, then a sign-out). Each file is measured: every pixel opaque, the corners the theme's page background, or the live window colour under high contrast, which must be neither page background, and under high contrast the markers in the window-text colour, not the surface (#218). The caption is read back out of the file with Windows' OCR: in UTC, with the page's elevation mask. The caption must be gone from the page after Save and after Cancel, and at 225 % the caption must still be the image's last row, so nothing is cropped from the bottom. The Details window's caption is checked on every leg; at 225 % it is wrong (#663). The card's layout is measured on every leg too, through UI Automation: the heading clear of the Plot choice, and the legend's last entry inside the card; at the width Details first opens at, both fail (#664). The saved images are kept for the agent to judge, which is how #664 was found |
 | 8 | **automated** | `binary-audit`: `Test-NoBlockedCommands.ps1 -ScanBinaries` on the unpacked package |
 | 10 | **automated** | `receiver`: the simulated antenna pulled and held off past the grace minute; the app must log both notifications, and the screen is photographed as the first fires, for the agent to judge. Then the app is restarted with the switch off, and the same loss must raise none |
@@ -157,6 +158,12 @@ record a result against each number.
   shapes are distinguishable.
   > Windows 11 renamed these. "High Contrast White" is **Desert**. `.theme` files silently no-op —
   > use the Settings UI. See #218 for what this found the first time it was actually done.
+  *Automated since 3 Oct 2026* (`high-contrast`): all four themes switched live under the running app with
+  `SPI_SETHIGHCONTRAST` - by their internal names on both systems, because Windows 11 asked for "Aquatic"
+  applies High Contrast Black - and each confirmed by the active scheme's name. The main window and two
+  Details pages are measured (the theme's window colour commonest, its text colour drawn, the title bar's
+  subtitle at 3:1, no window text inside a highlighted control) and photographed for the agent to judge.
+  Its first run found #672.
 - **A11Y-9 Announcements.** With Narrator running, force a mode change, a connection change and a
   tier C outcome. Each is spoken; a lost connection assertively rather than politely.
   *Automated since 3 Oct 2026* (`accessibility`) at the level of the events Narrator listens for; that
