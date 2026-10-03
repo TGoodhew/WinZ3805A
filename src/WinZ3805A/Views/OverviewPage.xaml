@@ -126,28 +126,33 @@
                                    TextWrapping="Wrap"
                                    Visibility="Collapsed" />
 
-                        <Grid x:Name="MeritRow" ColumnSpacing="{ThemeResource WzSpaceMd}">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
+                        <!--
+                            A FlowPanel rather than an Auto/Auto/* grid (#668). In power-up the two
+                            captions are the longest the card shows, the Auto columns kept their full
+                            width, and the * column left the 1 PPS readout too narrow to draw, cut off
+                            at the card's edge. Here the readout stays opposite the pills while all three
+                            fit, and goes under them once they do not.
+                        -->
+                        <controls:FlowPanel x:Name="MeritRow"
+                                            ColumnSpacing="{ThemeResource WzSpaceMd}"
+                                            RowSpacing="{ThemeResource WzSpaceSm}"
+                                            PushLastToEnd="True">
 
-                            <StackPanel Grid.Column="0" Spacing="{ThemeResource WzSpaceXxs}">
+                            <StackPanel Spacing="{ThemeResource WzSpaceXxs}">
                                 <controls:SeverityPill x:Name="TfomPill" />
                                 <TextBlock x:Name="TfomDetailText"
                                            Style="{ThemeResource WzCaptionTextStyle}"
                                            Foreground="{ThemeResource WzTextSecondaryBrush}" />
                             </StackPanel>
 
-                            <StackPanel Grid.Column="1" Spacing="{ThemeResource WzSpaceXxs}">
+                            <StackPanel Spacing="{ThemeResource WzSpaceXxs}">
                                 <controls:SeverityPill x:Name="FfomPill" />
                                 <TextBlock x:Name="FfomDetailText"
                                            Style="{ThemeResource WzCaptionTextStyle}"
                                            Foreground="{ThemeResource WzTextSecondaryBrush}" />
                             </StackPanel>
 
-                            <StackPanel Grid.Column="2" Spacing="{ThemeResource WzSpaceXxs}">
+                            <StackPanel Spacing="{ThemeResource WzSpaceXxs}">
                                 <controls:ReadoutTile x:Name="TimeInterval"
                                                       Label="1 PPS TI"
                                                       Unit="ns"
@@ -167,7 +172,7 @@
                                            Foreground="{ThemeResource WzTextSecondaryBrush}"
                                            TextWrapping="Wrap" />
                             </StackPanel>
-                        </Grid>
+                        </controls:FlowPanel>
                     </StackPanel>
                 </Border>
 
