@@ -44,6 +44,11 @@
                               every sky-plot marker exposed as sentences, and List showing the same
                               satellites; live-region events recorded for a mode change, a lost
                               connection and a tier C outcome. Needs the simulator port
+      sky-export         §7   the sky plot saved as an image in Light, Dark and high contrast, and at
+                              225 %: each file measured (opaque, the theme's background in the
+                              corners, markers not in the surface colour), its caption read by OCR,
+                              and the on-screen caption gone after Save and after Cancel. Needs the
+                              simulator port
       connect-cancel     §24  an auto-detect walk on a port where nothing answers, stopped by
                               Cancel and by Esc; then Connect works once the receiver answers.
                               Driven through UI Automation (guest\Ui.ps1). Needs the simulator port
@@ -72,7 +77,7 @@ param(
     [string]$Offline,
     [string]$Release,
     [string[]]$Machines = @('QA-Win10', 'QA-Win11'),
-    [string[]]$Scenarios = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility'),
+    [string[]]$Scenarios = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export'),
     [string]$OutDir
 )
 
@@ -83,7 +88,7 @@ Import-Module (Join-Path $PSScriptRoot 'QaVm.psm1') -Force
 # names no scenario - the first run of this script ran nothing and reported success.
 $Machines = @($Machines | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 $Scenarios = @($Scenarios | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-$known = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility')
+$known = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export')
 $unknown = @($Scenarios | Where-Object { $known -notcontains $_ })
 if ($unknown.Count) { throw "Unknown scenario(s): $($unknown -join ', '). Known: $($known -join ', ')." }
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
@@ -603,7 +608,7 @@ function Invoke-UiStep {
     $ui = Get-Content (Join-Path $PSScriptRoot 'guest\Ui.ps1') -Raw
     # A terminating error escapes the guest runner's output capture, which left a failing step
     # reporting nothing at all; caught here, it reports what went wrong and what was running.
-    $wrapped = $ui + "`r`n" + $Prelude + "`r`ntry {`r`n" + $Body + "`r`n}`r`ncatch { [ordered]@{ error = `"`$(`$_.Exception.Message) (`$(Get-WindowReport))`" } | ConvertTo-Json -Compress }"
+    $wrapped = $ui + "`r`n" + $Prelude + "`r`ntry {`r`n" + $Body + "`r`n}`r`ncatch { [ordered]@{ error = `"`$(`$_.Exception.Message) at line `$(`$_.InvocationInfo.ScriptLineNumber): `$(`$_.InvocationInfo.Line.Trim()) (`$(Get-WindowReport))`" } | ConvertTo-Json -Compress }"
     $r = Invoke-QaGuestScript $Vm -Name $Name -Script $wrapped
     $line = $r.Output -split "`r?`n" | Where-Object { $_.StartsWith('{') } | Select-Object -Last 1
     if (-not $line) { throw "the UI step '$Name' printed nothing: $($r.Output)" }
@@ -1477,6 +1482,306 @@ Start-Process "shell:AppsFolder\$($pkg.PackageFamilyName)!App"
     }
 }
 
+# manual-qa.md section 7 (#47, §10.5): the image file is what is checked, so each export is saved
+# through the app's own Save dialog and then measured, never eyeballed. Called with $theme naming
+# the leg ('light', 'dark', 'contrast' or 'scaled') and $file the path to save to.
+$skyStep = @'
+$facts = [ordered]@{}
+Add-Type -TypeDefinition @"
+using System; using System.Runtime.InteropServices;
+public static class QaColours {
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] public struct HIGHCONTRAST { public int cbSize; public int dwFlags; public string lpszDefaultScheme; }
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern bool SystemParametersInfo(int action, int param, ref HIGHCONTRAST hc, int winIni);
+    [DllImport("user32.dll")] public static extern int GetSysColor(int index);
+    // High contrast on or off for the whole desktop, saved to the profile and broadcast.
+    public static bool HighContrast(bool on) { var hc = new HIGHCONTRAST(); hc.cbSize = Marshal.SizeOf(hc); hc.dwFlags = on ? 1 : 0; hc.lpszDefaultScheme = on ? "High Contrast White" : null; return SystemParametersInfo(0x43, hc.cbSize, ref hc, 3); }
+    public static string Hex(int c) { return string.Format("#{0:X2}{1:X2}{2:X2}", c & 0xFF, (c >> 8) & 0xFF, (c >> 16) & 0xFF); }
+}
+"@
+
+# The theme for this leg: Light and Dark are Windows' app mode, which the app follows; high
+# contrast is the whole desktop's, through SPI_SETHIGHCONTRAST. Any contrast theme serves, as long
+# as its window colour is neither page background, because the corner must match the live
+# window colour and not coincide with another theme's.
+Set-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize' -Name AppsUseLightTheme -Value $(if ($theme -eq 'dark') { 0 } else { 1 }) -Type DWord
+if ($theme -eq 'contrast') { $facts.contrastOn = [QaColours]::HighContrast($true); Start-Sleep -Seconds 8 }
+# Restored in the finally below, so a leg that fails part way does not leave high contrast or Dark
+# on for the next one: the 225 % leg once measured its corners under high contrast for that reason.
+try {
+
+Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue | Stop-Process -Force
+Start-Sleep -Seconds 2
+Start-Process "shell:AppsFolder\$((Get-AppxPackage -Name WinZ3805A).PackageFamilyName)!App"
+$deadline = (Get-Date).AddSeconds(60)
+do { Start-Sleep -Seconds 2; $w = Get-AppWindow -Seconds 5 } while ((Get-Date) -lt $deadline -and -not ($w -and (Find-Control $w -AutomationId 'ClockText' -Seconds 0)))
+# Details by its footer button, which does not depend on where the keyboard focus is: Ctrl+D
+# missed at 225 %.
+$detailsButton = Find-Control $w -AutomationId 'DetailsButton' -Seconds 5
+if ($detailsButton) { Invoke-Control $detailsButton }
+else {
+    $bar = Get-Bounds (Find-Control $w -AutomationId 'AppTitleBar' -Seconds 2)
+    [QaWin32]::MoveTo($bar.Left + [int]($bar.Width / 2), $bar.Top + [int]($bar.Height / 2)); [QaWin32]::LeftDown(); [QaWin32]::LeftUp()
+    Start-Sleep -Seconds 1
+    Send-KeyTo $w '^d'
+}
+# By its caption, or else as the app's other window: at 225 % its caption was the main window's (#663).
+$d = Get-AppWindowNamed 'Receiver Details' -Seconds 15
+if (-not $d) {
+    $other = [QaWin32]::WindowOtherThan([uint32](Get-Process -Name WinZ3805A | Select-Object -First 1).Id, (Get-Handle $w))
+    if ($other -ne [IntPtr]::Zero) { $d = $script:Ae::FromHandle($other) }
+}
+$facts.detailsCaption = "$($d.Current.Name)"
+[void](Select-NavigationItem $d 'Satellites')
+Start-Sleep -Seconds 5
+$facts.mask = "$((Find-Control $d -AutomationId 'ElevationMaskText' -Seconds 2).Current.Name)"
+
+# The card's own layout at this width (#664): the heading against the Plot choice beside it, and
+# the legend's last label against the card's content edge, which Save image's right edge marks.
+# The legend is Raw to assistive technology, so it is reached through the raw view.
+# An element with nothing on screen - clipped away entirely - has an empty rectangle, whose
+# coordinates are infinite; that is reported as 'empty' rather than failing the step.
+function Get-ScreenBounds($element) {
+    if (-not $element -or $element.Current.BoundingRectangle.IsEmpty) { return $null }
+    Get-Bounds $element
+}
+function Format-Bounds($b) { if ($b) { "$($b.Left),$($b.Top) $($b.Width)x$($b.Height)" } else { 'empty' } }
+$headingBounds = Get-ScreenBounds (Find-Control $d -AutomationId 'SkyCardHeading' -Seconds 2)
+$choiceBounds = Get-ScreenBounds (Find-Control $d -AutomationId 'PlotViewChoice' -Seconds 2)
+$saveBounds = Get-ScreenBounds (Find-Control $d -AutomationId 'ExportImageButton' -Seconds 2)
+$facts.heading = Format-Bounds $headingBounds; $facts.plotChoice = Format-Bounds $choiceBounds; $facts.saveButton = Format-Bounds $saveBounds
+# WinUI reports the heading's rectangle already clipped to its column, so an overlapped heading
+# shows as one that ends exactly where the Plot choice starts: touching, never intersecting. So a
+# shared row needs a real gap, and the text's own extent, from its text pattern, must end before
+# the Plot choice too.
+$textRight = $null
+try {
+    $lines = (Find-Control $d -AutomationId 'SkyCardHeading' -Seconds 1).GetCurrentPattern([System.Windows.Automation.TextPattern]::Pattern).DocumentRange.GetBoundingRectangles()
+    if ($lines.Count) { $textRight = [int](($lines | Measure-Object -Property Right -Maximum).Maximum) }
+} catch { }
+$facts.headingTextRight = $textRight
+$sameRow = $headingBounds -and $choiceBounds -and $headingBounds.Bottom -gt $choiceBounds.Top -and $choiceBounds.Bottom -gt $headingBounds.Top
+$facts.headerOverlap = $sameRow -and (($choiceBounds.Left - $headingBounds.Right) -lt 4 -or ($textRight -and $textRight -gt $choiceBounds.Left))
+$walker = [System.Windows.Automation.TreeWalker]::RawViewWalker
+function Find-Raw($element, $name) {
+    $child = $walker.GetFirstChild($element)
+    while ($child) {
+        if ($child.Current.Name -eq $name) { return $child }
+        $found = Find-Raw $child $name
+        if ($found) { return $found }
+        $child = $walker.GetNextSibling($child)
+    }
+}
+$plotControl = Find-Control $d -AutomationId 'SkyPlot' -Seconds 2
+$facts.skyPlot = Format-Bounds (Get-ScreenBounds $plotControl)
+$label = Find-Raw $plotControl 'elevation mask'
+if ($label) {
+    $labelBounds = Get-ScreenBounds $label
+    $facts.maskLabel = Format-Bounds $labelBounds
+    $facts.legendClipped = -not $labelBounds -or -not $saveBounds -or $labelBounds.Width -le 0 -or $labelBounds.Right -gt $saveBounds.Right
+}
+
+function Open-SaveDialog {
+    Invoke-Control (Find-Control $d -AutomationId 'ExportImageButton')
+    $deadline = (Get-Date).AddSeconds(15)
+    do {
+        Start-Sleep -Milliseconds 500
+        $dlg = $d.FindFirst([System.Windows.Automation.TreeScope]::Children, (New-Object System.Windows.Automation.PropertyCondition($script:Ae::ClassNameProperty, '#32770')))
+    } while (-not $dlg -and (Get-Date) -lt $deadline)
+    $dlg
+}
+
+# Cancel first: the caption is drawn for the render only, and must not be left on the page.
+if ($theme -eq 'light') {
+    $dlg = Open-SaveDialog
+    # Esc with the file name field focused, which is the dialog's own Cancel: its Cancel button is not
+    # found reliably through UI Automation, and other elements in it share the button's id.
+    if ($dlg) {
+        $b = Get-Bounds (Find-Control $dlg -AutomationId '1001' -Seconds 3)
+        [QaWin32]::MoveTo($b.Left + [int]($b.Width / 2), $b.Top + [int]($b.Height / 2)); [QaWin32]::LeftDown(); [QaWin32]::LeftUp()
+        Start-Sleep -Milliseconds 500
+        [System.Windows.Forms.SendKeys]::SendWait('{ESC}')
+        Start-Sleep -Seconds 3
+    }
+    $facts.cancelDialog = [bool]$dlg
+    $facts.dialogClosed = -not [bool]$d.FindFirst([System.Windows.Automation.TreeScope]::Children, (New-Object System.Windows.Automation.PropertyCondition($script:Ae::ClassNameProperty, '#32770')))
+    $facts.captionAfterCancel = [bool](Find-Control $d -AutomationId 'SkyPlotCaptionText' -Seconds 1)
+}
+
+# The file name typed into the dialog's own field: UI Automation offers no value to set there, and
+# will not focus it either, so it is clicked.
+Remove-Item $file -ErrorAction SilentlyContinue
+$dlg = Open-SaveDialog
+if ($dlg) {
+    $b = Get-Bounds (Find-Control $dlg -AutomationId '1001' -Seconds 3)
+    [QaWin32]::MoveTo($b.Left + [int]($b.Width / 2), $b.Top + [int]($b.Height / 2)); [QaWin32]::LeftDown(); [QaWin32]::LeftUp()
+    Start-Sleep -Milliseconds 500
+    [System.Windows.Forms.SendKeys]::SendWait('^a')
+    [System.Windows.Forms.SendKeys]::SendWait($file)
+    Start-Sleep -Milliseconds 500
+    [System.Windows.Forms.SendKeys]::SendWait('{ENTER}')
+    $deadline = (Get-Date).AddSeconds(20)
+    while (-not (Test-Path $file) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 500 }
+    Start-Sleep -Seconds 2
+}
+$facts.saved = Test-Path $file
+$facts.captionAfterSave = [bool](Find-Control $d -AutomationId 'SkyPlotCaptionText' -Seconds 1)
+
+if ($facts.saved) {
+    # Measured: the corners, the lowest alpha anywhere, and how much of the image is the window-text
+    # colour, which is what every marker resolves to under high contrast (#218).
+    Add-Type -AssemblyName System.Drawing
+    $bmp = [System.Drawing.Bitmap]::FromFile($file)
+    $facts.size = "$($bmp.Width)x$($bmp.Height)"
+    $facts.corners = @(@(0, 0), @(($bmp.Width - 1), 0), @(0, ($bmp.Height - 1)), @(($bmp.Width - 1), ($bmp.Height - 1))) | ForEach-Object {
+        $c = $bmp.GetPixel($_[0], $_[1]); '#{0:X2}{1:X2}{2:X2}' -f $c.R, $c.G, $c.B } | Select-Object -Unique
+    $text = [QaColours]::GetSysColor(8)
+    $tr = $text -band 0xFF; $tg = ($text -shr 8) -band 0xFF; $tb = ($text -shr 16) -band 0xFF
+    $minAlpha = 255; $textSamples = 0
+    for ($y = 0; $y -lt $bmp.Height; $y += 3) {
+        for ($x = 0; $x -lt $bmp.Width; $x += 3) {
+            $p = $bmp.GetPixel($x, $y)
+            if ($p.A -lt $minAlpha) { $minAlpha = $p.A }
+            if ($p.R -eq $tr -and $p.G -eq $tg -and $p.B -eq $tb) { $textSamples++ }
+        }
+    }
+    $bmp.Dispose()
+    $facts.minAlpha = $minAlpha
+    $facts.windowColour = [QaColours]::Hex([QaColours]::GetSysColor(5))
+    $facts.textSamples = $textSamples
+
+    # The caption, read back out of the file with Windows' own OCR.
+    Add-Type -AssemblyName System.Runtime.WindowsRuntime
+    $null = [Windows.Storage.StorageFile, Windows.Storage, ContentType = WindowsRuntime]
+    $null = [Windows.Media.Ocr.OcrEngine, Windows.Foundation, ContentType = WindowsRuntime]
+    $null = [Windows.Graphics.Imaging.BitmapDecoder, Windows.Graphics, ContentType = WindowsRuntime]
+    $asTask = [System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1' } | Select-Object -First 1
+    function Await($op, [Type]$type) { $task = $asTask.MakeGenericMethod($type).Invoke($null, @($op)); $task.Wait(); $task.Result }
+    $sf = Await ([Windows.Storage.StorageFile]::GetFileFromPathAsync($file)) ([Windows.Storage.StorageFile])
+    $stream = Await ($sf.OpenAsync([Windows.Storage.FileAccessMode]::Read)) ([Windows.Storage.Streams.IRandomAccessStream])
+    $decoder = Await ([Windows.Graphics.Imaging.BitmapDecoder]::CreateAsync($stream)) ([Windows.Graphics.Imaging.BitmapDecoder])
+    $soft = Await ($decoder.GetSoftwareBitmapAsync()) ([Windows.Graphics.Imaging.SoftwareBitmap])
+    $ocr = Await ([Windows.Media.Ocr.OcrEngine]::TryCreateFromUserProfileLanguages().RecognizeAsync($soft)) ([Windows.Media.Ocr.OcrResult])
+    $facts.lastLine = "$(@($ocr.Lines)[-1].Text)"
+    $facts.ocr = "$($ocr.Text)"
+    $stream.Dispose()
+}
+}
+finally {
+    if ($theme -eq 'contrast') { $facts.contrastOff = [QaColours]::HighContrast($false) }
+    Set-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize' -Name AppsUseLightTheme -Value 1 -Type DWord
+}
+$facts | ConvertTo-Json -Compress -Depth 4
+'@
+
+# The screen to 2880 x 1800 at 225 % for the next sign-in, as whole-layout does for 150 %.
+$scale225Step = @'
+Add-Type -TypeDefinition @"
+using System; using System.Runtime.InteropServices;
+public static class QaDisplay {
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    public struct DEVMODE {
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string dmDeviceName;
+        public short dmSpecVersion, dmDriverVersion, dmSize, dmDriverExtra;
+        public int dmFields, dmPositionX, dmPositionY, dmDisplayOrientation, dmDisplayFixedOutput;
+        public short dmColor, dmDuplex, dmYResolution, dmTTOption, dmCollate;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string dmFormName;
+        public short dmLogPixels; public int dmBitsPerPel, dmPelsWidth, dmPelsHeight, dmDisplayFlags, dmDisplayFrequency;
+        public int dmICMMethod, dmICMIntent, dmMediaType, dmDitherType, dmReserved1, dmReserved2, dmPanningWidth, dmPanningHeight;
+    }
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern bool EnumDisplaySettings(string dev, int mode, ref DEVMODE dm);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int ChangeDisplaySettings(ref DEVMODE dm, int flags);
+    public static int Set(int w, int h) {
+        DEVMODE dm = new DEVMODE(); dm.dmSize = (short)Marshal.SizeOf(typeof(DEVMODE));
+        EnumDisplaySettings(null, -1, ref dm); dm.dmPelsWidth = w; dm.dmPelsHeight = h; dm.dmFields = 0x80000 | 0x100000;
+        return ChangeDisplaySettings(ref dm, 1);
+    }
+}
+"@
+$result = [QaDisplay]::Set(2880, 1800)
+# The placement stored at 100 % would restore a window too small at 225 % for the footer; with none,
+# the app opens at its whole layout at the real scaling, which section 23 checks.
+Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue | Stop-Process -Force
+Remove-Item (Join-Path $env:LOCALAPPDATA "Packages\$((Get-AppxPackage -Name WinZ3805A).PackageFamilyName)\LocalCache\Local\WinZ3805A\window.json") -ErrorAction SilentlyContinue
+Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name LogPixels -Value 216 -Type DWord
+Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name Win8DpiScaling -Value 1 -Type DWord
+Set-Content -LiteralPath 'C:\qa\force.ps1' -Value "Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon' -Name ForceAutoLogon -Value '1' -Type String"
+Start-Process powershell.exe -Verb RunAs -Wait -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', 'C:\qa\force.ps1'
+[ordered]@{ resolution = $result } | ConvertTo-Json -Compress
+'@
+
+function Test-SkyExport {
+    param($Vm, $Result)
+    $pipe = Get-QaSimulatorPipe -Vm $Vm
+    if (-not (Select-String -LiteralPath $Vm.Vmx -SimpleMatch "\\.\pipe\$pipe" -Quiet)) {
+        $Result.Error = "skipped: the VM has no simulator port; run Add-QaSimulatorPort (build/qa/README.md)"
+        return
+    }
+    Send-Zip $Vm $Offline 'candidate'
+    $code = Install-Candidate $Vm 'candidate'
+    Check $Result 'installed (exit 0, or 2 with the start check timing out)' ($code -in 0, 2) "exit $code"
+    $null = Invoke-QaGuestScript $Vm -Name 'prefs-sky' -Script @'
+Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue | Stop-Process -Force
+$pkg = Get-AppxPackage -Name WinZ3805A | Select-Object -First 1
+$dir = Join-Path $env:LOCALAPPDATA "Packages\$($pkg.PackageFamilyName)\LocalCache\Local\WinZ3805A"
+New-Item -ItemType Directory -Force $dir | Out-Null
+'{"PortName":"COM2","AutoDetect":false,"BaudRate":9600,"DataBits":8,"Parity":0,"StopBits":1,"ReconnectAutomatically":true,"ConnectOnLaunch":true}' | Set-Content (Join-Path $dir 'connection.json') -Encoding ascii
+'@
+    $simulator = Start-Process (Get-Simulator) -PassThru -WindowStyle Hidden `
+        -ArgumentList '--pipe-client', $pipe, '--start', 'locked', '--speed', '2', '--control', "$pipe-control" `
+        -RedirectStandardOutput (Join-Path $Result.Folder 'simulator.log') -RedirectStandardError (Join-Path $Result.Folder 'simulator.err')
+    $legs = [ordered]@{
+        light    = @{ Background = '#F3F3F3'; Label = 'Light' }
+        dark     = @{ Background = '#202020'; Label = 'Dark' }
+        contrast = @{ Background = $null; Label = 'High contrast' }
+        scaled   = @{ Background = '#F3F3F3'; Label = '225 %' }
+    }
+    $sizes = @{}
+    $scaledLastLine = $null
+    try {
+        foreach ($leg in $legs.Keys) {
+            $l = $legs[$leg]
+            if ($leg -eq 'scaled') {
+                $null = Invoke-UiStep $Vm 'sky-225' '' $scale225Step
+                Invoke-SignOutAndIn $Vm
+            }
+            $s = Invoke-UiStep $Vm "sky-$leg" "`$theme = '$leg'; `$file = 'C:\qa\sky-$leg.png'" $skyStep
+            if ($s.error) { Check $Result "[7] $($l.Label): the export" $false $s.error; continue }
+            try { Copy-QaFile $Vm -Source "C:\qa\sky-$leg.png" -Destination (Join-Path $Result.Folder "sky-$leg.png") } catch { }
+            if ($leg -eq 'light') {
+                Check $Result '[7] Cancel in the Save dialog leaves no caption on the page' ($s.cancelDialog -and $s.dialogClosed -and -not $s.captionAfterCancel) "dialog opened $($s.cancelDialog), closed by Esc $($s.dialogClosed), caption left $($s.captionAfterCancel)"
+            }
+            Check $Result "[7] $($l.Label): the Details window has its own caption (#637, #663)" ($s.detailsCaption -like 'Receiver Details - *') "'$($s.detailsCaption)'"
+            Check $Result "[7] $($l.Label): the card's heading is clear of the Plot choice beside it (#664)" ($s.heading -and $s.heading -ne 'empty' -and $s.plotChoice -ne 'empty' -and -not $s.headerOverlap) "heading $($s.heading), its text ending at $($s.headingTextRight), Plot $($s.plotChoice)"
+            Check $Result "[7] $($l.Label): the legend's last entry is inside the card (#664)" ($s.maskLabel -and -not $s.legendClipped) "'elevation mask' $($s.maskLabel), Save image $($s.saveButton), plot $($s.skyPlot)"
+            Check $Result "[7] $($l.Label): Save image writes a file, and the caption is gone afterwards" ($s.saved -and -not $s.captionAfterSave) "saved $($s.saved) $($s.size), caption left $($s.captionAfterSave)"
+            if (-not $s.saved) { continue }
+            $sizes[$leg] = $s.size
+            if ($leg -eq 'scaled') { $scaledLastLine = $s.lastLine }
+            $background = if ($l.Background) { $l.Background } else { $s.windowColour }
+            Check $Result "[7] $($l.Label): opaque, and the corners are the theme's background" ($s.minAlpha -eq 255 -and @($s.corners).Count -eq 1 -and $s.corners -eq $background) "corners $($s.corners -join ','), expected $background; lowest alpha $($s.minAlpha)"
+            if ($leg -eq 'contrast') {
+                Check $Result '[7] High contrast: on, with a window colour unlike either page background' ($s.contrastOn -and $s.windowColour -notin '#F3F3F3', '#202020') "on $($s.contrastOn), window $($s.windowColour)"
+                Check $Result '[7] High contrast: the markers are drawn, not painted in the surface colour (#218)' ($s.textSamples -ge 500) "$($s.textSamples) window-text samples"
+            }
+            # OCR reads the degree sign as a 0 or an o, so '10°' comes back as '100'; anything else after
+            # the digits is a different mask.
+            $maskValue = if ($s.mask -match '(\d+)') { $Matches[1] } else { '?' }
+            Check $Result "[7] $($l.Label): the caption, read from the file, is in UTC and gives the page's mask" ($s.ocr -match 'UTC' -and $s.ocr -match "elevation mask $maskValue[°0oO]?(?!\d)") "mask on the page '$($s.mask)'; caption read as '$($s.lastLine)'"
+        }
+        # RenderTargetBitmap truncates rather than throwing when asked for more than it can give, so an
+        # over-budget capture opens cleanly and is missing its bottom. The caption is the image's last
+        # row, so it must be the last thing OCR reads. Not the image's shape: the Satellites page lays
+        # out differently at another effective width, so the card is a different shape at 225 %.
+        if ($scaledLastLine) {
+            Check $Result '[7] 225 %: not cropped, the caption is still the last row' ($scaledLastLine -match 'elevation mask \d') "last line read: '$scaledLastLine'"
+        }
+    }
+    finally {
+        if (-not $simulator.HasExited) { $simulator.Kill() }
+        $null = Save-Evidence $Vm $Result.Folder
+    }
+}
+
 $scenarioTable = [ordered]@{
     'fresh-online'     = ${function:Test-FreshOnline}
     'fresh-offline'    = ${function:Test-FreshOffline}
@@ -1490,6 +1795,7 @@ $scenarioTable = [ordered]@{
     'pin-compact'      = ${function:Test-PinCompact}
     'whole-layout'     = ${function:Test-WholeLayout}
     'accessibility'    = ${function:Test-Accessibility}
+    'sky-export'       = ${function:Test-SkyExport}
 }
 
 # ---------------------------------------------------------------------------
