@@ -1898,19 +1898,36 @@ $trendStep = @'
 $d = Get-AppWindowNamed 'Receiver Details' -Seconds 5
 if (-not $d) { [ordered]@{ error = "no Details window ($(Get-WindowReport))" } | ConvertTo-Json -Compress; return }
 [void](Select-NavigationItem $d 'Overview')
+# #668: the 1 PPS readout's caption measured at the size Details opens at and again maximised. The
+# readout itself is arranged at its full width and clipped by the cell around it, which UI Automation
+# does not report, so its label measures the same either way. The caption wraps to the width it is
+# given: squeezed by the merits beside it, it takes two lines at the first size and one at the second.
+Start-Sleep -Seconds 3
+$label = Find-Control $d -Name 'relative to GPS' -Seconds 5
+$narrow = if ($label -and -not $label.Current.BoundingRectangle.IsEmpty) { [int]$label.Current.BoundingRectangle.Height } else { 0 }
+# And photographed as it is, for the agent to judge: the host's screenshot comes after the step.
+try {
+    Add-Type -AssemblyName System.Drawing
+    $r = $d.Current.BoundingRectangle
+    $bmp = New-Object System.Drawing.Bitmap ([int]$r.Width), ([int]$r.Height)
+    $g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen([int]$r.Left, [int]$r.Top, 0, 0, $bmp.Size); $g.Dispose()
+    $bmp.Save('C:\qa\overview-opening.png', [System.Drawing.Imaging.ImageFormat]::Png); $bmp.Dispose()
+} catch { }
 $range = Find-Control $d -AutomationId 'OverviewRange7d' -Seconds 10
 if ($range) { $range.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select() }
 # Maximised, and the chart scrolled into view: on the VMs' 1024 x 768 screen the window runs off the
 # right and the trend is below the fold, so the first photograph showed neither.
 try { $d.GetCurrentPattern([System.Windows.Automation.WindowPattern]::Pattern).SetWindowVisualState([System.Windows.Automation.WindowVisualState]::Maximized) } catch { }
 Start-Sleep -Seconds 2
+$label = Find-Control $d -Name 'relative to GPS' -Seconds 5
+$wide = if ($label -and -not $label.Current.BoundingRectangle.IsEmpty) { [int]$label.Current.BoundingRectangle.Height } else { 0 }
 if ($range) { try { $range.GetCurrentPattern([System.Windows.Automation.ScrollItemPattern]::Pattern).ScrollIntoView() } catch { } }
 # Scrolling the buttons into view leaves them on the bottom edge with the chart below them, so the
 # page is scrolled one screen further.
 $scrollable = $d.FindAll([System.Windows.Automation.TreeScope]::Descendants, (New-Object System.Windows.Automation.PropertyCondition($script:Ae::IsScrollPatternAvailableProperty, $true))) | Where-Object { $_.GetCurrentPattern([System.Windows.Automation.ScrollPattern]::Pattern).Current.VerticallyScrollable } | Select-Object -First 1
 if ($scrollable) { try { $scrollable.GetCurrentPattern([System.Windows.Automation.ScrollPattern]::Pattern).ScrollVertical([System.Windows.Automation.ScrollAmount]::LargeIncrement) } catch { } }
 Start-Sleep -Seconds 4
-[ordered]@{ range = [bool]$range; selected = [bool]($range -and $range.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Current.IsSelected) } | ConvertTo-Json -Compress
+[ordered]@{ narrow = $narrow; wide = $wide; range = [bool]$range; selected = [bool]($range -and $range.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Current.IsSelected) } | ConvertTo-Json -Compress
 '@
 
 # Remembered settings for COM2 with connect-on-launch, then the app started: as a person choosing
@@ -2018,8 +2035,10 @@ Start-Sleep -Seconds 3
         # The pass criterion's own picture: the Overview trend at 7 d, the history from before the
         # uninstall joined to what the reinstalled copy has recorded since, for the agent to judge.
         $trend = Invoke-UiStep $Vm 'history-trend' '' $trendStep
+        Check $Result '[#668] the Overview''s 1 PPS readout is drawn whole at the size Details opens at' ($trend.wide -gt 0 -and $trend.narrow -le $trend.wide + 1) "caption $($trend.narrow) px tall there, $($trend.wide) px maximised"
         Check $Result '[21] the Overview trend shown at 7 d, photographed for the agent to judge' ($trend.selected -eq $true) "$(if ($trend.error) { $trend.error } else { "7 d selected $($trend.selected)" })"
         try { Invoke-VmRun $Vm captureScreen -Arguments (Join-Path $Result.Folder 'trend-7d.png') -Guest | Out-Null } catch { }
+        try { Copy-QaFile $Vm -Source 'C:\qa\overview-opening.png' -Destination (Join-Path $Result.Folder 'overview-opening.png') } catch { }
     }
     finally {
         if (-not $simulator.HasExited) { $simulator.Kill() }
