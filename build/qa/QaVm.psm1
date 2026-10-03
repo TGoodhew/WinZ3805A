@@ -406,7 +406,11 @@ function Invoke-QaGuestScript {
 
     $stamp = '{0}-{1:HHmmssfff}' -f $Name, (Get-Date)
     $local = Join-Path ([IO.Path]::GetTempPath()) "qa-$stamp.ps1"
-    $wrapped = "`$ErrorActionPreference = 'Stop'`r`n& {`r`n$Script`r`n} *> C:\qa\$stamp.log`r`nexit `$LASTEXITCODE"
+    # A terminating error leaves the block, and the redirection with it, so it never reached the
+    # log: a failing step came back with empty output and nothing to say why (2 Oct 2026). Caught
+    # outside the block, it is appended to the same log, with its line, and the exit code is 99.
+    $wrapped = "`$ErrorActionPreference = 'Stop'`r`ntry {`r`n& {`r`n$Script`r`n} *> C:\qa\$stamp.log`r`n}`r`ncatch {`r`n" +
+        "`"ERROR: `$(`$_.Exception.Message) (line `$(`$_.InvocationInfo.ScriptLineNumber): `$(`$_.InvocationInfo.Line.Trim()))`" | Add-Content C:\qa\$stamp.log`r`nexit 99`r`n}`r`nexit `$LASTEXITCODE"
     [IO.File]::WriteAllText($local, $wrapped, (New-Object Text.UTF8Encoding($true)))
     try {
         Invoke-VmRun $Vm createDirectoryInGuest -Arguments 'C:\qa' -Guest -ErrorAction SilentlyContinue | Out-Null
