@@ -550,12 +550,14 @@
                                         <Setter Target="PART_Ring.Stroke" Value="{ThemeResource WzCautionBrush}" />
                                     </VisualState.Setters>
                                 </VisualState>
+                                <!-- WAIT is holdover waiting for GPS, and draws as holdover (#642). -->
                                 <VisualState x:Name="Waiting">
                                     <VisualState.Setters>
-                                        <Setter Target="Glyph.Text" Value="&#xE769;" />
-                                        <Setter Target="Glyph.Foreground" Value="{ThemeResource WzCautionBrush}" />
-                                        <Setter Target="Count.Foreground" Value="{ThemeResource WzCautionBrush}" />
-                                        <Setter Target="PART_Ring.Stroke" Value="{ThemeResource WzCautionBrush}" />
+                                        <Setter Target="Glyph.Text" Value="&#xE7BA;" />
+                                        <Setter Target="Glyph.Foreground" Value="{ThemeResource WzCriticalBrush}" />
+                                        <Setter Target="GlyphPath.Fill" Value="{ThemeResource WzCriticalBrush}" />
+                                        <Setter Target="Count.Foreground" Value="{ThemeResource WzCriticalBrush}" />
+                                        <Setter Target="PART_Ring.Stroke" Value="{ThemeResource WzCriticalBrush}" />
                                     </VisualState.Setters>
                                 </VisualState>
                                 <VisualState x:Name="Holdover">
