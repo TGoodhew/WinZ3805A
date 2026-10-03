@@ -24,8 +24,12 @@
                               an Explorer restart (guest\AppChecks.ps1); a screenshot is kept
       receiver           the app against the simulated Z3805A on the VM's COM2 (#639): connects and
                               locks, follows a pulled antenna into holdover and back, and comes
-                              back by itself after the receiver goes silent. Needs the VM's
-                              simulator port (Add-QaSimulatorPort)
+                              back by itself after the receiver goes silent; the lock
+                              notification on screen, and none with the switch off (§10). Needs
+                              the VM's simulator port (Add-QaSimulatorPort)
+      connect-cancel     §24  an auto-detect walk on a port where nothing answers, stopped by
+                              Cancel and by Esc; then Connect works once the receiver answers.
+                              Driven through UI Automation (guest\Ui.ps1). Needs the simulator port
 
 .PARAMETER Online
     The candidate's online zip. With -Offline, or with -Release instead.
@@ -51,7 +55,7 @@ param(
     [string]$Offline,
     [string]$Release,
     [string[]]$Machines = @('QA-Win10', 'QA-Win11'),
-    [string[]]$Scenarios = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver'),
+    [string[]]$Scenarios = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel'),
     [string]$OutDir
 )
 
@@ -62,7 +66,7 @@ Import-Module (Join-Path $PSScriptRoot 'QaVm.psm1') -Force
 # names no scenario - the first run of this script ran nothing and reported success.
 $Machines = @($Machines | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 $Scenarios = @($Scenarios | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-$known = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver')
+$known = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel')
 $unknown = @($Scenarios | Where-Object { $known -notcontains $_ })
 if ($unknown.Count) { throw "Unknown scenario(s): $($unknown -join ', '). Known: $($known -join ', ')." }
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
@@ -443,6 +447,9 @@ $pkg = Get-AppxPackage -Name WinZ3805A | Select-Object -First 1
 $dir = Join-Path $env:LOCALAPPDATA "Packages\$($pkg.PackageFamilyName)\LocalCache\Local\WinZ3805A"
 New-Item -ItemType Directory -Force $dir | Out-Null
 '{"PortName":"COM2","AutoDetect":false,"BaudRate":9600,"DataBits":8,"Parity":0,"StopBits":1,"ReconnectAutomatically":true,"ConnectOnLaunch":true}' | Set-Content (Join-Path $dir 'connection.json') -Encoding ascii
+# A notification stays on screen for MessageDuration seconds, five by default, which is shorter than
+# the round trip from seeing it logged to taking the screenshot. Accessibility's own setting for it.
+Set-ItemProperty -Path 'HKCU:\Control Panel\Accessibility' -Name MessageDuration -Value 60 -Type DWord
 Start-Process "shell:AppsFolder\$($pkg.PackageFamilyName)!App"
 '@
 
@@ -469,6 +476,8 @@ Start-Process "shell:AppsFolder\$($pkg.PackageFamilyName)!App"
         # Whether they appear on screen, and that none comes with the switch off, stay with a person.
         $seen = Wait-AppLog $Vm 'Notified: Receiver (in holdover|has lost GPS lock)' $seen.count 120 'notified-lost'
         Check $Result '[10] a notification that lock was lost, after the grace minute' $seen.found $seen.line
+        # For the agent to judge that it is on screen, which the log cannot say.
+        try { Invoke-VmRun $Vm captureScreen -Arguments (Join-Path $Result.Folder 'notification.png') -Guest | Out-Null } catch { }
         $mark = $seen.count
 
         $null = Send-SimulatorControl "$pipe-control" 'antenna on'
@@ -495,6 +504,182 @@ Start-Process "shell:AppsFolder\$($pkg.PackageFamilyName)!App"
         $seen = Wait-AppLog $Vm 'State: ' $seen.count 120 'polling-again'
         Check $Result '[2] and polls again: a State line after the reconnect' $seen.found $seen.line
         try { Invoke-VmRun $Vm captureScreen -Arguments (Join-Path $Result.Folder 'screen.png') -Guest | Out-Null } catch { }
+
+        # manual-qa.md section 10's other half: with the switch off, a loss past the grace minute
+        # raises nothing. The switch is read at start-up (App.StartLockNotifications), so the app is
+        # restarted with it off, as Settings would leave it. Its absence is only evidence once the
+        # holdover is known to have happened and the minute to have passed, so both are checked.
+        $null = Invoke-QaGuestScript $Vm -Name 'notifications-off' -Script @'
+Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue | Stop-Process -Force
+Start-Sleep -Seconds 2
+$pkg = Get-AppxPackage -Name WinZ3805A | Select-Object -First 1
+$dir = Join-Path $env:LOCALAPPDATA "Packages\$($pkg.PackageFamilyName)\LocalCache\Local\WinZ3805A"
+'{"AreLockNotificationsEnabled":false}' | Set-Content (Join-Path $dir 'advanced.json') -Encoding ascii
+Start-Process "shell:AppsFolder\$($pkg.PackageFamilyName)!App"
+'@
+        $seen = Wait-AppLog $Vm 'State: LOCK' $seen.count 180 'locked-switch-off'
+        Check $Result '[10] restarted with notifications off, and locked' $seen.found $seen.line
+        $mark = $seen.count
+        $null = Send-SimulatorControl "$pipe-control" 'antenna off'
+        $seen = Wait-AppLog $Vm 'State: (WAIT|HOLD)' $mark 120 'holdover-switch-off'
+        Check $Result '[10] the antenna pulled again: holdover' $seen.found $seen.line
+        $quiet = Wait-AppLog $Vm 'Notified:' $mark 100 'silence'
+        Check $Result '[10] and no notification with the switch off, 100 s on' (-not $quiet.found) $(if ($quiet.found) { $quiet.line } else { 'none logged' })
+        $null = Send-SimulatorControl "$pipe-control" 'antenna on'
+    }
+    finally {
+        if (-not $simulator.HasExited) { $simulator.Kill() }
+        $null = Save-Evidence $Vm $Result.Folder
+    }
+}
+
+# One cancelled auto-detect, through the dialog, by the Close button or by Esc. Returns what the
+# guest saw as an object: the log lines that matter, how long the cancel took, whether any probe
+# went out after it, and what the dialog and the window show.
+$cancelStep = @'
+$window = Get-AppWindow
+if (-not $window) { [ordered]@{ error = "no main window ($(Get-WindowReport))" } | ConvertTo-Json -Compress; return }
+$before = (Get-AppLogLines).Count
+
+# The footer's Connect opens the dialog unless it is already open.
+$primary = Find-Control $window -AutomationId 'PrimaryButton' -Seconds 1
+if (-not $primary) {
+    $footer = Find-Control $window -Name 'Connect'
+    if ($footer) { Invoke-Control $footer }
+    $primary = Find-Control $window -AutomationId 'PrimaryButton'
+}
+if (-not $primary) { [ordered]@{ error = "no dialog; buttons: $(Get-ButtonList $window)" } | ConvertTo-Json -Compress; return }
+$auto = Find-Control $window -Name 'Auto-detect settings' -Seconds 2
+$autoChosen = $auto -and $auto.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Current.IsSelected
+
+Invoke-Control $primary
+Start-Sleep -Seconds 10
+$connecting = [bool](Find-Control $window -Name 'Connecting' -Seconds 1)
+if ($how -eq 'esc') { Send-KeyTo $primary '{ESC}' }
+else { Invoke-Control (Find-Control $window -AutomationId 'CloseButton') }
+Start-Sleep -Seconds 8
+
+$lines = @(Get-AppLogLines | Select-Object -Skip $before)
+$pressed = $lines | Where-Object { $_ -match 'Cancel pressed while connecting' } | Select-Object -First 1
+$doneAt = -1
+for ($i = 0; $i -lt $lines.Count; $i++) { if ($lines[$i] -match 'is now Disconnected\. Cancelled\.') { $doneAt = $i; break } }
+$done = if ($doneAt -ge 0) { $lines[$doneAt] } else { $null }
+$probesAfter = if ($doneAt -ge 0) { @($lines | Select-Object -Skip ($doneAt + 1) | Where-Object { $_ -match '\*CLS|\*IDN' }).Count } else { -1 }
+$primaryNow = Find-Control $window -AutomationId 'PrimaryButton' -Seconds 1
+[ordered]@{
+    autoDetect   = [bool]$autoChosen
+    connecting   = $connecting
+    walked       = @($lines | Where-Object { $_ -match 'timed out|Opened' }).Count
+    pressed      = "$pressed"
+    done         = "$done"
+    seconds      = $(if ($pressed -and $done) { ((Get-LineTime $done) - (Get-LineTime $pressed)).TotalSeconds } else { -1 })
+    probesAfter  = $probesAfter
+    dialogOpen   = [bool]$primaryNow
+    connectReady = [bool]($primaryNow -and $primaryNow.Current.IsEnabled)
+    disconnected = [bool](Find-Control $window -Name 'Disconnected' -Seconds 1)
+    errorShown   = [bool](Find-Control $window -AutomationId 'ErrorBar' -Seconds 1)
+} | ConvertTo-Json -Compress
+'@
+
+function Invoke-UiStep {
+    param($Vm, [string]$Name, [string]$Prelude, [string]$Body)
+    $ui = Get-Content (Join-Path $PSScriptRoot 'guest\Ui.ps1') -Raw
+    # A terminating error escapes the guest runner's output capture, which left a failing step
+    # reporting nothing at all; caught here, it reports what went wrong and what was running.
+    $wrapped = $ui + "`r`n" + $Prelude + "`r`ntry {`r`n" + $Body + "`r`n}`r`ncatch { [ordered]@{ error = `"`$(`$_.Exception.Message) (`$(Get-WindowReport))`" } | ConvertTo-Json -Compress }"
+    $r = Invoke-QaGuestScript $Vm -Name $Name -Script $wrapped
+    $line = $r.Output -split "`r?`n" | Where-Object { $_.StartsWith('{') } | Select-Object -Last 1
+    if (-not $line) { throw "the UI step '$Name' printed nothing: $($r.Output)" }
+    $line | ConvertFrom-Json
+}
+
+# manual-qa.md section 24 (#585, #607), against the simulated receiver with its power off: the port
+# is there and nothing answers, which is the case the bench needed a serial cable pulled for.
+function Test-ConnectCancel {
+    param($Vm, $Result)
+    $pipe = Get-QaSimulatorPipe -Vm $Vm
+    if (-not (Select-String -LiteralPath $Vm.Vmx -SimpleMatch "\\.\pipe\$pipe" -Quiet)) {
+        $Result.Error = "skipped: the VM has no simulator port; run Add-QaSimulatorPort (build/qa/README.md)"
+        return
+    }
+
+    Send-Zip $Vm $Offline 'candidate'
+    $code = Install-Candidate $Vm 'candidate'
+    Check $Result 'installed (exit 0, or 2 with the start check timing out)' ($code -in 0, 2) "exit $code"
+
+    # COM2 remembered with auto-detect chosen, and nothing connecting by itself.
+    $launch = Invoke-QaGuestScript $Vm -Name 'prefs-autodetect' -Script @'
+Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue | Stop-Process -Force
+Start-Sleep -Seconds 2
+$pkg = Get-AppxPackage -Name WinZ3805A | Select-Object -First 1
+$dir = Join-Path $env:LOCALAPPDATA "Packages\$($pkg.PackageFamilyName)\LocalCache\Local\WinZ3805A"
+New-Item -ItemType Directory -Force $dir | Out-Null
+'{"PortName":"COM2","AutoDetect":true,"BaudRate":9600,"DataBits":8,"Parity":0,"StopBits":1,"ReconnectAutomatically":false,"ConnectOnLaunch":false}' | Set-Content (Join-Path $dir 'connection.json') -Encoding ascii
+# Started, and then waited for until it has written to its log. A launch straight after the copy the
+# installer's start check left was killed, mid-way through a slow first start, once produced no
+# working app at all (2 Oct 2026); a second launch is what a person would try.
+$log = Join-Path $dir 'logs\app.log'
+foreach ($attempt in 1, 2) {
+    $lines = @(if (Test-Path $log) { Get-Content $log }).Count
+    Start-Process "shell:AppsFolder\$($pkg.PackageFamilyName)!App"
+    $deadline = (Get-Date).AddSeconds(60)
+    do { Start-Sleep -Seconds 2 } while (@(if (Test-Path $log) { Get-Content $log }).Count -le $lines -and (Get-Date) -lt $deadline)
+    if (@(if (Test-Path $log) { Get-Content $log }).Count -gt $lines) { "started on attempt $attempt"; break }
+    "launch $attempt wrote nothing to the log in 60 s"
+    Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue | Stop-Process -Force
+    Start-Sleep -Seconds 3
+}
+'@
+
+    Check $Result 'the app started with auto-detect remembered' ($launch.Output -match 'started on attempt') ($launch.Output -replace '\s+', ' ')
+
+    $simulator = Start-Process (Get-Simulator) -PassThru -WindowStyle Hidden `
+        -ArgumentList '--pipe-client', $pipe, '--start', 'locked', '--speed', '2', '--control', "$pipe-control" `
+        -RedirectStandardOutput (Join-Path $Result.Folder 'simulator.log') -RedirectStandardError (Join-Path $Result.Folder 'simulator.err')
+    try {
+        Start-Sleep -Seconds 5
+        $null = Send-SimulatorControl "$pipe-control" 'power off'
+
+        foreach ($how in 'button', 'esc') {
+            $label = if ($how -eq 'esc') { 'Esc' } else { 'Cancel' }
+            $s = Invoke-UiStep $Vm "cancel-$how" "`$how = '$how'" $cancelStep
+            if ($s.error) { Check $Result "[24] $label`: the dialog" $false $s.error; continue }
+            if ($how -eq 'button') {
+                Check $Result '[24] the dialog opens with auto-detect chosen' $s.autoDetect ''
+            }
+            Check $Result "[24] $label`: a walk was under way when it was pressed" ($s.connecting -and $s.walked -gt 0) "window said Connecting: $($s.connecting); $($s.walked) walk line(s)"
+            Check $Result "[24] $label`: logged as pressed while connecting" ([bool]$s.pressed) $s.pressed
+            Check $Result "[24] $label`: the session is Disconnected, Cancelled, within 3 s" ($s.done -and $s.seconds -ge 0 -and $s.seconds -le 3) "$($s.done) ($($s.seconds) s)"
+            Check $Result "[24] $label`: no probe after it" ($s.probesAfter -eq 0) "$($s.probesAfter) probe line(s) after"
+            Check $Result "[24] $label`: the dialog stays open, Connect usable, no error" ($s.dialogOpen -and $s.connectReady -and -not $s.errorShown) "open $($s.dialogOpen), Connect enabled $($s.connectReady), error shown $($s.errorShown)"
+            Check $Result "[24] $label`: the main window says Disconnected" $s.disconnected ''
+        }
+
+        # Cancel with nothing running closes the dialog.
+        $closed = Invoke-UiStep $Vm 'cancel-idle' '' @'
+$window = Get-AppWindow
+$close = Find-Control $window -AutomationId 'CloseButton' -Seconds 2
+if ($close) { Invoke-Control $close }
+Start-Sleep -Seconds 2
+[ordered]@{ hadDialog = [bool]$close; closed = -not [bool](Find-Control $window -AutomationId 'PrimaryButton' -Seconds 1) } | ConvertTo-Json -Compress
+'@
+        Check $Result '[24] Cancel with nothing running closes the dialog' ($closed.hadDialog -and $closed.closed) "dialog was open $($closed.hadDialog), closed $($closed.closed)"
+
+        # And with the receiver answering again, Connect gets there.
+        $null = Send-SimulatorControl "$pipe-control" 'power on'
+        Start-Sleep -Seconds 5
+        $mark = (Wait-AppLog $Vm 'Cancelled' 0 5 'mark').count
+        $opened = Invoke-UiStep $Vm 'connect-again' '' @'
+$window = Get-AppWindow
+$footer = Find-Control $window -Name 'Connect'
+if ($footer) { Invoke-Control $footer }
+$primary = Find-Control $window -AutomationId 'PrimaryButton'
+if ($primary) { Invoke-Control $primary }
+[ordered]@{ pressed = [bool]$primary } | ConvertTo-Json -Compress
+'@
+        $seen = Wait-AppLog $Vm 'Session COM2 is now Connected' $mark 180 'connected-again'
+        Check $Result '[24] with the receiver answering, Connect connects' ($opened.pressed -and $seen.found) "$($seen.line)$($seen.tail)"
+        try { Invoke-VmRun $Vm captureScreen -Arguments (Join-Path $Result.Folder 'screen.png') -Guest | Out-Null } catch { }
     }
     finally {
         if (-not $simulator.HasExited) { $simulator.Kill() }
@@ -510,6 +695,7 @@ $scenarioTable = [ordered]@{
     'repair-damaged'   = ${function:Test-RepairDamaged}
     'app-checks'       = ${function:Test-AppChecks}
     'receiver'         = ${function:Test-Receiver}
+    'connect-cancel'   = ${function:Test-ConnectCancel}
 }
 
 # ---------------------------------------------------------------------------

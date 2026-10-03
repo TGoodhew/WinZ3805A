@@ -34,13 +34,15 @@ with the screenshots attached.
 |---|---|---|
 | 2 | **automated** | `receiver`: the simulated Z3805A on the VM's COM2 powered off for 30 s and back; the session must reach *Reconnecting*, reconnect by itself, and log a `State:` line after (#639) |
 | 8 | **automated** | `binary-audit`: `Test-NoBlockedCommands.ps1 -ScanBinaries` on the unpacked package |
-| 10 | **partly automated** | `receiver`: the simulated antenna pulled and held off past the grace minute; the app must log both notifications. Still by hand: that they appear on screen, and that none comes with the switch off |
+| 10 | **automated** | `receiver`: the simulated antenna pulled and held off past the grace minute; the app must log both notifications, and the screen is photographed as the first fires, for the agent to judge. Then the app is restarted with the switch off, and the same loss must raise none |
 | 11 | **automated** | `app-checks`: the guide and every image it names in the package; Ctrl+D and F1 open Details and the guide, each with its own caption |
 | 12 | **partly automated** | `fresh-online`, `fresh-offline`, `upgrade-1.2.0`, `leftover-cert`, `repair-damaged`, on Windows 10 and 11. Still by hand: a browser download with *Unblock* and the thumbprint compared, the offline zip with the network off, a run without unblocking, and a machine an earlier installer left unable to start the app, which does not reproduce under the harness (see `build/qa/README.md`) |
 | 18 | **automated** | `app-checks`: Explorer killed; the app logs re-adding its icon and keeps running |
+| 24 | **automated** | `connect-cancel`: the simulated receiver powered off, so COM2 is there and silent; an auto-detect walk is stopped by the dialog's Cancel and by Esc, through UI Automation. Each must log the press and *Disconnected. Cancelled.* within 3 s, send no probe after it, and leave the dialog open with Connect usable. Cancel with nothing running closes the dialog, and Connect connects once the receiver answers |
 | 25 | **automated** | `app-checks`: a second launch typed into the Start menu over Notepad; the app must be in front, alone, and say so in its log |
 | 21, 22, 23 | planned | UI Automation on the same VMs (#633) |
-| the rest | by hand | the receiver, a power switch, a second display, a real sign-in, or a person's eye |
+| 1, 5, 15, 16, 17, 19 | **not applicable** | Decided 2 Oct 2026. Section 5: a pass against the simulator is sufficient. Section 1 (the adapter pulled): a VM's serial port cannot vanish the way a USB device does, so unless that can be simulated a defect there is raised as a bug. Sections 15–17 (a real talker, the lamps, a UCCM's broadcast) and 19 (a second display): raised as bugs when found, not checked per release |
+| the rest | by hand | a real sign-in, a display or theme change, or a person's eye, until #633 reaches them |
 
 ---
 
