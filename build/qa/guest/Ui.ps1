@@ -30,20 +30,27 @@ public static class QaWin32
     [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
     [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
+    [DllImport("kernel32.dll")] public static extern IntPtr GetConsoleWindow();
+    [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int command);
     [DllImport("user32.dll")] public static extern uint GetDpiForWindow(IntPtr hWnd);
 
     public static bool IsTopmost(IntPtr hWnd) { return (GetWindowLong(hWnd, -20) & 0x8) != 0; }
     public static RECT Rect(IntPtr hWnd) { RECT r; GetWindowRect(hWnd, out r); return r; }
     public static IntPtr TopAt(int x, int y) { POINT p; p.X = x; p.Y = y; return GetAncestor(WindowFromPoint(p), 2); }
 
-    // Moves the pointer there in small steps, so the window under it sees it arrive.
+    [DllImport("user32.dll")] static extern int GetSystemMetrics(int index);
+
+    // Moves the pointer there in small steps of real input, so the window under it sees it arrive.
+    // Absolute mouse_event moves, not SetCursorPos: a cursor set without input reached the title bar
+    // but never the app's content, where no tooltip opened (3 Oct 2026).
     public static void MoveTo(int x, int y)
     {
         POINT now; GetCursorPos(out now);
+        int w = GetSystemMetrics(0) - 1, h = GetSystemMetrics(1) - 1;
         for (int i = 1; i <= 10; i++)
         {
-            SetCursorPos(now.X + (x - now.X) * i / 10, now.Y + (y - now.Y) * i / 10);
-            mouse_event(0x0001, 0, 0, 0, UIntPtr.Zero);
+            int px = now.X + (x - now.X) * i / 10, py = now.Y + (y - now.Y) * i / 10;
+            mouse_event(0x8001, px * 65535 / w, py * 65535 / h, 0, UIntPtr.Zero);
             System.Threading.Thread.Sleep(15);
         }
     }
@@ -148,6 +155,12 @@ function Use-TrayMenu {
     elseif ([QaTray]::IsOpen()) { [System.Windows.Forms.SendKeys]::SendWait('{ESC}') }
     [pscustomobject]@{ Items = $items; Chosen = $chosen }
 }
+
+# The script's own console out of the way. vmrun opens it visible and in front, and a pointer aimed
+# at the app lands on the console instead: hovers over the main window opened no tooltip, and the
+# window at the pointer was the console (3 Oct 2026). Screenshots never showed it, because they are
+# taken after the script, and its console, have gone. Output still reaches the step's log.
+[void][QaWin32]::ShowWindow([QaWin32]::GetConsoleWindow(), 0)
 
 # Physical pixels, whatever the display's scaling. Windows PowerShell is not DPI-aware, so without
 # this, at 150 % every rectangle it reads of another process's window comes back scaled down.
