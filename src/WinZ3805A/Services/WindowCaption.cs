@@ -33,6 +33,14 @@ namespace WinZ3805A.Services;
 /// <see cref="Window.Title"/>, which is the value this class asked for rather than the value the
 /// window has. Each correction is logged with the event that found it.
 /// </para>
+/// <para>
+/// <b>What the log found, 3 Oct 2026</b> (QA-Win10 and QA-Win11, 100 % and 225 %, Light, Dark and
+/// high contrast): the title bar writes the caption <b>when it is first sized, which is after it has
+/// loaded</b>. Every correction came from the size change, the caption being still right at load, so
+/// #637's load handler had been working only because of the order the two happened to arrive in at
+/// 100 %. The other hooks found nothing wrong and are kept as cheap insurance: each costs one
+/// <c>GetWindowText</c> and writes nothing while the caption is right.
+/// </para>
 /// </remarks>
 internal static class WindowCaption
 {
