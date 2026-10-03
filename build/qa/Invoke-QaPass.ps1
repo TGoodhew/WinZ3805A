@@ -39,6 +39,11 @@
                               screen and nothing clipped; at the minimum width the clock wraps
                               before the date, and the rows go together as the height shrinks;
                               Copy gives one plain line. UI Automation and the simulator port
+      accessibility      §4   A11Y-3, -9, -10 and -11 on the running app: icon-only controls named and
+                              their tooltips opened by real pointer movement; the medallion and
+                              every sky-plot marker exposed as sentences, and List showing the same
+                              satellites; live-region events recorded for a mode change, a lost
+                              connection and a tier C outcome. Needs the simulator port
       connect-cancel     §24  an auto-detect walk on a port where nothing answers, stopped by
                               Cancel and by Esc; then Connect works once the receiver answers.
                               Driven through UI Automation (guest\Ui.ps1). Needs the simulator port
@@ -67,7 +72,7 @@ param(
     [string]$Offline,
     [string]$Release,
     [string[]]$Machines = @('QA-Win10', 'QA-Win11'),
-    [string[]]$Scenarios = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout'),
+    [string[]]$Scenarios = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility'),
     [string]$OutDir
 )
 
@@ -78,7 +83,7 @@ Import-Module (Join-Path $PSScriptRoot 'QaVm.psm1') -Force
 # names no scenario - the first run of this script ran nothing and reported success.
 $Machines = @($Machines | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 $Scenarios = @($Scenarios | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-$known = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout')
+$known = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility')
 $unknown = @($Scenarios | Where-Object { $known -notcontains $_ })
 if ($unknown.Count) { throw "Unknown scenario(s): $($unknown -join ', '). Known: $($known -join ', ')." }
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
@@ -1280,6 +1285,198 @@ function Test-WholeLayout {
     }
 }
 
+# manual-qa.md section 4, the criteria a script can judge on the running app.
+$a11yStep = @'
+$facts = [ordered]@{}
+function Open-Details([string]$Page) {
+    $d = Get-AppWindowNamed 'Receiver Details' -Seconds 2
+    if (-not $d) {
+        $w = Get-AppWindow
+        $bar = Get-Bounds (Find-Control $w -AutomationId 'AppTitleBar' -Seconds 2)
+        [QaWin32]::MoveTo($bar.Left + 120, $bar.Top + [int]($bar.Height / 2)); [QaWin32]::LeftDown(); [QaWin32]::LeftUp()
+        Start-Sleep -Milliseconds 500
+        Send-KeyTo $w '^d'
+        $d = Get-AppWindowNamed 'Receiver Details'
+    }
+    [void](Select-NavigationItem $d $Page)
+    Start-Sleep -Seconds 3
+    $d
+}
+
+if ($phase -eq 'names') {
+    # A11Y-10: the medallion's state as a sentence; every satellite on the plot as one.
+    $med = Find-Control (Get-AppWindow) -AutomationId 'Medallion'
+    $facts.medallion = "$($med.Current.Name)"
+    $facts.modeText = "$((Find-Control (Get-AppWindow) -AutomationId 'ModeText' -Seconds 1).Current.Name)"
+    $d = Open-Details 'Satellites'
+    $plot = Find-Control $d -AutomationId 'SkyPlot'
+    $facts.markers = @($plot.FindAll([System.Windows.Automation.TreeScope]::Descendants,
+        (New-Object System.Windows.Automation.PropertyCondition($script:Ae::ControlTypeProperty, [System.Windows.Automation.ControlType]::Button))) |
+        ForEach-Object { $_.Current.Name })
+    # A11Y-11: the List view, row by row, each row's sentence and its cells.
+    $list = Find-Control $d -AutomationId 'ListViewChoice'
+    $list.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+    Start-Sleep -Seconds 2
+    $rows = Find-Control $d -AutomationId 'SkyRows'
+    $facts.rows = @($rows.FindAll([System.Windows.Automation.TreeScope]::Children, [System.Windows.Automation.Condition]::TrueCondition) | ForEach-Object {
+        $cells = @($_.FindAll([System.Windows.Automation.TreeScope]::Descendants, (New-Object System.Windows.Automation.PropertyCondition($script:Ae::ControlTypeProperty, [System.Windows.Automation.ControlType]::Text))) | ForEach-Object { $_.Current.Name })
+        "$($_.Current.Name)|$($cells -join ';')"
+    })
+    $list = Find-Control $d -AutomationId 'PlotViewChoice'
+    $list.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+}
+elseif ($phase -eq 'tooltips') {
+    # A11Y-3: every icon-only control named, and its tooltip opened by real pointer movement. Icon
+    # buttons are squarish and text buttons wide; a button's text is not exposed as a child, so
+    # shape is what tells them apart. Window chrome and stock parts of library controls are not
+    # this application's to name. Details sits on the Timing page, where Export is enabled, and is
+    # moved clear of the main window, which owns it and so is always beneath it.
+    $d = Open-Details 'Timing'
+    $deadline = (Get-Date).AddSeconds(60)
+    while (-not (Find-Control $d -AutomationId 'ExportButton' -Seconds 1).Current.IsEnabled -and (Get-Date) -lt $deadline) { Start-Sleep -Seconds 3 }
+    $m = [QaWin32]::Rect((Get-Handle (Get-AppWindow)))
+    [QaWin32]::SetWindowPos((Get-Handle $d), [IntPtr]::Zero, 20, $m.Bottom + 10, 0, 0, 0x0015) | Out-Null
+    Start-Sleep -Seconds 1
+    $stock = 'Minimize', 'Maximize', 'Close', 'UpSpinButton', 'DownSpinButton', 'TogglePaneButton', 'CloseButton'
+    $found = @()
+    foreach ($label in 'main', 'details') {
+        $win = if ($label -eq 'main') { Get-AppWindow } else { Get-AppWindowNamed 'Receiver Details' }
+        $bar = Get-Bounds (Find-Control $win -AutomationId 'AppTitleBar' -Seconds 2)
+        [QaWin32]::MoveTo($bar.Left + 120, $bar.Top + [int]($bar.Height / 2)); [QaWin32]::LeftDown(); [QaWin32]::LeftUp()
+        Start-Sleep -Seconds 1
+        foreach ($e in $win.FindAll([System.Windows.Automation.TreeScope]::Descendants, (New-Object System.Windows.Automation.PropertyCondition($script:Ae::ControlTypeProperty, [System.Windows.Automation.ControlType]::Button)))) {
+            $r = $e.Current.BoundingRectangle
+            if ($e.Current.IsOffscreen -or $e.Current.AutomationId -in $stock -or $r.Width -gt 1.6 * $r.Height) { continue }
+            $texts = @($e.FindAll([System.Windows.Automation.TreeScope]::Descendants, (New-Object System.Windows.Automation.PropertyCondition($script:Ae::ControlTypeProperty, [System.Windows.Automation.ControlType]::Text))) | Where-Object { $_.Current.Name -match '\w' })
+            if ($texts.Count) { continue }
+            $b = Get-Bounds $e
+            [QaWin32]::MoveTo($b.Left - 150, $b.Top + 150)
+            Start-Sleep -Milliseconds 800
+            [QaWin32]::MoveTo($b.Left + [int]($b.Width / 2), $b.Top + [int]($b.Height / 2) + 50)
+            [QaWin32]::MoveTo($b.Left + [int]($b.Width / 2), $b.Top + [int]($b.Height / 2))
+            Start-Sleep -Milliseconds 1800
+            $tip = @($script:Ae::RootElement.FindAll([System.Windows.Automation.TreeScope]::Descendants,
+                (New-Object System.Windows.Automation.PropertyCondition($script:Ae::ControlTypeProperty, [System.Windows.Automation.ControlType]::ToolTip))) | ForEach-Object { $_.Current.Name }) -join ' | '
+            $found += "$label|$($e.Current.AutomationId)|$($e.Current.Name)|$($e.Current.IsEnabled)|$tip"
+        }
+    }
+    $facts.controls = $found
+}
+elseif ($phase -eq 'tierC') {
+    # A command with a confirmed outcome: the elevation mask, applied from the Satellites page. The
+    # simulated receiver refuses it, which is the outcome that must interrupt.
+    $d = Open-Details 'Satellites'
+    [QaWin32]::SetWindowPos((Get-Handle $d), [IntPtr]::Zero, 20, 20, 0, 0, 0x0015) | Out-Null
+    Start-Sleep -Seconds 1
+    $apply = Find-Control $d -AutomationId 'ApplyMaskButton'
+    if ($apply) { Invoke-Control $apply }
+    $primary = Find-Control $d -AutomationId 'PrimaryButton' -Seconds 4
+    if ($primary) { Invoke-Control $primary }
+    Start-Sleep -Seconds 12
+    $facts.outcome = "$((Find-Control $d -AutomationId 'MaskOutcome' -Seconds 2).Current.Name)"
+}
+$facts | ConvertTo-Json -Compress -Depth 4
+'@
+
+function Test-Accessibility {
+    param($Vm, $Result)
+    $pipe = Get-QaSimulatorPipe -Vm $Vm
+    if (-not (Select-String -LiteralPath $Vm.Vmx -SimpleMatch "\\.\pipe\$pipe" -Quiet)) {
+        $Result.Error = "skipped: the VM has no simulator port; run Add-QaSimulatorPort (build/qa/README.md)"
+        return
+    }
+    Send-Zip $Vm $Offline 'candidate'
+    $code = Install-Candidate $Vm 'candidate'
+    Check $Result 'installed (exit 0, or 2 with the start check timing out)' ($code -in 0, 2) "exit $code"
+    $null = Invoke-QaGuestScript $Vm -Name 'prefs-a11y' -Script @'
+Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue | Stop-Process -Force
+Start-Sleep -Seconds 2
+$pkg = Get-AppxPackage -Name WinZ3805A | Select-Object -First 1
+$dir = Join-Path $env:LOCALAPPDATA "Packages\$($pkg.PackageFamilyName)\LocalCache\Local\WinZ3805A"
+'{"PortName":"COM2","AutoDetect":false,"BaudRate":9600,"DataBits":8,"Parity":0,"StopBits":1,"ReconnectAutomatically":true,"ConnectOnLaunch":true}' | Set-Content (Join-Path $dir 'connection.json') -Encoding ascii
+Start-Process "shell:AppsFolder\$($pkg.PackageFamilyName)!App"
+'@
+    $simulator = Start-Process (Get-Simulator) -PassThru -WindowStyle Hidden `
+        -ArgumentList '--pipe-client', $pipe, '--start', 'locked', '--speed', '2', '--control', "$pipe-control" `
+        -RedirectStandardOutput (Join-Path $Result.Folder 'simulator.log') -RedirectStandardError (Join-Path $Result.Folder 'simulator.err')
+    try {
+        $seen = Wait-AppLog $Vm 'State: LOCK' 0 120 'locked'
+        Check $Result 'connected and locked to the simulated receiver' $seen.found $seen.line
+
+        # A11Y-10 and A11Y-11.
+        $n = Invoke-UiStep $Vm 'a11y-names' "`$phase = 'names'" $a11yStep
+        Check $Result '[4] A11Y-10: the medallion states its mode as a sentence' ($n.medallion -match '^[A-Z].+, .+\.$' -and $n.modeText -and $n.medallion.StartsWith($n.modeText)) "'$($n.medallion)'"
+        $markers = @($n.markers)
+        Check $Result '[4] A11Y-10: the sky plot exposes every satellite as a sentence' ($markers.Count -ge 4 -and @($markers | Where-Object { $_ -notmatch '^PRN \d+, elevation \d+ degrees, azimuth \d+ degrees, .+' }).Count -eq 0) "$($markers.Count) markers: $($markers -join ' / ')"
+        # The plot and the list are read moments apart from a receiver that is moving, so they are
+        # compared satellite by satellite: the same PRNs and states, positions within a degree, and
+        # each row's cells in agreement with its own sentence.
+        $plotBy = @{}; foreach ($m in $markers) { if ($m -match '^PRN (\d+), elevation (\d+) degrees, azimuth (\d+) degrees, (.+)$') { $plotBy[$Matches[1]] = @([int]$Matches[2], [int]$Matches[3], ($Matches[4] -replace '^C/N \d+ of \d+, ', '')) } }
+        $problems = @(); $listPrns = @()
+        foreach ($row in @($n.rows)) {
+            $name, $cells = $row -split '\|', 2
+            $c = $cells -split ';'
+            if ($name -notmatch '^PRN (\d+), elevation (\d+) degrees, azimuth (\d+) degrees, (.+)$') { $problems += "row '$name'"; continue }
+            $prn = $Matches[1]; $el = [int]$Matches[2]; $az = [int]$Matches[3]; $state = $Matches[4] -replace '^C/N \d+ of \d+, ', ''
+            $listPrns += $prn
+            if ($c[0] -ne $prn -or ($c[1] -replace '\D') -ne "$el" -or ($c[2] -replace '\D') -ne "$az") { $problems += "PRN $prn cells $($c -join ',') against its sentence" }
+            if (-not $plotBy.ContainsKey($prn)) { $problems += "PRN $prn listed, not plotted"; continue }
+            $pl = $plotBy[$prn]
+            if ([Math]::Abs($pl[0] - $el) -gt 1 -or [Math]::Abs($pl[1] - $az) -gt 1 -or $pl[2] -ne $state) { $problems += "PRN $prn plot $($pl -join ',') list $el,$az,$state" }
+        }
+        foreach ($prn in $plotBy.Keys) { if ($listPrns -notcontains $prn) { $problems += "PRN $prn plotted, not listed" } }
+        Check $Result '[4] A11Y-11: List shows the same satellites with the same data as the plot' ($problems.Count -eq 0 -and $listPrns.Count -eq $plotBy.Count) "$($listPrns.Count) rows, $($plotBy.Count) markers; $($problems -join '; ')"
+
+        # A11Y-3.
+        $tt = Invoke-UiStep $Vm 'a11y-tooltips' "`$phase = 'tooltips'" $a11yStep
+        $controls = @($tt.controls)
+        foreach ($expected in 'main|ZoneButton', 'main|AlwaysOnTopButton', 'details|RefreshButton', 'details|ExportButton', 'details|SettingsButton', 'details|HelpButton') {
+            $hit = $controls | Where-Object { $_ -like "$expected|*" } | Select-Object -First 1
+            $f = if ($hit) { $hit -split '\|' } else { @() }
+            Check $Result "[4] A11Y-3: $($expected -replace '\|', ' ') is named and its tooltip opens" ($hit -and $f[2] -and $f[4]) "$(if ($hit) { "name '$($f[2])', enabled $($f[3]), tooltip '$($f[4])'" } else { 'not found as an icon-only control' })"
+        }
+        $others = @($controls | Where-Object { $c = $_; -not ('main|ZoneButton', 'main|AlwaysOnTopButton', 'details|RefreshButton', 'details|ExportButton', 'details|SettingsButton', 'details|HelpButton' | Where-Object { $c -like "$_|*" }) })
+        Check $Result '[4] A11Y-3: every other icon-only control is named, and enabled ones show a tooltip' (@($others | Where-Object { $f = $_ -split '\|'; -not $f[2] -or ($f[3] -eq 'True' -and -not $f[4]) }).Count -eq 0) "$($others.Count) more: $($others -join ' / ')"
+
+        # A11Y-9: a listener records live-region events while the simulator forces a mode change and
+        # a lost connection, and the Satellites page runs a tier C command.
+        Copy-QaFile $Vm -Source (Join-Path $PSScriptRoot 'guest\LiveListen.ps1') -Destination 'C:\qa\LiveListen.ps1' -ToGuest
+        Invoke-VmRun $Vm runProgramInGuest -Arguments '-noWait', '-activeWindow', '-interactive', 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', 'C:\qa\LiveListen.ps1', '-Seconds', '200' -Guest | Out-Null
+        Start-Sleep -Seconds 10
+        $mark = (Wait-AppLog $Vm 'State:' 0 5 'mark-a11y').count
+        $null = Send-SimulatorControl "$pipe-control" 'antenna off'
+        $seen = Wait-AppLog $Vm 'State: (WAIT|HOLD)' $mark 120 'a11y-holdover'
+        $null = Send-SimulatorControl "$pipe-control" 'antenna on'
+        Start-Sleep -Seconds 20
+        $null = Send-SimulatorControl "$pipe-control" 'power off'
+        $seen = Wait-AppLog $Vm 'is now Reconnecting' $mark 60 'a11y-lost'
+        $null = Send-SimulatorControl "$pipe-control" 'power on'
+        $seen = Wait-AppLog $Vm 'is now Connected' $seen.count 120 'a11y-back'
+        $null = Invoke-UiStep $Vm 'a11y-tierc' "`$phase = 'tierC'" $a11yStep
+        $events = ''
+        $deadline = (Get-Date).AddSeconds(150)
+        do {
+            try { Copy-QaFile $Vm -Source 'C:\qa\live-events.txt' -Destination (Join-Path $Result.Folder 'live-events.txt'); $events = Get-Content (Join-Path $Result.Folder 'live-events.txt') -Raw } catch { }
+            if ($events -notmatch '(?m)^done') { Start-Sleep -Seconds 10 }
+        } while ($events -notmatch '(?m)^done' -and (Get-Date) -lt $deadline)
+        $lines = @($events -split "`r?`n" | Where-Object { $_ -match "`t" })
+        $mode = $lines | Where-Object { $_ -match "`tAnnouncer`t.*Holdover" } | Select-Object -First 1
+        Check $Result '[4] A11Y-9: a mode change is announced' ([bool]$mode) "$mode"
+        $lost = $lines | Where-Object { $_ -match "`tAnnouncer`t.*(Reconnecting|Connection lost)" } | Select-Object -First 1
+        Check $Result '[4] A11Y-9: a lost connection is announced' ([bool]$lost) "$lost"
+        Check $Result '[4] A11Y-9: and assertively (#660)' ($lost -match "^\S+`tAssertive") "$lost"
+        $outcome = $lines | Where-Object { $_ -match "`tMaskOutcome`t" } | Select-Object -First 1
+        # The simulated receiver accepts the mask or refuses it depending on its state, and either is
+        # an outcome: a failure must interrupt, and a success must not.
+        $urgencyRight = if ($outcome -match "Couldn't") { $outcome -match "`tAssertive`t" } else { $outcome -match "`tPolite`t" }
+        Check $Result '[4] A11Y-9: a tier C outcome is announced, assertively only if it failed' ($outcome -and $urgencyRight) "$outcome"
+    }
+    finally {
+        if (-not $simulator.HasExited) { $simulator.Kill() }
+        $null = Save-Evidence $Vm $Result.Folder
+    }
+}
+
 $scenarioTable = [ordered]@{
     'fresh-online'     = ${function:Test-FreshOnline}
     'fresh-offline'    = ${function:Test-FreshOffline}
@@ -1292,6 +1489,7 @@ $scenarioTable = [ordered]@{
     'sign-in'          = ${function:Test-SignIn}
     'pin-compact'      = ${function:Test-PinCompact}
     'whole-layout'     = ${function:Test-WholeLayout}
+    'accessibility'    = ${function:Test-Accessibility}
 }
 
 # ---------------------------------------------------------------------------
