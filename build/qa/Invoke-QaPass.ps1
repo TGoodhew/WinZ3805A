@@ -2953,9 +2953,9 @@ $missed = @($root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $f
 [ordered]@{ surface = $surface; dpi = 96; stops = $stops; missed = $missed; closedOn = $closedOn; unnamed = $unnamed; tabs = $i } | ConvertTo-Json -Compress -Depth 5
 '@
 
-# #684: a toggle switch reports a 20 px rectangle; whether its target is that small is measured by
-# pressing outside the rectangle - 6 px above it and 6 px below, 32 px apart - and seeing whether the
-# switch changes. Each press that changes it is put back with the pattern, not the pointer.
+# #684: a toggle switch's target measured by pressing 15 px above and below its centre - outside a 20 px
+# band, inside the 32 px floor - and seeing whether the switch changes. Each press that changes it is put
+# back with the pattern, not the pointer.
 $toggleStep = @'
 $facts = [ordered]@{}
 $w = Get-AppWindow
@@ -2985,8 +2985,11 @@ function Press-At([int]$y) {
     $after -ne $before
 }
 $facts.inside = Press-At ([int]($r.Top + $r.Height / 2))
-$facts.above = Press-At ([int]$r.Top - 6)
-$facts.below = Press-At ([int]$r.Bottom + 5)
+# 15 px either side of the switch's centre: outside the 20 px band the target was (±10) and inside the 32 px
+# floor (±16), whatever rectangle the switch reports - after #684's fix it reports 32 px itself.
+$middle = [int]($r.Top + $r.Height / 2)
+$facts.above = Press-At ($middle - 15)
+$facts.below = Press-At ($middle + 15)
 [QaWin32]::MoveTo(2, 2)
 $facts | ConvertTo-Json -Compress
 '@
@@ -3013,7 +3016,7 @@ function Test-KeyboardFocus {
         # #684: the switches' measured target, so A11Y-5 judges the target and not the rectangle.
         $hit = Invoke-UiStep $Vm 'keys-toggle-target' '' $toggleStep
         $switchReach = $hit.inside -eq $true -and $hit.above -eq $true -and $hit.below -eq $true
-        Check $Result '[A11Y-5] a toggle switch takes a press 6 px above and below its 20 px rectangle, so its target is 32 px or more (#684)' $switchReach "rectangle $($hit.rect); pressed inside $($hit.inside), above $($hit.above), below $($hit.below)$(if ($hit.error) { '; ' + $hit.error })"
+        Check $Result '[A11Y-5] a toggle switch takes a press 15 px above and below its centre, so its target is 32 px (#684)' $switchReach "rectangle $($hit.rect); pressed inside $($hit.inside), above $($hit.above), below $($hit.below)$(if ($hit.error) { '; ' + $hit.error })"
         $all = [ordered]@{}
         foreach ($surface in 'main', 'Overview', 'Satellites', 'Position', 'Timing', 'Holdover', 'Time', 'Status Registers', 'Diagnostics', 'Settings') {
             $k = Invoke-UiStep $Vm "keys-$($surface -replace ' ', '')" "`$surface = '$surface'" $keyboardStep
