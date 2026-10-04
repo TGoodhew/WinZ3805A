@@ -255,7 +255,9 @@ if ($LASTEXITCODE -ne 0) { throw "vmware-vdiskmanager could not create $disk" }
 # slot available for Ethernet0" (the first run, 1 Oct 2026). uuid.action and msg.autoAnswer keep a
 # start with no window from waiting on a question nobody can see: the first says the VM is new
 # rather than moved or copied, the second takes each question's default. serial1 is COM2 in the guest,
-# served on a named pipe for the Z3805A simulator to connect to (#639, Add-QaSimulatorPort).
+# served on a named pipe for the Z3805A simulator to connect to (#639, Add-QaSimulatorPort). 3D
+# acceleration is what lets Windows 11 draw Mica, which the contrast scenario measures text over
+# (Enable-Qa3dGraphics); without it the backdrop is a flat fallback whatever the wallpaper.
 $vmxText = @"
 .encoding = "UTF-8"
 config.version = "8"
@@ -314,6 +316,7 @@ ehci.present = "TRUE"
 usb_xhci.present = "TRUE"
 sound.present = "FALSE"
 svga.autodetect = "TRUE"
+mks.enable3d = "TRUE"
 tools.syncTime = "TRUE"
 "@
 [IO.File]::WriteAllText($vmx, $vmxText, (New-Object Text.UTF8Encoding($false)))
