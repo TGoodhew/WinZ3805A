@@ -160,6 +160,14 @@ record a result against each number.
 - **A11Y-4 Contrast, where the gate cannot read.** Accessibility Insights colour-contrast pass under
   a contrast theme (its colours are the user's own `SystemColor*`), and over Mica, where the backdrop
   is a live blur of the wallpaper.
+  *Automated since 4 Oct 2026* (`contrast`): every text element on the main window and every Details
+  page, scrolled to its foot, measured on screen against its §9.4.5 floor - 4.5:1, 3:1 for large text
+  and for icons, disabled text exempt. Each theme is measured over Mica on a grey wallpaper and on the
+  hardest of six saturated ones, at 200 % so small text is measured at its own colour rather than its
+  anti-aliasing; then each of the four contrast themes. On Windows 10 it confirms the solid fallback
+  instead of Mica. It needs QA-Win11's 3D acceleration, without which Windows draws Mica as a flat
+  colour whatever the wallpaper. What it still cannot reach is a user's own contrast colours, which
+  the four built-in themes stand in for. Its first run found #697.
 - **A11Y-5 Target size.** Accessibility Insights target-size check. The sky-plot markers will flag;
   §9.10.2 is the answer to that flag.
   *Automated since 3 Oct 2026, with A11Y-1 and A11Y-2* (`keyboard-focus`): the main window and every Details

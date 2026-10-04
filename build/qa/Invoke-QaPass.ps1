@@ -75,6 +75,10 @@
       greyscale-states   §4   A11Y-12: the simulated receiver put through each state it can show, the main
                               window and Overview photographed beside their greyscale for the agent to
                               judge. Needs the simulator port
+      contrast           §4   A11Y-4: every piece of text on every surface measured on screen against its
+                              floor, at 200 %: Light and Dark over Mica on a grey wallpaper and on the
+                              hardest of six hues (Windows 10: the solid fallback), then the four contrast
+                              themes. Needs the simulator port, and on Windows 11 3D acceleration
       connect-cancel     §24  an auto-detect walk on a port where nothing answers, stopped by
                               Cancel and by Esc; then Connect works once the receiver answers.
                               Driven through UI Automation (guest\Ui.ps1). Needs the simulator port
@@ -103,7 +107,7 @@ param(
     [string]$Offline,
     [string]$Release,
     [string[]]$Machines = @('QA-Win10', 'QA-Win11'),
-    [string[]]$Scenarios = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast', 'display-scaling', 'text-scaling', 'keyboard-focus', 'reduced-motion', 'greyscale-states'),
+    [string[]]$Scenarios = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast', 'display-scaling', 'text-scaling', 'keyboard-focus', 'reduced-motion', 'greyscale-states', 'contrast'),
     [string]$OutDir
 )
 
@@ -114,7 +118,7 @@ Import-Module (Join-Path $PSScriptRoot 'QaVm.psm1') -Force
 # names no scenario - the first run of this script ran nothing and reported success.
 $Machines = @($Machines | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 $Scenarios = @($Scenarios | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-$known = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast', 'display-scaling', 'text-scaling', 'keyboard-focus', 'reduced-motion', 'greyscale-states')
+$known = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast', 'display-scaling', 'text-scaling', 'keyboard-focus', 'reduced-motion', 'greyscale-states', 'contrast')
 $unknown = @($Scenarios | Where-Object { $known -notcontains $_ })
 if ($unknown.Count) { throw "Unknown scenario(s): $($unknown -join ', '). Known: $($known -join ', ')." }
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
@@ -3267,6 +3271,385 @@ function Test-GreyscaleStates {
     }
 }
 
+# A11Y-4's conditions: Windows' app theme ($theme, 'Light' or 'Dark'), a solid wallpaper ($wall, a colour
+# name), and a contrast theme ($scheme, or '' for none), set under the running app. With $hues, each of
+# them is tried as the wallpaper in turn and the main window's backdrop recorded under each, so the
+# caller can choose the one that moves the backdrop furthest towards the text: Mica keeps a wallpaper's
+# hue and replaces its lightness, so black and white give the same backdrop and a saturated hue does not.
+$contrastSetStep = @'
+Add-Type -TypeDefinition @"
+using System; using System.Runtime.InteropServices;
+public static class QaCondition {
+    [StructLayout(LayoutKind.Sequential)] public struct HIGHCONTRAST { public int cbSize; public int dwFlags; public IntPtr lpszDefaultScheme; }
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "SystemParametersInfoW")] static extern bool SpiHc(int action, int param, ref HIGHCONTRAST hc, int winIni);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "SystemParametersInfoW")] public static extern bool SpiStr(int action, int param, string value, int winIni);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr SendMessageTimeout(IntPtr h, int msg, IntPtr w, string l, int flags, int timeout, out IntPtr result);
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+    [DllImport("user32.dll")] public static extern bool MoveWindow(IntPtr h, int x, int y, int w, int t, bool repaint);
+    public static bool Contrast(bool on, string scheme) {
+        var hc = new HIGHCONTRAST(); hc.cbSize = Marshal.SizeOf(hc); hc.dwFlags = on ? 1 : 0;
+        hc.lpszDefaultScheme = scheme == null ? IntPtr.Zero : Marshal.StringToHGlobalUni(scheme);
+        try { return SpiHc(0x43, hc.cbSize, ref hc, 3); } finally { if (hc.lpszDefaultScheme != IntPtr.Zero) Marshal.FreeHGlobal(hc.lpszDefaultScheme); }
+    }
+    public static string ContrastName() {
+        var hc = new HIGHCONTRAST(); hc.cbSize = Marshal.SizeOf(hc); SpiHc(0x42, hc.cbSize, ref hc, 0);
+        return (hc.dwFlags & 1) == 0 ? "" : Marshal.PtrToStringUni(hc.lpszDefaultScheme);
+    }
+    // What Settings sends after changing the app theme; WinUI follows it live.
+    public static void ThemeChanged() { IntPtr r; SendMessageTimeout((IntPtr)0xFFFF, 0x1A, IntPtr.Zero, "ImmersiveColorSet", 2, 5000, out r); }
+}
+"@
+Add-Type -AssemblyName System.Drawing
+$facts = [ordered]@{}
+
+function Set-Wallpaper([string]$colour) {
+    $bmp = New-Object System.Drawing.Bitmap 64, 64; $g = [System.Drawing.Graphics]::FromImage($bmp); $g.Clear([System.Drawing.Color]::FromName($colour)); $g.Dispose()
+    $path = "C:\qa\contrast\wall-$colour.bmp"; $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Bmp); $bmp.Dispose()
+    [void][QaCondition]::SpiStr(0x14, 0, $path, 3)
+}
+# The main window's commonest colour, which is its backdrop: most of it is not card.
+function Get-Backdrop {
+    $w = Get-AppWindow
+    [void][QaCondition]::SetForegroundWindow((Get-Handle $w)); [QaWin32]::MoveTo(2550, 1590); Start-Sleep -Seconds 3
+    $r = $w.Current.BoundingRectangle
+    $bmp = New-Object System.Drawing.Bitmap ([int]$r.Width), ([int]$r.Height)
+    $g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen([int]$r.Left, [int]$r.Top, 0, 0, $bmp.Size); $g.Dispose()
+    $counts = @{}
+    for ($y = 80; $y -lt $bmp.Height; $y += 10) { for ($x = 0; $x -lt $bmp.Width; $x += 10) { $p = $bmp.GetPixel($x, $y); $k = '#{0:X2}{1:X2}{2:X2}' -f $p.R, $p.G, $p.B; $counts[$k] = 1 + [int]$counts[$k] } }
+    $bmp.Dispose()
+    ($counts.GetEnumerator() | Sort-Object Value -Descending | Select-Object -First 1).Key
+}
+
+New-Item -ItemType Directory -Force 'C:\qa\contrast' | Out-Null
+$w = Get-AppWindow
+if (-not $w) { [ordered]@{ error = "no main window ($(Get-WindowReport))" } | ConvertTo-Json -Compress; return }
+$d = Get-AppWindowNamed 'Receiver Details' -Seconds 1
+if ($d) { try { $d.GetCurrentPattern([System.Windows.Automation.WindowPattern]::Pattern).Close() } catch { }; Start-Sleep -Seconds 2 }
+[void][QaCondition]::MoveWindow((Get-Handle $w), 40, 40, 1800, 1280, $true)
+
+if ($scheme) {
+    [void][QaCondition]::Contrast($false, $null); Start-Sleep -Seconds 3
+    $facts.applied = [QaCondition]::Contrast($true, $scheme); Start-Sleep -Seconds 10
+}
+else {
+    if ([QaCondition]::ContrastName()) { [void][QaCondition]::Contrast($false, $null); Start-Sleep -Seconds 5 }
+    $light = [int]($theme -eq 'Light')
+    $p = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize'
+    Set-ItemProperty $p -Name AppsUseLightTheme -Value $light -Type DWord
+    Set-ItemProperty $p -Name SystemUsesLightTheme -Value $light -Type DWord
+    [QaCondition]::ThemeChanged(); Start-Sleep -Seconds 4
+}
+$facts.contrast = [QaCondition]::ContrastName()
+$facts.micaLog = [bool](Get-AppLogLines | Where-Object { $_ -match 'Mica is not supported' })
+if ($hues) {
+    $facts.hues = [ordered]@{}
+    foreach ($hue in $hues -split ',') { Set-Wallpaper $hue; Start-Sleep -Seconds 3; $facts.hues[$hue] = Get-Backdrop }
+}
+Set-Wallpaper $wall; Start-Sleep -Seconds 3
+$facts.backdrop = Get-Backdrop
+$facts | ConvertTo-Json -Compress -Depth 3
+'@
+
+# manual-qa.md section 4, A11Y-4: every piece of text measured on screen against section 9.4.5's floor,
+# where the gate cannot read - over Mica, whose backdrop is the user's wallpaper, and under a contrast
+# theme, whose colours are the user's. Each text element UI Automation reports on the surface is
+# measured in a photograph of the window: its background is the commonest colour in its box, its text
+# the most contrasting colour drawn there. Called with $surface ('main' or a Details page by its
+# navigation label) and $tag naming the condition, for the evidence's file names.
+$contrastMeasureStep = @'
+Add-Type -ReferencedAssemblies System.Drawing -TypeDefinition @"
+using System; using System.Collections.Generic; using System.Drawing; using System.Drawing.Imaging; using System.Runtime.InteropServices;
+public static class QaContrast {
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+    [DllImport("user32.dll")] public static extern bool MoveWindow(IntPtr h, int x, int y, int w, int t, bool repaint);
+    [StructLayout(LayoutKind.Sequential)] struct POINT { public int X, Y; }
+    [DllImport("user32.dll")] static extern IntPtr WindowFromPoint(POINT p);
+    [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+    // Whether the window under a point is the app's: a notification over the window once supplied the
+    // pixels of five labels, measured as the app's (QA-Win10, 4 Oct 2026). By process, not by window,
+    // because the app's tooltips and flyouts are windows of their own, and its pixels all the same.
+    public static bool Owns(IntPtr root, int x, int y) {
+        POINT p; p.X = x; p.Y = y; IntPtr h = WindowFromPoint(p); uint a, b;
+        if (h == IntPtr.Zero) return false;
+        GetWindowThreadProcessId(root, out a); GetWindowThreadProcessId(h, out b); return a == b;
+    }
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr h, System.Text.StringBuilder s, int n);
+    [DllImport("user32.dll")] static extern IntPtr GetAncestor(IntPtr h, uint flags);
+    // What is under a point, for the evidence: the window's class, its top-level window's class, and
+    // whether that top-level window is the one being measured.
+    public static string Under(IntPtr root, int x, int y) {
+        POINT p; p.X = x; p.Y = y; IntPtr h = WindowFromPoint(p); IntPtr top = GetAncestor(h, 2);
+        var a = new System.Text.StringBuilder(256); var b = new System.Text.StringBuilder(256);
+        GetClassName(h, a, 256); GetClassName(top, b, 256);
+        return a + " in " + b + (top == root ? "" : " (another window)");
+    }
+    static double Lin(int c) { double v = c / 255.0; return v <= 0.03928 ? v / 12.92 : Math.Pow((v + 0.055) / 1.055, 2.4); }
+    public static double Lum(int argb) { return 0.2126 * Lin((argb >> 16) & 0xFF) + 0.7152 * Lin((argb >> 8) & 0xFF) + 0.0722 * Lin(argb & 0xFF); }
+    public static double Ratio(double a, double b) { return (Math.Max(a, b) + 0.05) / (Math.Min(a, b) + 0.05); }
+    public static string Hex(int argb) { return string.Format("#{0:X6}", argb & 0xFFFFFF); }
+    // The background is the commonest colour, to within 2 bits a channel, averaged over the pixels that
+    // are it; the text is the third most contrasting pixel, so one stray pixel cannot pass a box. Ink
+    // is how many pixels differ from the background by 1.5:1 or more: under a handful, nothing is drawn.
+    public static object[] Measure(Bitmap bmp, int x0, int y0, int w, int h) {
+        int x1 = Math.Min(bmp.Width, x0 + w), y1 = Math.Min(bmp.Height, y0 + h);
+        x0 = Math.Max(0, x0); y0 = Math.Max(0, y0);
+        if (x1 - x0 < 2 || y1 - y0 < 2) return null;
+        var data = bmp.LockBits(new Rectangle(x0, y0, x1 - x0, y1 - y0), ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+        int n = (x1 - x0) * (y1 - y0); var px = new int[n];
+        for (int row = 0; row < y1 - y0; row++) Marshal.Copy(data.Scan0 + row * data.Stride, px, row * (x1 - x0), x1 - x0);
+        bmp.UnlockBits(data);
+        var counts = new Dictionary<int, int>(); int best = 0, bestKey = 0;
+        foreach (int p in px) { int k = ((p >> 18) & 0x3F) << 12 | ((p >> 10) & 0x3F) << 6 | ((p >> 2) & 0x3F); int c; counts.TryGetValue(k, out c); counts[k] = ++c; if (c > best) { best = c; bestKey = k; } }
+        long r = 0, g = 0, b = 0; int m = 0;
+        foreach (int p in px) { int k = ((p >> 18) & 0x3F) << 12 | ((p >> 10) & 0x3F) << 6 | ((p >> 2) & 0x3F); if (k == bestKey) { r += (p >> 16) & 0xFF; g += (p >> 8) & 0xFF; b += p & 0xFF; m++; } }
+        int bg = (int)(r / m) << 16 | (int)(g / m) << 8 | (int)(b / m);
+        double bgL = Lum(bg);
+        var ratios = new double[n]; var fgs = new int[n]; int ink = 0;
+        for (int i = 0; i < n; i++) { ratios[i] = Ratio(Lum(px[i]), bgL); fgs[i] = px[i]; if (ratios[i] >= 1.5) ink++; }
+        Array.Sort(ratios, fgs); Array.Reverse(ratios); Array.Reverse(fgs);
+        int pick = Math.Min(2, n - 1);
+        return new object[] { Hex(bg), Hex(fgs[pick]), Math.Round(ratios[pick], 2), ink, Math.Round(100.0 * m / n) };
+    }
+}
+"@
+Add-Type -AssemblyName System.Drawing
+$Ae = [System.Windows.Automation.AutomationElement]
+
+$w = Get-AppWindow
+if (-not $w) { [ordered]@{ error = "no main window ($(Get-WindowReport))" } | ConvertTo-Json -Compress; return }
+$root = $w
+if ($surface -eq 'main') {
+    $d = Get-AppWindowNamed 'Receiver Details' -Seconds 1
+    if ($d) { try { $d.GetCurrentPattern([System.Windows.Automation.WindowPattern]::Pattern).Close() } catch { }; Start-Sleep -Seconds 2 }
+    [void][QaContrast]::MoveWindow((Get-Handle $w), 40, 40, 1800, 1280, $true)
+}
+else {
+    $d = Get-AppWindowNamed 'Receiver Details' -Seconds 2
+    if (-not $d) {
+        $button = Find-Control $w -AutomationId 'DetailsButton' -Seconds 5
+        if ($button) { Invoke-Control $button } else { Send-KeyTo $w '^d' }
+        $d = Get-AppWindowNamed 'Receiver Details' -Seconds 20
+    }
+    if (-not $d) { [ordered]@{ error = "no Details window ($(Get-WindowReport))" } | ConvertTo-Json -Compress; return }
+    [void][QaContrast]::MoveWindow((Get-Handle $d), 100, 40, 2400, 1500, $true)
+    [void](Select-NavigationItem $d $surface)
+    Start-Sleep -Seconds 4
+    $root = $d
+}
+
+# Every text element under the window, in the raw view: a label inside a button is not in the control view.
+function Get-Texts($element) {
+    $walker = [System.Windows.Automation.TreeWalker]::RawViewWalker
+    $out = New-Object System.Collections.Generic.List[object]
+    $stack = New-Object System.Collections.Stack; $stack.Push($element)
+    while ($stack.Count -and $out.Count -lt 3000) {
+        $e = $stack.Pop()
+        try {
+            if ($e.Current.ControlType -eq [System.Windows.Automation.ControlType]::Text) { $out.Add($e) }
+            $c = $walker.GetFirstChild($e)
+            while ($c) { $stack.Push($c); $c = $walker.GetNextSibling($c) }
+        } catch { }
+    }
+    $out
+}
+# Disabled text is exempt (section 9.4.5): the nearest ancestor that is not text says whether it is.
+function Test-Enabled($e) {
+    $walker = [System.Windows.Automation.TreeWalker]::RawViewWalker
+    $p = $e
+    for ($i = 0; $i -lt 6 -and $p; $i++) {
+        try { if ($p.Current.ControlType -ne [System.Windows.Automation.ControlType]::Text) { return $p.Current.IsEnabled } } catch { return $true }
+        $p = $walker.GetParent($p)
+    }
+    $true
+}
+# Large text takes 3:1: 24 px regular, or 18.66 px at semibold (600) and above.
+function Get-Large($e) {
+    try {
+        $range = $e.GetCurrentPattern([System.Windows.Automation.TextPattern]::Pattern).DocumentRange
+        $size = $range.GetAttributeValue([System.Windows.Automation.TextPattern]::FontSizeAttribute)
+        $weight = $range.GetAttributeValue([System.Windows.Automation.TextPattern]::FontWeightAttribute)
+        if ($size -is [double]) {
+            # UI Automation gives points; the floor is in pixels at 96 DPI.
+            $px = $size * 96 / 72
+            return [ordered]@{ px = [Math]::Round($px, 1); weight = "$weight"; large = ($px -ge 24 -or ($px -ge 18.66 -and $weight -is [int] -and $weight -ge 600)) }
+        }
+    } catch { }
+    $h = $e.Current.BoundingRectangle.Height
+    [ordered]@{ px = $null; weight = $null; large = ($h -ge 80) }
+}
+
+$handle = Get-Handle $root
+$seen = @{}
+$measured = New-Object System.Collections.Generic.List[object]
+$covered = New-Object System.Collections.Generic.List[string]
+function Measure-View([int]$view) {
+    [void][QaContrast]::SetForegroundWindow($handle)
+    [QaWin32]::MoveTo(2550, 1590)
+    Start-Sleep -Seconds 2
+    $r = $root.Current.BoundingRectangle
+    $shot = New-Object System.Drawing.Bitmap ([int]$r.Width), ([int]$r.Height)
+    $g = [System.Drawing.Graphics]::FromImage($shot); $g.CopyFromScreen([int]$r.Left, [int]$r.Top, 0, 0, $shot.Size); $g.Dispose()
+    $shot.Save("C:\qa\contrast\$tag-$($surface -replace ' ', '')-$view.png", [System.Drawing.Imaging.ImageFormat]::Png)
+    foreach ($t in (Get-Texts $root)) {
+        try {
+            $b = $t.Current.BoundingRectangle
+            if ($b.IsEmpty -or $b.Width -lt 3 -or $b.Height -lt 3 -or $t.Current.IsOffscreen) { continue }
+            $key = "$($t.Current.Name)|$([int]$b.Left)|$([int]($b.Top))"
+            $id = ($t.GetRuntimeId() -join '.')
+            if ($seen.ContainsKey($id)) { continue }
+            if (-not [QaContrast]::Owns($handle, [int]($b.Left + $b.Width / 2), [int]($b.Top + $b.Height / 2))) { $covered.Add("'$($t.Current.Name)' at $([int]$b.Left),$([int]$b.Top) under $([QaContrast]::Under($handle, [int]($b.Left + $b.Width / 2), [int]($b.Top + $b.Height / 2)))"); continue }
+            $m = [QaContrast]::Measure($shot, [int]($b.Left - $r.Left), [int]($b.Top - $r.Top), [int]$b.Width, [int]$b.Height)
+            if (-not $m -or $m[3] -lt 6) { continue }
+            $seen[$id] = $true
+            # An unnamed text element that draws something is a glyph - a FontIcon, a NumberBox's spin
+            # arrows - and takes the 3:1 floor for icons carrying meaning, not text's.
+            $icon = -not "$($t.Current.Name)".Trim()
+            $size = Get-Large $t
+            $measured.Add([ordered]@{
+                text = "$($t.Current.Name)"; id = "$($t.Current.AutomationId)"; view = $view
+                left = [int]$b.Left; top = [int]$b.Top; width = [int]$b.Width; height = [int]$b.Height
+                background = $m[0]; foreground = $m[1]; ratio = $m[2]; ink = $m[3]; backgroundShare = $m[4]
+                px = $size.px; weight = $size.weight; kind = $(if ($icon) { 'icon' } elseif ($size.large) { 'large text' } else { 'text' }); floor = $(if ($icon -or $size.large) { 3.0 } else { 4.5 }); enabled = (Test-Enabled $t)
+            })
+        } catch { }
+    }
+    $shot.Dispose()
+}
+
+New-Item -ItemType Directory -Force 'C:\qa\contrast' | Out-Null
+Measure-View 0
+$views = 0
+# A page taller than the window is measured a screen at a time, down to its foot.
+if ($surface -ne 'main') {
+    $scroll = @($root.FindAll([System.Windows.Automation.TreeScope]::Descendants, (New-Object System.Windows.Automation.PropertyCondition($Ae::IsScrollPatternAvailableProperty, $true))) |
+        Where-Object { try { $_.GetCurrentPattern([System.Windows.Automation.ScrollPattern]::Pattern).Current.VerticallyScrollable } catch { $false } } |
+        Sort-Object { $b = $_.Current.BoundingRectangle; - $b.Width * $b.Height } | Select-Object -First 1)
+    if ($scroll) {
+        $sp = $scroll[0].GetCurrentPattern([System.Windows.Automation.ScrollPattern]::Pattern)
+        for ($view = 1; $view -le 12 -and $sp.Current.VerticalScrollPercent -lt 99.5; $view++) {
+            $sp.ScrollVertical([System.Windows.Automation.ScrollAmount]::LargeIncrement); Start-Sleep -Milliseconds 800
+            Measure-View $view; $views = $view
+        }
+        try { $sp.SetScrollPercent(-1, 0) } catch { }
+    }
+}
+$measured | ConvertTo-Json -Depth 3 | Set-Content "C:\qa\contrast\$tag-$($surface -replace ' ', '').json" -Encoding UTF8
+$under = @($measured | Where-Object { $_.enabled -and $_.ratio -lt $_.floor } | ForEach-Object { "$($_.kind) '$($_.text)' at $($_.left),$($_.top) $($_.ratio):1 ($($_.foreground) on $($_.background), floor $($_.floor))" })
+$lowest = $measured | Where-Object enabled | Sort-Object { $_.ratio / $_.floor } | Select-Object -First 1
+[ordered]@{ surface = $surface; measured = $measured.Count; covered = @($covered | Select-Object -Unique); views = $views; under = $under; margin = $(if ($lowest) { [Math]::Round($lowest.ratio / $lowest.floor, 3) } else { 99 }); lowest = $(if ($lowest) { "$($lowest.kind) '$($lowest.text)' $($lowest.ratio):1 ($($lowest.foreground) on $($lowest.background), floor $($lowest.floor))" }) } | ConvertTo-Json -Compress -Depth 3
+'@
+
+# The app started again after the sign-out that brought 200 %, and the scaling it opened at.
+$contrastLaunchStep = @'
+Add-Type -TypeDefinition @"
+using System; using System.Runtime.InteropServices;
+public static class QaLaunch { [DllImport("user32.dll")] public static extern int GetDpiForWindow(IntPtr h); }
+"@
+Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue | Stop-Process -Force
+Start-Sleep -Seconds 2
+Start-Process "shell:AppsFolder\$((Get-AppxPackage -Name WinZ3805A).PackageFamilyName)!App"
+$deadline = (Get-Date).AddSeconds(60)
+do { Start-Sleep -Seconds 2; $w = Get-AppWindow -Seconds 5 } while ((Get-Date) -lt $deadline -and -not ($w -and (Find-Control $w -AutomationId 'ClockText' -Seconds 0)))
+[ordered]@{ window = [bool]$w; dpi = $(if ($w) { [QaLaunch]::GetDpiForWindow((Get-Handle $w)) } else { 0 }) } | ConvertTo-Json -Compress
+'@
+
+function Test-Contrast {
+    param($Vm, $Result)
+    $pipe = Get-QaSimulatorPipe -Vm $Vm
+    if (-not (Select-String -LiteralPath $Vm.Vmx -SimpleMatch "\\.\pipe\$pipe" -Quiet)) {
+        $Result.Error = "skipped: the VM has no simulator port; run Add-QaSimulatorPort (build/qa/README.md)"
+        return
+    }
+    $build = (Get-Facts $Vm).build
+    $mica = $build -ge 22000
+    if ($mica -and -not (Select-String -LiteralPath $Vm.Vmx -SimpleMatch 'mks.enable3d = "TRUE"' -Quiet)) {
+        $Result.Error = "skipped: Windows 11 draws Mica only with the VM's 3D acceleration on; run Enable-Qa3dGraphics (build/qa/README.md)"
+        return
+    }
+    Send-Zip $Vm $Offline 'candidate'
+    $code = Install-Candidate $Vm 'candidate'
+    Check $Result 'installed (exit 0, or 2 with the start check timing out)' ($code -in 0, 2) "exit $code"
+    $simulator = Start-Process (Get-Simulator) -PassThru -WindowStyle Hidden `
+        -ArgumentList '--pipe-client', $pipe, '--start', 'locked', '--speed', '2', '--control', "$pipe-control" `
+        -RedirectStandardOutput (Join-Path $Result.Folder 'simulator.log') -RedirectStandardError (Join-Path $Result.Folder 'simulator.err')
+    $null = Invoke-QaGuestScript $Vm -Name 'connect-com2' -Script $connectCom2
+    $script:contrastCovered = New-Object System.Collections.Generic.List[string]
+    $surfaces = 'main', 'Overview', 'Satellites', 'Position', 'Timing', 'Holdover', 'Time', 'Status Registers', 'Diagnostics', 'Settings'
+    $hues = 'Red', 'Lime', 'Blue', 'Yellow', 'Cyan', 'Magenta'
+    function Get-Luminance([string]$hex) {
+        $c = [Convert]::ToInt32($hex.TrimStart('#'), 16)
+        $lin = { param($v) $v /= 255; if ($v -le 0.03928) { $v / 12.92 } else { [Math]::Pow(($v + 0.055) / 1.055, 2.4) } }
+        0.2126 * (& $lin (($c -shr 16) -band 0xFF)) + 0.7152 * (& $lin (($c -shr 8) -band 0xFF)) + 0.0722 * (& $lin ($c -band 0xFF))
+    }
+    # Every surface measured under the condition set, and one check for all of them.
+    function Measure-Condition([string]$tag, [string]$label) {
+        $under = New-Object System.Collections.Generic.List[string]; $count = 0; $lowest = $null
+        foreach ($surface in $surfaces) {
+            $short = $surface -replace ' ', ''
+            $m = Invoke-UiStep $Vm "contrast-$tag-$short" "`$surface = '$surface'; `$tag = '$tag'" $contrastMeasureStep
+            if ($m.error) { $under.Add("$($surface): $($m.error)"); continue }
+            $count += $m.measured
+            foreach ($u in @($m.under)) { if ($u) { $under.Add("$surface $u") } }
+            foreach ($c in @($m.covered)) { if ($c) { $script:contrastCovered.Add("$label, $surface $c") } }
+            if ($m.lowest -and (-not $lowest -or $m.margin -lt $lowest.margin)) { $lowest = [pscustomobject]@{ margin = $m.margin; text = "$surface $($m.lowest)" } }
+            try { Copy-QaFile $Vm -Source "C:\qa\contrast\$tag-$short.json" -Destination (Join-Path $Result.Folder "$tag-$short.json") } catch { }
+            if (@($m.under).Count) { foreach ($view in 0..$m.views) { try { Copy-QaFile $Vm -Source "C:\qa\contrast\$tag-$short-$view.png" -Destination (Join-Path $Result.Folder "$tag-$short-$view.png") } catch { } } }
+        }
+        Check $Result "[A11Y-4] $($label): every piece of text meets its floor" ($under.Count -eq 0 -and $count -ge 200) "$count measured; lowest against its floor: $(if ($lowest) { $lowest.text }); under: $($under -join '; ')"
+    }
+    try {
+        $seen = Wait-AppLog $Vm 'State: LOCK' 0 120 'locked'
+        Check $Result 'connected to the simulated receiver, and locked' $seen.found $seen.line
+        if (-not $seen.found) { return }
+        # Measured at 200 %, an effective 1280 x 800. At 100 % a 12 px glyph's stems are narrower than a
+        # pixel, so no pixel is the text's own colour and every small label reads lighter than it is: the
+        # sky plot's "N", 5.8:1 by its brush, measured 4.44:1 (4 Oct 2026). At 200 % the stems have cores.
+        $null = Invoke-UiStep $Vm 'contrast-scale' "`$width = 2560; `$height = 1600; `$dpi = 192" $scalingSetStep
+        # Notifications off for the new session: one over the window supplies pixels that are not the app's.
+        $null = Invoke-QaGuestScript $Vm -Name 'contrast-quiet' -Script "Set-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\PushNotifications' -Name ToastEnabled -Value 0 -Type DWord"
+        Invoke-SignOutAndIn $Vm
+        $launch = Invoke-UiStep $Vm 'contrast-launch' '' $contrastLaunchStep
+        $seen = Wait-AppLog $Vm 'State: LOCK' $seen.count 120 'relocked'
+        Check $Result 'at 200 %, the app open and locked again' ($launch.window -and $launch.dpi -eq 192 -and $seen.found) "window $($launch.window), dpi $($launch.dpi); $($seen.line)"
+        if (-not $seen.found) { return }
+        foreach ($theme in 'Light', 'Dark') {
+            $set = Invoke-UiStep $Vm "contrast-$theme-hues" "`$theme = '$theme'; `$wall = 'Gray'; `$scheme = ''; `$hues = '$($hues -join ',')'" $contrastSetStep
+            if ($set.error) { Check $Result "[A11Y-4] $theme" $false $set.error; continue }
+            $dark = (Get-Luminance $set.backdrop) -lt 0.2
+            Check $Result "[A11Y-4] $($theme): the app follows Windows' theme" ($dark -eq ($theme -eq 'Dark')) "backdrop $($set.backdrop)"
+            $seenHues = @($hues | ForEach-Object { $set.hues.$_ })
+            $moved = @($seenHues | Where-Object { $_ -ne $set.backdrop }).Count
+            if ($mica) {
+                Check $Result "[A11Y-4] $($theme): Mica is drawn - the backdrop takes the wallpaper's hue" ($moved -ge 4) "grey $($set.backdrop); $(($hues | ForEach-Object { "$_ $($set.hues.$_)" }) -join ', ')"
+            }
+            else {
+                Check $Result "[A11Y-4] $($theme): no Mica here - the app says so, and keeps the solid whatever the wallpaper" ($set.micaLog -and $moved -eq 0) "logged $($set.micaLog); grey $($set.backdrop); $(($hues | ForEach-Object { "$_ $($set.hues.$_)" }) -join ', ')"
+            }
+            Measure-Condition "$($theme.ToLowerInvariant())-grey" "$theme, $(if ($mica) { 'over Mica on a grey wallpaper' } else { 'on the solid backdrop' })"
+            if ($mica) {
+                # The hue that moves the backdrop furthest towards the text: the darkest in Light, the lightest in Dark.
+                $ranked = $hues | Sort-Object { Get-Luminance $set.hues.$_ }
+                $worst = if ($theme -eq 'Light') { $ranked[0] } else { $ranked[-1] }
+                $set = Invoke-UiStep $Vm "contrast-$theme-$worst" "`$theme = '$theme'; `$wall = '$worst'; `$scheme = ''; `$hues = ''" $contrastSetStep
+                Measure-Condition "$($theme.ToLowerInvariant())-$($worst.ToLowerInvariant())" "$theme, over Mica on a $($worst.ToLowerInvariant()) wallpaper (the hardest of six, backdrop $($set.backdrop))"
+            }
+        }
+        $schemes = if ($build -ge 22000) { [ordered]@{ aquatic = 'High Contrast #1'; dusk = 'High Contrast #2'; nightsky = 'High Contrast Black'; desert = 'High Contrast White' } }
+                   else { [ordered]@{ hc1 = 'High Contrast #1'; hc2 = 'High Contrast #2'; black = 'High Contrast Black'; white = 'High Contrast White' } }
+        foreach ($name in $schemes.Keys) {
+            $set = Invoke-UiStep $Vm "contrast-$name" "`$theme = ''; `$wall = 'Gray'; `$scheme = '$($schemes[$name])'; `$hues = ''" $contrastSetStep
+            if ($set.error -or $set.contrast -ne $schemes[$name]) { Check $Result "[A11Y-4] $($schemes[$name]) is on ($name)" $false "$($set.error) active '$($set.contrast)'"; continue }
+            Measure-Condition "hc-$name" "$($schemes[$name]) ($name)"
+        }
+    }
+    finally {
+        if ($null -ne $script:contrastCovered) { Check $Result '[A11Y-4] every element was measured on its own window''s pixels (nothing covered it)' ($script:contrastCovered.Count -eq 0) "$($script:contrastCovered.Count) covered: $(@($script:contrastCovered | Select-Object -First 12) -join '; ')" }
+        $null = Invoke-QaGuestScript $Vm -Name 'contrast-off' -Script $contrastOff
+        if (-not $simulator.HasExited) { $simulator.Kill() }
+        $null = Save-Evidence $Vm $Result.Folder
+    }
+}
+
 $scenarioTable = [ordered]@{
     'fresh-online'     = ${function:Test-FreshOnline}
     'fresh-offline'    = ${function:Test-FreshOffline}
@@ -3289,6 +3672,7 @@ $scenarioTable = [ordered]@{
     'keyboard-focus'   = ${function:Test-KeyboardFocus}
     'reduced-motion'   = ${function:Test-ReducedMotion}
     'greyscale-states' = ${function:Test-GreyscaleStates}
+    'contrast'         = ${function:Test-Contrast}
 }
 
 # ---------------------------------------------------------------------------
