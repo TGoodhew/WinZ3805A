@@ -72,6 +72,9 @@
       reduced-motion     §4   A11Y-13: page changes captured frame by frame with Windows' animation effects
                               on (the control) and off; with them off, no frames in between. Needs the
                               simulator port
+      greyscale-states   §4   A11Y-12: the simulated receiver put through each state it can show, the main
+                              window and Overview photographed beside their greyscale for the agent to
+                              judge. Needs the simulator port
       connect-cancel     §24  an auto-detect walk on a port where nothing answers, stopped by
                               Cancel and by Esc; then Connect works once the receiver answers.
                               Driven through UI Automation (guest\Ui.ps1). Needs the simulator port
@@ -100,7 +103,7 @@ param(
     [string]$Offline,
     [string]$Release,
     [string[]]$Machines = @('QA-Win10', 'QA-Win11'),
-    [string[]]$Scenarios = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast', 'display-scaling', 'text-scaling', 'keyboard-focus', 'reduced-motion'),
+    [string[]]$Scenarios = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast', 'display-scaling', 'text-scaling', 'keyboard-focus', 'reduced-motion', 'greyscale-states'),
     [string]$OutDir
 )
 
@@ -111,7 +114,7 @@ Import-Module (Join-Path $PSScriptRoot 'QaVm.psm1') -Force
 # names no scenario - the first run of this script ran nothing and reported success.
 $Machines = @($Machines | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 $Scenarios = @($Scenarios | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-$known = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast', 'display-scaling', 'text-scaling', 'keyboard-focus', 'reduced-motion')
+$known = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast', 'display-scaling', 'text-scaling', 'keyboard-focus', 'reduced-motion', 'greyscale-states')
 $unknown = @($Scenarios | Where-Object { $known -notcontains $_ })
 if ($unknown.Count) { throw "Unknown scenario(s): $($unknown -join ', '). Known: $($known -join ', ')." }
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
@@ -3154,6 +3157,113 @@ function Test-ReducedMotion {
     }
 }
 
+# manual-qa.md section 4, A11Y-12: no state is carried by hue alone. Judged, not measured: each state the
+# simulated receiver can be put in is photographed - the main window and the Details Overview - and each
+# photograph set beside its greyscale, for the agent to read every state from the grey half alone.
+# Called with $tag naming the state.
+$greyStep = @'
+Add-Type -TypeDefinition @"
+using System; using System.Runtime.InteropServices;
+public static class QaGrey {
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+    [DllImport("user32.dll")] public static extern bool MoveWindow(IntPtr h, int x, int y, int w, int t, bool repaint);
+}
+"@
+Add-Type -AssemblyName System.Drawing
+$w = Get-AppWindow
+if (-not $w) { [ordered]@{ error = "no main window ($(Get-WindowReport))" } | ConvertTo-Json -Compress; return }
+[void][QaGrey]::MoveWindow((Get-Handle $w), 10, 10, 700, 560, $true)
+$d = Get-AppWindowNamed 'Receiver Details' -Seconds 2
+if (-not $d) {
+    $button = Find-Control $w -AutomationId 'DetailsButton' -Seconds 5
+    if ($button) { Invoke-Control $button } else { Send-KeyTo $w '^d' }
+    $d = Get-AppWindowNamed 'Receiver Details' -Seconds 20
+}
+if ($d) { [void][QaGrey]::MoveWindow((Get-Handle $d), 720, 10, 1180, 1000, $true); [void](Select-NavigationItem $d 'Overview') }
+Start-Sleep -Seconds 4
+[QaWin32]::MoveTo(2, 1190)
+
+# The photograph beside its greyscale (luminance, Rec. 709), one image per window.
+function Save-Pair($element, [string]$label) {
+    [void][QaGrey]::SetForegroundWindow((Get-Handle $element)); Start-Sleep -Seconds 1
+    $r = $element.Current.BoundingRectangle
+    $bmp = New-Object System.Drawing.Bitmap ([int]$r.Width), ([int]$r.Height)
+    $g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen([int]$r.Left, [int]$r.Top, 0, 0, $bmp.Size); $g.Dispose()
+    $pair = New-Object System.Drawing.Bitmap ($bmp.Width * 2 + 8), $bmp.Height
+    $pg = [System.Drawing.Graphics]::FromImage($pair); $pg.Clear([System.Drawing.Color]::Magenta); $pg.DrawImage($bmp, 0, 0, $bmp.Width, $bmp.Height)
+    $matrix = New-Object System.Drawing.Imaging.ColorMatrix(,[single[][]]@(
+        [single[]]@(0.2126, 0.2126, 0.2126, 0, 0), [single[]]@(0.7152, 0.7152, 0.7152, 0, 0), [single[]]@(0.0722, 0.0722, 0.0722, 0, 0),
+        [single[]]@(0, 0, 0, 1, 0), [single[]]@(0, 0, 0, 0, 1)))
+    $attributes = New-Object System.Drawing.Imaging.ImageAttributes; $attributes.SetColorMatrix($matrix)
+    $pg.DrawImage($bmp, (New-Object System.Drawing.Rectangle ($bmp.Width + 8), 0, $bmp.Width, $bmp.Height), 0, 0, $bmp.Width, $bmp.Height, [System.Drawing.GraphicsUnit]::Pixel, $attributes)
+    $pg.Dispose(); $bmp.Dispose()
+    $pair.Save("C:\qa\grey\$tag-$label.png", [System.Drawing.Imaging.ImageFormat]::Png); $pair.Dispose()
+}
+New-Item -ItemType Directory -Force 'C:\qa\grey' | Out-Null
+Save-Pair $w 'main'
+if ($d) { Save-Pair $d 'overview' }
+[ordered]@{ details = [bool]$d } | ConvertTo-Json -Compress
+'@
+
+function Test-GreyscaleStates {
+    param($Vm, $Result)
+    $pipe = Get-QaSimulatorPipe -Vm $Vm
+    if (-not (Select-String -LiteralPath $Vm.Vmx -SimpleMatch "\\.\pipe\$pipe" -Quiet)) {
+        $Result.Error = "skipped: the VM has no simulator port; run Add-QaSimulatorPort (build/qa/README.md)"
+        return
+    }
+    Send-Zip $Vm $Offline 'candidate'
+    $code = Install-Candidate $Vm 'candidate'
+    Check $Result 'installed (exit 0, or 2 with the start check timing out)' ($code -in 0, 2) "exit $code"
+    $simulator = Start-Process (Get-Simulator) -PassThru -WindowStyle Hidden `
+        -ArgumentList '--pipe-client', $pipe, '--start', 'locked', '--speed', '2', '--control', "$pipe-control" `
+        -RedirectStandardOutput (Join-Path $Result.Folder 'simulator.log') -RedirectStandardError (Join-Path $Result.Folder 'simulator.err')
+    $null = Invoke-QaGuestScript $Vm -Name 'connect-com2' -Script $connectCom2
+    $control = "$pipe-control"
+    $taken = New-Object System.Collections.Generic.List[string]
+    function Shoot([string]$tag, [string]$what) {
+        $g = Invoke-UiStep $Vm "grey-$tag" "`$tag = '$tag'" $greyStep
+        Check $Result "[A11Y-12] $what, photographed in colour and greyscale" (-not $g.error -and $g.details) "$($g.error)"
+        foreach ($part in 'main', 'overview') { try { Copy-QaFile $Vm -Source "C:\qa\grey\$tag-$part.png" -Destination (Join-Path $Result.Folder "$tag-$part.png"); $taken.Add("$tag-$part") } catch { } }
+    }
+    try {
+        $null = Invoke-UiStep $Vm 'grey-resolution' '' $resolutionStep
+        $seen = Wait-AppLog $Vm 'State: LOCK' 0 120 'locked'
+        Check $Result 'connected to the simulated receiver, and locked' $seen.found $seen.line
+        if (-not $seen.found) { return }
+        Shoot '1-locked' 'Locked'
+
+        $null = Send-SimulatorControl $control 'antenna off'
+        $seen = Wait-AppLog $Vm 'State: (WAIT|HOLD)' $seen.count 150 'holdover'
+        if ($seen.found) { Shoot '2-holdover' 'Holdover (antenna pulled)' } else { Check $Result '[A11Y-12] holdover reached' $false $seen.tail }
+
+        $null = Send-SimulatorControl $control 'antenna on'
+        $seen = Wait-AppLog $Vm 'State: REC' $seen.count 150 'recovery'
+        if ($seen.found) { Shoot '3-recovery' 'Recovery' } else { Check $Result '[A11Y-12] recovery reached' $false $seen.tail }
+        $seen = Wait-AppLog $Vm 'State: LOCK' $seen.count 150 'relocked'
+
+        $null = Send-SimulatorControl $control 'health ocxo fail'
+        Start-Sleep -Seconds 20
+        Shoot '4-health-fault' 'A failing health check (OCXO)'
+        $null = Send-SimulatorControl $control 'health ocxo ok'
+
+        $null = Send-SimulatorControl $control 'power-cycle'
+        $seen = Wait-AppLog $Vm 'State: POW' $seen.count 150 'powerup'
+        if ($seen.found) { Shoot '5-powerup' 'Power-up' } else { Check $Result '[A11Y-12] power-up reached' $false $seen.tail }
+
+        $null = Send-SimulatorControl $control 'power off'
+        $seen = Wait-AppLog $Vm 'Session COM2 is now Reconnecting' $seen.count 90 'reconnecting'
+        if ($seen.found) { Shoot '6-reconnecting' 'Reconnecting (no power)' } else { Check $Result '[A11Y-12] reconnecting reached' $false $seen.tail }
+        $null = Send-SimulatorControl $control 'power on'
+
+        Check $Result '[A11Y-12] every state photographed for the agent to read from the greyscale' ($taken.Count -ge 12) "$($taken.Count) photographs: $($taken -join ', ')"
+    }
+    finally {
+        if (-not $simulator.HasExited) { $simulator.Kill() }
+        $null = Save-Evidence $Vm $Result.Folder
+    }
+}
+
 $scenarioTable = [ordered]@{
     'fresh-online'     = ${function:Test-FreshOnline}
     'fresh-offline'    = ${function:Test-FreshOffline}
@@ -3175,6 +3285,7 @@ $scenarioTable = [ordered]@{
     'text-scaling'     = ${function:Test-TextScaling}
     'keyboard-focus'   = ${function:Test-KeyboardFocus}
     'reduced-motion'   = ${function:Test-ReducedMotion}
+    'greyscale-states' = ${function:Test-GreyscaleStates}
 }
 
 # ---------------------------------------------------------------------------
