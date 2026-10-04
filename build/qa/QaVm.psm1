@@ -379,6 +379,40 @@ function Add-QaSimulatorPort {
     Save-QaCleanSnapshot -Vm $Vm -Snapshot $Snapshot
 }
 
+# Turns on the VM's 3D acceleration, for A11Y-4's Mica half: without it Windows 11 composes the
+# desktop in software and draws Mica as its solid fallback colour whatever the wallpaper, so nothing
+# about Mica can be measured (seen on QA-Win11, 4 Oct 2026: the app applied Mica Alt and the window
+# was #F4F4F4 over black, white and red wallpapers alike). Like Add-QaSimulatorPort, it shuts the
+# guest down, changes the vmx and takes QA Clean again - after keeping the old one as
+# "<snapshot> before 3D", which Start-QaVm -Snapshot can revert to if the new one misbehaves. A VM
+# that already has it is left alone.
+function Enable-Qa3dGraphics {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)]$Vm, [string]$Snapshot = 'QA Clean')
+
+    if (Select-String -LiteralPath $Vm.Vmx -SimpleMatch 'mks.enable3d = "TRUE"' -Quiet) {
+        Write-Host "$($Vm.Vmx) already has 3D acceleration."
+        return
+    }
+
+    Start-QaVm -Vm $Vm -Snapshot $Snapshot
+    Invoke-VmRun $Vm snapshot -Arguments "$Snapshot before 3D" | Out-Null
+    Invoke-VmRun $Vm stop -Arguments 'soft' | Out-Null
+    $deadline = (Get-Date).AddMinutes(3)
+    while ((& $script:VmRunPath -T ws list) -match [regex]::Escape($Vm.Vmx)) {
+        if ((Get-Date) -gt $deadline) { throw 'The guest did not shut down within three minutes.' }
+        Start-Sleep -Seconds 2
+    }
+
+    # Read only now, for Add-QaSimulatorPort's reason: the revert rewrites the vmx.
+    $vmx = Get-Content -LiteralPath $Vm.Vmx
+    $kept = @($vmx | Where-Object { $_ -notmatch '^mks\.enable3d\b' })
+    Set-Content -LiteralPath $Vm.Vmx -Value ($kept + 'mks.enable3d = "TRUE"') -Encoding ascii
+
+    Invoke-VmRun $Vm start -Arguments 'nogui' | Out-Null
+    Save-QaCleanSnapshot -Vm $Vm -Snapshot $Snapshot
+}
+
 # Copies a file into the guest (-ToGuest) or out of it.
 function Copy-QaFile {
     [CmdletBinding()]
@@ -463,4 +497,4 @@ function Invoke-QaGuestScript {
     [pscustomobject]@{ ExitCode = $code; Output = "$output".TrimEnd() }
 }
 
-Export-ModuleMember -Function Get-QaCredential, Set-QaCredential, New-QaIso, New-QaVm, Invoke-VmRun, Wait-QaDesktop, Wait-QaQuiet, Start-QaVm, Stop-QaVm, Save-QaCleanSnapshot, Get-QaSimulatorPipe, Add-QaSimulatorPort, Copy-QaFile, Invoke-QaGuest, Invoke-QaGuestScript, Wait-QaGuestReady
+Export-ModuleMember -Function Get-QaCredential, Set-QaCredential, New-QaIso, New-QaVm, Invoke-VmRun, Wait-QaDesktop, Wait-QaQuiet, Start-QaVm, Stop-QaVm, Save-QaCleanSnapshot, Get-QaSimulatorPipe, Add-QaSimulatorPort, Enable-Qa3dGraphics, Copy-QaFile, Invoke-QaGuest, Invoke-QaGuestScript, Wait-QaGuestReady
