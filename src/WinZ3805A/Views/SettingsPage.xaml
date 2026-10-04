@@ -119,7 +119,7 @@
                     <tk:SettingsCard Style="{ThemeResource WzSettingsCardStyle}"
                                      Header="Advanced Console"
                                      Description="Adds a page below Settings offering every command in the catalog as a picker, with a transcript of everything sent and received. It changes what is reachable, never what is permitted: the commands this application will not send are absent from the catalog, so they are absent from the console.">
-                        <ToggleSwitch x:Name="ConsoleSwitch"
+                        <ToggleSwitch x:Name="ConsoleSwitch" Style="{StaticResource WzSettingsToggleSwitchStyle}"
                                       OnContent="Shown"
                                       OffContent="Hidden"
                                       AutomationProperties.Name="Show the Advanced Console"
@@ -150,7 +150,7 @@
                                            Text="Six queries appear on the Diagnostics page, each run only when you click it. There is no way to type one, and the set forms of these nodes are excluded permanently and cannot be enabled here or anywhere else." />
                             </StackPanel>
                         </tk:SettingsCard.Description>
-                        <ToggleSwitch x:Name="ExperimentalSwitch"
+                        <ToggleSwitch x:Name="ExperimentalSwitch" Style="{StaticResource WzSettingsToggleSwitchStyle}"
                                       OnContent="Shown"
                                       OffContent="Hidden"
                                       AutomationProperties.Name="Enable undocumented read-only queries"
@@ -179,7 +179,7 @@
                                            Text="This is the only setting that makes the application change something on the receiver by itself. It changes no timing and nothing that outlives the lamps. If the application closes unexpectedly a lamp is left as it was; the Diagnostics page can set either one back." />
                             </StackPanel>
                         </tk:SettingsCard.Description>
-                        <ToggleSwitch x:Name="ActivityLampSwitch"
+                        <ToggleSwitch x:Name="ActivityLampSwitch" Style="{StaticResource WzSettingsToggleSwitchStyle}"
                                       OnContent="Used"
                                       OffContent="Left alone"
                                       AutomationProperties.Name="Use the front-panel lamps"
@@ -201,7 +201,7 @@
                     <tk:SettingsCard Style="{ThemeResource WzSettingsCardStyle}"
                                      Header="Use the Windows accent colour"
                                      Description="Selected items, buttons and links follow the accent you set in Windows. The colours that mean caution and critical never change - they are chosen to stay distinct from the built-in accent, so a Windows accent in the same family as one of them is harder to tell apart at a glance. You will be told if the one you have picked is close.">
-                        <ToggleSwitch x:Name="SystemAccentSwitch"
+                        <ToggleSwitch x:Name="SystemAccentSwitch" Style="{StaticResource WzSettingsToggleSwitchStyle}"
                                       OnContent="Windows"
                                       OffContent="This app&apos;s own"
                                       AutomationProperties.Name="Use the Windows accent colour"
@@ -232,7 +232,7 @@
                     <tk:SettingsCard Style="{ThemeResource WzSettingsCardStyle}"
                                      Header="Tell me when the receiver loses GPS lock"
                                      Description="A Windows notification when the receiver stops disciplining to GPS, and one when it starts again. Brief drop-outs are not reported: a loss has to last a minute before it is worth telling you about, and a receiver that recovers inside that minute is never mentioned at all.">
-                        <ToggleSwitch x:Name="LockNotificationsSwitch"
+                        <ToggleSwitch x:Name="LockNotificationsSwitch" Style="{StaticResource WzSettingsToggleSwitchStyle}"
                                       OnContent="On"
                                       OffContent="Off"
                                       AutomationProperties.Name="Notify when the receiver loses GPS lock"
@@ -258,7 +258,7 @@
                                          Description="On, closing the window leaves the receiver being polled, so the trend keeps filling and the alerts above still reach you. Click the notification area icon to bring the window back, or right-click it and choose Exit. Off, closing the window exits and monitoring stops with it."
                                          IsExpanded="True">
                         <tk:SettingsExpander.Content>
-                            <ToggleSwitch x:Name="KeepRunningSwitch"
+                            <ToggleSwitch x:Name="KeepRunningSwitch" Style="{StaticResource WzSettingsToggleSwitchStyle}"
                                           OnContent="On"
                                           OffContent="Off"
                                           AutomationProperties.Name="Keep running when the window is closed"
@@ -302,7 +302,7 @@
                                                TextWrapping="Wrap"
                                                Text="When you open it yourself, starts with no window, monitoring from the notification area." />
                                 </tk:SettingsCard.Description>
-                                <ToggleSwitch x:Name="StartMinimisedSwitch"
+                                <ToggleSwitch x:Name="StartMinimisedSwitch" Style="{StaticResource WzSettingsToggleSwitchStyle}"
                                               OnContent="On"
                                               OffContent="Off"
                                               AutomationProperties.Name="Start in the notification area with no window"
