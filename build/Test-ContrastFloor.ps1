@@ -50,12 +50,15 @@
     §9.4.1's opaque page background - WzPageBackgroundFallbackBrush, which is what the window
     shows when Mica is unavailable. Under Mica the true backdrop is a live blur of the user's
     wallpaper and is not knowable from any file. That is a real limit on this gate rather than
-    an oversight, and it is the reason A11Y-4 also keeps a manual Accessibility Insights pass:
-    only a tool looking at rendered pixels can measure the Mica case.
+    an oversight, and it is the reason A11Y-4 also keeps a pass on rendered pixels: only a tool
+    looking at them can measure the Mica case. The QA pass's contrast scenario is that pass
+    (build/qa/README.md), and its first run found what this gate cannot: a title bar shows bare
+    Mica Alt, #DADADA in Light, darker than any surface here, and tertiary text there was 4.37:1
+    (#697).
 
     HIGHCONTRAST IS NOT CHECKED. Its tokens resolve to SystemColor*, which are the user's own
     colours. Nothing here can know them, and asserting anything about them would be inventing
-    a result. It stays a manual pass.
+    a result. The contrast scenario measures Windows' four contrast themes instead.
 
 .PARAMETER Root
     Repository root. Defaults to the parent of this script's directory.
