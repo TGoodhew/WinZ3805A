@@ -36,6 +36,7 @@ with the screenshots attached.
 | 4 | **partly automated** | `accessibility`, with the simulated receiver: **A11Y-3**, every icon-only control in both windows named and its tooltip opened by real pointer movement; **A11Y-9**, a listener records the live-region events for a mode change, a lost connection and a tier C outcome, with their live setting (decided 2 Oct 2026: the events being raised is the check, and Narrator's speech is left to bug reports); **A11Y-10**, the medallion's state and every sky-plot marker exposed as sentences; **A11Y-11**, List showing the same satellites with the same data as the plot. Still by hand: A11Y-1, -2, -4 to -8, -12 and -13 |
 | 3 | **automated, judged by the agent** | `display-scaling`: 100, 150, 200 and 225 %, each after a sign-out, both windows at the display's scaling and inside the work area, their title-bar buttons clear of the caption buttons, a real drag on each title bar, and both photographed. See section 3 |
 | 4 (A11Y-1, -2, -5) | **automated** | `keyboard-focus`: every surface walked with Tab alone; every focusable control reached, no unnamed stops, a ring drawn at every stop, every stop at least 32 × 32. See A11Y-5 below |
+| 4 (A11Y-12) | **automated, judged by the agent** | `greyscale-states`: six receiver states photographed beside their greyscale. See A11Y-12 below |
 | 4 (A11Y-13) | **automated** | `reduced-motion`: page changes captured frame by frame with Windows' animation effects on (the control) and off; off, no frames in between. See A11Y-13 below |
 | 4 (A11Y-6) | **automated, judged by the agent** | `text-scaling`: Windows' text size at 100, 150 and 200 % at each of §9.6.1's breakpoints, confirmed in the app, with a dialog's buttons on screen and photographs for the agent. See A11Y-6 below |
 | 4 (A11Y-8) | **automated, judged by the agent** | `high-contrast`, with the simulated receiver: each of the four contrast themes switched live under the running app, confirmed by name, and the main window and the Details Overview and Satellites pages measured and photographed. See A11Y-8 below |
@@ -201,6 +202,11 @@ record a result against each number.
 - **A11Y-12 Colour.** A greyscale screenshot of every page and state (P0-19): no state is carried by
   hue alone — severity is colour **and** shape **and** text everywhere it appears. The chart-series
   gate covers the eight series and nothing else.
+  *Automated since 3 Oct 2026, judged by the agent* (`greyscale-states`): the simulated receiver put
+  through locked, holdover, recovery, a failing health check, power-up and reconnecting, and the main
+  window and Overview photographed in each beside their greyscale. **Judge the shapes from full-size
+  crops**: they are 12 px, and in a scaled-down view a hexagon reads as a circle - two issues were filed
+  and closed on 3 Oct 2026 for exactly that misreading. Every state read correctly from the grey half.
 - **A11Y-13 Animations off.** Settings → Accessibility → Visual effects → Animation effects off.
   Nothing animates, and no layout differs from the animated path.
   *Automated since 3 Oct 2026* (`reduced-motion`): `SPI_SETCLIENTAREAANIMATION` on and then off, the app
