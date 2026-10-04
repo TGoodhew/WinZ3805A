@@ -202,8 +202,13 @@
                                         Orientation="Horizontal"
                                         Spacing="{ThemeResource WzSpaceXxs}"
                                         VerticalAlignment="Center">
+                                <!--
+                                    Secondary, like the port beside it, and not tertiary (#697). A title
+                                    bar shows bare Mica Alt, #DADADA in Light, where tertiary is 4.37:1;
+                                    the four surfaces #176 chose tertiary against are all lighter.
+                                -->
                                 <TextBlock Style="{ThemeResource WzBodyTextStyle}"
-                                           Foreground="{ThemeResource WzTextTertiaryBrush}"
+                                           Foreground="{ThemeResource WzTextSecondaryBrush}"
                                            VerticalAlignment="Center"
                                            AutomationProperties.AccessibilityView="Raw"
                                            Text="&#183;" />
