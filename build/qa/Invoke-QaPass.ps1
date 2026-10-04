@@ -69,6 +69,9 @@
       keyboard-focus     §4   A11Y-1, -2 and -5: each surface walked with Tab alone; every control that takes
                               the keyboard reached, a focus ring drawn at each stop, and each stop at least
                               32 x 32. Needs the simulator port
+      reduced-motion     §4   A11Y-13: page changes captured frame by frame with Windows' animation effects
+                              on (the control) and off; with them off, no frames in between. Needs the
+                              simulator port
       connect-cancel     §24  an auto-detect walk on a port where nothing answers, stopped by
                               Cancel and by Esc; then Connect works once the receiver answers.
                               Driven through UI Automation (guest\Ui.ps1). Needs the simulator port
@@ -97,7 +100,7 @@ param(
     [string]$Offline,
     [string]$Release,
     [string[]]$Machines = @('QA-Win10', 'QA-Win11'),
-    [string[]]$Scenarios = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast', 'display-scaling', 'text-scaling', 'keyboard-focus'),
+    [string[]]$Scenarios = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast', 'display-scaling', 'text-scaling', 'keyboard-focus', 'reduced-motion'),
     [string]$OutDir
 )
 
@@ -108,7 +111,7 @@ Import-Module (Join-Path $PSScriptRoot 'QaVm.psm1') -Force
 # names no scenario - the first run of this script ran nothing and reported success.
 $Machines = @($Machines | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 $Scenarios = @($Scenarios | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-$known = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast', 'display-scaling', 'text-scaling', 'keyboard-focus')
+$known = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast', 'display-scaling', 'text-scaling', 'keyboard-focus', 'reduced-motion')
 $unknown = @($Scenarios | Where-Object { $known -notcontains $_ })
 if ($unknown.Count) { throw "Unknown scenario(s): $($unknown -join ', '). Known: $($known -join ', ')." }
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
@@ -3040,6 +3043,117 @@ function Test-KeyboardFocus {
     }
 }
 
+# manual-qa.md section 4, A11Y-13: with Windows' animation effects off nothing animates. Measured as a
+# page change in the Details window, captured as fast as the screen can be read: the frames that are
+# neither the page before nor the page after are the transition. With animations on there must be
+# some, which proves the capture can see one; with them off there must be none to speak of - a live
+# reading arrives once a second and may account for one. Called with $animations ('on' or 'off').
+$motionStep = @'
+Add-Type -TypeDefinition @"
+using System; using System.Runtime.InteropServices;
+public static class QaMotion {
+    [DllImport("user32.dll", EntryPoint = "SystemParametersInfoW")] static extern bool Spi(int action, int param, IntPtr value, int winIni);
+    [DllImport("user32.dll", EntryPoint = "SystemParametersInfoW")] static extern bool SpiGet(int action, int param, out int value, int winIni);
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+    [DllImport("user32.dll")] public static extern bool MoveWindow(IntPtr h, int x, int y, int w, int t, bool repaint);
+    // SPI_SETCLIENTAREAANIMATION: the switch Settings calls Animation effects.
+    public static bool Set(bool on) { return Spi(0x1043, 0, on ? (IntPtr)1 : IntPtr.Zero, 3); }
+    public static bool Get() { int v; SpiGet(0x1042, 0, out v, 0); return v != 0; }
+}
+"@
+Add-Type -AssemblyName System.Drawing
+$facts = [ordered]@{}
+$facts.set = [QaMotion]::Set($animations -eq 'on')
+$facts.effects = [QaMotion]::Get()
+Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue | Stop-Process -Force
+Start-Sleep -Seconds 2
+Start-Process "shell:AppsFolder\$((Get-AppxPackage -Name WinZ3805A).PackageFamilyName)!App"
+$deadline = (Get-Date).AddSeconds(60)
+do { Start-Sleep -Seconds 2; $w = Get-AppWindow -Seconds 5 } while ((Get-Date) -lt $deadline -and -not ($w -and (Find-Control $w -AutomationId 'ClockText' -Seconds 0)))
+if (-not $w) { [ordered]@{ error = "no main window ($(Get-WindowReport))" } | ConvertTo-Json -Compress; return }
+$button = Find-Control $w -AutomationId 'DetailsButton' -Seconds 5
+if ($button) { Invoke-Control $button } else { Send-KeyTo $w '^d' }
+$d = Get-AppWindowNamed 'Receiver Details' -Seconds 20
+if (-not $d) { [ordered]@{ error = "no Details window ($(Get-WindowReport))" } | ConvertTo-Json -Compress; return }
+[void][QaMotion]::MoveWindow((Get-Handle $d), 100, 50, 1200, 900, $true)
+[void][QaMotion]::SetForegroundWindow((Get-Handle $d))
+[QaWin32]::MoveTo(2, 2)
+Start-Sleep -Seconds 3
+
+# The page area only, a quarter of the pixels, so a frame is read in a few tens of milliseconds.
+$pane = Get-Bounds (Find-Control $d -AutomationId 'PaneRoot' -Seconds 5)
+$area = New-Object System.Drawing.Rectangle ($pane.Right + 20), ($pane.Top + 60), 700, 500
+function Get-Frame {
+    $bmp = New-Object System.Drawing.Bitmap $area.Width, $area.Height
+    $g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen($area.X, $area.Y, 0, 0, $bmp.Size); $g.Dispose()
+    $small = New-Object System.Drawing.Bitmap $bmp, 70, 50; $bmp.Dispose()
+    $v = New-Object int[] 3500; $i = 0
+    for ($y = 0; $y -lt 50; $y++) { for ($x = 0; $x -lt 70; $x++) { $p = $small.GetPixel($x, $y); $v[$i++] = $p.R + $p.G + $p.B } }
+    $small.Dispose(); , $v
+}
+function Get-Distance($a, $b) { $s = 0; for ($i = 0; $i -lt $a.Length; $i++) { $s += [Math]::Abs($a[$i] - $b[$i]) }; $s / $a.Length }
+
+$results = @()
+# Overview and Position only: they show stored readings, while a page such as Time reads the receiver when it
+# is opened and goes on filling in for a second or more, which reads as frames in between with or without any
+# animation - on Windows 11 it did, 44 of 47 with effects off.
+foreach ($pair in @(@('Overview', 'Position'), @('Position', 'Overview'), @('Overview', 'Position'))) {
+    [void](Select-NavigationItem $d $pair[0]); Start-Sleep -Seconds 3
+    $frames = New-Object System.Collections.Generic.List[object]
+    $frames.Add((Get-Frame))
+    [void](Select-NavigationItem $d $pair[1])
+    $clock = [Diagnostics.Stopwatch]::StartNew()
+    while ($clock.ElapsedMilliseconds -lt 1200) { $frames.Add((Get-Frame)) }
+    Start-Sleep -Seconds 3
+    $final = Get-Frame
+    # In between: far from the page before and from the page after.
+    $between = @($frames | Select-Object -Skip 1 | Where-Object { (Get-Distance $_ $frames[0]) -gt 6 -and (Get-Distance $_ $final) -gt 6 }).Count
+    $results += [ordered]@{ from = $pair[0]; to = $pair[1]; frames = $frames.Count; between = $between }
+}
+$facts.changes = $results
+[void][QaMotion]::Set($true)
+$facts | ConvertTo-Json -Compress -Depth 4
+'@
+
+function Test-ReducedMotion {
+    param($Vm, $Result)
+    $pipe = Get-QaSimulatorPipe -Vm $Vm
+    if (-not (Select-String -LiteralPath $Vm.Vmx -SimpleMatch "\\.\pipe\$pipe" -Quiet)) {
+        $Result.Error = "skipped: the VM has no simulator port; run Add-QaSimulatorPort (build/qa/README.md)"
+        return
+    }
+    Send-Zip $Vm $Offline 'candidate'
+    $code = Install-Candidate $Vm 'candidate'
+    Check $Result 'installed (exit 0, or 2 with the start check timing out)' ($code -in 0, 2) "exit $code"
+    $simulator = Start-Process (Get-Simulator) -PassThru -WindowStyle Hidden `
+        -ArgumentList '--pipe-client', $pipe, '--start', 'locked', '--speed', '2', '--control', "$pipe-control" `
+        -RedirectStandardOutput (Join-Path $Result.Folder 'simulator.log') -RedirectStandardError (Join-Path $Result.Folder 'simulator.err')
+    $null = Invoke-QaGuestScript $Vm -Name 'connect-com2' -Script $connectCom2
+    try {
+        $seen = Wait-AppLog $Vm 'State: LOCK' 0 120 'locked'
+        Check $Result 'connected to the simulated receiver, and locked' $seen.found $seen.line
+        if (-not $seen.found) { return }
+        $null = Invoke-UiStep $Vm 'motion-resolution' '' $resolutionStep
+        $runs = @{}
+        foreach ($mode in 'on', 'off') {
+            $m = Invoke-UiStep $Vm "motion-$mode" "`$animations = '$mode'" $motionStep
+            if ($m.error) { Check $Result "[A11Y-13] animations $mode" $false $m.error; continue }
+            $runs[$mode] = $m
+        }
+        if ($runs.on -and $runs.off) {
+            $on = @($runs.on.changes); $off = @($runs.off.changes)
+            $describe = { param($r) ($r | ForEach-Object { "$($_.from)->$($_.to) $($_.between) of $($_.frames)" }) -join ', ' }
+            # The control: the capture sees a transition when Windows allows one.
+            Check $Result '[A11Y-13] with animation effects on, a page change shows frames in between (the capture can see one)' ($runs.on.effects -and @($on | Where-Object { $_.between -ge 2 }).Count -ge 2) (& $describe $on)
+            Check $Result '[A11Y-13] with animation effects off, a page change goes straight from one page to the next' (-not $runs.off.effects -and @($off | Where-Object { $_.between -gt 1 }).Count -eq 0) (& $describe $off)
+        }
+    }
+    finally {
+        if (-not $simulator.HasExited) { $simulator.Kill() }
+        $null = Save-Evidence $Vm $Result.Folder
+    }
+}
+
 $scenarioTable = [ordered]@{
     'fresh-online'     = ${function:Test-FreshOnline}
     'fresh-offline'    = ${function:Test-FreshOffline}
@@ -3060,6 +3174,7 @@ $scenarioTable = [ordered]@{
     'display-scaling'  = ${function:Test-DisplayScaling}
     'text-scaling'     = ${function:Test-TextScaling}
     'keyboard-focus'   = ${function:Test-KeyboardFocus}
+    'reduced-motion'   = ${function:Test-ReducedMotion}
 }
 
 # ---------------------------------------------------------------------------
