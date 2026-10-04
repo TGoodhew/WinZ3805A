@@ -66,8 +66,12 @@ function Values {
 }
 
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+# Themes\StockTemplates.xaml is control templates copied verbatim from the libraries that ship them (#684): their
+# values are the library's, not this application's, and pulling them onto the scale would change how a stock control looks.
+# Nothing of the application's own belongs in that file, which its header says.
 $files = Get-ChildItem (Resolve-Path $Root) -Recurse -Filter *.xaml |
-    Where-Object { $_.FullName -notmatch '\\(bin|obj)\\' }
+    Where-Object { $_.FullName -notmatch '\\(bin|obj)\\' } |
+    Where-Object { $_.Name -ne 'StockTemplates.xaml' }
 
 $failures = @()
 

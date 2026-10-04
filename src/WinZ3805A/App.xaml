@@ -45,6 +45,8 @@
                 <ResourceDictionary Source="ms-appx:///Themes/Motion.xaml" />
                 <ResourceDictionary Source="ms-appx:///Themes/Shapes.xaml" />
                 <ResourceDictionary Source="ms-appx:///Themes/Controls.xaml" />
+                <!-- Stock control templates copied from their libraries, changed where marked (#684). -->
+                <ResourceDictionary Source="ms-appx:///Themes/StockTemplates.xaml" />
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Application.Resources>
