@@ -3375,7 +3375,31 @@ public static class QaContrast {
     }
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr h, System.Text.StringBuilder s, int n);
     [DllImport("user32.dll")] static extern IntPtr GetAncestor(IntPtr h, uint flags);
-    // What is under a point, for the evidence: the window's class, its top-level window's class, and
+    delegate bool EnumProc(IntPtr h, IntPtr l);
+    [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc f, IntPtr l);
+    [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr h);
+    [DllImport("user32.dll")] static extern int GetWindowLong(IntPtr h, int i);
+    [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr h, int cmd);
+    [StructLayout(LayoutKind.Sequential)] struct RECT { public int L, T, R, B; }
+    [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr h, out RECT r);
+    // Another process's always-on-top window over the app's - a Windows Security prompt sat in the
+    // corner of QA-Win11 through a whole run - hidden before a photograph, and named for the evidence.
+    // The taskbar and the desktop stay; the VM is reverted afterwards anyway.
+    public static string HideForeignTopmost(IntPtr root) {
+        uint app; GetWindowThreadProcessId(root, out app); RECT a;
+        if (root == IntPtr.Zero || !GetWindowRect(root, out a) || a.R - a.L < 2) return "";
+        var hidden = new System.Collections.Generic.List<string>();
+        EnumWindows((h, l) => {
+            uint pid; GetWindowThreadProcessId(h, out pid);
+            if (pid == app || !IsWindowVisible(h) || (GetWindowLong(h, -20) & 0x8) == 0) return true;
+            var c = new System.Text.StringBuilder(256); GetClassName(h, c, 256); string cls = c.ToString();
+            if (cls == "Shell_TrayWnd" || cls == "Shell_SecondaryTrayWnd" || cls == "Progman" || cls == "WorkerW") return true;
+            RECT r; GetWindowRect(h, out r);
+            if (r.R <= a.L || r.L >= a.R || r.B <= a.T || r.T >= a.B || r.R - r.L < 2 || r.B - r.T < 2) return true;
+            ShowWindow(h, 0); hidden.Add(cls); return true;
+        }, IntPtr.Zero);
+        return string.Join(", ", hidden);
+    }    // What is under a point, for the evidence: the window's class, its top-level window's class, and
     // whether that top-level window is the one being measured.
     public static string Under(IntPtr root, int x, int y) {
         POINT p; p.X = x; p.Y = y; IntPtr h = WindowFromPoint(p); IntPtr top = GetAncestor(h, 2);
@@ -3431,7 +3455,9 @@ else {
         $d = Get-AppWindowNamed 'Receiver Details' -Seconds 20
     }
     if (-not $d) { [ordered]@{ error = "no Details window ($(Get-WindowReport))" } | ConvertTo-Json -Compress; return }
-    [void][QaContrast]::MoveWindow((Get-Handle $d), 100, 40, 2400, 1500, $true)
+    # Inside the work area: at 1500 px its foot went behind Windows 10's taskbar.
+    $work = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
+    [void][QaContrast]::MoveWindow((Get-Handle $d), 100, 40, 2400, [Math]::Min(1500, $work.Bottom - 50), $true)
     [void](Select-NavigationItem $d $surface)
     Start-Sleep -Seconds 4
     $root = $d
@@ -3482,7 +3508,9 @@ $handle = Get-Handle $root
 $seen = @{}
 $measured = New-Object System.Collections.Generic.List[object]
 $covered = New-Object System.Collections.Generic.List[string]
+$script:hiddenWindows = @()
 function Measure-View([int]$view) {
+    $h = [QaContrast]::HideForeignTopmost($handle); if ($h) { $script:hiddenWindows += $h }
     [void][QaContrast]::SetForegroundWindow($handle)
     [QaWin32]::MoveTo(2550, 1590)
     Start-Sleep -Seconds 2
@@ -3536,7 +3564,7 @@ if ($surface -ne 'main') {
 $measured | ConvertTo-Json -Depth 3 | Set-Content "C:\qa\contrast\$tag-$($surface -replace ' ', '').json" -Encoding UTF8
 $under = @($measured | Where-Object { $_.enabled -and $_.ratio -lt $_.floor } | ForEach-Object { "$($_.kind) '$($_.text)' at $($_.left),$($_.top) $($_.ratio):1 ($($_.foreground) on $($_.background), floor $($_.floor))" })
 $lowest = $measured | Where-Object enabled | Sort-Object { $_.ratio / $_.floor } | Select-Object -First 1
-[ordered]@{ surface = $surface; measured = $measured.Count; covered = @($covered | Select-Object -Unique); views = $views; under = $under; margin = $(if ($lowest) { [Math]::Round($lowest.ratio / $lowest.floor, 3) } else { 99 }); lowest = $(if ($lowest) { "$($lowest.kind) '$($lowest.text)' $($lowest.ratio):1 ($($lowest.foreground) on $($lowest.background), floor $($lowest.floor))" }) } | ConvertTo-Json -Compress -Depth 3
+[ordered]@{ surface = $surface; measured = $measured.Count; covered = @($covered | Select-Object -Unique); hidden = @($script:hiddenWindows | Select-Object -Unique); views = $views; under = $under; margin = $(if ($lowest) { [Math]::Round($lowest.ratio / $lowest.floor, 3) } else { 99 }); lowest = $(if ($lowest) { "$($lowest.kind) '$($lowest.text)' $($lowest.ratio):1 ($($lowest.foreground) on $($lowest.background), floor $($lowest.floor))" }) } | ConvertTo-Json -Compress -Depth 3
 '@
 
 # The app started again after the sign-out that brought 200 %, and the scaling it opened at.
@@ -3574,6 +3602,7 @@ function Test-Contrast {
         -RedirectStandardOutput (Join-Path $Result.Folder 'simulator.log') -RedirectStandardError (Join-Path $Result.Folder 'simulator.err')
     $null = Invoke-QaGuestScript $Vm -Name 'connect-com2' -Script $connectCom2
     $script:contrastCovered = New-Object System.Collections.Generic.List[string]
+    $script:contrastHidden = New-Object System.Collections.Generic.List[string]
     $surfaces = 'main', 'Overview', 'Satellites', 'Position', 'Timing', 'Holdover', 'Time', 'Status Registers', 'Diagnostics', 'Settings'
     $hues = 'Red', 'Lime', 'Blue', 'Yellow', 'Cyan', 'Magenta'
     function Get-Luminance([string]$hex) {
@@ -3591,6 +3620,7 @@ function Test-Contrast {
             $count += $m.measured
             foreach ($u in @($m.under)) { if ($u) { $under.Add("$surface $u") } }
             foreach ($c in @($m.covered)) { if ($c) { $script:contrastCovered.Add("$label, $surface $c") } }
+            foreach ($h in @($m.hidden)) { if ($h) { $script:contrastHidden.Add($h) } }
             if ($m.lowest -and (-not $lowest -or $m.margin -lt $lowest.margin)) { $lowest = [pscustomobject]@{ margin = $m.margin; text = "$surface $($m.lowest)" } }
             try { Copy-QaFile $Vm -Source "C:\qa\contrast\$tag-$short.json" -Destination (Join-Path $Result.Folder "$tag-$short.json") } catch { }
             if (@($m.under).Count) { foreach ($view in 0..$m.views) { try { Copy-QaFile $Vm -Source "C:\qa\contrast\$tag-$short-$view.png" -Destination (Join-Path $Result.Folder "$tag-$short-$view.png") } catch { } } }
@@ -3643,7 +3673,7 @@ function Test-Contrast {
         }
     }
     finally {
-        if ($null -ne $script:contrastCovered) { Check $Result '[A11Y-4] every element was measured on its own window''s pixels (nothing covered it)' ($script:contrastCovered.Count -eq 0) "$($script:contrastCovered.Count) covered: $(@($script:contrastCovered | Select-Object -First 12) -join '; ')" }
+        if ($null -ne $script:contrastCovered) { Check $Result '[A11Y-4] every element was measured on its own window''s pixels (nothing covered it)' ($script:contrastCovered.Count -eq 0) "$($script:contrastCovered.Count) covered: $(@($script:contrastCovered | Select-Object -First 12) -join '; '); other processes' windows hidden first: $(@($script:contrastHidden | Select-Object -Unique) -join ', ')" }
         $null = Invoke-QaGuestScript $Vm -Name 'contrast-off' -Script $contrastOff
         if (-not $simulator.HasExited) { $simulator.Kill() }
         $null = Save-Evidence $Vm $Result.Folder
