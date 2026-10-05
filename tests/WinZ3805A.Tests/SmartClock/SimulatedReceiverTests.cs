@@ -142,4 +142,26 @@ public sealed class SimulatedReceiverTests
         Assert.Contains("Log 001:20070216.12:00:00:  GPS lock started", log, StringComparison.Ordinal);
         Assert.Contains("Log 002:20070216.12:00:54:  Holdover started, not tracking GPS", log, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void CancellingASurveyGoesBackToTheHeldPositionAndAdoptingHoldsItsEstimate()
+    {
+        // #633: the Position page's Cancel survey (:GPS:POS LAST) and Adopt computed position
+        // (:GPS:POS SURV) did the same thing in the simulator, so section 6 could not tell them apart.
+        (SimulatedReceiver cancelled, FakeTimeProvider clock) = Bench();
+        double held = cancelled.HeldPosition.Height;
+        clock.Advance(cancelled.Timing.Acquisition);
+        Assert.True(cancelled.Surveying);
+        Assert.Equal(held - 15.7, cancelled.Snapshot().Position.Height, 3);
+
+        cancelled.CancelSurvey();
+        Assert.False(cancelled.Surveying);
+        Assert.Equal(held, cancelled.Snapshot().Position.Height, 3);
+
+        (SimulatedReceiver adopted, FakeTimeProvider other) = Bench();
+        other.Advance(adopted.Timing.Acquisition);
+        adopted.AdoptSurvey();
+        Assert.False(adopted.Surveying);
+        Assert.Equal(held - 15.7, adopted.Snapshot().Position.Height, 3);
+    }
 }
