@@ -106,6 +106,9 @@
       screen-fields      §9   locked and in holdover, the simulated timeline all but frozen: every number on
                               the status screen found, by value, in the app's windows (screen-fields-allowlist.txt
                               for the ones shown differently). Needs the simulator port
+      surprise-removal  §1   a probe, not in the default list: COM2's device disabled for 60 s and enabled,
+                              checked against the section's criteria and for whether that is a faithful
+                              stand-in for pulling an adapter. Needs the simulator port
       soak               §14  not run by default: the app left -SoakMinutes (60) against the simulated receiver,
                               locked, main window and Details on Overview open, measured by Watch-Soak.ps1
                               in the guest. Read against another soak - run it for the last release too
@@ -157,7 +160,7 @@ $Machines = @($Machines | ForEach-Object { $_ -split ',' } | ForEach-Object { $_
 # -Machines none runs the host scenarios alone (binary-audit, release-assets).
 if ($Machines -contains 'none') { $Machines = @() }
 $Scenarios = @($Scenarios | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-$known = @('binary-audit', 'release-assets', 'fresh-online', 'fresh-offline', 'unblocked-download', 'offline-no-network', 'blocked-zip', 'upgrade-1.2.0', 'upgrade-previous', 'leftover-cert', 'replace-v130', 'remove-everything', 'uninstall-sideload', 'companions-removed', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast', 'display-scaling', 'text-scaling', 'keyboard-focus', 'reduced-motion', 'greyscale-states', 'contrast', 'receiver-families', 'survey-operations', 'screen-fields', 'soak')
+$known = @('binary-audit', 'release-assets', 'fresh-online', 'fresh-offline', 'unblocked-download', 'offline-no-network', 'blocked-zip', 'upgrade-1.2.0', 'upgrade-previous', 'leftover-cert', 'replace-v130', 'remove-everything', 'uninstall-sideload', 'companions-removed', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast', 'display-scaling', 'text-scaling', 'keyboard-focus', 'reduced-motion', 'greyscale-states', 'contrast', 'receiver-families', 'survey-operations', 'screen-fields', 'soak', 'surprise-removal')
 $unknown = @($Scenarios | Where-Object { $known -notcontains $_ })
 if ($unknown.Count) { throw "Unknown scenario(s): $($unknown -join ', '). Known: $($known -join ', ')." }
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
@@ -4424,6 +4427,95 @@ function Test-ScreenFields {
     }
 }
 
+# manual-qa.md section 1, surprise removal, as a PROBE: is disabling the guest's COM2 device a faithful
+# stand-in for pulling a USB-serial adapter? Decided 2 Oct 2026: automate the section only if a removal
+# can really be simulated, so this records both the app's behaviour against the section's pass
+# criteria AND the fidelity of the simulation - whether Windows stops listing the port and whether the
+# open port fails - and is not in the default list until a run shows it is faithful.
+# Called with $enable ('no' to disable the device, 'yes' to enable it again).
+$portDeviceStep = @'
+$command = "Get-PnpDevice -Class Ports | Where-Object { `$_.FriendlyName -match '\(COM2\)' } | $(if ($enable -eq 'yes') { 'Enable-PnpDevice' } else { 'Disable-PnpDevice' }) -Confirm:`$false"
+$p = Start-Process powershell.exe -Verb RunAs -Wait -PassThru -WindowStyle Hidden -ArgumentList '-NoProfile', '-Command', $command
+Start-Sleep -Seconds 3
+$device = Get-PnpDevice -Class Ports | Where-Object { $_.FriendlyName -match '\(COM2\)' } | Select-Object -First 1
+[ordered]@{ exit = $p.ExitCode; status = "$($device.Status)"; listed = ([System.IO.Ports.SerialPort]::GetPortNames() -contains 'COM2') } | ConvertTo-Json -Compress
+'@
+
+# The error bar while the port is gone: its text read twice, three seconds apart, to see it count down.
+$errorBarStep = @'
+$w = Get-AppWindow -Seconds 10
+$d = Get-AppWindowNamed 'Receiver Details' -Seconds 2
+if (-not $d) {
+    $button = Find-Control $w -AutomationId 'DetailsButton' -Seconds 10
+    if ($button) { Invoke-Control $button } else { Send-KeyTo $w '^d' }
+    $d = Get-AppWindowNamed 'Receiver Details' -Seconds 20
+}
+function Read-Bar {
+    $bar = Find-Control $d -AutomationId 'ErrorBar' -Seconds 3
+    if (-not $bar) { return $null }
+    $walker = [System.Windows.Automation.TreeWalker]::RawViewWalker
+    $names = New-Object System.Collections.Generic.List[string]
+    $stack = New-Object System.Collections.Stack; $stack.Push($bar)
+    while ($stack.Count) { $e = $stack.Pop(); try { if ("$($e.Current.Name)".Trim()) { $names.Add("$($e.Current.Name)") }; $c = $walker.GetFirstChild($e); while ($c) { $stack.Push($c); $c = $walker.GetNextSibling($c) } } catch { } }
+    $names -join ' | '
+}
+$first = Read-Bar; Start-Sleep -Seconds 3; $second = Read-Bar
+[ordered]@{ first = "$first"; second = "$second"; reading = "$((Find-Control $w -AutomationId 'ClockText' -Seconds 2).Current.Name)" } | ConvertTo-Json -Compress
+'@
+
+function Test-SurpriseRemoval {
+    param($Vm, $Result)
+    $pipe = Get-QaSimulatorPipe -Vm $Vm
+    if (-not (Select-String -LiteralPath $Vm.Vmx -SimpleMatch "\\.\pipe\$pipe" -Quiet)) {
+        $Result.Error = "skipped: the VM has no simulator port; run Add-QaSimulatorPort (build/qa/README.md)"
+        return
+    }
+    Send-Zip $Vm $Offline 'candidate'
+    $code = Install-Candidate $Vm 'candidate'
+    Check $Result 'installed (exit 0, or 2 with the start check timing out)' ($code -in 0, 2) "exit $code"
+    $simulator = Start-Process (Get-Simulator) -PassThru -WindowStyle Hidden `
+        -ArgumentList '--pipe-client', $pipe, '--start', 'locked', '--speed', '2', '--control', "$pipe-control" `
+        -RedirectStandardOutput (Join-Path $Result.Folder 'simulator.log') -RedirectStandardError (Join-Path $Result.Folder 'simulator.err')
+    $null = Invoke-QaGuestScript $Vm -Name 'connect-com2' -Script $connectCom2
+    try {
+        $seen = Wait-AppLog $Vm 'State: LOCK' 0 120 'locked'
+        Check $Result 'connected to the simulated receiver, and locked' $seen.found $seen.line
+        if (-not $seen.found) { return }
+        $pidBefore = ((Invoke-QaGuestScript $Vm -Name 'pid-before' -Script '(Get-Process -Name WinZ3805A | Select-Object -First 1).Id').Output -split "`r?`n" | Where-Object { $_ -match '^\d+$' } | Select-Object -Last 1)
+        $mark = $seen.count
+        $off = Invoke-UiStep $Vm 'com2-disable' "`$enable = 'no'" $portDeviceStep
+        $pulled = Get-Date
+        Check $Result '[1] fidelity: the device is disabled and Windows no longer lists COM2, as for an adapter pulled out' ($off.status -ne 'OK' -and -not $off.listed) "device status '$($off.status)'; listed $($off.listed); exit $($off.exit)"
+        $lost = Wait-AppLog $Vm 'is now Reconnecting' $mark 30 'removal-lost'
+        $lostAfter = if ($lost.found) { ((Get-Date) - $pulled).TotalSeconds } else { -1 }
+        Check $Result '[1] fidelity: the open port failed, so the app saw a loss' $lost.found "$($lost.line)$(if (-not $lost.found) { $lost.tail })"
+        Check $Result '[1] the app reports the loss within 10 s' ($lost.found -and $lostAfter -le 15) "noticed within about $([int]$lostAfter) s of the device going (the measurement includes a guest call)"
+        Start-Sleep -Seconds 10
+        $bar = Invoke-UiStep $Vm 'removal-bar' '' $errorBarStep
+        $n1 = if ($bar.first -match 'Retrying in (\d+)') { [int]$Matches[1] } else { -1 }
+        $n2 = if ($bar.second -match 'Retrying in (\d+)') { [int]$Matches[1] } else { -1 }
+        Check $Result '[1] the Details window says it lost COM2 and is retrying, with Retry now and Stop retrying' ($bar.first -match 'Lost the connection to COM2' -and $bar.first -match 'Retry now' -and $bar.first -match 'Stop retrying') "'$($bar.first)'"
+        Check $Result '[1] and the number counts down' ($n1 -ge 0 -and $n2 -ge 0 -and $n2 -lt $n1) "$n1 then $n2"
+        Check $Result '[1] the last readings stay on screen' ($bar.reading -and $bar.reading -notmatch '^\s*[—-]?\s*$') "'$($bar.reading)'"
+        # Sixty seconds out, as the section says, then the port back.
+        $wait = 60 - ((Get-Date) - $pulled).TotalSeconds
+        if ($wait -gt 0) { Start-Sleep -Seconds ([int]$wait) }
+        $on = Invoke-UiStep $Vm 'com2-enable' "`$enable = 'yes'" $portDeviceStep
+        $back = Get-Date
+        Check $Result '[1] fidelity: the device is enabled and COM2 listed again' ($on.status -eq 'OK' -and $on.listed) "device status '$($on.status)'; listed $($on.listed)"
+        $again = Wait-AppLog $Vm 'Session COM2 is now Connected' $lost.count 75 'removal-back'
+        $againAfter = if ($again.found) { ((Get-Date) - $back).TotalSeconds } else { -1 }
+        Check $Result '[1] it reconnects within 45 s of the port coming back' ($again.found -and $againAfter -le 50) "within about $([int]$againAfter) s"
+        $pidAfter = ((Invoke-QaGuestScript $Vm -Name 'pid-after' -Script '(Get-Process -Name WinZ3805A | Select-Object -First 1).Id').Output -split "`r?`n" | Where-Object { $_ -match '^\d+$' } | Select-Object -Last 1)
+        Check $Result '[1] the PID is unchanged: the process survived' ($pidBefore -and $pidAfter -eq $pidBefore) "$pidBefore then $pidAfter"
+    }
+    finally {
+        try { $null = Invoke-UiStep $Vm 'com2-enable-finally' "`$enable = 'yes'" $portDeviceStep } catch { }
+        if (-not $simulator.HasExited) { $simulator.Kill() }
+        try { $null = Save-Evidence $Vm $Result.Folder } catch { }
+    }
+}
+
 # manual-qa.md section 12's download rows. A browser marks what it downloads with a Zone.Identifier
 # stream (ZoneId 3, the internet), Properties > Unblock deletes it, and Explorer's own extraction
 # copies a marked zip's mark onto every file it extracts - which is how a zip left blocked reaches
@@ -4758,6 +4850,7 @@ $scenarioTable = [ordered]@{
     'receiver-families' = ${function:Test-ReceiverFamilies}
     'survey-operations' = ${function:Test-SurveyOperations}
     'screen-fields'    = ${function:Test-ScreenFields}
+    'surprise-removal' = ${function:Test-SurpriseRemoval}
     'soak'             = ${function:Test-Soak}
 }
 
