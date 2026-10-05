@@ -27,6 +27,13 @@
       upgrade-previous   §12  the last release installed and used - history, a setting changed, a port
                               remembered - then this one over it: one copy, all of it kept
       leftover-cert      §12  v1.2.0 uninstalled by hand: its certificate is still removed
+      replace-v130       §12  v1.3.0 used, with a remembered port, and RUNNING: the installer must ask and
+                              wait, then replace it in one prompt with its data and port moved (#590)
+      remove-everything  §12  Remove-WinZ3805A.ps1 -ListOnly then for real, after a v1.2.0 replacement and
+                              an account certificate: nothing left, data saved, runtime and .NET kept (#618)
+      uninstall-sideload §12  build\Uninstall-Sideload.ps1 leaves no package and no certificate
+      companions-removed §12  the runtime's companions removed: the app opens and says so; the installer puts
+                              them back (#625)
       repair-damaged     §12  this version installed and then damaged: rerunning the installer
                               repairs it with its data intact (#600)
       app-checks         §11, §25, §18  on the running app, after a clean offline install: the
@@ -128,7 +135,7 @@ param(
     [string]$Offline,
     [string]$Release,
     [string[]]$Machines = @('QA-Win10', 'QA-Win11'),
-    [string[]]$Scenarios = @('binary-audit', 'release-assets', 'fresh-online', 'fresh-offline', 'unblocked-download', 'offline-no-network', 'blocked-zip', 'upgrade-1.2.0', 'upgrade-previous', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast', 'display-scaling', 'text-scaling', 'keyboard-focus', 'reduced-motion', 'greyscale-states', 'contrast', 'receiver-families'),
+    [string[]]$Scenarios = @('binary-audit', 'release-assets', 'fresh-online', 'fresh-offline', 'unblocked-download', 'offline-no-network', 'blocked-zip', 'upgrade-1.2.0', 'upgrade-previous', 'leftover-cert', 'replace-v130', 'remove-everything', 'uninstall-sideload', 'companions-removed', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast', 'display-scaling', 'text-scaling', 'keyboard-focus', 'reduced-motion', 'greyscale-states', 'contrast', 'receiver-families'),
     [string]$OutDir,
     [int]$SoakMinutes = 60
 )
@@ -144,7 +151,7 @@ $Machines = @($Machines | ForEach-Object { $_ -split ',' } | ForEach-Object { $_
 # -Machines none runs the host scenarios alone (binary-audit, release-assets).
 if ($Machines -contains 'none') { $Machines = @() }
 $Scenarios = @($Scenarios | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-$known = @('binary-audit', 'release-assets', 'fresh-online', 'fresh-offline', 'unblocked-download', 'offline-no-network', 'blocked-zip', 'upgrade-1.2.0', 'upgrade-previous', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast', 'display-scaling', 'text-scaling', 'keyboard-focus', 'reduced-motion', 'greyscale-states', 'contrast', 'receiver-families', 'soak')
+$known = @('binary-audit', 'release-assets', 'fresh-online', 'fresh-offline', 'unblocked-download', 'offline-no-network', 'blocked-zip', 'upgrade-1.2.0', 'upgrade-previous', 'leftover-cert', 'replace-v130', 'remove-everything', 'uninstall-sideload', 'companions-removed', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast', 'display-scaling', 'text-scaling', 'keyboard-focus', 'reduced-motion', 'greyscale-states', 'contrast', 'receiver-families', 'soak')
 $unknown = @($Scenarios | Where-Object { $known -notcontains $_ })
 if ($unknown.Count) { throw "Unknown scenario(s): $($unknown -join ', '). Known: $($known -join ', ')." }
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
@@ -346,6 +353,20 @@ function Test-FreshOffline {
     Check $Result '.NET 10 installed' (@($facts.dotnet | Where-Object { $_ -like '10.*' }).Count -gt 0) ($facts.dotnet -join ', ')
     Check $Result 'one elevation, for the certificate and .NET' (([regex]::Matches($log, 'elevating for:')).Count -eq 1 -and $log -match 'elevating for: certificate \.NET')
     Check $Result 'start check passed' ($log -match 'finished      started ok: True')
+    # Section 12's runtime rows (#594, #595), as each VM has them: QA-Win11's Clean snapshot carries the
+    # Store's newer Microsoft.WindowsAppRuntime.2, so the installer must leave it and the companions
+    # follow it; QA-Win10's has none, so the zip's own is installed. (Windows 10 with only a newer
+    # Store runtime - the row's exact machine - is not reproduced.)
+    $zipRuntime = if ($log -match 'zip runtime\s+Microsoft\.WindowsAppRuntime\.2 (\d+\.\d+\.\d+\.\d+)') { $Matches[1] } else { '' }
+    $companions = if ($log -match 'Runtime companions match the runtime (\d+\.\d+\.\d+\.\d+)') { $Matches[1] } else { '' }
+    if ($log -match 'ok    Already present \((\d+\.\d+\.\d+\.\d+)\), which is this version or newer') {
+        $present = $Matches[1]
+        Check $Result "[12] a newer runtime already present ($present) is kept, not replaced by the zip's ($zipRuntime) (#595)" ([version]$present -ge [version]$zipRuntime) ''
+        Check $Result "[12] the companions follow the newer runtime (#595)" ($companions -eq $present) "companions match $companions"
+    }
+    else {
+        Check $Result "[12] the zip's runtime ($zipRuntime) installed, and the companions match it" ($zipRuntime -and $companions -eq $zipRuntime) "companions match $companions"
+    }
 }
 
 # A used v1.2.0 on the machine, which is what the replacement scenarios start from.
@@ -3931,6 +3952,185 @@ function Test-ReceiverFamilies {
     try { $null = Save-Evidence $Vm $Result.Folder } catch { }
 }
 
+# ---------------------------------------------------------------------------
+# Section 12's remaining rows (#633 item 5).
+# ---------------------------------------------------------------------------
+
+# build\Uninstall-Sideload.ps1, the developer's tool, which reads the publisher from the clone's
+# manifest: so the guest gets the script and the manifest in the clone's layout.
+function Test-UninstallSideload {
+    param($Vm, $Result)
+    Send-Zip $Vm $Offline 'candidate'
+    $code = Install-Candidate $Vm 'candidate'
+    Check $Result 'installed (exit 0, or 2 with the start check timing out)' ($code -in 0, 2) "exit $code"
+    $null = Invoke-QaGuestScript $Vm -Name 'clone-dirs' -Script "New-Item -ItemType Directory -Force 'C:\qa\clone\build', 'C:\qa\clone\src\WinZ3805A' | Out-Null"
+    Copy-QaFile $Vm -Source (Join-Path $repo 'build\Uninstall-Sideload.ps1') -Destination 'C:\qa\clone\build\Uninstall-Sideload.ps1' -ToGuest
+    Copy-QaFile $Vm -Source (Join-Path $repo 'src\WinZ3805A\Package.appxmanifest') -Destination 'C:\qa\clone\src\WinZ3805A\Package.appxmanifest' -ToGuest
+    $before = Get-Facts $Vm
+    Check $Result 'the package and its certificate are there before' (@($before.packages).Count -eq 1 -and $before.certificates -contains $currentCert) ''
+    $run = Invoke-QaGuestScript $Vm -Name 'uninstall-sideload' -Script "Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue | Stop-Process -Force; & 'C:\qa\clone\build\Uninstall-Sideload.ps1'; exit `$LASTEXITCODE"
+    $after = Get-Facts $Vm
+    Check $Result '[12] Uninstall-Sideload.ps1 leaves no package' (@($after.packages).Count -eq 0) (($after.packages | ForEach-Object { "$($_.family) $($_.version)" }) -join ', ')
+    Check $Result '[12] and no certificate in Trusted People' (-not ($after.certificates -contains $currentCert)) "exit $($run.ExitCode)"
+    try { $null = Save-Evidence $Vm $Result.Folder } catch { }
+}
+
+# Section 12, replacing v1.3.0 (#590): the earlier identity, used, with a remembered port, and still
+# RUNNING when this release's installer starts - which must ask for it to be closed and wait. That is
+# the interactive path, so the installer runs with its input redirected: the feeder waits for the
+# log to say it is waiting, closes the app as the person would, then presses Enter for each prompt.
+$replaceRunningStep = @'
+$logs = Join-Path $env:LOCALAPPDATA 'WinZ3805A Installer\logs'
+$count = @(Get-ChildItem $logs -Filter 'install-*.log' -ErrorAction SilentlyContinue).Count
+$info = New-Object System.Diagnostics.ProcessStartInfo 'cmd.exe', '/c "C:\qa\candidate\Install.cmd"'
+$info.UseShellExecute = $false; $info.RedirectStandardInput = $true
+$installer = [System.Diagnostics.Process]::Start($info)
+$facts = [ordered]@{ runningAtStart = [bool](Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue) }
+function Get-RunLog { $f = @(Get-ChildItem $logs -Filter 'install-*.log' -ErrorAction SilentlyContinue | Sort-Object Name); if ($f.Count -gt $count) { Get-Content $f[-1].FullName -Raw } else { '' } }
+$asked = Wait-Until { (Get-RunLog) -match 'waiting\s+WinZ3805A is running' } -Seconds 120
+$facts.askedToClose = [bool]$asked
+Start-Sleep -Seconds 5
+# Still waiting, not carrying on and not closing it itself.
+$facts.waited = (-not $installer.HasExited) -and [bool](Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue)
+Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue | Stop-Process -Force
+Start-Sleep -Seconds 2
+$deadline = (Get-Date).AddMinutes(8)
+while (-not $installer.HasExited -and (Get-Date) -lt $deadline) { try { $installer.StandardInput.WriteLine('') } catch { }; Start-Sleep -Seconds 3 }
+$facts.exit = $(if ($installer.HasExited) { $installer.ExitCode } else { 'still running' })
+$facts.log = Get-RunLog
+$facts | ConvertTo-Json -Compress
+'@
+
+function Test-ReplaceV130 {
+    param($Vm, $Result)
+    Send-Zip $Vm $Offline 'candidate-offline'
+    Install-DotNet $Vm 'candidate-offline'
+    Send-Zip $Vm (Get-ReleaseZip 'v1.3.0') 'v130'
+    $code = Install-Old $Vm 'v130'
+    $old = @((Get-Facts $Vm).packages | Where-Object { $_.version -eq '1.3.0.0' })
+    if ($old.Count -ne 1) { throw "v1.3.0 did not install (its installer exited $code)" }
+    $family = $old[0].family
+    Use-App $Vm $family
+    # A remembered port, as choosing one leaves it, and the app left running.
+    $prep = Invoke-QaGuestScript $Vm -Name 'v130-running' -Script @"
+`$dir = Join-Path `$env:LOCALAPPDATA 'Packages\$family\LocalCache\Local\WinZ3805A'
+'{"PortName":"COM2","AutoDetect":false,"BaudRate":9600,"DataBits":8,"Parity":0,"StopBits":1,"ReconnectAutomatically":true,"ConnectOnLaunch":false}' | Set-Content (Join-Path `$dir 'connection.json') -Encoding ascii
+"connection=`$((Get-FileHash (Join-Path `$dir 'connection.json')).Hash)"
+Start-Process 'shell:AppsFolder\$family!App'
+Start-Sleep -Seconds 15
+"running=`$([bool](Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue))"
+"@
+    $connectionHash = if ($prep.Output -match 'connection=(\w+)') { $Matches[1] } else { '' }
+    Check $Result 'v1.3.0 installed, used, given a remembered port and left running' ($prep.Output -match 'running=True' -and $connectionHash) $prep.Output.Trim()
+    Send-Zip $Vm $Offline 'candidate'
+    $r = Invoke-UiStep $Vm 'replace-running' '' $replaceRunningStep
+    $log = "$($r.log)"
+    Check $Result '[12] it asks for the running copy to be closed, and waits' ($r.runningAtStart -and $r.askedToClose -and $r.waited) "running at start $($r.runningAtStart); asked $($r.askedToClose); still waiting $($r.waited)"
+    Check $Result '[12] before anything changes it lists version 1.3.0.0 and the certificate 655D07E3...' ($log -match '1\.3\.0\.0' -and $log -match "decide cert\s+$retiredCert") ''
+    $elevations = @($log -split "`r?`n" | Where-Object { $_ -match 'elevating for:' })
+    Check $Result '[12] one administrator prompt' ($elevations.Count -eq 1) ($elevations -join ' | ')
+    Check $Result '[12] it finished, and the start check found the app running' ($r.exit -eq 0 -and $log -match 'finished      started ok: True') "exit $($r.exit)"
+    $facts = Get-Facts $Vm
+    Check $Result '[12] only this release is installed' (@($facts.packages).Count -eq 1 -and $facts.packages[0].family -like '*c2j642r4w54xr') (($facts.packages | ForEach-Object { "$($_.family) $($_.version)" }) -join ', ')
+    Check $Result "[12] Trusted People holds only this release's certificate" (($facts.certificates -contains $currentCert) -and -not ($facts.certificates -contains $retiredCert)) ''
+    Check $Result '[12] Documents has a "WinZ3805A earlier copy 1.3.0.0" folder with trend.db' (@($facts.savedCopies | Where-Object { $_.name -like 'WinZ3805A earlier copy 1.3.0.0*' -and $_.trendDb }).Count -ge 1) (($facts.savedCopies | ForEach-Object { $_.name }) -join ', ')
+    $moved = Invoke-QaGuestScript $Vm -Name 'moved-data' -Script @'
+$pkg = Get-AppxPackage -Name WinZ3805A | Select-Object -First 1
+$dir = Join-Path $env:LOCALAPPDATA "Packages\$($pkg.PackageFamilyName)\LocalCache\Local\WinZ3805A"
+"db=$(Test-Path (Join-Path $dir 'trend.db')) connection=$(if (Test-Path (Join-Path $dir 'connection.json')) { (Get-FileHash (Join-Path $dir 'connection.json')).Hash } else { 'none' })"
+'@
+    Check $Result "[12] the new copy has 1.3.0's history and its remembered connection" ($moved.Output -match 'db=True' -and $moved.Output -match "connection=$connectionHash") $moved.Output.Trim()
+    try { $null = Save-Evidence $Vm $Result.Folder } catch { }
+}
+
+# Section 12, removing everything (#618), on the state the row describes: this release having
+# replaced v1.2.0 (so a saved copy is in Documents and the installer has logs), and v1.2.0's
+# certificate added to the account's own Trusted People too. -ListOnly first, which must change
+# nothing; then the real run, answering as the row says: save the data, keep the saved copies.
+function Test-RemoveEverything {
+    param($Vm, $Result)
+    $null = Install-UsedV120 $Vm
+    Send-Zip $Vm $Online 'candidate'
+    $code = Install-Candidate $Vm 'candidate'
+    Check $Result 'this release replaced v1.2.0 (exit 0)' ($code -eq 0) "exit $code"
+    $null = Invoke-QaGuestScript $Vm -Name 'account-cert' -Script "certutil -user -addstore TrustedPeople 'C:\qa\v120\WinZ3805A.cer' | Out-Null"
+    Copy-QaFile $Vm -Source (Join-Path $repo 'build\Remove-WinZ3805A.ps1') -Destination 'C:\qa\Remove-WinZ3805A.ps1' -ToGuest
+    $state = @'
+$user = @(Get-ChildItem Cert:\CurrentUser\TrustedPeople | ForEach-Object Thumbprint)
+$machine = @(Get-ChildItem Cert:\LocalMachine\TrustedPeople | ForEach-Object Thumbprint)
+$docs = [Environment]::GetFolderPath('MyDocuments')
+[ordered]@{
+    packages = @(Get-AppxPackage -Name WinZ3805A).Count
+    machine = $machine -join ','; user = $user -join ','
+    installerFolder = Test-Path (Join-Path $env:LOCALAPPDATA 'WinZ3805A Installer')
+    earlierCopies = @(Get-ChildItem $docs -Directory -Filter 'WinZ3805A earlier copy*' -ErrorAction SilentlyContinue).Count
+    savedData = @(Get-ChildItem $docs -Directory -Filter 'WinZ3805A saved data*' -ErrorAction SilentlyContinue | Where-Object { Test-Path (Join-Path $_.FullName 'trend.db') }).Count
+    runtime = @(Get-AppxPackage -Name 'Microsoft.WindowsAppRuntime.*').Count
+    dotnet = @(Get-ChildItem (Join-Path $env:ProgramFiles 'dotnet\shared\Microsoft.NETCore.App') -Directory -ErrorAction SilentlyContinue).Count
+    desktopLog = @(Get-ChildItem ([Environment]::GetFolderPath('Desktop')) -Filter 'WinZ3805A-removal-*.log' -ErrorAction SilentlyContinue).Count
+} | ConvertTo-Json -Compress
+'@
+    function Read-State { (Invoke-QaGuestScript $Vm -Name 'remove-state' -Script $state).Output -split "`r?`n" | Where-Object { $_.StartsWith('{') } | Select-Object -Last 1 | ConvertFrom-Json }
+    $before = Read-State
+    Check $Result 'the starting state: a package, both certificates, a saved earlier copy, installer logs' ($before.packages -eq 1 -and $before.machine -match $currentCert -and $before.user -match $retiredCert -and $before.earlierCopies -ge 1 -and $before.installerFolder) ($before | ConvertTo-Json -Compress)
+    $list = Invoke-QaGuestScript $Vm -Name 'remove-list-only' -Script "& 'C:\qa\Remove-WinZ3805A.ps1' -ListOnly; exit `$LASTEXITCODE"
+    $listed = Read-State
+    # Every run writes its log to the Desktop, -ListOnly included; everything else must be as it was.
+    $same = { param($s) $s | Select-Object * -ExcludeProperty desktopLog | ConvertTo-Json -Compress }
+    Check $Result '[12] -ListOnly changes nothing' ((& $same $listed) -eq (& $same $before)) "exit $($list.ExitCode); its log written: $($listed.desktopLog -gt $before.desktopLog)"
+    # Save the data: y. Delete the saved copies: n. Then Enter to go ahead, and spare ones for any other prompt.
+    $run = Invoke-QaGuestScript $Vm -Name 'remove-everything' -Script "@('y', 'n', '', '', '', '') | & cmd.exe /c powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\qa\Remove-WinZ3805A.ps1; exit `$LASTEXITCODE"
+    $after = Read-State
+    Check $Result '[12] the package is gone' ($after.packages -eq 0) "exit $($run.ExitCode)"
+    Check $Result '[12] Trusted People holds neither 7F47E8D7... nor 655D07E3..., for the machine or the account' ($after.machine -notmatch "$currentCert|$retiredCert" -and $after.user -notmatch "$currentCert|$retiredCert") "machine '$($after.machine)'; account '$($after.user)'"
+    Check $Result "[12] the installer's folder is gone" (-not $after.installerFolder) ''
+    Check $Result '[12] Documents has a "WinZ3805A saved data" folder with trend.db, and the earlier saved copies are still there' ($after.savedData -ge 1 -and $after.earlierCopies -eq $before.earlierCopies) "saved data $($after.savedData); earlier copies $($before.earlierCopies) -> $($after.earlierCopies)"
+    Check $Result '[12] the Windows App Runtime and .NET are untouched' ($after.runtime -eq $before.runtime -and $after.dotnet -eq $before.dotnet) "runtime packages $($before.runtime) -> $($after.runtime); .NET $($before.dotnet) -> $($after.dotnet)"
+    Check $Result '[12] its log is on the Desktop' ($after.desktopLog -ge 1) ''
+    # After a restart, this release installs and starts again.
+    Invoke-VmRun $Vm reset -Arguments 'soft' | Out-Null
+    Start-Sleep -Seconds 30
+    Wait-QaDesktop -Vm $Vm -Seconds 300
+    $null = Wait-QaGuestReady -Vm $Vm
+    $code = Install-Candidate $Vm 'candidate'
+    $log = (Save-Evidence $Vm $Result.Folder) -join "`n"
+    Check $Result '[12] after a restart, this release installs and starts' ($code -eq 0 -and $log -match 'finished      started ok: True') "exit $code"
+}
+
+# Section 12, the runtime's companions removed (#625): the app must open without them and say so,
+# and running the installer again must put them back.
+function Test-CompanionsRemoved {
+    param($Vm, $Result)
+    Send-Zip $Vm $Offline 'candidate'
+    $code = Install-Candidate $Vm 'candidate'
+    Check $Result 'installed (exit 0, or 2 with the start check timing out)' ($code -in 0, 2) "exit $code"
+    $removed = Invoke-QaGuestScript $Vm -Name 'remove-companions' -Script @'
+Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue | Stop-Process -Force
+Start-Sleep -Seconds 2
+foreach ($name in 'MicrosoftCorporationII.WinAppRuntime.Main.2', 'MicrosoftCorporationII.WinAppRuntime.Singleton') { Get-AppxPackage $name | Remove-AppxPackage -ErrorAction SilentlyContinue }
+"left=$(@(Get-AppxPackage MicrosoftCorporationII.WinAppRuntime.Main.2) + @(Get-AppxPackage MicrosoftCorporationII.WinAppRuntime.Singleton) | Measure-Object | ForEach-Object Count)"
+'@
+    Check $Result 'both companions removed' ($removed.Output -match 'left=0') $removed.Output.Trim()
+    $mark = (Wait-AppLog $Vm 'a line that is never written' 0 1 'mark-companions').count
+    $opened = Invoke-UiStep $Vm 'open-without-companions' '' @'
+Start-Process "shell:AppsFolder\$((Get-AppxPackage -Name WinZ3805A).PackageFamilyName)!App"
+$w = Get-AppWindow -Seconds 60
+[ordered]@{ window = [bool]$w } | ConvertTo-Json -Compress
+'@
+    $logged = Wait-AppLog $Vm 'Windows App Runtime: PackageInstallFailed, 0x80070005' $mark 60 'companions-missing'
+    Check $Result '[12] it opens without them' ([bool]$opened.window) ''
+    Check $Result '[12] and logs the failure with the advice to run the installer again' ($logged.found -and $logged.line -match 'Install\.cmd again') "$($logged.line)$(if (-not $logged.found) { $logged.tail })"
+    $null = Invoke-QaGuestScript $Vm -Name 'close-app' -Script 'Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue | Stop-Process -Force'
+    $code = Install-Candidate $Vm 'candidate'
+    $back = Invoke-QaGuestScript $Vm -Name 'companions-back' -Script "`"back=`$(@(Get-AppxPackage MicrosoftCorporationII.WinAppRuntime.Main.2) + @(Get-AppxPackage MicrosoftCorporationII.WinAppRuntime.Singleton) | Measure-Object | ForEach-Object Count)`""
+    Check $Result '[12] after running the installer again, both companions are back' ($back.Output -match 'back=2') "$($back.Output.Trim()); installer exit $code"
+    $mark = (Wait-AppLog $Vm 'a line that is never written' 0 1 'mark-restart').count
+    $null = Invoke-QaGuestScript $Vm -Name 'restart-app' -Script "Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue | Stop-Process -Force; Start-Sleep -Seconds 2; Start-Process `"shell:AppsFolder\`$((Get-AppxPackage -Name WinZ3805A).PackageFamilyName)!App`""
+    $parts = Wait-AppLog $Vm 'Windows App Runtime: its parts are in place' $mark 60 'parts-back'
+    Check $Result '[12] and the next start logs its parts are in place' $parts.found "$($parts.line)$(if (-not $parts.found) { $parts.tail })"
+    try { $null = Save-Evidence $Vm $Result.Folder } catch { }
+}
+
 # manual-qa.md section 12's download rows. A browser marks what it downloads with a Zone.Identifier
 # stream (ZoneId 3, the internet), Properties > Unblock deletes it, and Explorer's own extraction
 # copies a marked zip's mark onto every file it extracts - which is how a zip left blocked reaches
@@ -4240,6 +4440,10 @@ $scenarioTable = [ordered]@{
     'upgrade-1.2.0'    = ${function:Test-Upgrade120}
     'upgrade-previous' = ${function:Test-UpgradePrevious}
     'leftover-cert'    = ${function:Test-LeftoverCert}
+    'replace-v130'     = ${function:Test-ReplaceV130}
+    'remove-everything' = ${function:Test-RemoveEverything}
+    'uninstall-sideload' = ${function:Test-UninstallSideload}
+    'companions-removed' = ${function:Test-CompanionsRemoved}
     'repair-damaged'   = ${function:Test-RepairDamaged}
     'app-checks'       = ${function:Test-AppChecks}
     'receiver'         = ${function:Test-Receiver}
