@@ -231,6 +231,10 @@ manifest in a pull request, merge, then tag the merge:
 git tag v1.0.1 && git push origin v1.0.1
 ```
 
+The whole sequence - dry run, the QA pass, the soak, the QA-run issue, then on the go the merge,
+the tag and the pass on the published zips - is `build\qa\Invoke-Release.ps1`; see
+[build/qa/README.md](build/qa/README.md#running-a-release).
+
 Signing on the runner needs `SIGNING_PFX_BASE64` and `SIGNING_PFX_PASSWORD` as
 repository secrets; [`build/New-SigningSecrets.ps1`](build/New-SigningSecrets.ps1)
 sets both from the local PFX and explains what rotating the key costs. Use the
