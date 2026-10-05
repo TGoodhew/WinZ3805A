@@ -391,7 +391,7 @@ public sealed class LineProtocol
         {
             _promptWord = null;
             string? promptStatus = await ReadUntilPromptAsync(lines, [], linked.Token).ConfigureAwait(false);
-            await ClearStatusAsync(cancellationToken).ConfigureAwait(false);
+            await ClearStatusAsync(replyUnderWay: false, cancellationToken).ConfigureAwait(false);
 
             return new Transaction
             {
@@ -407,8 +407,9 @@ public sealed class LineProtocol
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             // Silence is a perfectly good answer: this receiver announces itself, a sibling model
-            // may not, and neither case is a failure to connect.
-            await ClearStatusAsync(cancellationToken).ConfigureAwait(false);
+            // may not, and neither case is a failure to connect. Lines without a prompt are a reply
+            // still under way when the listen gave up, which the clear has to allow for (#707).
+            await ClearStatusAsync(replyUnderWay: lines.Count > 0, cancellationToken).ConfigureAwait(false);
 
             return new Transaction
             {
@@ -454,11 +455,32 @@ public sealed class LineProtocol
     /// whose whole purpose is to clear status and whose response nobody wants. Twice, because the
     /// first attempt is the one being sacrificed.
     /// </para>
+    /// <para>
+    /// <b>After a listen that ended mid-reply, a <c>*CLS</c> answer with lines in it was somebody
+    /// else's (#707).</b> The port opened into a reply, and the listen gave up before it ended. The
+    /// command prints nothing on a SmartClock, so lines before its prompt are that reply's tail, and
+    /// the prompt that ended them was the reply's, not this command's. This command's own prompt is
+    /// still on its way. Unless it is read here, every answer after it is one command late: seen on
+    /// QA-Win10, where the identity probe read a bare prompt and the connect failed with the
+    /// receiver answering every command correctly.
+    /// </para>
+    /// <para>
+    /// Only after such a listen, because lines and a prompt are otherwise a real answer: a UCCM-P
+    /// answers a command it does not know with <c>Command error</c> or <c>Undefined header</c> and
+    /// its prompt, and waiting for a second prompt there would add a window to every connect.
+    /// </para>
     /// </remarks>
-    private async Task ClearStatusAsync(CancellationToken cancellationToken)
+    /// <param name="replyUnderWay">Whether the listen before this heard lines but no prompt.</param>
+    /// <param name="cancellationToken">Cancels the attempt.</param>
+    private async Task ClearStatusAsync(bool replyUnderWay, CancellationToken cancellationToken)
     {
         Transaction cleared = await ExecuteAsync(ClearStatusCommand, TransactionTimeouts.AutoDetectProbe, cancellationToken)
             .ConfigureAwait(false);
+
+        if (replyUnderWay && cleared.Succeeded && cleared.Lines.Count > 0)
+        {
+            await AwaitOwnPromptAsync(cleared.Lines.Count).ConfigureAwait(false);
+        }
 
         // ErrorQueueNotEmpty is the right test here, unusually: this wants "not clean yet", not
         // "that command failed". Spending the glitch is done when the queue is empty.
@@ -466,6 +488,43 @@ public sealed class LineProtocol
         {
             await ExecuteAsync(ClearStatusCommand, TransactionTimeouts.AutoDetectProbe, cancellationToken)
                 .ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Reads the prompt a command is still owed after a stale reply's tail answered for it (#707).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Up to <see cref="LateReplyWindow"/>, the window #643 settled on for a reply that is late
+    /// rather than absent. A receiver answers <c>*CLS</c> in milliseconds, so the window is spent in
+    /// full only when the prompt that ended the tail really was this command's, which costs one
+    /// window on one connect and leaves the link aligned either way.
+    /// </para>
+    /// <para>
+    /// As in <see cref="ResynchroniseAsync"/>, nothing here throws: a link that dies while waiting
+    /// is reported by the next command as a Faulted transaction, which every caller already
+    /// handles.
+    /// </para>
+    /// </remarks>
+    /// <param name="staleLines">How many lines of the stale reply the command read.</param>
+    private async Task AwaitOwnPromptAsync(int staleLines)
+    {
+        List<string> discarded = [];
+        using CancellationTokenSource window = new(LateReplyWindow, _timeProvider);
+
+        try
+        {
+            await ReadUntilPromptAsync(discarded, [], window.Token).ConfigureAwait(false);
+            TransportLog.StaleReplyAbsorbed(_logger, staleLines, discarded.Count);
+        }
+        catch (OperationCanceledException)
+        {
+            TransportLog.NoOwnPrompt(_logger, staleLines, LateReplyWindow.TotalMilliseconds);
+        }
+        catch (Exception exception) when (TransportFaults.IsTransportFault(exception))
+        {
+            TransportLog.NoOwnPrompt(_logger, staleLines, LateReplyWindow.TotalMilliseconds);
         }
     }
 
