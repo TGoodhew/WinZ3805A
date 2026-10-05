@@ -2978,6 +2978,12 @@ $stops = New-Object System.Collections.Generic.List[object]
 $seen = @{}
 $prev = $null; $prevShot = $null; $prevRect = $null; $lastKey = ''
 $firstKey = ''; $unnamed = 0
+# The page's scroller, so each stop records where the page was: positions on a page that scrolls
+# while it is walked cannot be compared for reading order (A11Y-1).
+$scroller = @($root.FindAll([System.Windows.Automation.TreeScope]::Descendants, (New-Object System.Windows.Automation.PropertyCondition($Ae::IsScrollPatternAvailableProperty, $true))) |
+    Where-Object { try { $_.GetCurrentPattern([System.Windows.Automation.ScrollPattern]::Pattern).Current.VerticallyScrollable } catch { $false } } |
+    Sort-Object { $b = $_.Current.BoundingRectangle; - $b.Width * $b.Height } | Select-Object -First 1)
+$rootTop = [int]$root.Current.BoundingRectangle.Top
 foreach ($i in 1..400) {
     [System.Windows.Forms.SendKeys]::SendWait('{TAB}')
     Start-Sleep -Milliseconds 350
@@ -3013,6 +3019,7 @@ foreach ($i in 1..400) {
         id = "$($f.Current.AutomationId)"; name = "$($f.Current.Name)"; type = "$($f.Current.ControlType.ProgrammaticName -replace 'ControlType\.', '')"
         left = [int]$r.Left; top = [int]$r.Top; width = [int]$r.Width; height = [int]$r.Height
         ringPixels = -1; perimeter = [int](2 * ($r.Width + $r.Height)); repeats = 0
+        scroll = $(if ($scroller) { try { [Math]::Round($scroller[0].GetCurrentPattern([System.Windows.Automation.ScrollPattern]::Pattern).Current.VerticalScrollPercent, 1) } catch { -1 } } else { -1 })
         parent = ($(try { [System.Windows.Automation.TreeWalker]::ControlViewWalker.GetParent($f).GetRuntimeId() -join '.' } catch { '' }))
     }
     $stops.Add($stop)
@@ -3035,7 +3042,7 @@ $stopParents = @{}; foreach ($s in $stops) { if ($s.parent) { $stopParents[$s.pa
 $missed = @($root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $focusable) | Where-Object { -not $seen.ContainsKey(($_.GetRuntimeId() -join '.')) } |
     Where-Object { -not ($_.Current.ControlType -in [System.Windows.Automation.ControlType]::ListItem, [System.Windows.Automation.ControlType]::TreeItem, [System.Windows.Automation.ControlType]::DataItem -and $stopParents.ContainsKey(([System.Windows.Automation.TreeWalker]::ControlViewWalker.GetParent($_).GetRuntimeId() -join '.'))) } |
     ForEach-Object { "$($_.Current.ControlType.ProgrammaticName -replace 'ControlType\.', '') '$($_.Current.Name)' [$($_.Current.AutomationId)]" })
-[ordered]@{ surface = $surface; dpi = 96; stops = $stops; missed = $missed; closedOn = $closedOn; unnamed = $unnamed; tabs = $i } | ConvertTo-Json -Compress -Depth 5
+[ordered]@{ surface = $surface; dpi = 96; rootTop = $rootTop; stops = $stops; missed = $missed; closedOn = $closedOn; unnamed = $unnamed; tabs = $i } | ConvertTo-Json -Compress -Depth 5
 '@
 
 # #684: a toggle switch's target measured by pressing 15 px above and below its centre - outside a 20 px
@@ -3077,6 +3084,34 @@ $facts.above = Press-At ($middle - 15)
 $facts.below = Press-At ($middle + 15)
 [QaWin32]::MoveTo(2, 2)
 $facts | ConvertTo-Json -Compress
+'@
+
+# Windows' app theme (light or dark, through the registry and the ImmersiveColorSet broadcast
+# Settings sends) or a contrast theme (High Contrast #1, by its internal name). Called with $theme.
+$keyThemeStep = @'
+Add-Type -TypeDefinition @"
+using System; using System.Runtime.InteropServices;
+public static class QaKeyTheme {
+    [StructLayout(LayoutKind.Sequential)] public struct HIGHCONTRAST { public int cbSize; public int dwFlags; public IntPtr lpszDefaultScheme; }
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "SystemParametersInfoW")] static extern bool Spi(int action, int param, ref HIGHCONTRAST hc, int winIni);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr SendMessageTimeout(IntPtr h, int msg, IntPtr w, string l, int flags, int timeout, out IntPtr result);
+    public static bool Contrast(bool on, string scheme) {
+        var hc = new HIGHCONTRAST(); hc.cbSize = Marshal.SizeOf(hc); hc.dwFlags = on ? 1 : 0;
+        hc.lpszDefaultScheme = scheme == null ? IntPtr.Zero : Marshal.StringToHGlobalUni(scheme);
+        try { return Spi(0x43, hc.cbSize, ref hc, 3); } finally { if (hc.lpszDefaultScheme != IntPtr.Zero) Marshal.FreeHGlobal(hc.lpszDefaultScheme); }
+    }
+    public static void ThemeChanged() { IntPtr r; SendMessageTimeout((IntPtr)0xFFFF, 0x1A, IntPtr.Zero, "ImmersiveColorSet", 2, 5000, out r); }
+}
+"@
+[void][QaKeyTheme]::Contrast($false, $null); Start-Sleep -Seconds 3
+if ($theme -eq 'contrast') { $set = [QaKeyTheme]::Contrast($true, 'High Contrast #1') }
+else {
+    $light = [int]($theme -eq 'light'); $p = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize'
+    Set-ItemProperty $p -Name AppsUseLightTheme -Value $light -Type DWord; Set-ItemProperty $p -Name SystemUsesLightTheme -Value $light -Type DWord
+    [QaKeyTheme]::ThemeChanged(); $set = $true
+}
+Start-Sleep -Seconds 8
+[ordered]@{ theme = $theme; set = $set } | ConvertTo-Json -Compress
 '@
 
 function Test-KeyboardFocus {
@@ -3123,8 +3158,37 @@ function Test-KeyboardFocus {
             # §9.10.2 answers the sky-plot markers' flag; their own size is the plot's business.
             $small = @($stops | Where-Object { $_.width -gt 0 -and ($_.width -lt 32 -or $_.height -lt 32) -and $_.name -notlike 'Satellite*' -and $_.name -notlike 'PRN*' -and -not ($switchReach -and $_.id -like '*Switch') } | ForEach-Object { "$($_.type) '$($_.name)' [$($_.id)] $($_.width)x$($_.height)" })
             Check $Result "[A11Y-5] $($surface): every focus stop is at least 32 x 32" ($small.Count -eq 0) "under 32: $($small -join '; ')"
+            # A11Y-1, Tab order follows reading order. The walk starts wherever the focus was, so the stops are a
+            # cycle and may jump back up once - the wrap. A move into the title bar is the window's own controls
+            # coming after the page, and is not counted. A page that scrolled during the walk is not judged by
+            # position: each stop's place was taken after Tab scrolled it into view.
+            $scrolls = @($stops | ForEach-Object { $_.scroll } | Select-Object -Unique)
+            if ($scrolls.Count -le 1) {
+                $back = @()
+                for ($n = 1; $n -lt $stops.Count; $n++) {
+                    $a = $stops[$n - 1]; $b = $stops[$n]
+                    if ($a.width -le 0 -or $b.width -le 0 -or $b.top -lt $k.rootTop + 64) { continue }
+                    if ($b.top -lt $a.top - 20 -and $b.left -le $a.left + 20) { $back += "'$($a.name)' ($($a.left),$($a.top)) then '$($b.name)' ($($b.left),$($b.top))" }
+                }
+                Check $Result "[A11Y-1] $($surface): Tab order follows reading order" ($back.Count -le 1) "jumps back up: $($back.Count) (one is the wrap)$(if ($back.Count -gt 1) { ': ' + ($back -join '; ') })"
+            }
+            else {
+                Check $Result "[A11Y-1] $($surface): Tab order recorded; the page scrolled during the walk, so it is read from the stop list" $true "$($stops.Count) stops"
+            }
         }
         $all | ConvertTo-Json -Depth 6 | Set-Content (Join-Path $Result.Folder 'focus-stops.json')
+
+        # A11Y-2 in all three themes: the walk again in Dark and in a contrast theme, for the rings alone.
+        foreach ($theme in 'dark', 'contrast') {
+            $null = Invoke-UiStep $Vm "keys-theme-$theme" "`$theme = '$theme'" $keyThemeStep
+            foreach ($surface in 'main', 'Overview', 'Satellites', 'Position', 'Timing', 'Holdover', 'Time', 'Status Registers', 'Diagnostics', 'Settings') {
+                $k = Invoke-UiStep $Vm "keys-$theme-$($surface -replace ' ', '')" "`$surface = '$surface'" $keyboardStep
+                if ($k.error) { Check $Result "[A11Y-2] $theme, $surface" $false $k.error; continue }
+                $noRing = @(@($k.stops) | Where-Object { $_.ringPixels -ge 0 -and $_.ringPixels -lt [Math]::Max(20, $_.perimeter / 2) -and -not ($_.type -eq 'ListItem' -and $_.name -like 'PRN *') } | ForEach-Object { "$($_.type) '$($_.name)' [$($_.id)] $($_.ringPixels)/$($_.perimeter)" })
+                Check $Result "[A11Y-2] $($theme), $($surface): a focus ring is drawn at every stop" ($noRing.Count -eq 0 -and @($k.stops).Count -gt 0) "$(@($k.stops).Count) stops; no ring at: $($noRing -join '; ')"
+            }
+        }
+        $null = Invoke-UiStep $Vm 'keys-theme-light' "`$theme = 'light'" $keyThemeStep
         $null = Invoke-QaGuestScript $Vm -Name 'keys-zip' -Script "if (Test-Path 'C:\qa\keys') { Compress-Archive -Path 'C:\qa\keys\*' -DestinationPath 'C:\qa\keys.zip' -Force }"
         try { Copy-QaFile $Vm -Source 'C:\qa\keys.zip' -Destination (Join-Path $Result.Folder 'keys.zip'); Expand-Archive (Join-Path $Result.Folder 'keys.zip') -DestinationPath (Join-Path $Result.Folder 'rings') -Force } catch { }
     }
