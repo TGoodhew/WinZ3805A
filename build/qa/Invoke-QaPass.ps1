@@ -14,6 +14,13 @@
       binary-audit       §8   no excluded command in the shipped assemblies (host, no VM)
       fresh-online       §12  the online zip on a machine with no .NET: exit 3, app installed
       fresh-offline      §12  the offline zip installs .NET too: exit 0, the start check passes
+      unblocked-download §12  the online zip marked as a browser marks it, unblocked, extracted by Explorer:
+                              the notes' thumbprint, one prompt, the .NET page named, Microsoft Update's
+                              line true; then .NET installed and the app started from Start
+      offline-no-network §12  the offline zip with the VM's network adapter disconnected: .NET from the zip,
+                              one prompt, the app started, .NET listed as an ordinary Microsoft install
+      blocked-zip        §12  the zip left blocked, so Explorer marks every file it extracts: the
+                              installer must fail legibly
       upgrade-1.2.0      §12  a used v1.2.0 replaced: data moved, old copy and certificate gone
       leftover-cert      §12  v1.2.0 uninstalled by hand: its certificate is still removed
       repair-damaged     §12  this version installed and then damaged: rerunning the installer
@@ -114,7 +121,7 @@ param(
     [string]$Offline,
     [string]$Release,
     [string[]]$Machines = @('QA-Win10', 'QA-Win11'),
-    [string[]]$Scenarios = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast', 'display-scaling', 'text-scaling', 'keyboard-focus', 'reduced-motion', 'greyscale-states', 'contrast'),
+    [string[]]$Scenarios = @('binary-audit', 'fresh-online', 'fresh-offline', 'unblocked-download', 'offline-no-network', 'blocked-zip', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast', 'display-scaling', 'text-scaling', 'keyboard-focus', 'reduced-motion', 'greyscale-states', 'contrast'),
     [string]$OutDir,
     [int]$SoakMinutes = 60
 )
@@ -126,7 +133,7 @@ Import-Module (Join-Path $PSScriptRoot 'QaVm.psm1') -Force
 # names no scenario - the first run of this script ran nothing and reported success.
 $Machines = @($Machines | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 $Scenarios = @($Scenarios | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-$known = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast', 'display-scaling', 'text-scaling', 'keyboard-focus', 'reduced-motion', 'greyscale-states', 'contrast', 'soak')
+$known = @('binary-audit', 'fresh-online', 'fresh-offline', 'unblocked-download', 'offline-no-network', 'blocked-zip', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast', 'display-scaling', 'text-scaling', 'keyboard-focus', 'reduced-motion', 'greyscale-states', 'contrast', 'soak')
 $unknown = @($Scenarios | Where-Object { $known -notcontains $_ })
 if ($unknown.Count) { throw "Unknown scenario(s): $($unknown -join ', '). Known: $($known -join ', ')." }
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
@@ -238,15 +245,23 @@ exit `$p.ExitCode
     if ($r.ExitCode -notin 0, 3010) { throw ".NET did not install in the guest: exit $($r.ExitCode)" }
 }
 
-# Starts an installed copy and leaves it 20 s to write its data, then stops it.
+# Starts an installed copy and waits for it to have written its data - its trend.db - then gives it
+# 10 s more and stops it. A fixed 20 s was not enough with the other VM running: v1.2.0 wrote
+# nothing in time, so the upgrade had no data to save and failed its check on a correct installer
+# (QA-Win11, 5 Oct 2026).
 function Use-App {
     param($Vm, [string]$Family)
     $r = Invoke-QaGuestScript $Vm -Name 'use-app' -Script @"
 Start-Process 'shell:AppsFolder\$Family!App'
-Start-Sleep -Seconds 20
+`$db = Join-Path `$env:LOCALAPPDATA 'Packages\$Family\LocalCache\Local\WinZ3805A\trend.db'
+`$deadline = (Get-Date).AddSeconds(90)
+while ((Get-Date) -lt `$deadline -and -not (Test-Path `$db)) { Start-Sleep -Seconds 2 }
+Start-Sleep -Seconds 10
 Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue | Stop-Process -Force
 Start-Sleep -Seconds 2
+"wrote=`$(Test-Path `$db)"
 "@
+    if ($r.Output -notmatch 'wrote=True') { throw "the copy $Family wrote no data within 90 s of starting, so there is nothing for the upgrade to save" }
 }
 
 # The guest's state as far as WinZ3805A is concerned, as an object.
@@ -731,18 +746,31 @@ Start-Sleep -Seconds 2
         $mark = (Wait-AppLog $Vm 'Cancelled' 0 5 'mark').count
         $opened = Invoke-UiStep $Vm 'connect-again' '' @'
 $window = Get-AppWindow
-$footer = Find-Control $window -Name 'Connect'
-if ($footer) { Invoke-Control $footer }
+# By AutomationId: by name, 'Connect' is also the dialog's own button, which a closing dialog can
+# leave in the tree for a moment. Pressed once it is enabled, and again if UI Automation throws:
+# it threw on QA-Win10 with an empty message (5 Oct 2026).
+$footer = Find-Control $window -AutomationId 'ConnectButton' -Seconds 10
+$deadline = (Get-Date).AddSeconds(30); $pressError = $null; $footerPressed = $false
+while ($footer -and -not $footerPressed -and (Get-Date) -lt $deadline) {
+    try { if ($footer.Current.IsEnabled) { Invoke-Control $footer; $footerPressed = $true } else { Start-Sleep -Milliseconds 500 } }
+    catch { $pressError = "$($_.Exception.GetType().Name) $($_.Exception.Message)"; Start-Sleep -Seconds 1 }
+}
 # Up to 30 s: on QA-Win10, with the other VM running, the dialog took 12 s to open and a 10 s wait
 # pressed nothing (4 Oct 2026). How long it took is reported, so a slow dialog is seen, not hidden.
 $clock = [Diagnostics.Stopwatch]::StartNew()
 $primary = Find-Control $window -AutomationId 'PrimaryButton' -Seconds 30
 $openedIn = [Math]::Round($clock.Elapsed.TotalSeconds, 1)
-if ($primary) { Invoke-Control $primary }
-[ordered]@{ footer = [bool]$footer; pressed = [bool]$primary; openedIn = $openedIn } | ConvertTo-Json -Compress
+# Pressed again only while it is still there and enabled: on Windows 10 the press threw during the
+# dialog's opening, and a press that throws can still have landed (5 Oct 2026).
+$deadline = (Get-Date).AddSeconds(30); $pressed = $false
+while ($primary -and -not $pressed -and (Get-Date) -lt $deadline) {
+    try { Invoke-Control $primary; $pressed = $true }
+    catch { $pressError = "$pressError; dialog: $($_.Exception.GetType().Name)"; Start-Sleep -Seconds 2; try { if (-not $primary.Current.IsEnabled) { $pressed = $true } } catch { $pressed = $true } }
+}
+[ordered]@{ footer = $footerPressed; pressError = $pressError; pressed = $pressed; openedIn = $openedIn } | ConvertTo-Json -Compress
 '@
         $seen = Wait-AppLog $Vm 'Session COM2 is now Connected' $mark 180 'connected-again'
-        Check $Result '[24] with the receiver answering, Connect connects' ($opened.pressed -and $seen.found) "footer pressed $($opened.footer), dialog open after $($opened.openedIn) s, Connect pressed $($opened.pressed); $($seen.line)$($seen.tail)"
+        Check $Result '[24] with the receiver answering, Connect connects' ($opened.pressed -and $seen.found) "$(if ($opened.error) { "step failed: $($opened.error); " })footer pressed $($opened.footer)$(if ($opened.pressError) { " (after $($opened.pressError))" }), dialog open after $($opened.openedIn) s, Connect pressed $($opened.pressed); $($seen.line)$($seen.tail)"
         try { Invoke-VmRun $Vm captureScreen -Arguments (Join-Path $Result.Folder 'screen.png') -Guest | Out-Null } catch { }
     }
     finally {
@@ -914,8 +942,15 @@ $processes = @(Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue)
 Start-Process "shell:AppsFolder\$((Get-AppxPackage -Name WinZ3805A).PackageFamilyName)!App"
 Start-Sleep -Seconds 5
 $window = Get-AppWindow
-$footer = Find-Control $window -Name 'Connect'
-if ($footer) { Invoke-Control $footer }
+# By AutomationId: by name, 'Connect' is also the dialog's own button, which a closing dialog can
+# leave in the tree for a moment. Pressed once it is enabled, and again if UI Automation throws:
+# it threw on QA-Win10 with an empty message (5 Oct 2026).
+$footer = Find-Control $window -AutomationId 'ConnectButton' -Seconds 10
+$deadline = (Get-Date).AddSeconds(30); $pressError = $null; $footerPressed = $false
+while ($footer -and -not $footerPressed -and (Get-Date) -lt $deadline) {
+    try { if ($footer.Current.IsEnabled) { Invoke-Control $footer; $footerPressed = $true } else { Start-Sleep -Milliseconds 500 } }
+    catch { $pressError = "$($_.Exception.GetType().Name) $($_.Exception.Message)"; Start-Sleep -Seconds 1 }
+}
 $primary = Find-Control $window -AutomationId 'PrimaryButton'
 $opened = (Get-AppLogLines).Count
 Start-Sleep -Seconds 70
@@ -3692,6 +3727,207 @@ function Test-Contrast {
     }
 }
 
+# manual-qa.md section 12's download rows. A browser marks what it downloads with a Zone.Identifier
+# stream (ZoneId 3, the internet), Properties > Unblock deletes it, and Explorer's own extraction
+# copies a marked zip's mark onto every file it extracts - which is how a zip left blocked reaches
+# the installer. All three are reproduced here: the mark written as a browser writes it, Unblock-File,
+# and extraction through Shell.Application, Explorer's own copy engine. Called with $zipName, $label
+# and $unblock ('yes' or 'no').
+$markedExtractStep = @'
+$zip = "C:\qa\$zipName"
+$dest = "C:\qa\$label"
+Set-Content -LiteralPath $zip -Stream Zone.Identifier -Value "[ZoneTransfer]`r`nZoneId=3`r`nReferrerUrl=https://github.com/TGoodhew/WinZ3805A/releases`r`nHostUrl=https://github.com/TGoodhew/WinZ3805A/releases/download/$zipName"
+$facts = [ordered]@{ zipMarked = [bool](Get-Item -LiteralPath $zip -Stream Zone.Identifier -ErrorAction SilentlyContinue) }
+if ($unblock -eq 'yes') { Unblock-File -LiteralPath $zip }
+$facts.zipMarkedAfter = [bool](Get-Item -LiteralPath $zip -Stream Zone.Identifier -ErrorAction SilentlyContinue)
+Remove-Item $dest -Recurse -Force -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Force $dest | Out-Null
+$shell = New-Object -ComObject Shell.Application
+$items = $shell.NameSpace($zip).Items()
+$expected = $items.Count
+# 4: no progress window; 16: yes to all. CopyHere returns before it has finished.
+$shell.NameSpace($dest).CopyHere($items, 20)
+$deadline = (Get-Date).AddSeconds(180)
+do { Start-Sleep -Seconds 2 } while ((Get-Date) -lt $deadline -and -not ((@(Get-ChildItem $dest).Count -ge $expected) -and (Test-Path "$dest\install.ps1") -and (Get-ChildItem $dest -Filter *.msixbundle)))
+Start-Sleep -Seconds 5
+$files = @(Get-ChildItem $dest -Recurse -File)
+$facts.extracted = $files.Count
+$facts.marked = @($files | Where-Object { Get-Item -LiteralPath $_.FullName -Stream Zone.Identifier -ErrorAction SilentlyContinue }).Count
+$facts | ConvertTo-Json -Compress
+'@
+
+function Send-MarkedZip {
+    param($Vm, [string]$Zip, [string]$Label, [bool]$Unblock)
+    $name = Split-Path $Zip -Leaf
+    try { Invoke-VmRun $Vm createDirectoryInGuest -Arguments 'C:\qa' -Guest | Out-Null } catch { }
+    Copy-QaFile $Vm -Source $Zip -Destination "C:\qa\$name" -ToGuest
+    Invoke-UiStep $Vm "marked-$Label" "`$zipName = '$name'; `$label = '$Label'; `$unblock = '$(if ($Unblock) { 'yes' } else { 'no' })'" $markedExtractStep
+}
+
+# The thumbprint the published notes give, or for a dry run the certificate the zip carries.
+function Get-ExpectedThumbprint {
+    if ($Release) {
+        # Joined: gh prints lines, and -match on an array filters it without setting $Matches.
+        $body = (gh release view $Release --repo TGoodhew/WinZ3805A --json body -q .body 2>$null) -join "`n"
+        if ($body -match 'Certificate thumbprint \(SHA-1\) \| `([0-9A-F]{40})`') { return $Matches[1] }
+    }
+    $currentCert
+}
+
+# Section 12, the online row: downloaded, unblocked, extracted by Explorer, installed on a machine
+# with no .NET; then .NET installed as the page would, and the app started.
+function Test-UnblockedDownload {
+    param($Vm, $Result)
+    $m = Send-MarkedZip $Vm $Online 'candidate' $true
+    Check $Result '[12] the zip carried the internet mark, and Unblock removed it' ($m.zipMarked -and -not $m.zipMarkedAfter) "marked $($m.zipMarked), after Unblock $($m.zipMarkedAfter)"
+    Check $Result '[12] Explorer extracted it with no file marked' ($m.extracted -gt 5 -and $m.marked -eq 0) "$($m.extracted) files, $($m.marked) marked"
+    $code = Install-Candidate $Vm 'candidate'
+    $log = (Save-Evidence $Vm $Result.Folder) -join "`n"
+    $expected = Get-ExpectedThumbprint
+    Check $Result 'exit code 3 (installed, .NET missing)' ($code -eq 3) "exit $code"
+    Check $Result "[12] the certificate trusted is the one the notes give ($($expected.Substring(0, 8))...)" ($log -match "signing\s+$expected" -and $log -match "ok    Trusted\. Certificate $($expected.Substring(0, 8))") "expected $expected"
+    $elevations = @($log -split "`r?`n" | Where-Object { $_ -match 'elevating for:' })
+    Check $Result '[12] one administrator prompt, for the certificate alone' ($elevations.Count -eq 1 -and $elevations[0] -match 'elevating for: certificate\s*$') ($elevations -join ' | ')
+    Check $Result '[12] step 2 says .NET 10 is missing and names the page' ($log -match 'Not installed\. WinZ3805A needs the free \.NET 10 Runtime' -and $log -match 'Opening https://dotnet\.microsoft\.com/download/dotnet/10\.0')
+    $mu = Invoke-QaGuestScript $Vm -Name 'mu-setting' -Script @'
+try { $m = New-Object -ComObject Microsoft.Update.ServiceManager; $on = @($m.Services | Where-Object { $_.ServiceID -eq '7971f918-a847-4430-9279-4a52d1efe18d' -and $_.IsRegisteredWithAU }).Count -gt 0; "MU=$(if ($on) { 'on' } else { 'off' })" } catch { 'MU=unknown' }
+'@
+    $setting = if ((@($mu.Output) -join "`n") -match 'MU=(\w+)') { $Matches[1] } else { 'unknown' }
+    $logged = if ($log -match 'ms update\s+(\w+)') { $Matches[1] } else { 'missing' }
+    Check $Result '[12] its Microsoft Update line matches the setting' ($logged -eq $setting -and $setting -ne 'unknown') "logged $logged, Windows says $setting"
+    # .NET as the page gives it - the same Microsoft installer the offline zip carries - then the app from Start.
+    Send-Zip $Vm $Offline 'runtime'
+    Install-DotNet $Vm 'runtime'
+    $started = Invoke-QaGuestScript $Vm -Name 'start-after-dotnet' -Script @'
+$family = (Get-AppxPackage -Name WinZ3805A).PackageFamilyName
+Start-Process "shell:AppsFolder\$family!App"
+$log = Join-Path $env:LOCALAPPDATA "Packages\$family\LocalCache\Local\WinZ3805A\logs\app.log"
+$deadline = (Get-Date).AddSeconds(60)
+while ((Get-Date) -lt $deadline -and -not (Test-Path $log)) { Start-Sleep -Seconds 2 }
+"started=$([bool](Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue)) logged=$(Test-Path $log)"
+'@
+    Check $Result '[12] with .NET installed, the app starts from Start' ($started.Output -match 'started=True logged=True') $started.Output.Trim()
+}
+
+# Section 12, the offline row, with the VM's network adapter disconnected throughout the install.
+function Test-OfflineNoNetwork {
+    param($Vm, $Result)
+    Send-Zip $Vm $Offline 'candidate'
+    try {
+        Invoke-VmRun $Vm disconnectNamedDevice -Arguments 'ethernet0' | Out-Null
+        Start-Sleep -Seconds 5
+        $net = Invoke-QaGuestScript $Vm -Name 'net-off' -Script @'
+$up = @(Get-NetAdapter -Physical -ErrorAction SilentlyContinue | Where-Object Status -eq 'Up').Count
+$reach = try { [bool](Invoke-WebRequest -UseBasicParsing 'https://dotnet.microsoft.com' -TimeoutSec 10) } catch { $false }
+"up=$up reach=$reach"
+'@
+        Check $Result '[12] the network is disconnected' ($net.Output -match 'up=0 reach=False') $net.Output.Trim()
+        $code = Install-Candidate $Vm 'candidate'
+        $log = Save-Evidence $Vm $Result.Folder
+        $facts = Get-Facts $Vm
+        Check $Result 'exit code 0 (installed and started)' ($code -eq 0) "exit $code"
+        Check $Result '[12] one administrator prompt, for the certificate and .NET together' (([regex]::Matches($log, 'elevating for:')).Count -eq 1 -and $log -match 'elevating for: certificate \.NET')
+        $dotnet = if ($log -match 'ok    \.NET (10\.\d+\.\d+) installed') { $Matches[1] } else { $null }
+        Check $Result '[12] step 2 reports .NET 10.0.x installed, from the zip' ([bool]$dotnet) "$dotnet"
+        if ($Release) {
+            $body = (gh release view $Release --repo TGoodhew/WinZ3805A --json body -q .body 2>$null) -join "`n"
+            Check $Result '[12] that version is the one the release notes give' ($dotnet -and $body -match [regex]::Escape($dotnet)) "notes mention $dotnet`: $($body -match [regex]::Escape("$dotnet"))"
+        }
+        Check $Result '[12] the app started with no network and no download prompt' ($log -match 'finished      started ok: True')
+        $listed = Invoke-QaGuestScript $Vm -Name 'apps-list' -Script @'
+$keys = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*', 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
+@(Get-ItemProperty $keys -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -like 'Microsoft .NET Runtime - 10.*(x64)*' } | ForEach-Object DisplayName) -join '; '
+'@
+        Check $Result '[12] Settings > Apps lists Microsoft .NET Runtime 10.0.x (x64), an ordinary Microsoft install' ($listed.Output -match 'Microsoft \.NET Runtime - 10\.') $listed.Output.Trim()
+        Check $Result '.NET 10 installed' (@($facts.dotnet | Where-Object { $_ -like '10.*' }).Count -gt 0) ($facts.dotnet -join ', ')
+    }
+    finally {
+        try { Invoke-VmRun $Vm connectNamedDevice -Arguments 'ethernet0' | Out-Null } catch { }
+    }
+}
+
+# Section 12's blocked row: the zip left blocked, extracted by Explorer so every file carries the
+# mark, and Install.cmd started as a double-click starts it - through ShellExecute, which is where
+# Windows checks the mark and may warn. A script running cmd /c skips that, and with
+# -ExecutionPolicy Bypass the installer itself does not care about the mark (5 Oct 2026: a blocked
+# zip run that way installed). So what a person sees is what is recorded: which Windows prompt
+# appears, its photograph, and whether pressing Run lets the install finish.
+$doubleClickStep = @'
+Add-Type -AssemblyName System.Drawing
+$facts = [ordered]@{}
+$before = @(Get-ChildItem (Join-Path $env:LOCALAPPDATA 'WinZ3805A Installer\logs') -Filter 'install-*.log' -ErrorAction SilentlyContinue).Count
+# Through a helper process, because ShellExecute does not return until Windows' warning is answered:
+# started directly, the step waited on its own prompt for an hour (QA-Win11, 5 Oct 2026). Not hidden:
+# Windows does not show a warning owned by a hidden window, and the helper waited on one nobody could see.
+Start-Process powershell.exe -ArgumentList '-NoProfile', '-Command', "Start-Process -FilePath 'C:\qa\candidate\Install.cmd' -ArgumentList '-Unattended'"
+Start-Sleep -Seconds 12
+$titles = @($script:Ae::RootElement.FindAll([System.Windows.Automation.TreeScope]::Children, [System.Windows.Automation.Condition]::TrueCondition) | ForEach-Object { "$($_.Current.Name)" } | Where-Object { $_ })
+$facts.windows = $titles -join ' | '
+$prompt = $script:Ae::RootElement.FindAll([System.Windows.Automation.TreeScope]::Children, [System.Windows.Automation.Condition]::TrueCondition) | Where-Object { $_.Current.Name -match 'Security Warning|protected your PC' } | Select-Object -First 1
+$facts.prompt = if ($prompt) { "$($prompt.Current.Name)" } else { '' }
+$screen = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+$bmp = New-Object System.Drawing.Bitmap $screen.Width, $screen.Height
+$g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen(0, 0, 0, 0, $bmp.Size); $g.Dispose()
+$bmp.Save('C:\qa\blocked-prompt.png', [System.Drawing.Imaging.ImageFormat]::Png); $bmp.Dispose()
+if ($prompt) {
+    # By control type as well as name: a name alone matched an element that cannot be pressed. Cancel
+    # has the focus on the attachment warning, so Enter would cancel - Run is pressed explicitly.
+    # SmartScreen, where it appears instead, hides Run behind "More info".
+    function Find-Pressable($root, [string[]]$names) {
+        @($root.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition) |
+            Where-Object { $names -contains $_.Current.Name -and $_.Current.ControlType.ProgrammaticName -match 'Button|Hyperlink' }) | Select-Object -First 1
+    }
+    $more = Find-Pressable $prompt @('More info')
+    if ($more) { try { Invoke-Control $more } catch { }; Start-Sleep -Seconds 2 }
+    $run = Find-Pressable $prompt @('Run', 'Run anyway')
+    $facts.ran = $false
+    if ($run) { try { Invoke-Control $run; $facts.ran = $true; $facts.how = 'button' } catch { $facts.runError = "$($_.Exception.Message)" } }
+    # Windows 11 draws the attachment warning's buttons without exposing them as buttons (5 Oct
+    # 2026), so failing that, its own shortcut - Alt+R, as a keyboard user would - and failing that,
+    # a click where Run is drawn. What UI Automation does see is recorded for the next person.
+    $facts.seen = (@($prompt.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition) | ForEach-Object { "$($_.Current.ControlType.ProgrammaticName -replace 'ControlType\.', ''):$($_.Current.Name)" } | Select-Object -First 25) -join ', ')
+    $stillThere = { [bool]($script:Ae::RootElement.FindAll([System.Windows.Automation.TreeScope]::Children, [System.Windows.Automation.Condition]::TrueCondition) | Where-Object { $_.Current.Name -match 'Security Warning|protected your PC' }) }
+    if (-not $facts.ran -and (& $stillThere)) {
+        [void][QaWin32]::SetForegroundWindow([IntPtr]$prompt.Current.NativeWindowHandle); Start-Sleep -Milliseconds 500
+        [System.Windows.Forms.SendKeys]::SendWait('%r'); Start-Sleep -Seconds 2
+        if (-not (& $stillThere)) { $facts.ran = $true; $facts.how = 'Alt+R' }
+    }
+    if (-not $facts.ran -and (& $stillThere)) {
+        $b = $prompt.Current.BoundingRectangle
+        [QaWin32]::MoveTo([int]($b.Left + $b.Width * 0.64), [int]($b.Top + $b.Height * 0.60)); Start-Sleep -Milliseconds 300
+        [QaWin32]::LeftDown(); [QaWin32]::LeftUp(); Start-Sleep -Seconds 2
+        if (-not (& $stillThere)) { $facts.ran = $true; $facts.how = 'click' }
+    }
+}
+# The installer's log for this run, until it finishes.
+$deadline = (Get-Date).AddSeconds(240)
+do {
+    Start-Sleep -Seconds 3
+    $logs = @(Get-ChildItem (Join-Path $env:LOCALAPPDATA 'WinZ3805A Installer\logs') -Filter 'install-*.log' -ErrorAction SilentlyContinue | Sort-Object Name)
+    $text = if ($logs.Count -gt $before) { Get-Content $logs[-1].FullName -Raw } else { '' }
+} while ((Get-Date) -lt $deadline -and $text -notmatch 'finished ')
+$facts.started = $logs.Count -gt $before
+$facts.finished = (($text -split "`r?`n") | Where-Object { $_ -match 'finished |FAILED' } | Select-Object -Last 1)
+$facts.installed = @(Get-AppxPackage -Name WinZ3805A).Count
+$facts | ConvertTo-Json -Compress
+'@
+
+function Test-BlockedZip {
+    param($Vm, $Result)
+    $m = Send-MarkedZip $Vm $Online 'candidate' $false
+    Check $Result '[12] Explorer extracted the blocked zip with every file marked' ($m.extracted -gt 5 -and $m.marked -eq $m.extracted) "$($m.extracted) files, $($m.marked) marked"
+    $d = Invoke-UiStep $Vm 'double-click' '' $doubleClickStep
+    # From the host as well: it sees the whole screen, a secure-desktop prompt included.
+    try { Invoke-VmRun $Vm captureScreen -Arguments (Join-Path $Result.Folder 'after-double-click.png') -Guest | Out-Null } catch { }
+    try { Copy-QaFile $Vm -Source 'C:\qa\blocked-prompt.png' -Destination (Join-Path $Result.Folder 'blocked-prompt.png') } catch { }
+    try { $null = Save-Evidence $Vm $Result.Folder } catch { Say "  evidence not collected: $($_.Exception.Message)" }
+    $saw = "$(if ($d.error) { "step failed: $($d.error); " })prompt '$($d.prompt)', Run pressed $($d.ran) by $($d.how); windows: $($d.windows); the prompt holds: $($d.seen)"
+    # Windows 11 shows its attachment warning, naming the file and an unknown publisher; Windows 10
+    # showed none (5 Oct 2026). Either is legible; what must not happen is the installer failing.
+    Check $Result "[12] a blocked zip: Windows' own warning, if any, names Install.cmd, and Run goes on" (-not $d.error -and (-not $d.prompt -or ($d.prompt -match 'Security Warning|protected your PC' -and $d.ran))) $saw
+    Check $Result '[12] a blocked zip installs as an unblocked one does' ($d.started -and $d.installed -ge 1 -and $d.finished -match 'finished ' -and $d.finished -notmatch 'FAILED') "installer started $($d.started); $($d.finished); installed $($d.installed)"
+}
+
 # manual-qa.md section 14: the app left running for $SoakMinutes against the simulated receiver,
 # locked, with the main window and Details on Overview open and nothing else touched, measured by
 # build\Watch-Soak.ps1 in the guest - private bytes, the managed heaps, and a gcdump at each end.
@@ -3793,6 +4029,9 @@ Set-Content 'C:\qa\soak\done' "`$LASTEXITCODE"
 $scenarioTable = [ordered]@{
     'fresh-online'     = ${function:Test-FreshOnline}
     'fresh-offline'    = ${function:Test-FreshOffline}
+    'unblocked-download' = ${function:Test-UnblockedDownload}
+    'offline-no-network' = ${function:Test-OfflineNoNetwork}
+    'blocked-zip'      = ${function:Test-BlockedZip}
     'upgrade-1.2.0'    = ${function:Test-Upgrade120}
     'leftover-cert'    = ${function:Test-LeftoverCert}
     'repair-damaged'   = ${function:Test-RepairDamaged}
