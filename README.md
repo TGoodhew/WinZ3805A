@@ -174,7 +174,8 @@ two zips:
 
 > Unblock before extracting — right-click the **zip** → *Properties* →
 > *Unblock*. Windows marks anything downloaded from the internet and the mark
-> survives extraction, where it makes the install fail without mentioning why.
+> survives extraction. Skip it and Windows 11 asks whether to run `Install.cmd`,
+> saying the publisher could not be verified; choose *Run* and it carries on.
 
 Both zips carry the signed package, its certificate and the x64 Windows App
 Runtime. The package carries **no .NET runtime** of its own (§6.3). .NET 10 is
