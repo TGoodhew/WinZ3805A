@@ -8,10 +8,11 @@ Download **one** of the two zips below, unblock it, extract it, and double-click
 - **`WinZ3805A-<version>-x64-offline.zip`**: for a machine without one. It adds
   Microsoft's own .NET 10 Runtime installer, run when .NET 10 is missing.
 
-> Unblocking matters: Windows marks anything downloaded from the internet, and
-> the mark survives extraction. Right-click the **zip** → *Properties* → tick
-> *Unblock* → *OK*, **before** extracting. Skipping it makes the installer fail
-> in ways that do not mention the mark.
+> Unblock first: Windows marks anything downloaded from the internet, and the mark
+> survives extraction. Right-click the **zip** → *Properties* → tick *Unblock* →
+> *OK*, **before** extracting. If you skip it, Windows 11 asks whether to run
+> `Install.cmd`, saying the publisher could not be verified; choose *Run* and the
+> install carries on.
 
 Both carry the signed package, its certificate and the x64 Windows App Runtime.
 The application carries **no .NET runtime of its own**. .NET is installed by

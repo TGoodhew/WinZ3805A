@@ -44,7 +44,7 @@ with the screenshots attached.
 | 8 | **automated** | `binary-audit`: `Test-NoBlockedCommands.ps1 -ScanBinaries` on the unpacked package |
 | 10 | **automated** | `receiver`: the simulated antenna pulled and held off past the grace minute; the app must log both notifications, and the screen is photographed as the first fires, for the agent to judge. Then the app is restarted with the switch off, and the same loss must raise none |
 | 11 | **automated** | `app-checks`: the guide and every image it names in the package; Ctrl+D and F1 open Details and the guide, each with its own caption |
-| 12 | **partly automated** | `fresh-online`, `fresh-offline`, `upgrade-1.2.0`, `leftover-cert`, `repair-damaged`, on Windows 10 and 11. Still by hand: a browser download with *Unblock* and the thumbprint compared, the offline zip with the network off, a run without unblocking, and a machine an earlier installer left unable to start the app, which does not reproduce under the harness (see `build/qa/README.md`) |
+| 12 | **partly automated** | `fresh-online`, `fresh-offline`, `unblocked-download`, `offline-no-network`, `blocked-zip`, `upgrade-1.2.0`, `leftover-cert`, `repair-damaged`, on Windows 10 and 11 - the three download rows since 5 Oct 2026. Still by hand: the remaining rows of the section's table, among them `Uninstall-Sideload.ps1`, removing everything (#618), a newer Windows App Runtime and its companions missing (see `build/qa/README.md`) |
 | 18 | **automated** | `app-checks`: Explorer killed; the app logs re-adding its icon and keeps running |
 | 20 | **automated** | `sign-in`: the guest's user signs out and Windows signs them back in (ForceAutoLogon), so the app is started by its own startup task. The setting is changed on the Settings page through UI Automation: in the notification area (started hidden, one copy, its icon, polling, and brought forward when opened from Start), with the window open, and off (nothing starts). A receiver powered off at sign-in must be retried, said once, and connected within about 30 s of answering; the connection dialog opened mid-retry must stop it and connect. The startup task's state written as 1, which Windows reads back as disabled by the user (the state Task Manager's Disable leaves), must lock the box at Off with the note; written back as 2, it shows on again |
 | 24 | **automated** | `connect-cancel`: the simulated receiver powered off, so COM2 is there and silent; an auto-detect walk is stopped by the dialog's Cancel and by Esc, through UI Automation. Each must log the press and *Disconnected. Cancelled.* within 3 s, send no probe after it, and leave the dialog open with Connect usable. Cancel with nothing running closes the dialog, and Connect connects once the receiver answers |
@@ -385,9 +385,13 @@ it. It rides on section 5's antenna pull.
 > - a fresh offline install with .NET and the start check (exit 0, one elevation);
 > - replacing a used v1.2.0;
 > - a leftover certificate;
-> - this version installed, then damaged, and repaired by running the installer again (#600).
+> - this version installed, then damaged, and repaired by running the installer again (#600);
+> - **since 5 Oct 2026, the three download rows below**:
+>   - `unblocked-download`: the online zip given the mark a browser leaves, unblocked, extracted by Explorer's own copy engine, then the notes' thumbprint, one prompt, the .NET page named, the Microsoft Update line against Windows' own setting, and the app started once .NET is in;
+>   - `offline-no-network`: the offline zip with the VM's network adapter disconnected;
+>   - `blocked-zip`: the zip left blocked, and `Install.cmd` started as a double-click starts it, through ShellExecute.
 >
-> The rows below that need a browser, a disconnected network, or a zip left blocked are still by hand. The row for a machine an earlier installer left unable to start the app was retired on 4 Oct 2026: #614 is closed, fixed by #619 in v1.3.3, and the Windows 10 replacement row below, automated as `upgrade-1.2.0`, is what guards that fix. The harness was shown to fail: given v1.3.2 as the candidate, the Windows 10 upgrade fails as #617 did.
+> Two parts of those rows are reproduced rather than performed. The browser download is reproduced by the mark it leaves. The administrator prompt is on the secure desktop, so the thumbprint is read from the installer's log, which is what was actually trusted. The row for a machine an earlier installer left unable to start the app was retired on 4 Oct 2026: #614 is closed, fixed by #619 in v1.3.3, and the Windows 10 replacement row below, automated as `upgrade-1.2.0`, is what guards that fix. The harness was shown to fail: given v1.3.2 as the candidate, the Windows 10 upgrade fails as #617 did.
 
 **Why.** Everything else here tests the application. This tests the *download* — and it is the only
 check with a stranger at the other end of it. The failure modes are all invisible from a developer
@@ -421,8 +425,7 @@ There are **two zips** since #588. Run both, each on a machine that has never ha
 | | |
 |---|---|
 | **Do** | Repeat *without* unblocking the zip first. |
-| **Pass** | It fails, and the failure is readable — the window stays open and says something a
-non-developer can act on. This is expected to fail; the check is that it fails *legibly*, because it is the most common way an install goes wrong and the mark is never mentioned by Windows' own error. |
+| **Pass** | The install completes as it does from an unblocked zip. On Windows 11, Windows' own **Open File – Security Warning** comes first, naming `Install.cmd` and an unknown publisher; after **Run** it carries on. Windows 10 shows no warning. *This said the install was expected to fail legibly: measured on 5 Oct 2026 with v1.3.4 and v1.3.5 it does not fail at all, because `Install.cmd` starts PowerShell with `-ExecutionPolicy Bypass` and nothing else in the zip cares about the mark (#703).* Automated as `blocked-zip`. |
 
 | | |
 |---|---|
