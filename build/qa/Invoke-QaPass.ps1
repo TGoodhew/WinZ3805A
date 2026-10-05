@@ -79,6 +79,9 @@
                               floor, at 200 %: Light and Dark over Mica on a grey wallpaper and on the
                               hardest of six hues (Windows 10: the solid fallback), then the four contrast
                               themes. Needs the simulator port, and on Windows 11 3D acceleration
+      soak               §14  not run by default: the app left -SoakMinutes (60) against the simulated receiver,
+                              locked, main window and Details on Overview open, measured by Watch-Soak.ps1
+                              in the guest. Read against another soak - run it for the last release too
       connect-cancel     §24  an auto-detect walk on a port where nothing answers, stopped by
                               Cancel and by Esc; then Connect works once the receiver answers.
                               Driven through UI Automation (guest\Ui.ps1). Needs the simulator port
@@ -96,7 +99,11 @@
     Which VMs to run on: QA-Win10, QA-Win11, or both (the default).
 
 .PARAMETER Scenarios
-    Which scenarios to run; all of them by default.
+    Which scenarios to run; all of them by default, except soak, which runs only when named.
+
+.PARAMETER SoakMinutes
+    How long the soak scenario measures the app for. 60 by default, which §14 compares against
+    another 60.
 
 .EXAMPLE
     .\build\qa\Invoke-QaPass.ps1 -Release v1.3.3
@@ -108,7 +115,8 @@ param(
     [string]$Release,
     [string[]]$Machines = @('QA-Win10', 'QA-Win11'),
     [string[]]$Scenarios = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast', 'display-scaling', 'text-scaling', 'keyboard-focus', 'reduced-motion', 'greyscale-states', 'contrast'),
-    [string]$OutDir
+    [string]$OutDir,
+    [int]$SoakMinutes = 60
 )
 
 $ErrorActionPreference = 'Stop'
@@ -118,7 +126,7 @@ Import-Module (Join-Path $PSScriptRoot 'QaVm.psm1') -Force
 # names no scenario - the first run of this script ran nothing and reported success.
 $Machines = @($Machines | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 $Scenarios = @($Scenarios | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-$known = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast', 'display-scaling', 'text-scaling', 'keyboard-focus', 'reduced-motion', 'greyscale-states', 'contrast')
+$known = @('binary-audit', 'fresh-online', 'fresh-offline', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast', 'display-scaling', 'text-scaling', 'keyboard-focus', 'reduced-motion', 'greyscale-states', 'contrast', 'soak')
 $unknown = @($Scenarios | Where-Object { $known -notcontains $_ })
 if ($unknown.Count) { throw "Unknown scenario(s): $($unknown -join ', '). Known: $($known -join ', ')." }
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
@@ -3680,6 +3688,104 @@ function Test-Contrast {
     }
 }
 
+# manual-qa.md section 14: the app left running for $SoakMinutes against the simulated receiver,
+# locked, with the main window and Details on Overview open and nothing else touched, measured by
+# build\Watch-Soak.ps1 in the guest - private bytes, the managed heaps, and a gcdump at each end.
+# The two windows placed, and Details on Overview, which reads the trend store on every reading.
+$soakArrangeStep = @'
+Add-Type -TypeDefinition @"
+using System; using System.Runtime.InteropServices;
+public static class QaSoak { [DllImport("user32.dll")] public static extern bool MoveWindow(IntPtr h, int x, int y, int w, int t, bool repaint); }
+"@
+$w = Get-AppWindow
+if (-not $w) { [ordered]@{ error = "no main window ($(Get-WindowReport))" } | ConvertTo-Json -Compress; return }
+[void][QaSoak]::MoveWindow((Get-Handle $w), 20, 20, 900, 640, $true)
+$button = Find-Control $w -AutomationId 'DetailsButton' -Seconds 5
+if ($button) { Invoke-Control $button } else { Send-KeyTo $w '^d' }
+$d = Get-AppWindowNamed 'Receiver Details' -Seconds 20
+if (-not $d) { [ordered]@{ error = "no Details window ($(Get-WindowReport))" } | ConvertTo-Json -Compress; return }
+[void][QaSoak]::MoveWindow((Get-Handle $d), 940, 20, 960, 1000, $true)
+[void](Select-NavigationItem $d 'Overview')
+[QaWin32]::MoveTo(1910, 1190)
+[ordered]@{ details = $true; pid = @(Get-Process -Name WinZ3805A).Id -join ',' } | ConvertTo-Json -Compress
+'@
+
+function Test-Soak {
+    param($Vm, $Result)
+    $pipe = Get-QaSimulatorPipe -Vm $Vm
+    if (-not (Select-String -LiteralPath $Vm.Vmx -SimpleMatch "\\.\pipe\$pipe" -Quiet)) {
+        $Result.Error = "skipped: the VM has no simulator port; run Add-QaSimulatorPort (build/qa/README.md)"
+        return
+    }
+    # The standalone, signed builds of the two diagnostics tools, which need no SDK in the guest.
+    $tools = Join-Path $cache 'soak-tools'
+    New-Item -ItemType Directory -Force $tools | Out-Null
+    foreach ($t in 'dotnet-counters', 'dotnet-gcdump') {
+        $exe = Join-Path $tools "$t.exe"
+        if (-not (Test-Path $exe)) { $ProgressPreference = 'SilentlyContinue'; Invoke-WebRequest -UseBasicParsing "https://aka.ms/$t/win-x64" -OutFile $exe }
+        if ((Get-AuthenticodeSignature $exe).Status -ne 'Valid') { throw "$exe is not validly signed" }
+    }
+    Send-Zip $Vm $Offline 'candidate'
+    $code = Install-Candidate $Vm 'candidate'
+    Check $Result 'installed (exit 0, or 2 with the start check timing out)' ($code -in 0, 2) "exit $code"
+    $simulator = Start-Process (Get-Simulator) -PassThru -WindowStyle Hidden `
+        -ArgumentList '--pipe-client', $pipe, '--start', 'locked', '--speed', '2', '--control', "$pipe-control" `
+        -RedirectStandardOutput (Join-Path $Result.Folder 'simulator.log') -RedirectStandardError (Join-Path $Result.Folder 'simulator.err')
+    $null = Invoke-QaGuestScript $Vm -Name 'connect-com2' -Script $connectCom2
+    try {
+        $seen = Wait-AppLog $Vm 'State: LOCK' 0 120 'locked'
+        Check $Result 'connected to the simulated receiver, and locked' $seen.found $seen.line
+        if (-not $seen.found) { return }
+        $null = Invoke-UiStep $Vm 'soak-resolution' '' $resolutionStep
+        $arranged = Invoke-UiStep $Vm 'soak-arrange' '' $soakArrangeStep
+        Check $Result 'the main window and Details on Overview open' (-not $arranged.error -and $arranged.details) "$($arranged.error) pid $($arranged.pid)"
+        if ($arranged.error) { return }
+
+        $null = Invoke-QaGuestScript $Vm -Name 'soak-dir' -Script "New-Item -ItemType Directory -Force 'C:\qa\soak\out' | Out-Null"
+        Copy-QaFile $Vm -Source (Join-Path $repo 'build\Watch-Soak.ps1') -Destination 'C:\qa\soak\Watch-Soak.ps1' -ToGuest
+        foreach ($t in 'dotnet-counters', 'dotnet-gcdump') { Copy-QaFile $Vm -Source (Join-Path $tools "$t.exe") -Destination "C:\qa\soak\$t.exe" -ToGuest }
+        # By source, not version: a candidate carries the last release's number until it is tagged.
+        $label = if ($Release) { $Release } else { 'candidate-' + ((Split-Path $Offline -Leaf) -replace '^WinZ3805A-(.+)-x64-offline\.zip$', '$1') }
+        $runner = Join-Path ([IO.Path]::GetTempPath()) 'qa-soak-run.ps1'
+        Set-Content -LiteralPath $runner -Encoding UTF8 -Value @"
+`$env:PATH = 'C:\qa\soak;' + `$env:PATH
+& 'C:\qa\soak\Watch-Soak.ps1' -Label '$label' -DurationMinutes $SoakMinutes -OutputDirectory 'C:\qa\soak\out' *> 'C:\qa\soak\out\console.log'
+Set-Content 'C:\qa\soak\done' "`$LASTEXITCODE"
+"@
+        Copy-QaFile $Vm -Source $runner -Destination 'C:\qa\soak\run.ps1' -ToGuest
+        Remove-Item -LiteralPath $runner
+        # Not waited on: a guest program that runs for an hour outlives anything vmrun should be held open for.
+        Invoke-VmRun $Vm runProgramInGuest -Arguments '-noWait', '-activeWindow', '-interactive', 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', 'C:\qa\soak\run.ps1' -Guest | Out-Null
+        Say "  soaking $label for $SoakMinutes minutes"
+        $deadline = (Get-Date).AddMinutes($SoakMinutes + 20)
+        $done = $false
+        while (-not $done -and (Get-Date) -lt $deadline) {
+            Start-Sleep -Seconds 60
+            # vmrun answers 'The file exists.' or 'The file does not exist.' (and a nonzero exit, caught).
+            try { $done = (Invoke-VmRun $Vm fileExistsInGuest -Arguments 'C:\qa\soak\done' -Guest) -match 'The file exists' } catch { }
+            if ($simulator.HasExited) { Check $Result 'the simulator ran throughout' $false "it exited with $($simulator.ExitCode)"; break }
+        }
+        Check $Result "[14] the soak ran its $SoakMinutes minutes" $done $(if (-not $done) { 'not finished by the deadline' })
+
+        $null = Invoke-QaGuestScript $Vm -Name 'soak-pack' -Script "Compress-Archive -Path 'C:\qa\soak\out\*' -DestinationPath 'C:\qa\soak\soak.zip' -Force"
+        $zip = Join-Path $Result.Folder 'soak.zip'
+        try { Copy-QaFile $Vm -Source 'C:\qa\soak\soak.zip' -Destination $zip; Expand-Archive $zip -DestinationPath (Join-Path $Result.Folder 'soak') -Force } catch { }
+        $console = Join-Path $Result.Folder 'soak\console.log'
+        $text = if (Test-Path $console) { Get-Content $console -Raw } else { '' }
+        $private = if ($text -match 'PRIVATE \(the verdict\)\s*(-?[\d.]+) MB/hour') { [double]$Matches[1] } else { $null }
+        $alive = $text -notmatch 'is gone after'
+        Check $Result '[14] the app was alive at the end' ($alive -and $text) $(if (-not $text) { 'no console log' } elseif (-not $alive) { ($text -split "`r?`n" | Where-Object { $_ -match 'is gone' }) -join ' ' })
+        Check $Result '[14] private bytes, the verdict, measured (read against another soak, not a threshold)' ($null -ne $private) "$private MB/hour"
+        # The whole summary, for the report: a soak is compared with another by a person.
+        $summary = @($text -split "`r?`n" | Where-Object { $_ -match '^\s{2,}\S' -or $_ -match '^Soak:' -or $_ -match 'WARNING' } | ForEach-Object { $_.Trim() })
+        Check $Result '[14] summary' $true ($summary -join ' | ')
+    }
+    finally {
+        if (-not $simulator.HasExited) { $simulator.Kill() }
+        $null = Save-Evidence $Vm $Result.Folder
+    }
+}
+
 $scenarioTable = [ordered]@{
     'fresh-online'     = ${function:Test-FreshOnline}
     'fresh-offline'    = ${function:Test-FreshOffline}
@@ -3703,6 +3809,7 @@ $scenarioTable = [ordered]@{
     'reduced-motion'   = ${function:Test-ReducedMotion}
     'greyscale-states' = ${function:Test-GreyscaleStates}
     'contrast'         = ${function:Test-Contrast}
+    'soak'             = ${function:Test-Soak}
 }
 
 # ---------------------------------------------------------------------------
