@@ -100,6 +100,9 @@
       receiver-families    the NMEA 0183 and UCCM simulators on COM2 with the port left to auto-detect:
                               the right driver claims each, it connects, nothing logs an error, and both
                               windows are photographed for the judge. Needs the simulator port
+      survey-operations §6 a survey after a power cycle, then Cancel survey (back to the held position) and,
+                              after another, Adopt computed position (the estimate held): outcome in about
+                              ten seconds, no survey left running. Needs the simulator port
       soak               §14  not run by default: the app left -SoakMinutes (60) against the simulated receiver,
                               locked, main window and Details on Overview open, measured by Watch-Soak.ps1
                               in the guest. Read against another soak - run it for the last release too
@@ -135,7 +138,7 @@ param(
     [string]$Offline,
     [string]$Release,
     [string[]]$Machines = @('QA-Win10', 'QA-Win11'),
-    [string[]]$Scenarios = @('binary-audit', 'release-assets', 'fresh-online', 'fresh-offline', 'unblocked-download', 'offline-no-network', 'blocked-zip', 'upgrade-1.2.0', 'upgrade-previous', 'leftover-cert', 'replace-v130', 'remove-everything', 'uninstall-sideload', 'companions-removed', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast', 'display-scaling', 'text-scaling', 'keyboard-focus', 'reduced-motion', 'greyscale-states', 'contrast', 'receiver-families'),
+    [string[]]$Scenarios = @('binary-audit', 'release-assets', 'fresh-online', 'fresh-offline', 'unblocked-download', 'offline-no-network', 'blocked-zip', 'upgrade-1.2.0', 'upgrade-previous', 'leftover-cert', 'replace-v130', 'remove-everything', 'uninstall-sideload', 'companions-removed', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast', 'display-scaling', 'text-scaling', 'keyboard-focus', 'reduced-motion', 'greyscale-states', 'contrast', 'receiver-families', 'survey-operations'),
     [string]$OutDir,
     [int]$SoakMinutes = 60
 )
@@ -151,7 +154,7 @@ $Machines = @($Machines | ForEach-Object { $_ -split ',' } | ForEach-Object { $_
 # -Machines none runs the host scenarios alone (binary-audit, release-assets).
 if ($Machines -contains 'none') { $Machines = @() }
 $Scenarios = @($Scenarios | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-$known = @('binary-audit', 'release-assets', 'fresh-online', 'fresh-offline', 'unblocked-download', 'offline-no-network', 'blocked-zip', 'upgrade-1.2.0', 'upgrade-previous', 'leftover-cert', 'replace-v130', 'remove-everything', 'uninstall-sideload', 'companions-removed', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast', 'display-scaling', 'text-scaling', 'keyboard-focus', 'reduced-motion', 'greyscale-states', 'contrast', 'receiver-families', 'soak')
+$known = @('binary-audit', 'release-assets', 'fresh-online', 'fresh-offline', 'unblocked-download', 'offline-no-network', 'blocked-zip', 'upgrade-1.2.0', 'upgrade-previous', 'leftover-cert', 'replace-v130', 'remove-everything', 'uninstall-sideload', 'companions-removed', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast', 'display-scaling', 'text-scaling', 'keyboard-focus', 'reduced-motion', 'greyscale-states', 'contrast', 'receiver-families', 'survey-operations', 'soak')
 $unknown = @($Scenarios | Where-Object { $known -notcontains $_ })
 if ($unknown.Count) { throw "Unknown scenario(s): $($unknown -join ', '). Known: $($known -join ', ')." }
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
@@ -693,12 +696,12 @@ $primaryNow = Find-Control $window -AutomationId 'PrimaryButton' -Seconds 1
 '@
 
 function Invoke-UiStep {
-    param($Vm, [string]$Name, [string]$Prelude, [string]$Body)
+    param($Vm, [string]$Name, [string]$Prelude, [string]$Body, [int]$TimeoutSeconds = 900)
     $ui = Get-Content (Join-Path $PSScriptRoot 'guest\Ui.ps1') -Raw
     # A terminating error escapes the guest runner's output capture, which left a failing step
     # reporting nothing at all; caught here, it reports what went wrong and what was running.
     $wrapped = $ui + "`r`n" + $Prelude + "`r`ntry {`r`n" + $Body + "`r`n}`r`ncatch { [ordered]@{ error = `"`$(`$_.Exception.Message) at line `$(`$_.InvocationInfo.ScriptLineNumber): `$(`$_.InvocationInfo.Line.Trim()) (`$(Get-WindowReport))`" } | ConvertTo-Json -Compress }"
-    $r = Invoke-QaGuestScript $Vm -Name $Name -Script $wrapped
+    $r = Invoke-QaGuestScript $Vm -Name $Name -Script $wrapped -TimeoutSeconds $TimeoutSeconds
     $line = $r.Output -split "`r?`n" | Where-Object { $_.StartsWith('{') } | Select-Object -Last 1
     if (-not $line) { throw "the UI step '$Name' printed nothing: $($r.Output)" }
     $line | ConvertFrom-Json
@@ -4195,6 +4198,96 @@ $w = Get-AppWindow -Seconds 60
     try { $null = Save-Evidence $Vm $Result.Folder } catch { }
 }
 
+# manual-qa.md section 6, survey operations, against the simulated receiver: a survey started by a
+# power cycle with survey-at-power-up on, then Cancel survey - which must go back to the position held
+# before it - and, after another power cycle, Adopt computed position - which must hold the estimate
+# as it stood. The simulator tells the two apart since 5 Oct 2026 (a guess, recorded in its README).
+# Called with $action: 'read' (the held height only), 'cancel' or 'adopt'.
+$surveyStep = @'
+$w = Get-AppWindow -Seconds 30
+if (-not $w) { [ordered]@{ error = "no main window ($(Get-WindowReport))" } | ConvertTo-Json -Compress; return }
+$d = Get-AppWindowNamed 'Receiver Details' -Seconds 2
+if (-not $d) {
+    $button = Find-Control $w -AutomationId 'DetailsButton' -Seconds 10
+    if ($button) { Invoke-Control $button } else { Send-KeyTo $w '^d' }
+    $d = Get-AppWindowNamed 'Receiver Details' -Seconds 20
+}
+if (-not $d) { [ordered]@{ error = "no Details window ($(Get-WindowReport))" } | ConvertTo-Json -Compress; return }
+[void](Select-NavigationItem $d 'Position')
+function Text([string]$id) { $e = Find-Control $d -AutomationId $id -Seconds 2; if ($e) { "$($e.Current.Name)".Trim() } else { '' } }
+$facts = [ordered]@{}
+$null = Wait-Until { (Text 'HeightText') -match '\d' } -Seconds 30
+if ($action -eq 'read') {
+    $facts.height = Text 'HeightText'; $facts.status = Text 'SurveyStatusText'
+    $facts | ConvertTo-Json -Compress; return
+}
+$id = if ($action -eq 'cancel') { 'CancelSurveyButton' } else { 'AdoptSurveyButton' }
+# The survey running: the button enabled. A power-up takes minutes of simulated acquisition first.
+$button = Wait-Until { $b = Find-Control $d -AutomationId $id -Seconds 1; if ($b -and $b.Current.IsEnabled) { $b } } -Seconds 420
+if (-not $button) { $facts.error = "no survey: $id never enabled; status '$(Text 'SurveyStatusText')'"; $facts | ConvertTo-Json -Compress; return }
+Start-Sleep -Seconds 20
+$facts.estimate = Text 'HeightText'
+$facts.statusBefore = Text 'SurveyStatusText'
+try { $button.GetCurrentPattern([System.Windows.Automation.ScrollItemPattern]::Pattern).ScrollIntoView() } catch { }
+Invoke-Control $button
+$primary = Find-Control $d -AutomationId 'PrimaryButton' -Seconds 10
+$clock = [Diagnostics.Stopwatch]::StartNew()
+if ($primary) { Invoke-Control $primary }
+$facts.confirmed = [bool]$primary
+$facts.outcome = "$(Wait-Until { $o = Text 'SurveyOutcome'; if ($o) { $o } } -Seconds 60)"
+$facts.seconds = [Math]::Round($clock.Elapsed.TotalSeconds, 1)
+# The page reads the position again; a cancel must move off the estimate, an adoption stay on it.
+if ($action -eq 'cancel') { $null = Wait-Until { (Text 'HeightText') -ne $facts.estimate } -Seconds 90 } else { Start-Sleep -Seconds 30 }
+$facts.after = Text 'HeightText'
+$null = Wait-Until { $b = Find-Control $d -AutomationId $id -Seconds 1; $b -and -not $b.Current.IsEnabled } -Seconds 60
+$facts.statusAfter = Text 'SurveyStatusText'
+$facts.buttonAfter = [bool](Find-Control $d -AutomationId $id -Seconds 1).Current.IsEnabled
+$facts | ConvertTo-Json -Compress
+'@
+
+function Test-SurveyOperations {
+    param($Vm, $Result)
+    $pipe = Get-QaSimulatorPipe -Vm $Vm
+    if (-not (Select-String -LiteralPath $Vm.Vmx -SimpleMatch "\\.\pipe\$pipe" -Quiet)) {
+        $Result.Error = "skipped: the VM has no simulator port; run Add-QaSimulatorPort (build/qa/README.md)"
+        return
+    }
+    Send-Zip $Vm $Offline 'candidate'
+    $code = Install-Candidate $Vm 'candidate'
+    Check $Result 'installed (exit 0, or 2 with the start check timing out)' ($code -in 0, 2) "exit $code"
+    $simulator = Start-Process (Get-Simulator) -PassThru -WindowStyle Hidden `
+        -ArgumentList '--pipe-client', $pipe, '--start', 'locked', '--speed', '2', '--control', "$pipe-control" `
+        -RedirectStandardOutput (Join-Path $Result.Folder 'simulator.log') -RedirectStandardError (Join-Path $Result.Folder 'simulator.err')
+    $null = Invoke-QaGuestScript $Vm -Name 'connect-com2' -Script $connectCom2
+    try {
+        $seen = Wait-AppLog $Vm 'State: LOCK' 0 120 'locked'
+        Check $Result 'connected to the simulated receiver, and locked' $seen.found $seen.line
+        if (-not $seen.found) { return }
+        $null = Invoke-UiStep $Vm 'survey-resolution' '' $resolutionStep
+        $held = Invoke-UiStep $Vm 'survey-held' "`$action = 'read'" $surveyStep
+        Check $Result 'the held position read before any survey' (-not $held.error -and $held.height) "$($held.error) height '$($held.height)', survey '$($held.status)'"
+        foreach ($action in 'cancel', 'adopt') {
+            $null = Send-SimulatorControl "$pipe-control" 'power-cycle'
+            $s = Invoke-UiStep $Vm "survey-$action" "`$action = '$action'" $surveyStep -TimeoutSeconds 900
+            if ($s.error) { Check $Result "[6] $action" $false $s.error; continue }
+            Check $Result "[6] $($action): a survey ran after the power cycle, showing a partial estimate" ($s.estimate -and $s.estimate -ne $held.height) "estimate '$($s.estimate)' against held '$($held.height)'; '$($s.statusBefore)'"
+            Check $Result "[6] $($action): confirmed, and the outcome reported after about ten seconds" ($s.confirmed -and $s.outcome -and $s.seconds -ge 5 -and $s.seconds -le 30) "after $($s.seconds) s: '$($s.outcome)'"
+            if ($action -eq 'cancel') {
+                Check $Result '[6] cancel: the Position page shows the previously held position, not the partial estimate' ($s.after -eq $held.height) "after '$($s.after)', held '$($held.height)', estimate '$($s.estimate)'"
+            }
+            else {
+                Check $Result '[6] adopt: the position shown is the estimate as it stood' ($s.after -eq $s.estimate) "after '$($s.after)', estimate '$($s.estimate)'"
+                $held = [pscustomobject]@{ height = $s.after }
+            }
+            Check $Result "[6] $($action): the survey card says no survey is running" (-not $s.buttonAfter) "'$($s.statusAfter)'"
+        }
+    }
+    finally {
+        if (-not $simulator.HasExited) { $simulator.Kill() }
+        try { $null = Save-Evidence $Vm $Result.Folder } catch { }
+    }
+}
+
 # manual-qa.md section 12's download rows. A browser marks what it downloads with a Zone.Identifier
 # stream (ZoneId 3, the internet), Properties > Unblock deletes it, and Explorer's own extraction
 # copies a marked zip's mark onto every file it extracts - which is how a zip left blocked reaches
@@ -4527,6 +4620,7 @@ $scenarioTable = [ordered]@{
     'greyscale-states' = ${function:Test-GreyscaleStates}
     'contrast'         = ${function:Test-Contrast}
     'receiver-families' = ${function:Test-ReceiverFamilies}
+    'survey-operations' = ${function:Test-SurveyOperations}
     'soak'             = ${function:Test-Soak}
 }
 
