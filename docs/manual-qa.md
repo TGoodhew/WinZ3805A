@@ -386,6 +386,7 @@ it. It rides on section 5's antenna pull.
 > - replacing a used v1.2.0;
 > - a leftover certificate;
 > - this version installed, then damaged, and repaired by running the installer again (#600);
+> - **since 5 Oct 2026**, `upgrade-previous`: the previous release installed and used, then this one over it - the in-place upgrade most users make, with history, a changed setting and the remembered port kept; and `release-assets`, on the host: the zips' version, signer and certificate, and for a published release its notes' hashes, thumbprint and .NET row;
 > - **since 5 Oct 2026, the three download rows below**:
 >   - `unblocked-download`: the online zip given the mark a browser leaves, unblocked, extracted by Explorer's own copy engine, then the notes' thumbprint, one prompt, the .NET page named, the Microsoft Update line against Windows' own setting, and the app started once .NET is in;
 >   - `offline-no-network`: the offline zip with the VM's network adapter disconnected;

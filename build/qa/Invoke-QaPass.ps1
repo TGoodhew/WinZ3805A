@@ -12,6 +12,8 @@
 
     Scenarios (manual-qa.md §12, and §8 on the host):
       binary-audit       §8   no excluded command in the shipped assemblies (host, no VM)
+      release-assets     §12  the zips are what they say: version, signer, certificate, Microsoft's .NET
+                              installer; with -Release, the notes' hashes, thumbprint and .NET row (host)
       fresh-online       §12  the online zip on a machine with no .NET: exit 3, app installed
       fresh-offline      §12  the offline zip installs .NET too: exit 0, the start check passes
       unblocked-download §12  the online zip marked as a browser marks it, unblocked, extracted by Explorer:
@@ -22,6 +24,8 @@
       blocked-zip        §12  the zip left blocked, so Explorer marks every file it extracts: the
                               installer must fail legibly
       upgrade-1.2.0      §12  a used v1.2.0 replaced: data moved, old copy and certificate gone
+      upgrade-previous   §12  the last release installed and used - history, a setting changed, a port
+                              remembered - then this one over it: one copy, all of it kept
       leftover-cert      §12  v1.2.0 uninstalled by hand: its certificate is still removed
       repair-damaged     §12  this version installed and then damaged: rerunning the installer
                               repairs it with its data intact (#600)
@@ -121,7 +125,7 @@ param(
     [string]$Offline,
     [string]$Release,
     [string[]]$Machines = @('QA-Win10', 'QA-Win11'),
-    [string[]]$Scenarios = @('binary-audit', 'fresh-online', 'fresh-offline', 'unblocked-download', 'offline-no-network', 'blocked-zip', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast', 'display-scaling', 'text-scaling', 'keyboard-focus', 'reduced-motion', 'greyscale-states', 'contrast'),
+    [string[]]$Scenarios = @('binary-audit', 'release-assets', 'fresh-online', 'fresh-offline', 'unblocked-download', 'offline-no-network', 'blocked-zip', 'upgrade-1.2.0', 'upgrade-previous', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast', 'display-scaling', 'text-scaling', 'keyboard-focus', 'reduced-motion', 'greyscale-states', 'contrast'),
     [string]$OutDir,
     [int]$SoakMinutes = 60
 )
@@ -134,8 +138,10 @@ $passStarted = Get-Date -Format 'yyyy-MM-dd HH:mm'
 # Called with powershell -File, a list such as -Scenarios a,b arrives as the one string 'a,b', which
 # names no scenario - the first run of this script ran nothing and reported success.
 $Machines = @($Machines | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+# -Machines none runs the host scenarios alone (binary-audit, release-assets).
+if ($Machines -contains 'none') { $Machines = @() }
 $Scenarios = @($Scenarios | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-$known = @('binary-audit', 'fresh-online', 'fresh-offline', 'unblocked-download', 'offline-no-network', 'blocked-zip', 'upgrade-1.2.0', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast', 'display-scaling', 'text-scaling', 'keyboard-focus', 'reduced-motion', 'greyscale-states', 'contrast', 'soak')
+$known = @('binary-audit', 'release-assets', 'fresh-online', 'fresh-offline', 'unblocked-download', 'offline-no-network', 'blocked-zip', 'upgrade-1.2.0', 'upgrade-previous', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast', 'display-scaling', 'text-scaling', 'keyboard-focus', 'reduced-motion', 'greyscale-states', 'contrast', 'soak')
 $unknown = @($Scenarios | Where-Object { $known -notcontains $_ })
 if ($unknown.Count) { throw "Unknown scenario(s): $($unknown -join ', '). Known: $($known -join ', ')." }
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
@@ -3728,6 +3734,110 @@ function Test-Contrast {
     }
 }
 
+# The upgrade most users make: the last release installed and used - history recorded, a setting
+# changed on the Settings page, a port remembered - and this release installed over it. Same
+# publisher, same package family, so Windows upgrades in place, and everything must still be there.
+# Until 5 Oct 2026 nothing tested it: upgrade-1.2.0 is the publisher change and repair-damaged the
+# same version.
+function Get-PreviousRelease {
+    $tags = @(gh release list --repo TGoodhew/WinZ3805A --limit 30 --json tagName,isDraft,isPrerelease -q '.[] | select(.isDraft | not) | select(.isPrerelease | not) | .tagName' 2>$null)
+    if ($Release) {
+        $i = [array]::IndexOf($tags, $Release)
+        if ($i -ge 0 -and $i + 1 -lt $tags.Count) { return $tags[$i + 1] }
+        return $null
+    }
+    $tags | Select-Object -First 1
+}
+
+# The lock-notification switch on the Settings page: turned off ($mode 'set') or read ($mode 'read').
+$lockSwitchStep = @'
+$w = Get-AppWindow -Seconds 45
+if (-not $w) { [ordered]@{ error = "no main window ($(Get-WindowReport))" } | ConvertTo-Json -Compress; return }
+$d = Get-AppWindowNamed 'Receiver Details' -Seconds 2
+if (-not $d) {
+    $button = Find-Control $w -AutomationId 'DetailsButton' -Seconds 10
+    if ($button) { Invoke-Control $button } else { Send-KeyTo $w '^d' }
+    $d = Get-AppWindowNamed 'Receiver Details' -Seconds 20
+}
+if (-not $d) { [ordered]@{ error = "no Details window ($(Get-WindowReport))" } | ConvertTo-Json -Compress; return }
+[void](Select-NavigationItem $d 'Settings')
+$switch = Wait-Until { Find-Control $d -AutomationId 'LockNotificationsSwitch' -Seconds 1 } -Seconds 20
+if (-not $switch) { [ordered]@{ error = 'no LockNotificationsSwitch on the Settings page' } | ConvertTo-Json -Compress; return }
+try { $switch.GetCurrentPattern([System.Windows.Automation.ScrollItemPattern]::Pattern).ScrollIntoView() } catch { }
+$toggle = $switch.GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern)
+$facts = [ordered]@{ before = "$($toggle.Current.ToggleState)" }
+if ($mode -eq 'set' -and $toggle.Current.ToggleState -eq [System.Windows.Automation.ToggleState]::On) { $toggle.Toggle(); Start-Sleep -Seconds 2 }
+$facts.after = "$($toggle.Current.ToggleState)"
+try { $d.GetCurrentPattern([System.Windows.Automation.WindowPattern]::Pattern).Close() } catch { }
+$facts | ConvertTo-Json -Compress
+'@
+
+# The app stopped, and what it keeps: the history file's identity and size, and the remembered port.
+$dataFactsStep = @'
+Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue | Stop-Process -Force
+Start-Sleep -Seconds 3
+$pkg = Get-AppxPackage -Name WinZ3805A | Select-Object -First 1
+$dir = Join-Path $env:LOCALAPPDATA "Packages\$($pkg.PackageFamilyName)\LocalCache\Local\WinZ3805A"
+$db = Get-Item (Join-Path $dir 'trend.db') -ErrorAction SilentlyContinue
+$conn = Join-Path $dir 'connection.json'
+[ordered]@{
+    version = "$($pkg.Version)"; family = $pkg.PackageFamilyName
+    dbCreated = $(if ($db) { $db.CreationTimeUtc.Ticks } else { 0 }); dbBytes = $(if ($db) { $db.Length } else { 0 })
+    connection = $(if (Test-Path $conn) { (Get-FileHash $conn).Hash } else { '' })
+} | ConvertTo-Json -Compress
+'@
+
+function Test-UpgradePrevious {
+    param($Vm, $Result)
+    $pipe = Get-QaSimulatorPipe -Vm $Vm
+    if (-not (Select-String -LiteralPath $Vm.Vmx -SimpleMatch "\\.\pipe\$pipe" -Quiet)) {
+        $Result.Error = "skipped: the VM has no simulator port; run Add-QaSimulatorPort (build/qa/README.md)"
+        return
+    }
+    $previous = Get-PreviousRelease
+    if (-not $previous) { $Result.Error = "skipped: no published release before $(if ($Release) { $Release } else { 'this candidate' })"; return }
+    $candidateVersion = (Split-Path $Offline -Leaf) -replace '^WinZ3805A-(.+)-x64-offline\.zip$', '$1'
+    Send-Zip $Vm (Get-ReleaseZip $previous -OfflineZip) 'previous'
+    $code = Install-Candidate $Vm 'previous'
+    Check $Result "$previous installed (exit 0, or 2 with the start check timing out)" ($code -in 0, 2) "exit $code"
+    $simulator = Start-Process (Get-Simulator) -PassThru -WindowStyle Hidden `
+        -ArgumentList '--pipe-client', $pipe, '--start', 'locked', '--speed', '2', '--control', "$pipe-control" `
+        -RedirectStandardOutput (Join-Path $Result.Folder 'simulator.log') -RedirectStandardError (Join-Path $Result.Folder 'simulator.err')
+    $null = Invoke-QaGuestScript $Vm -Name 'connect-com2' -Script $connectCom2
+    try {
+        $seen = Wait-AppLog $Vm 'State: LOCK' 0 120 'locked'
+        Check $Result "$previous connected to the simulated receiver, and locked" $seen.found $seen.line
+        if (-not $seen.found) { return }
+        $set = Invoke-UiStep $Vm 'previous-setting' "`$mode = 'set'" $lockSwitchStep
+        Check $Result "[12] on $previous, the lock-notification switch turned off on the Settings page" (-not $set.error -and $set.after -eq 'Off') "$($set.error) before $($set.before), after $($set.after)"
+        # A minute connected is some history: a sample is appended on every fast poll.
+        Start-Sleep -Seconds 60
+        $before = (Invoke-QaGuestScript $Vm -Name 'before-upgrade' -Script $dataFactsStep).Output -split "`r?`n" | Where-Object { $_.StartsWith('{') } | Select-Object -Last 1 | ConvertFrom-Json
+        Check $Result "[12] $previous kept history and a remembered port" ($before.dbBytes -gt 0 -and $before.connection) "trend.db $($before.dbBytes) bytes; connection.json $(if ($before.connection) { 'present' } else { 'missing' })"
+
+        Send-Zip $Vm $Offline 'candidate'
+        $mark = (Wait-AppLog $Vm 'State:' 0 5 'mark-upgrade').count
+        $code = Install-Candidate $Vm 'candidate'
+        $log = (Save-Evidence $Vm $Result.Folder) -join "`n"
+        Check $Result "[12] $candidateVersion installed over $previous (exit 0)" ($code -eq 0) "exit $code"
+        $facts = Get-Facts $Vm
+        $packages = @($facts.packages)
+        Check $Result '[12] one copy, upgraded in place: the same package family, at the new version' ($packages.Count -eq 1 -and $packages[0].version -eq $candidateVersion -and $packages[0].family -eq $before.family) (($packages | ForEach-Object { "$($_.family) $($_.version)" }) -join '; ')
+        $seen = Wait-AppLog $Vm 'State: LOCK' $mark 120 'relocked'
+        Check $Result '[12] the upgraded app reconnected to the remembered port by itself, and locked' $seen.found "$($seen.line)$(if (-not $seen.found) { $seen.tail })"
+        $read = Invoke-UiStep $Vm 'upgraded-setting' "`$mode = 'read'" $lockSwitchStep
+        Check $Result '[12] the setting changed on the old version is still changed' (-not $read.error -and $read.before -eq 'Off') "$($read.error) the switch reads $($read.before)"
+        $after = (Invoke-QaGuestScript $Vm -Name 'after-upgrade' -Script $dataFactsStep).Output -split "`r?`n" | Where-Object { $_.StartsWith('{') } | Select-Object -Last 1 | ConvertFrom-Json
+        Check $Result '[12] the history is the same file, kept and not shrunk' ($after.dbCreated -eq $before.dbCreated -and $after.dbBytes -ge $before.dbBytes) "created $(if ($after.dbCreated -eq $before.dbCreated) { 'unchanged' } else { 'CHANGED' }); $($before.dbBytes) -> $($after.dbBytes) bytes"
+        Check $Result '[12] the remembered port is untouched' ($after.connection -eq $before.connection) ''
+        Check $Result '[12] no data saved aside: an upgrade in place has no earlier copy to replace' ($log -notmatch 'Replacing the earlier copy')
+    }
+    finally {
+        if (-not $simulator.HasExited) { $simulator.Kill() }
+        try { $null = Save-Evidence $Vm $Result.Folder } catch { }
+    }
+}
+
 # manual-qa.md section 12's download rows. A browser marks what it downloads with a Zone.Identifier
 # stream (ZoneId 3, the internet), Properties > Unblock deletes it, and Explorer's own extraction
 # copies a marked zip's mark onto every file it extracts - which is how a zip left blocked reaches
@@ -4035,6 +4145,7 @@ $scenarioTable = [ordered]@{
     'offline-no-network' = ${function:Test-OfflineNoNetwork}
     'blocked-zip'      = ${function:Test-BlockedZip}
     'upgrade-1.2.0'    = ${function:Test-Upgrade120}
+    'upgrade-previous' = ${function:Test-UpgradePrevious}
     'leftover-cert'    = ${function:Test-LeftoverCert}
     'repair-damaged'   = ${function:Test-RepairDamaged}
     'app-checks'       = ${function:Test-AppChecks}
@@ -4078,6 +4189,65 @@ if ($Scenarios -contains 'binary-audit') {
         $output | Set-Content (Join-Path $result.Folder 'scan.txt')
         Check $result 'no excluded command outside the exclusion patterns' ($LASTEXITCODE -eq 0) (($output -split "`r?`n" | Where-Object { $_ -match 'PASS|FAIL' } | Select-Object -Last 1))
         Remove-Item $unpacked -Recurse -Force
+    }
+    catch { $result.Error = $_.Exception.Message; Say "  ERROR $($result.Error)" }
+    $results.Add($result)
+}
+
+# ---------------------------------------------------------------------------
+# The release's assets, on the host: the zips are what they say they are, and - for a published
+# release - what its notes say. These were checked by hand after every tag until 5 Oct 2026.
+# ---------------------------------------------------------------------------
+if ($Scenarios -contains 'release-assets') {
+    $result = New-Result 'release-assets' 'host'
+    $result.Folder = Join-Path $OutDir 'release-assets'
+    New-Item -ItemType Directory -Force $result.Folder | Out-Null
+    Say 'release-assets on the host'
+    try {
+        $version = (Split-Path $Offline -Leaf) -replace '^WinZ3805A-(.+)-x64-offline\.zip$', '$1'
+        Check $result 'the two zips are named for one version' ((Split-Path $Online -Leaf) -eq "WinZ3805A-$version-x64.zip") "$(Split-Path $Online -Leaf), $(Split-Path $Offline -Leaf)"
+        $hashes = [ordered]@{}
+        foreach ($zip in $Online, $Offline) {
+            $label = if ($zip -eq $Online) { 'online' } else { 'offline' }
+            $hashes[(Split-Path $zip -Leaf)] = (Get-FileHash $zip -Algorithm SHA256).Hash
+            $unpacked = Join-Path $result.Folder $label
+            Expand-Archive $zip -DestinationPath $unpacked -Force
+            $bundle = Get-ChildItem $unpacked -Filter *.msixbundle | Select-Object -First 1
+            $cer = Get-ChildItem $unpacked -Filter *.cer | Select-Object -First 1
+            $cerThumb = if ($cer) { (New-Object System.Security.Cryptography.X509Certificates.X509Certificate2 $cer.FullName).Thumbprint } else { '' }
+            $signer = if ($bundle) { (Get-AuthenticodeSignature $bundle.FullName).SignerCertificate.Thumbprint } else { '' }
+            Check $result "[$label] the bundle is signed with this release's certificate, and the zip's certificate is that one" ($signer -eq $currentCert -and $cerThumb -eq $currentCert) "signer $signer; WinZ3805A.cer $cerThumb"
+            # The bundle's own manifest says what version Windows will install.
+            Copy-Item $bundle.FullName (Join-Path $unpacked 'bundle.zip')
+            Add-Type -AssemblyName System.IO.Compression.FileSystem
+            $archive = [System.IO.Compression.ZipFile]::OpenRead((Join-Path $unpacked 'bundle.zip'))
+            try {
+                $entry = $archive.Entries | Where-Object { $_.FullName -eq 'AppxMetadata/AppxBundleManifest.xml' } | Select-Object -First 1
+                $reader = New-Object System.IO.StreamReader($entry.Open()); [xml]$manifest = $reader.ReadToEnd(); $reader.Dispose()
+            }
+            finally { $archive.Dispose() }
+            $bundleVersion = ($manifest.Bundle.Packages.Package | Where-Object { $_.Type -eq 'application' } | Select-Object -First 1).Version
+            Check $result "[$label] the bundle installs version $version" ($bundleVersion -eq $version) "bundle manifest: $bundleVersion"
+            if ($label -eq 'offline') {
+                $runtime = Get-ChildItem (Join-Path $unpacked 'Runtime') -Filter 'dotnet-runtime-*.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
+                $runtimeSig = if ($runtime) { Get-AuthenticodeSignature $runtime.FullName } else { $null }
+                $dotnetVersion = if ($runtime -and $runtime.Name -match 'dotnet-runtime-(\d+\.\d+\.\d+)') { $Matches[1] } else { '' }
+                Check $result '[offline] it carries Microsoft''s .NET installer, validly signed by Microsoft' ($runtimeSig -and $runtimeSig.Status -eq 'Valid' -and $runtimeSig.SignerCertificate.Subject -match 'O=Microsoft Corporation') "$($runtime.Name) $($runtimeSig.Status)"
+            }
+            Remove-Item $unpacked -Recurse -Force
+        }
+        if ($Release) {
+            $view = gh release view $Release --repo TGoodhew/WinZ3805A --json isDraft,isPrerelease,assets,body 2>$null | ConvertFrom-Json
+            $body = "$($view.body)"
+            Check $result "[published] $Release is published, not a draft or pre-release" ($view -and -not $view.isDraft -and -not $view.isPrerelease) ''
+            $assetNames = @($view.assets | ForEach-Object { $_.name } | Sort-Object)
+            Check $result '[published] the release carries exactly the two zips' (($assetNames -join ',') -eq ((@("WinZ3805A-$version-x64-offline.zip", "WinZ3805A-$version-x64.zip") | Sort-Object) -join ',')) ($assetNames -join ', ')
+            foreach ($name in $hashes.Keys) {
+                Check $result "[published] the notes give $name's SHA-256, and it matches the download" ($body -match "``$([regex]::Escape($name))`` SHA-256 \| ``$($hashes[$name])``") "downloaded $($hashes[$name].Substring(0, 16))..."
+            }
+            Check $result '[published] the notes give this release''s certificate thumbprint' ($body -match "Certificate thumbprint \(SHA-1\) \| ``$currentCert``") ''
+            Check $result "[published] the notes' .NET row names the runtime the offline zip carries ($dotnetVersion)" ($dotnetVersion -and $body -match "\.NET Runtime in ``WinZ3805A-$([regex]::Escape($version))-x64-offline\.zip`` \| $([regex]::Escape($dotnetVersion))") ''
+        }
     }
     catch { $result.Error = $_.Exception.Message; Say "  ERROR $($result.Error)" }
     $results.Add($result)
