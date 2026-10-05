@@ -733,12 +733,16 @@ Start-Sleep -Seconds 2
 $window = Get-AppWindow
 $footer = Find-Control $window -Name 'Connect'
 if ($footer) { Invoke-Control $footer }
-$primary = Find-Control $window -AutomationId 'PrimaryButton'
+# Up to 30 s: on QA-Win10, with the other VM running, the dialog took 12 s to open and a 10 s wait
+# pressed nothing (4 Oct 2026). How long it took is reported, so a slow dialog is seen, not hidden.
+$clock = [Diagnostics.Stopwatch]::StartNew()
+$primary = Find-Control $window -AutomationId 'PrimaryButton' -Seconds 30
+$openedIn = [Math]::Round($clock.Elapsed.TotalSeconds, 1)
 if ($primary) { Invoke-Control $primary }
-[ordered]@{ pressed = [bool]$primary } | ConvertTo-Json -Compress
+[ordered]@{ footer = [bool]$footer; pressed = [bool]$primary; openedIn = $openedIn } | ConvertTo-Json -Compress
 '@
         $seen = Wait-AppLog $Vm 'Session COM2 is now Connected' $mark 180 'connected-again'
-        Check $Result '[24] with the receiver answering, Connect connects' ($opened.pressed -and $seen.found) "$($seen.line)$($seen.tail)"
+        Check $Result '[24] with the receiver answering, Connect connects' ($opened.pressed -and $seen.found) "footer pressed $($opened.footer), dialog open after $($opened.openedIn) s, Connect pressed $($opened.pressed); $($seen.line)$($seen.tail)"
         try { Invoke-VmRun $Vm captureScreen -Arguments (Join-Path $Result.Folder 'screen.png') -Guest | Out-Null } catch { }
     }
     finally {
