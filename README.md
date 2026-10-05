@@ -6,7 +6,7 @@ SmartClock GPS-disciplined oscillators over RS-232.
 | | |
 |---|---|
 | **Receivers** | the HP/Symmetricom **Z3805A** and its SmartClock siblings — Z3801A, 58503A/B, 59551A, Z3816A; and, for monitoring only, any NMEA 0183 GNSS talker |
-| **Platform** | Windows 10 (1809 or later) and Windows 11, x64 — see [Supported platforms](#supported-platforms) |
+| **Platform** | Windows 10 (22H2) and Windows 11, x64 — see [Supported platforms](#supported-platforms) |
 | **Stack** | WinUI 3 (Windows App SDK) on .NET 10, packaged as MSIX |
 | **Extensible** | every receiver-specific fact sits behind one interface, `IReceiverDriver`; another GPS-disciplined oscillator is a driver plus one registration line, not a fork — see [Adding a receiver](#adding-a-receiver) |
 
@@ -102,23 +102,24 @@ what the Windows App SDK runs on.
 
 | | |
 |---|---|
-| **Minimum** | Windows 10, version 1809 (build 10.0.17763) |
-| **Also supported** | Windows 10 21H2 / 22H2 / 23H2, Windows 11 21H2 through 25H2 |
-| **Windows Server** | Server 2019 (17763) and Server 2022 (20348) |
+| **Minimum** | Windows 10, version 22H2 (build 10.0.19045) |
+| **Also supported** | Windows 11, 21H2 through 25H2 |
+| **Windows Server** | Server 2022 (20348) |
 | **Architecture** | **x64 only** — see §6.1. Windows on ARM is not a supported configuration |
 | **Runtime** | .NET 10 (LTS), installed by Microsoft's installer (the offline zip carries it); the Windows App SDK runtime, carried in both zips |
 
 The floor is set in [`WinZ3805A.csproj`](src/WinZ3805A/WinZ3805A.csproj) as
-`TargetPlatformMinVersion` `10.0.17763.0`, while the project *builds* against the
-10.0.26100 SDK (`TargetFramework` `net10.0-windows10.0.26100.0`). Those two are
-different jobs: the first is the oldest Windows the app will install and run on,
-the second is the API surface it compiles against.
+`TargetPlatformMinVersion` and in [`Package.appxmanifest`](src/WinZ3805A/Package.appxmanifest)
+as `MinVersion`, both `10.0.19045.0`, while the project *builds* against the 10.0.26100 SDK
+(`TargetFramework` `net10.0-windows10.0.26100.0`). Those are different jobs: the first is the
+oldest Windows the app will install and run on, the second is the API surface it compiles
+against. `Install.cmd` says so in words on anything older, before changing anything.
 
-> **Windows 10 1809 is supported by the SDK but is no longer a healthy target.**
-> Mainstream servicing for 1809 has ended on both Home/Pro and Enterprise. Only
-> the LTSC Extended channel is still serviced, until 9 January 2029. Treating
-> 1809 as the floor is a compatibility statement, not a recommendation — anyone
-> choosing a machine for this application should be on Windows 11.
+> **The floor is what is tested** (#705, 5 Oct 2026). It was Windows 10 1809 - the Windows App
+> SDK's own floor - but nothing ever ran the application there, while every release's QA pass runs
+> on Windows 10 22H2 and Windows 11 (`build/qa`). So the declared minimum is the oldest Windows the
+> pass covers. Server 2019 (build 17763) went with 1809. Anyone choosing a machine for this
+> application should be on Windows 11.
 
 ### Linux and macOS
 
@@ -136,26 +137,16 @@ it is building from is [docs/porting-to-python-qt.md](docs/porting-to-python-qt.
 which is also the honest account of what such a port costs and what it cannot
 carry across.
 
-**A caveat specific to Windows App SDK 2.x.** From 2.0 the minimum is no longer
-one number for the whole SDK; it varies by component. The refactored
-`Microsoft.Windows.AI.MachineLearning` package supports Windows 10 v1903 and
-later, and Microsoft's guidance is to keep using `Microsoft.WindowsAppSDK.ML` if
-1809 support is needed. **This project keeps
-`Microsoft.WindowsAppSDK.ML`**, which arrives transitively with the 2.3.1 meta-package
-and is the path that retains the 1809 floor: the csproj references the refactored
-`Microsoft.Windows.AI.MachineLearning` directly only to exclude its runtime and native
-assets, and its comment explains why `.ML` itself cannot be excluded — a
-framework-dependent build refuses to restore without it.
+**A note on Windows App SDK 2.x.** From 2.0 the minimum is no longer one number for the whole SDK;
+it varies by component, and the highest in the restored 2.3.1 tree is
+`Microsoft.Windows.AI.MachineLearning` at Windows 10 1903 (18362). The 22H2 floor is above every
+one of them, so no component constrains it. The csproj still references the refactored
+`Microsoft.Windows.AI.MachineLearning` directly only to exclude its runtime and native assets, which
+this application does not use; its comment explains why `Microsoft.WindowsAppSDK.ML` itself cannot be
+excluded - a framework-dependent build refuses to restore without it.
 
-Microsoft's published support matrix currently documents releases up to 1.8 and
-does not yet list 2.x, so the 1809 floor for **2.3.1 specifically** rests on the
-component guidance above plus the SDK packages themselves: the one package in the
-restored 2.3.1 tree that carries a check above 17763 — `Microsoft.Windows.AI.MachineLearning`,
-at 18362 — has that check switched off by `Microsoft.WindowsAppSDK.ML`'s props, nothing
-else enforces a higher floor, and `Microsoft.WindowsAppSDK.Base` still special-cases
-`10.0.17763.0` in its self-contained targets. §6.1 asks for exactly this check and it has now been
-made to that depth. **It has not been confirmed by running the application on
-Windows 10** — there is no such machine on this project.
+**It is confirmed by running the application on Windows 10 22H2**: QA-Win10, a VM provisioned from
+Microsoft's 22H2 media, runs every scenario of every release's QA pass.
 
 Sources: [Windows App SDK and supported Windows releases](https://learn.microsoft.com/en-us/windows/apps/windows-app-sdk/support),
 [Windows App SDK 2.0 release notes](https://learn.microsoft.com/en-us/windows/apps/windows-app-sdk/release-notes/windows-app-sdk-2-0).

@@ -426,6 +426,17 @@ $publisher = $signingCertificate.Subject
 Write-Log "signing       $thumbprint, expires $($signingCertificate.NotAfter.ToString('yyyy-MM-dd'))"
 Write-State 'before'
 
+# The oldest Windows this release declares and is tested on (#705): Windows 10 22H2, build 19045.
+# On anything older Windows itself would refuse the package, with a code and no explanation; said here
+# first, in words, before anything changes.
+$floorBuild = 19045
+try { $buildNow = [int](Get-CimInstance Win32_OperatingSystem -ErrorAction Stop).BuildNumber }
+catch { $buildNow = [Environment]::OSVersion.Version.Build }
+if ($buildNow -lt $floorBuild) {
+    Write-Log "too old       build $buildNow; WinZ3805A needs build $floorBuild (Windows 10 22H2) or later"
+    throw "WinZ3805A needs Windows 10 version 22H2 (build $floorBuild) or later, or Windows 11. This PC runs build $buildNow. Update Windows from Settings > Windows Update, then run this installer again."
+}
+
 # ---------------------------------------------------------------------------
 # Earlier copies (#590). Found now, acted on after the new copy is installed.
 # ---------------------------------------------------------------------------

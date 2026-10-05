@@ -128,7 +128,7 @@ TO REMOVE IT
 
 WHAT IT NEEDS
 
-  Windows 10 version 1809 or later, on a 64-bit Intel or AMD processor.
+  Windows 10 version 22H2 or later, or Windows 11, on a 64-bit Intel or AMD processor.
   A serial port, or a USB-to-serial adapter, connected to the receiver.
 
 
