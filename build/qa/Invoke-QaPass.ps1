@@ -103,6 +103,9 @@
       survey-operations §6 a survey after a power cycle, then Cancel survey (back to the held position) and,
                               after another, Adopt computed position (the estimate held): outcome in about
                               ten seconds, no survey left running. Needs the simulator port
+      screen-fields      §9   locked and in holdover, the simulated timeline all but frozen: every number on
+                              the status screen found, by value, in the app's windows (screen-fields-allowlist.txt
+                              for the ones shown differently). Needs the simulator port
       soak               §14  not run by default: the app left -SoakMinutes (60) against the simulated receiver,
                               locked, main window and Details on Overview open, measured by Watch-Soak.ps1
                               in the guest. Read against another soak - run it for the last release too
@@ -138,7 +141,7 @@ param(
     [string]$Offline,
     [string]$Release,
     [string[]]$Machines = @('QA-Win10', 'QA-Win11'),
-    [string[]]$Scenarios = @('binary-audit', 'release-assets', 'fresh-online', 'fresh-offline', 'unblocked-download', 'offline-no-network', 'blocked-zip', 'upgrade-1.2.0', 'upgrade-previous', 'leftover-cert', 'replace-v130', 'remove-everything', 'uninstall-sideload', 'companions-removed', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast', 'display-scaling', 'text-scaling', 'keyboard-focus', 'reduced-motion', 'greyscale-states', 'contrast', 'receiver-families', 'survey-operations'),
+    [string[]]$Scenarios = @('binary-audit', 'release-assets', 'fresh-online', 'fresh-offline', 'unblocked-download', 'offline-no-network', 'blocked-zip', 'upgrade-1.2.0', 'upgrade-previous', 'leftover-cert', 'replace-v130', 'remove-everything', 'uninstall-sideload', 'companions-removed', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast', 'display-scaling', 'text-scaling', 'keyboard-focus', 'reduced-motion', 'greyscale-states', 'contrast', 'receiver-families', 'survey-operations', 'screen-fields'),
     [string]$OutDir,
     [int]$SoakMinutes = 60
 )
@@ -154,7 +157,7 @@ $Machines = @($Machines | ForEach-Object { $_ -split ',' } | ForEach-Object { $_
 # -Machines none runs the host scenarios alone (binary-audit, release-assets).
 if ($Machines -contains 'none') { $Machines = @() }
 $Scenarios = @($Scenarios | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-$known = @('binary-audit', 'release-assets', 'fresh-online', 'fresh-offline', 'unblocked-download', 'offline-no-network', 'blocked-zip', 'upgrade-1.2.0', 'upgrade-previous', 'leftover-cert', 'replace-v130', 'remove-everything', 'uninstall-sideload', 'companions-removed', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast', 'display-scaling', 'text-scaling', 'keyboard-focus', 'reduced-motion', 'greyscale-states', 'contrast', 'receiver-families', 'survey-operations', 'soak')
+$known = @('binary-audit', 'release-assets', 'fresh-online', 'fresh-offline', 'unblocked-download', 'offline-no-network', 'blocked-zip', 'upgrade-1.2.0', 'upgrade-previous', 'leftover-cert', 'replace-v130', 'remove-everything', 'uninstall-sideload', 'companions-removed', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast', 'display-scaling', 'text-scaling', 'keyboard-focus', 'reduced-motion', 'greyscale-states', 'contrast', 'receiver-families', 'survey-operations', 'screen-fields', 'soak')
 $unknown = @($Scenarios | Where-Object { $known -notcontains $_ })
 if ($unknown.Count) { throw "Unknown scenario(s): $($unknown -join ', '). Known: $($known -join ', ')." }
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
@@ -4288,6 +4291,139 @@ function Test-SurveyOperations {
     }
 }
 
+# manual-qa.md section 9, every status-screen field reaches the Details window, as far as a script can
+# tell: every NUMBER on the screen the simulated receiver prints is looked for, by value, among the text
+# the main window and every Details page show. The timeline is all but frozen while both are read, so
+# readings that wander - the time interval, the satellites - are the same on both. The clock line is
+# left out (the Time page shows it, and it moves by itself). What it cannot do is say whether a number
+# is shown in the RIGHT place, or check the screen's words - the judge has the pages' photographs for
+# that; and a number shown differently on purpose is a row in screen-fields-allowlist.txt, with where.
+$fieldsStep = @'
+New-Item -ItemType Directory -Force 'C:\qa\fields' | Out-Null
+$w = Get-AppWindow -Seconds 30
+if (-not $w) { [ordered]@{ error = "no main window ($(Get-WindowReport))" } | ConvertTo-Json -Compress; return }
+function Get-Texts($root) {
+    $walker = [System.Windows.Automation.TreeWalker]::RawViewWalker
+    $out = New-Object System.Collections.Generic.List[string]
+    $stack = New-Object System.Collections.Stack; $stack.Push($root)
+    while ($stack.Count -and $out.Count -lt 5000) {
+        $e = $stack.Pop()
+        try {
+            $name = "$($e.Current.Name)"
+            if ($name.Trim()) { $out.Add($name) }
+            $c = $walker.GetFirstChild($e)
+            while ($c) { $stack.Push($c); $c = $walker.GetNextSibling($c) }
+        } catch { }
+    }
+    $out
+}
+$all = New-Object System.Collections.Generic.List[string]
+$all.AddRange([string[]]@(Get-Texts $w))
+$d = Get-AppWindowNamed 'Receiver Details' -Seconds 2
+if (-not $d) {
+    $button = Find-Control $w -AutomationId 'DetailsButton' -Seconds 10
+    if ($button) { Invoke-Control $button } else { Send-KeyTo $w '^d' }
+    $d = Get-AppWindowNamed 'Receiver Details' -Seconds 20
+}
+if (-not $d) { [ordered]@{ error = "no Details window ($(Get-WindowReport))" } | ConvertTo-Json -Compress; return }
+foreach ($page in 'Overview', 'Satellites', 'Position', 'Timing', 'Holdover', 'Time', 'Status Registers', 'Diagnostics') {
+    [void](Select-NavigationItem $d $page)
+    Start-Sleep -Seconds 5
+    $all.Add("=== $page")
+    $all.AddRange([string[]]@(Get-Texts $d))
+}
+$all | Set-Content "C:\qa\fields\$tag.txt" -Encoding UTF8
+[ordered]@{ texts = $all.Count } | ConvertTo-Json -Compress
+'@
+
+# The numbers on a status screen that the Details window must show: each with its line, for the report.
+function Get-ScreenNumbers {
+    param([string]$Screen)
+    foreach ($line in ($Screen -split "`r?`n")) {
+        if ($line -match '^-{5,}|\.{5,}\s*\[') { continue }
+        # Two columns, the right one from column 46: the clock shares a line with the satellite table.
+        $columns = if ($line.Length -gt 46) { @($line.Substring(0, 46), $line.Substring(46)) } else { @($line) }
+        foreach ($column in $columns) {
+            # The clock: the Time page shows it, and it moves between the screen and the read.
+            if ($column.Trim() -match '^(UTC|GPS)\s+\d\d:\d\d:\d\d') { continue }
+            foreach ($m in [regex]::Matches($column, '(?<![\w.])[-+]?\d+(\.\d+)?(?![\w.])')) {
+                [pscustomobject]@{ text = $m.Value; value = [double]($m.Value -replace '^\+', ''); line = $column.Trim() }
+            }
+        }
+    }
+}
+
+# Whether a value appears among the app's numbers, to the precision the app shows it with.
+function Test-ShownValue {
+    param([double]$Value, $Shown)
+    foreach ($s in $Shown) {
+        if ([Math]::Abs($s.value - $Value) -le $s.tolerance) { return $true }
+    }
+    $false
+}
+
+function Test-ScreenFields {
+    param($Vm, $Result)
+    $pipe = Get-QaSimulatorPipe -Vm $Vm
+    if (-not (Select-String -LiteralPath $Vm.Vmx -SimpleMatch "\\.\pipe\$pipe" -Quiet)) {
+        $Result.Error = "skipped: the VM has no simulator port; run Add-QaSimulatorPort (build/qa/README.md)"
+        return
+    }
+    $allowed = @(Get-Content (Join-Path $PSScriptRoot 'screen-fields-allowlist.txt') -ErrorAction SilentlyContinue |
+        Where-Object { $_ -and -not $_.StartsWith('#') } | ForEach-Object {
+            $pattern, $where = $_ -split '\s+\|\s+', 2
+            [pscustomobject]@{ pattern = $pattern.Trim(); where = "$where".Trim() }
+        })
+    Check $Result 'every allowlist row says where the field is shown, or why not' (@($allowed | Where-Object { -not $_.where }).Count -eq 0) "$($allowed.Count) row(s)"
+    Send-Zip $Vm $Offline 'candidate'
+    $code = Install-Candidate $Vm 'candidate'
+    Check $Result 'installed (exit 0, or 2 with the start check timing out)' ($code -in 0, 2) "exit $code"
+    $control = "$pipe-control"
+    $simulator = Start-Process (Get-Simulator) -PassThru -WindowStyle Hidden `
+        -ArgumentList '--pipe-client', $pipe, '--start', 'locked', '--speed', '2', '--control', $control `
+        -RedirectStandardOutput (Join-Path $Result.Folder 'simulator.log') -RedirectStandardError (Join-Path $Result.Folder 'simulator.err')
+    $null = Invoke-QaGuestScript $Vm -Name 'connect-com2' -Script $connectCom2
+    try {
+        $seen = Wait-AppLog $Vm 'State: LOCK' 0 120 'locked'
+        Check $Result 'connected to the simulated receiver, and locked' $seen.found $seen.line
+        if (-not $seen.found) { return }
+        $null = Invoke-UiStep $Vm 'fields-resolution' '' $resolutionStep
+        Start-Sleep -Seconds 60
+        foreach ($state in 'locked', 'holdover') {
+            if ($state -eq 'holdover') {
+                $null = Send-SimulatorControl $control 'speed 2'
+                $null = Send-SimulatorControl $control 'antenna off'
+                $h = Wait-AppLog $Vm 'State: (WAIT|HOLD)' $seen.count 180 'fields-holdover'
+                if (-not $h.found) { Check $Result "[9] $state reached" $false $h.tail; continue }
+                Start-Sleep -Seconds 30
+            }
+            # All but frozen: the app's next readings settle on what the screen will show.
+            $null = Send-SimulatorControl $control 'speed 0.0001'
+            Start-Sleep -Seconds 20
+            $read = Invoke-UiStep $Vm "fields-$state" "`$tag = '$state'" $fieldsStep
+            $screenPath = Join-Path $Result.Folder "$state-screen.txt"
+            $null = Send-SimulatorControl $control "screen $screenPath"
+            try { Copy-QaFile $Vm -Source "C:\qa\fields\$state.txt" -Destination (Join-Path $Result.Folder "$state-shown.txt") } catch { }
+            if ($read.error -or -not (Test-Path $screenPath)) { Check $Result "[9] $state read" $false "$($read.error) screen written $(Test-Path $screenPath)"; continue }
+            $shownText = Get-Content (Join-Path $Result.Folder "$state-shown.txt") -Raw
+            $shown = foreach ($m in [regex]::Matches(($shownText -replace [char]0x2212, '-'), '(?<![\w.])[-+]?\d+(\.(\d+))?')) {
+                $decimals = $m.Groups[2].Value.Length
+                [pscustomobject]@{ value = [double]($m.Value -replace '^\+', ''); tolerance = 0.5 * [Math]::Pow(10, -$decimals) + 1e-9 }
+            }
+            $numbers = @(Get-ScreenNumbers (Get-Content $screenPath -Raw))
+            $missing = @($numbers | Where-Object { -not (Test-ShownValue $_.value $shown) } | Where-Object {
+                $n = $_; -not ($allowed | Where-Object { $n.line -match $_.pattern })
+            })
+            Check $Result "[9] $($state): every number on the status screen is shown somewhere in the app" ($missing.Count -eq 0 -and $numbers.Count -gt 20) "$($numbers.Count) numbers on the screen, $($missing.Count) not found: $((@($missing | ForEach-Object { "$($_.text) in '$($_.line)'" }) | Select-Object -Unique | Select-Object -First 12) -join '; ')"
+        }
+        $null = Send-SimulatorControl $control 'speed 2'
+    }
+    finally {
+        if (-not $simulator.HasExited) { $simulator.Kill() }
+        try { $null = Save-Evidence $Vm $Result.Folder } catch { }
+    }
+}
+
 # manual-qa.md section 12's download rows. A browser marks what it downloads with a Zone.Identifier
 # stream (ZoneId 3, the internet), Properties > Unblock deletes it, and Explorer's own extraction
 # copies a marked zip's mark onto every file it extracts - which is how a zip left blocked reaches
@@ -4621,6 +4757,7 @@ $scenarioTable = [ordered]@{
     'contrast'         = ${function:Test-Contrast}
     'receiver-families' = ${function:Test-ReceiverFamilies}
     'survey-operations' = ${function:Test-SurveyOperations}
+    'screen-fields'    = ${function:Test-ScreenFields}
     'soak'             = ${function:Test-Soak}
 }
 
