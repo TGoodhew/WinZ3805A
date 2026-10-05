@@ -1,0 +1,7 @@
+# Numbers on the Z3805A's status screen that the app shows in a different form, or deliberately not at
+# all, for the screen-fields scenario (docs/manual-qa.md section 9). One row per field:
+#
+#   <regex matched against the screen line> | <where the app shows it, or why it does not>
+#
+# The second half is required and the scenario fails a row without it: a row is a redirection, not an
+# exemption. Keep the regex narrow - one field - so a row cannot quietly cover a neighbour.
