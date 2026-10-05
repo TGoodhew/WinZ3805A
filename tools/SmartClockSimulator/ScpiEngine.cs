@@ -580,7 +580,7 @@ public sealed class ScpiEngine
 
         if (arguments.Equals("LAST", StringComparison.OrdinalIgnoreCase))
         {
-            _receiver.AdoptSurvey();
+            _receiver.CancelSurvey();
             return Result.None(took);
         }
 
@@ -604,7 +604,7 @@ public sealed class ScpiEngine
         }
 
         _receiver.HeldPosition = _receiver.HeldPosition with { Latitude = latitude, Longitude = longitude, Height = height };
-        _receiver.AdoptSurvey();
+        _receiver.CancelSurvey();
         return Result.None(took);
     }
 

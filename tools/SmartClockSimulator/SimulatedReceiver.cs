@@ -574,13 +574,38 @@ public sealed class SimulatedReceiver
         _surveyStarted = _simulatedElapsed;
     }
 
-    /// <summary>Ends a survey and holds its average, as <c>:GPS:POS SURV</c> does.</summary>
+    /// <summary>Ends a survey and holds its estimate as it stands, as <c>:GPS:POS SURV</c> does.</summary>
+    /// <remarks>
+    /// The estimate is what the screen shows while surveying: the held position with the survey's
+    /// height. Adopting early leaves that partial estimate held; cancelling (<see cref="CancelSurvey"/>)
+    /// does not. A guess from the manual and docs/manual-qa.md section 6 - the bench unit's survey has
+    /// never been adopted or cancelled (README).
+    /// </remarks>
     public void AdoptSurvey()
+    {
+        Advance();
+        if (_surveyStarted is not null && SurveyPercent is not null)
+        {
+            HeldPosition = HeldPosition with { Height = HeldPosition.Height - SurveyHeightOffset };
+        }
+
+        _surveyStarted = null;
+        _surveyArmed = false;
+    }
+
+    /// <summary>
+    /// Ends a survey and goes back to the position held before it, as <c>:GPS:POS LAST</c> does: the
+    /// Position page's Cancel survey. The partial estimate is discarded.
+    /// </summary>
+    public void CancelSurvey()
     {
         Advance();
         _surveyStarted = null;
         _surveyArmed = false;
     }
+
+    /// <summary>How far, in metres, the survey's estimate sits below the held height while it runs.</summary>
+    internal const double SurveyHeightOffset = 15.7;
 
     /// <summary>The screen <c>:SYST:STAT?</c> prints right now.</summary>
     public ScreenSnapshot Snapshot()
@@ -642,7 +667,7 @@ public sealed class SimulatedReceiver
                     SurveySuspended = SurveyPercent is not null && tracked.Count < 4 ? "track <4 sats" : null,
                 }
                 : _surveyStarted is not null && SurveyPercent is double percent
-                    ? HeldPosition with { SurveyPercent = percent, Height = HeldPosition.Height - 15.7 }
+                    ? HeldPosition with { SurveyPercent = percent, Height = HeldPosition.Height - SurveyHeightOffset }
                     : HeldPosition,
             Health = Health,
         };
