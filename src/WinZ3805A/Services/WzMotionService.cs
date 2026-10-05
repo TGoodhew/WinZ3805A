@@ -1,5 +1,3 @@
-using System.Runtime.Versioning;
-
 using Microsoft.UI.Dispatching;
 
 using Windows.UI.ViewManagement;
@@ -51,13 +49,11 @@ public interface IMotionService
 /// which does not fail loudly, it simply stops delivering the notification this class exists for.
 /// </para>
 /// <para>
-/// <b>The second half is unavailable below Windows 10 2004.</b> <c>UISettings.AnimationsEnabled</c>
-/// is readable from 1809, which is §6.1's floor, but
-/// <c>UISettings.AnimationsEnabledChanged</c> arrived in 19041. On an older build the setting is
-/// therefore read once and honoured for the life of the process, and a user who changes it while
-/// the application is running sees the new value at the next launch. That is the whole of the
-/// degradation, and it is not worth raising §6.1's minimum over: the value is never <i>wrong</i>,
-/// only late.
+/// <b>Always watched.</b> <c>UISettings.AnimationsEnabledChanged</c> arrived in build 19041, and
+/// §6.1's floor is 19045 (Windows 10 22H2) since #705 - so the version guard and the read-once
+/// fallback it kept for older builds went with the old 1809 floor. The platform compatibility
+/// analyzer reads the floor from <c>TargetPlatformMinVersion</c>, so a call that needs a newer build
+/// than 19045 is still a build error.
 /// </para>
 /// </remarks>
 public sealed class WzMotionService : IMotionService, IDisposable
@@ -68,15 +64,11 @@ public sealed class WzMotionService : IMotionService, IDisposable
     private bool _animationsEnabled;
     private bool _disposed;
 
-    /// <summary>Reads the current setting and, where the build supports it, begins watching it.</summary>
+    /// <summary>Reads the current setting and begins watching it.</summary>
     public WzMotionService()
     {
         _animationsEnabled = _settings.AnimationsEnabled;
-
-        if (CanWatch)
-        {
-            _settings.AnimationsEnabledChanged += OnAnimationsEnabledChanged;
-        }
+        _settings.AnimationsEnabledChanged += OnAnimationsEnabledChanged;
     }
 
     /// <inheritdoc />
@@ -84,17 +76,6 @@ public sealed class WzMotionService : IMotionService, IDisposable
 
     /// <inheritdoc />
     public bool AnimationsEnabled => _animationsEnabled;
-
-    /// <summary>Whether this Windows build raises <c>UISettings.AnimationsEnabledChanged</c>.</summary>
-    /// <remarks>
-    /// Written as a version check rather than an <c>ApiInformation</c> probe because the platform
-    /// compatibility analyzer understands this one, so a call added below the floor is a build
-    /// error rather than something the next person finds on a 1809 machine. The attribute is what
-    /// carries that knowledge across the property boundary — without it the analyzer sees only a
-    /// bool and reports the guarded call anyway.
-    /// </remarks>
-    [SupportedOSPlatformGuard("windows10.0.19041.0")]
-    private static bool CanWatch => OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041);
 
     /// <summary>Stops watching the setting.</summary>
     public void Dispose()
@@ -105,11 +86,7 @@ public sealed class WzMotionService : IMotionService, IDisposable
         }
 
         _disposed = true;
-
-        if (CanWatch)
-        {
-            _settings.AnimationsEnabledChanged -= OnAnimationsEnabledChanged;
-        }
+        _settings.AnimationsEnabledChanged -= OnAnimationsEnabledChanged;
     }
 
     /// <remarks>

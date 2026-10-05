@@ -84,10 +84,9 @@ not paying one — so the thumbprint below is what you check it against.
 
 ### Requirements
 
-- **Windows 10 version 1809 (build 17763) or later, x64.** That is the floor the package
-  declares and will install against. Windows 11 is the sensible choice — mainstream servicing
-  for 1809 has ended, and only the LTSC Extended channel is still serviced — but the
-  application does not require it.
+- **Windows 10 version 22H2 (build 19045) or later, or Windows 11, x64.** That is the floor the
+  package declares and the oldest Windows every release is tested on; the installer stops, and
+  says why, on anything older. From **1.3.6** this was raised from Windows 10 1809.
 - **.NET 10 Runtime**, free from Microsoft. The offline zip installs it if it is
   missing, and the online zip opens its [download page](https://dotnet.microsoft.com/download/dotnet/10.0).
 - A serial port, or a USB-to-serial adapter, wired to the receiver

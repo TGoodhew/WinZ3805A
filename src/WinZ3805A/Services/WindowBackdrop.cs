@@ -26,8 +26,8 @@ namespace WinZ3805A.Services;
 /// <para>
 /// <b>The support check cannot be made on the backdrop object.</b> <c>MicaBackdrop</c> exposes only
 /// <c>Kind</c> and <c>KindProperty</c>, so the question goes to
-/// <see cref="MicaController.IsSupported"/>. §6.1 keeps <c>TargetPlatformMinVersion</c> at Windows
-/// 10 1809, so the unsupported case is a real machine and not a hypothetical.
+/// <see cref="MicaController.IsSupported"/>. §6.1's floor is Windows 10 22H2, which has no Mica, so
+/// the unsupported case is a real machine and not a hypothetical (QA-Win10 is one).
 /// </para>
 /// </remarks>
 internal static class WindowBackdrop

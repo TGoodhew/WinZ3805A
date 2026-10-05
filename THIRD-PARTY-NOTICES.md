@@ -92,7 +92,7 @@ Windows are trademarks of Microsoft Corporation.
 
 Reproduced in full, as clause 2 of the licence requires. §9.5.1 embeds this font
 rather than assuming it is present: it is inbox on Windows 11 but ships with
-Windows Terminal on Windows 10, so it cannot be relied on at §6.1's 1809 floor.
+Windows Terminal on Windows 10, so it cannot be relied on at §6.1's Windows 10 floor.
 
 ```
 Copyright (c) 2019 - Present, Microsoft Corporation,
