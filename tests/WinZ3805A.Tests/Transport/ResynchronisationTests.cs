@@ -526,4 +526,96 @@ public class ResynchronisationTests
 
         await UntilAsync(() => transport.CommandsWritten.Count == before + 1);
     }
+
+    /// <summary>
+    /// A port opened in the middle of somebody else's reply does not leave the connect sequence one
+    /// answer behind (#707).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Seen on QA-Win10 on 5 Oct 2026. The application was killed while the receiver was sending a
+    /// status screen, and started again at once. Its port opened into the screen's tail, and the
+    /// tail was still arriving when the synchronise listen ran out. So the first <c>*CLS</c> read
+    /// the rest of the tail and the stale screen's own <c>E-230&gt;</c> prompt as its answer. Its
+    /// real prompt arrived afterwards and was taken as the second <c>*CLS</c>'s, and the second's
+    /// was taken as <c>*IDN?</c>'s: a bare prompt with no identity in it. The connect failed with
+    /// the receiver answering every command correctly.
+    /// </para>
+    /// <para>
+    /// <b>The receiver is modelled on the wire's timing, not on its content alone.</b> A real one
+    /// answers tens of milliseconds after a command, while the application writes its next command
+    /// within microseconds of reading a prompt. So the receiver here holds each answer until the
+    /// protocol has written whatever it was going to write next, or until it plainly is not going to.
+    /// Without that, every answer is already waiting when the next command goes out, the stale-input
+    /// discard swallows it, and the test passes against the defect. Its first version did exactly
+    /// that.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task APortOpenedMidReplyStillReadsTheIdentityAsTheIdentitysAnswer()
+    {
+        const string Identity = "SYMMETRICOM,Z3805A,3625A02931,1.01.03-A";
+
+        FakeTimeProvider clock = new();
+        await using FakeTransport transport = new() { EchoCommands = false, WaitForReaderToConsume = true };
+        await transport.OpenAsync();
+
+        LineProtocol protocol = new(transport, clock);
+
+        // *IDN? goes out the moment the synchronise step returns, as the session sends it.
+        Task<Transaction> identity = protocol.SynchroniseAsync(TimeSpan.FromSeconds(2))
+            .ContinueWith(
+                _ => protocol.ExecuteAsync("*IDN?", TimeSpan.FromSeconds(2), CancellationToken.None),
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default)
+            .Unwrap();
+
+        // The tail of the screen begins while the listen is running, and is not finished when the
+        // listen gives up. Winding the clock past the listen is the only virtual time this test
+        // spends: nothing after it should wait for a timeout.
+        await transport.EmitAsync("SYNCHRONIZATION ............................................ [ Outputs Valid ]\r\n");
+        Task<string> firstClear = transport.ReadCommandAsync().AsTask();
+        await AdvanceUntilCompleteAsync(clock, firstClear, TimeSpan.FromMilliseconds(100), "the first *CLS");
+        Assert.Equal("*CLS", await firstClear);
+
+        // The rest of the stale screen is already on the wire, ended by its own prompt, which carries
+        // the stale screen's error token.
+        await transport.EmitAsync("ACQUISITION ...................................... [ GPS 1PPS Valid ]\r\nE-230> ");
+
+        int answered = 1;
+        await AnswerAfterAnyFollowUpAsync(Prompt);
+
+        Task identityAnswer;
+        while (true)
+        {
+            string command = await transport.ReadCommandAsync().AsTask().WaitAsync(Settle);
+            answered++;
+            if (command == "*IDN?")
+            {
+                // Not awaited before the assertion: a protocol one answer behind has finished with
+                // *IDN? already, and the identity would wait for a reader that never comes.
+                identityAnswer = AnswerAfterAnyFollowUpAsync($"{Identity}\r\n{Prompt}");
+                break;
+            }
+
+            await AnswerAfterAnyFollowUpAsync(Prompt);
+        }
+
+        Assert.Equal([Identity], (await identity.WaitAsync(Settle)).Lines);
+        await identityAnswer.WaitAsync(Settle);
+
+        // The receiver's own reply to a command: sent once the protocol has written whatever it
+        // writes next without waiting, or after a pause long enough to say it is waiting.
+        async Task AnswerAfterAnyFollowUpAsync(string answer)
+        {
+            using CancellationTokenSource pause = new(TimeSpan.FromMilliseconds(150));
+            while (transport.CommandsWritten.Count <= answered && !pause.IsCancellationRequested)
+            {
+                await Task.Delay(5, CancellationToken.None);
+            }
+
+            await transport.EmitAsync(answer);
+        }
+    }
 }

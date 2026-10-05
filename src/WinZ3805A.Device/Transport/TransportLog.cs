@@ -71,4 +71,17 @@ internal static partial class TransportLog
     [LoggerMessage(EventId = 1019, Level = LogLevel.Debug,
         Message = "Listened {Window} ms for a late reply after a silent timeout; none came.")]
     internal static partial void NoLateReply(ILogger logger, double window);
+
+    // Information, for the reason Resynchronised is: the port opened into the middle of a reply,
+    // and without this the connect sequence would have run one answer behind (#707).
+    [LoggerMessage(EventId = 1020, Level = LogLevel.Information,
+        Message = "The port opened mid-reply: *CLS read {StaleLines} line(s) of an earlier reply, "
+            + "so its own prompt was read after it ({LineCount} more line(s) discarded).")]
+    internal static partial void StaleReplyAbsorbed(ILogger logger, int staleLines, int lineCount);
+
+    // Debug: the usual reason is that the prompt after the tail really was this command's, which
+    // means nothing was misaligned and nothing needs reading in app.log.
+    [LoggerMessage(EventId = 1021, Level = LogLevel.Debug,
+        Message = "*CLS read {StaleLines} line(s) of an earlier reply, and no further prompt came within {Window} ms.")]
+    internal static partial void NoOwnPrompt(ILogger logger, int staleLines, double window);
 }

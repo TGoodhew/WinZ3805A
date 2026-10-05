@@ -386,7 +386,21 @@ public sealed class DeviceSessionService : IAsyncDisposable
             Settings = settings;
             SetStatus(ConnectionStatus.Connecting, $"Connecting to {portName} at {settings}.");
 
-            return await OpenAndSynchroniseAsync(attempt.Token).ConfigureAwait(false);
+            bool connected = await OpenAndSynchroniseAsync(attempt.Token).ConfigureAwait(false);
+
+            // #707: this returned false and said nothing, so a failed connect on launch read in
+            // app.log as Connecting followed by the Disconnected its caller set - indistinguishable
+            // from a user pressing Disconnect. Auto-detect has always said why; now this does too.
+            if (!connected)
+            {
+                _logger.LogInformation(
+                    "Connecting to {Port} at {Settings} failed: {Reason}.",
+                    portName,
+                    settings,
+                    LastFault == TransportFault.None ? "no identity in the reply to *IDN?" : $"the port faulted ({LastFault})");
+            }
+
+            return connected;
         }
         catch (OperationCanceledException)
         {
