@@ -90,6 +90,9 @@
                               floor, at 200 %: Light and Dark over Mica on a grey wallpaper and on the
                               hardest of six hues (Windows 10: the solid fallback), then the four contrast
                               themes. Needs the simulator port, and on Windows 11 3D acceleration
+      receiver-families    the NMEA 0183 and UCCM simulators on COM2 with the port left to auto-detect:
+                              the right driver claims each, it connects, nothing logs an error, and both
+                              windows are photographed for the judge. Needs the simulator port
       soak               §14  not run by default: the app left -SoakMinutes (60) against the simulated receiver,
                               locked, main window and Details on Overview open, measured by Watch-Soak.ps1
                               in the guest. Read against another soak - run it for the last release too
@@ -125,7 +128,7 @@ param(
     [string]$Offline,
     [string]$Release,
     [string[]]$Machines = @('QA-Win10', 'QA-Win11'),
-    [string[]]$Scenarios = @('binary-audit', 'release-assets', 'fresh-online', 'fresh-offline', 'unblocked-download', 'offline-no-network', 'blocked-zip', 'upgrade-1.2.0', 'upgrade-previous', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast', 'display-scaling', 'text-scaling', 'keyboard-focus', 'reduced-motion', 'greyscale-states', 'contrast'),
+    [string[]]$Scenarios = @('binary-audit', 'release-assets', 'fresh-online', 'fresh-offline', 'unblocked-download', 'offline-no-network', 'blocked-zip', 'upgrade-1.2.0', 'upgrade-previous', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast', 'display-scaling', 'text-scaling', 'keyboard-focus', 'reduced-motion', 'greyscale-states', 'contrast', 'receiver-families'),
     [string]$OutDir,
     [int]$SoakMinutes = 60
 )
@@ -141,7 +144,7 @@ $Machines = @($Machines | ForEach-Object { $_ -split ',' } | ForEach-Object { $_
 # -Machines none runs the host scenarios alone (binary-audit, release-assets).
 if ($Machines -contains 'none') { $Machines = @() }
 $Scenarios = @($Scenarios | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-$known = @('binary-audit', 'release-assets', 'fresh-online', 'fresh-offline', 'unblocked-download', 'offline-no-network', 'blocked-zip', 'upgrade-1.2.0', 'upgrade-previous', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast', 'display-scaling', 'text-scaling', 'keyboard-focus', 'reduced-motion', 'greyscale-states', 'contrast', 'soak')
+$known = @('binary-audit', 'release-assets', 'fresh-online', 'fresh-offline', 'unblocked-download', 'offline-no-network', 'blocked-zip', 'upgrade-1.2.0', 'upgrade-previous', 'leftover-cert', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast', 'display-scaling', 'text-scaling', 'keyboard-focus', 'reduced-motion', 'greyscale-states', 'contrast', 'receiver-families', 'soak')
 $unknown = @($Scenarios | Where-Object { $known -notcontains $_ })
 if ($unknown.Count) { throw "Unknown scenario(s): $($unknown -join ', '). Known: $($known -join ', ')." }
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
@@ -456,11 +459,14 @@ function Test-AppChecks {
     foreach ($c in $parsed) { Check $Result "[$($c.section)] $($c.name)" ($c.ok -eq $true) "$($c.detail)" }
 }
 
-# Builds the Z3805A simulator once per run, into the run's own folder.
+# Builds a simulator once per run, into the run's own folder: the Z3805A by default, or the NMEA
+# talker or the UCCM module, which have pipe modes for this since 5 Oct 2026.
 function Get-Simulator {
-    $exe = Join-Path $OutDir 'simulator\SmartClockSimulator.exe'
+    param([ValidateSet('SmartClock', 'Nmea', 'Uccm')][string]$Kind = 'SmartClock')
+    $folder = if ($Kind -eq 'SmartClock') { 'simulator' } else { "simulator-$($Kind.ToLowerInvariant())" }
+    $exe = Join-Path $OutDir "$folder\$($Kind)Simulator.exe"
     if (-not (Test-Path $exe)) {
-        $output = & dotnet build (Join-Path $repo 'tools\SmartClockSimulator\SmartClockSimulator.csproj') -c Release -o (Split-Path $exe) 2>&1 | Out-String
+        $output = & dotnet build (Join-Path $repo "tools\$($Kind)Simulator\$($Kind)Simulator.csproj") -c Release -o (Split-Path $exe) 2>&1 | Out-String
         if ($LASTEXITCODE -ne 0 -or -not (Test-Path $exe)) { throw "the simulator did not build: $output" }
     }
     $exe
@@ -3838,6 +3844,93 @@ function Test-UpgradePrevious {
     }
 }
 
+# The two receiver families the pass never drove: an NMEA 0183 talker and a UCCM module, each from
+# its simulator on the VM's COM2, with the port left to auto-detect - as a first connection is - so
+# the app must work out the family itself. Until 5 Oct 2026 every scenario drove the SmartClock
+# simulator, and two of the three drivers the app ships were never connected in a pass.
+$autoDetectCom2 = @'
+Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue | Stop-Process -Force
+Start-Sleep -Seconds 2
+$pkg = Get-AppxPackage -Name WinZ3805A | Select-Object -First 1
+$dir = Join-Path $env:LOCALAPPDATA "Packages\$($pkg.PackageFamilyName)\LocalCache\Local\WinZ3805A"
+New-Item -ItemType Directory -Force $dir | Out-Null
+'{"PortName":"COM2","AutoDetect":true,"ReconnectAutomatically":true,"ConnectOnLaunch":true}' | Set-Content (Join-Path $dir 'connection.json') -Encoding ascii
+Start-Process "shell:AppsFolder\$($pkg.PackageFamilyName)!App"
+'@
+
+# The main window and the Details Overview photographed, for the judge. Called with $tag.
+$familyPhotoStep = @'
+Add-Type -AssemblyName System.Drawing
+Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class QaFamily { [DllImport("user32.dll")] public static extern bool MoveWindow(IntPtr h, int x, int y, int w, int t, bool r); [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h); }'
+New-Item -ItemType Directory -Force 'C:\qa\families' | Out-Null
+$w = Get-AppWindow -Seconds 30
+if (-not $w) { [ordered]@{ error = "no main window ($(Get-WindowReport))" } | ConvertTo-Json -Compress; return }
+[void][QaFamily]::MoveWindow((Get-Handle $w), 10, 10, 700, 560, $true)
+$d = Get-AppWindowNamed 'Receiver Details' -Seconds 2
+if (-not $d) {
+    $button = Find-Control $w -AutomationId 'DetailsButton' -Seconds 10
+    if ($button) { Invoke-Control $button } else { Send-KeyTo $w '^d' }
+    $d = Get-AppWindowNamed 'Receiver Details' -Seconds 20
+}
+if ($d) { [void][QaFamily]::MoveWindow((Get-Handle $d), 720, 10, 1180, 1000, $true); [void](Select-NavigationItem $d 'Overview') }
+Start-Sleep -Seconds 4
+[QaWin32]::MoveTo(1910, 1190)
+function Save-Shot($element, [string]$path) {
+    [void][QaFamily]::SetForegroundWindow((Get-Handle $element)); Start-Sleep -Seconds 1
+    $r = $element.Current.BoundingRectangle
+    $bmp = New-Object System.Drawing.Bitmap ([int]$r.Width), ([int]$r.Height)
+    $g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen([int]$r.Left, [int]$r.Top, 0, 0, $bmp.Size); $g.Dispose()
+    $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png); $bmp.Dispose()
+}
+Save-Shot $w "C:\qa\families\$tag-main.png"
+if ($d) { Save-Shot $d "C:\qa\families\$tag-overview.png" }
+[ordered]@{ details = [bool]$d } | ConvertTo-Json -Compress
+'@
+
+function Test-ReceiverFamilies {
+    param($Vm, $Result)
+    $pipe = Get-QaSimulatorPipe -Vm $Vm
+    if (-not (Select-String -LiteralPath $Vm.Vmx -SimpleMatch "\\.\pipe\$pipe" -Quiet)) {
+        $Result.Error = "skipped: the VM has no simulator port; run Add-QaSimulatorPort (build/qa/README.md)"
+        return
+    }
+    Send-Zip $Vm $Offline 'candidate'
+    $code = Install-Candidate $Vm 'candidate'
+    Check $Result 'installed (exit 0, or 2 with the start check timing out)' ($code -in 0, 2) "exit $code"
+    $null = Invoke-UiStep $Vm 'families-resolution' '' $resolutionStep
+    $families = [ordered]@{
+        nmea = @{ Family = 'NMEA 0183'; Kind = 'Nmea'; Arguments = @('--pipe-client', $pipe, '--fix-after', '5', '--3d-after', '10') }
+        uccm = @{ Family = 'UCCM'; Kind = 'Uccm'; Arguments = @('--pipe-client', $pipe) }
+    }
+    foreach ($tag in $families.Keys) {
+        $f = $families[$tag]
+        $mark = (Wait-AppLog $Vm 'a line that is never written' 0 1 "mark-$tag").count
+        # The simulator first: an app that finds nothing on the port at launch does not retry.
+        $simulator = Start-Process (Get-Simulator -Kind $f.Kind) -PassThru -WindowStyle Hidden -ArgumentList $f.Arguments `
+            -RedirectStandardOutput (Join-Path $Result.Folder "$tag-simulator.log") -RedirectStandardError (Join-Path $Result.Folder "$tag-simulator.err")
+        try {
+            Start-Sleep -Seconds 3
+            $null = Invoke-QaGuestScript $Vm -Name "auto-detect-$tag" -Script $autoDetectCom2
+            $claimed = Wait-AppLog $Vm 'driver now serves' $mark 180 "driver-$tag"
+            Check $Result "[$($f.Family)] auto-detect gives it to the $($f.Family) driver" ($claimed.found -and $claimed.line -match "The $([regex]::Escape($f.Family)) driver now serves") "$($claimed.line)$(if (-not $claimed.found) { $claimed.tail })"
+            $connected = Wait-AppLog $Vm 'Session COM2 is now Connected' $mark 60 "connected-$tag"
+            Check $Result "[$($f.Family)] the session connects" $connected.found "$($connected.line)$(if (-not $connected.found) { $connected.tail })"
+            # Readings for a while, then what was logged in that time.
+            Start-Sleep -Seconds 30
+            $read = Invoke-QaGuestScript $Vm -Name "log-$tag" -Script "Get-Content (Join-Path `$env:LOCALAPPDATA ""Packages\`$((Get-AppxPackage -Name WinZ3805A).PackageFamilyName)\LocalCache\Local\WinZ3805A\logs\app.log"") | Select-Object -Skip $mark"
+            $errors = @(($read.Output -split "`r?`n") | Where-Object { $_ -match '\s(ERROR|FAIL|CRIT)\s' })
+            Check $Result "[$($f.Family)] nothing logged as an error while it ran" ($errors.Count -eq 0) (($errors | Select-Object -First 3) -join ' | ')
+            $shot = Invoke-UiStep $Vm "photograph-$tag" "`$tag = '$tag'" $familyPhotoStep
+            Check $Result "[$($f.Family)] the main window and Details photographed for the judge" (-not $shot.error -and $shot.details) "$($shot.error)"
+            foreach ($part in 'main', 'overview') { try { Copy-QaFile $Vm -Source "C:\qa\families\$tag-$part.png" -Destination (Join-Path $Result.Folder "$tag-$part.png") } catch { } }
+        }
+        finally {
+            if (-not $simulator.HasExited) { $simulator.Kill() }
+        }
+    }
+    try { $null = Save-Evidence $Vm $Result.Folder } catch { }
+}
+
 # manual-qa.md section 12's download rows. A browser marks what it downloads with a Zone.Identifier
 # stream (ZoneId 3, the internet), Properties > Unblock deletes it, and Explorer's own extraction
 # copies a marked zip's mark onto every file it extracts - which is how a zip left blocked reaches
@@ -4165,6 +4258,7 @@ $scenarioTable = [ordered]@{
     'reduced-motion'   = ${function:Test-ReducedMotion}
     'greyscale-states' = ${function:Test-GreyscaleStates}
     'contrast'         = ${function:Test-Contrast}
+    'receiver-families' = ${function:Test-ReceiverFamilies}
     'soak'             = ${function:Test-Soak}
 }
 

@@ -1,5 +1,7 @@
 using System.Globalization;
+using System.IO.Pipes;
 using System.IO.Ports;
+using System.Text;
 
 using WinZ3805A.Simulation;
 
@@ -8,6 +10,7 @@ using WinZ3805A.Simulation;
 // for the serial-port pair that lets the packaged application connect to it.
 
 string? port = null;
+string? pipeName = null;
 int baud = 4800;
 string talker = "GP";
 int fixAfter = 20;
@@ -25,6 +28,9 @@ for (int i = 0; i < args.Length; i++)
     {
         case "--port" when i + 1 < args.Length:
             port = args[++i];
+            break;
+        case "--pipe-client" when i + 1 < args.Length:
+            pipeName = args[++i];
             break;
         case "--baud" when i + 1 < args.Length:
             baud = int.Parse(args[++i], CultureInfo.InvariantCulture);
@@ -58,17 +64,17 @@ for (int i = 0; i < args.Length; i++)
             break;
         default:
             Console.Error.WriteLine(
-                "usage: NmeaSimulator (--port COMn [--baud 4800] | --stdout) [--talker GP] " +
+                "usage: NmeaSimulator (--port COMn [--baud 4800] | --pipe-client <name> | --stdout) [--talker GP] " +
                 "[--fix-after 20] [--3d-after 40] [--outage-after N --outage-for N] " +
                 "[--extra-talker GL [--extra-first-prn 65]] [--sentence-spacing-ms 0]");
             return 2;
     }
 }
 
-if (port is null && !toStdout)
+if (port is null && pipeName is null && !toStdout)
 {
     Console.Error.WriteLine(
-        "usage: NmeaSimulator (--port COMn [--baud 4800] | --stdout) [--talker GP] " +
+        "usage: NmeaSimulator (--port COMn [--baud 4800] | --pipe-client <name> | --stdout) [--talker GP] " +
         "[--fix-after 20] [--3d-after 40] [--outage-after N --outage-for N] " +
         "[--extra-talker GL [--extra-first-prn 65]] [--sentence-spacing-ms 0]");
     return 2;
@@ -107,13 +113,45 @@ if (port is not null)
     Console.Error.WriteLine($"Talking on {port} at {baud}-8-N-1 as {talker}; fix after {fixAfter} s, 3D after {threeDAfter} s. Ctrl+C stops.");
 }
 
+// A named pipe something else serves - a VMware VM's serial port (#633) - as SmartClockSimulator's
+// --pipe-client does: the talker writes into it, and reconnects if the VM goes away, as a cable
+// plugged back in would. A VM's pipe carries no baud rate, so the guest may open the port at any.
+NamedPipeClientStream? pipe = null;
+if (pipeName is not null)
+{
+    Console.Error.WriteLine($@"Talking into \\.\pipe\{pipeName} as {talker}; fix after {fixAfter} s, 3D after {threeDAfter} s. Ctrl+C stops.");
+}
+
 try
 {
     using PeriodicTimer tick = new(TimeSpan.FromSeconds(1));
     do
     {
         string cycle = simulator.NextCycleText();
-        if (serial is not null)
+        if (pipeName is not null)
+        {
+            try
+            {
+                if (pipe is null || !pipe.IsConnected)
+                {
+                    pipe?.Dispose();
+                    pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+                    await pipe.ConnectAsync(TimeSpan.FromSeconds(1), stopping.Token);
+                    Console.Error.WriteLine("* connected");
+                }
+
+                byte[] bytes = Encoding.ASCII.GetBytes(cycle);
+                await pipe.WriteAsync(bytes, stopping.Token);
+                await pipe.FlushAsync(stopping.Token);
+            }
+            catch (Exception ex) when (ex is IOException or TimeoutException)
+            {
+                // Not there yet, or gone: the next cycle tries again.
+                pipe?.Dispose();
+                pipe = null;
+            }
+        }
+        else if (serial is not null)
         {
             serial.Write(cycle);
         }
@@ -123,7 +161,7 @@ try
             Console.Out.Flush();
         }
 
-        if (serial is not null)
+        if (serial is not null || pipe is not null)
         {
             Console.Error.WriteLine($"{DateTimeOffset.UtcNow:HH:mm:ss}  {simulator.Phase}, {simulator.SatellitesTracked} tracked, {simulator.SatellitesUsed} used");
         }
@@ -137,6 +175,7 @@ catch (OperationCanceledException)
 finally
 {
     serial?.Dispose();
+    pipe?.Dispose();
 }
 
 return 0;

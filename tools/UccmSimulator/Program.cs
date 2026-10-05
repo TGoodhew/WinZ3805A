@@ -1,5 +1,7 @@
 using System.Globalization;
+using System.IO.Pipes;
 using System.IO.Ports;
+using System.Text;
 
 using WinZ3805A.Device.Drivers.Uccm;
 
@@ -35,6 +37,8 @@ internal static class Program
                 UccmSimulator - a UCCM module that is not a UCCM module.
 
                   --port <name>       serial port to answer on (omit to write to stdout)
+                  --pipe-client <n>   a named pipe something else serves, e.g. a VMware VM's
+                                      serial port (\\.\pipe\<n>)
                   --baud <rate>       default 9600
                   --vendor <name>     Symmetricom | Trimble        (default Symmetricom)
                   --variant <name>    Uccm | UccmP                 (default Uccm)
@@ -54,7 +58,94 @@ internal static class Program
             InterleaveTimeCode = args.Contains("--interleave"),
         };
 
+        if (Option(args, "--pipe-client") is string pipe)
+        {
+            return ServePipeAsync(module, pipe).GetAwaiter().GetResult();
+        }
+
         return port is null ? Demonstrate(module) : Serve(module, port, Baud(args));
+    }
+
+    /// <summary>
+    /// Answers on a pipe a VM serves (#633), as SmartClockSimulator's --pipe-client does: a reply
+    /// to each line, a time code once a second in between, and a reconnect if the VM goes away.
+    /// </summary>
+    private static async Task<int> ServePipeAsync(UccmModuleSimulator module, string name)
+    {
+        Console.WriteLine($@"{module.Vendor} {module.Variant} connecting to \\.\pipe\{name}. Ctrl+C to stop.");
+        while (true)
+        {
+            try
+            {
+                await using NamedPipeClientStream pipe = new(".", name, PipeDirection.InOut, PipeOptions.Asynchronous);
+                try
+                {
+                    await pipe.ConnectAsync(5000);
+                }
+                catch (TimeoutException)
+                {
+                    continue;
+                }
+
+                Console.WriteLine("* connected");
+                using StreamReader reader = new(pipe, Encoding.ASCII, detectEncodingFromByteOrderMarks: false, leaveOpen: true);
+                SemaphoreSlim writing = new(1, 1);
+                async Task WriteAsync(string text)
+                {
+                    await writing.WaitAsync();
+                    try
+                    {
+                        await pipe.WriteAsync(Encoding.ASCII.GetBytes(text));
+                        await pipe.FlushAsync();
+                    }
+                    finally
+                    {
+                        writing.Release();
+                    }
+                }
+
+                using CancellationTokenSource gone = new();
+                Task ticking = Task.Run(async () =>
+                {
+                    using PeriodicTimer tick = new(TimeSpan.FromSeconds(1));
+                    while (await tick.WaitForNextTickAsync(gone.Token))
+                    {
+                        await WriteAsync(module.TimeCodeLine() + "\r\n");
+                    }
+                });
+
+                try
+                {
+                    while (await reader.ReadLineAsync() is string line)
+                    {
+                        line = line.Trim();
+                        if (line.Length > 0)
+                        {
+                            await WriteAsync(module.Respond(line));
+                        }
+                    }
+                }
+                finally
+                {
+                    await gone.CancelAsync();
+                    try
+                    {
+                        await ticking;
+                    }
+                    catch (Exception ex) when (ex is OperationCanceledException or IOException)
+                    {
+                        // The ticker stops with the connection.
+                    }
+                }
+            }
+            catch (IOException ex)
+            {
+                // The VM went, or its pipe was busy; try again, as a cable plugged back in would.
+                Console.WriteLine($"* pipe went: {ex.Message}");
+            }
+
+            await Task.Delay(1000);
+        }
     }
 
     /// <summary>Writes one of everything to stdout, so the shapes can be eyeballed.</summary>
