@@ -168,6 +168,38 @@ answered with newlines and its outcome read from its log, so older releases can 
 That is how the harness was shown to fail: given v1.3.2, `upgrade-1.2.0` fails on Windows 10
 exactly as #617 did.
 
+## Running a release
+
+```powershell
+pwsh build\qa\Invoke-Release.ps1 -Version 1.3.6 -BumpPr 712   # from the version bump's PR
+pwsh build\qa\Invoke-Release.ps1 -Version 1.3.6 -Resume       # after judging, or a fix
+pwsh build\qa\Invoke-Release.ps1 -Version 1.3.6 -Resume -Go   # on Tony's go, and only then
+```
+
+`Invoke-Release.ps1` runs a release as stages, keeping its state in
+`%LOCALAPPDATA%\WinZ3805A QA\releases\<tag>\` beside its log and every pass it ran. Run it detached,
+because it outlives any tool call. The stages:
+
+1. **dry run**: `release.yml` with `dry_run` on the bump branch, which must already set the manifest
+   to the version;
+2. **pass**: the full pass on the dry run's zips;
+3. **soak**: the last release and the dry run, 60 minutes each on QA-Win11. The candidate may not
+   grow more than 3 MB/hour faster than the release; two soaks of one build differed by about 1.6,
+   and #399's leak was 19;
+4. **issue**: the QA-run issue, with the report and the soak;
+5. **go**: waits for Tony;
+6. **tag**: merge the bump, tag the merge commit, and wait for the publish;
+7. **published**: the pass on the published zips, with `release-assets`;
+8. **close**: the results posted, the issue closed.
+
+It **stops** in three cases:
+- a pass awaits judgement: judge with `Complete-QaRun.ps1`, then `-Resume`;
+- the go: `-Go` is passed only on Tony's word, because a tag is his decision;
+- anything fails.
+
+`-Restart <stage>` runs a stage again. The first stage was run for real on 5 Oct 2026: it dispatched
+the dry run, found it among the workflow's runs, waited for it, downloaded both zips and moved on.
+
 ## Things worth not rediscovering
 
 - **Take a snapshot only once the guest has gone quiet.** A desktop that has just appeared is still
