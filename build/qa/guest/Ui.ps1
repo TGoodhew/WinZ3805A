@@ -219,6 +219,19 @@ function Get-ToggleState {
 }
 
 
+# Waits until the condition returns something truthy, and returns it; $null once the time is up. For
+# "the app has done X" a fixed sleep either wastes time or is outrun - three QA failures on 4-5 Oct
+# 2026 were sleeps the app outran - so a step waits on X itself.
+function Wait-Until {
+    param([scriptblock]$Condition, [int]$Seconds = 30, [int]$Milliseconds = 500)
+    $deadline = (Get-Date).AddSeconds($Seconds)
+    do {
+        $value = & $Condition
+        if ($value) { return $value }
+        Start-Sleep -Milliseconds $Milliseconds
+    } while ((Get-Date) -lt $deadline)
+    $null
+}
 function Get-AppWindow {
     param([int]$Seconds = 30)
     $deadline = (Get-Date).AddSeconds($Seconds)

@@ -58,6 +58,14 @@ $results = New-Object System.Collections.Generic.List[object]
 function Result([string]$Section, [string]$Name, [bool]$Ok, [string]$Detail = '') {
     $results.Add([ordered]@{ section = $Section; name = $Name; ok = $Ok; detail = $Detail })
 }
+# Waits until the condition is truthy, up to the given seconds, and returns it: each check below waits
+# on what it is about to read rather than on a clock the app can outrun (#633, 5 Oct 2026).
+function Wait-For([scriptblock]$Condition, [int]$Seconds) {
+    $deadline = (Get-Date).AddSeconds($Seconds)
+    do { $v = & $Condition; if ($v) { return $v }; Start-Sleep -Milliseconds 500 } while ((Get-Date) -lt $deadline)
+    $null
+}
+
 function Get-ForegroundName {
     $id = [QaWindows]::ForegroundProcessId()
     try { (Get-Process -Id $id -ErrorAction Stop).ProcessName } catch { "process $id" }
@@ -68,7 +76,8 @@ $appLog = Join-Path $env:LOCALAPPDATA "Packages\$($package.PackageFamilyName)\Lo
 
 if (-not (Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue)) {
     Start-Process "shell:AppsFolder\$($package.PackageFamilyName)!App"
-    Start-Sleep -Seconds 12
+    $null = Wait-For { Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne [IntPtr]::Zero } } 45
+    Start-Sleep -Seconds 2
 }
 $app = Get-Process -Name WinZ3805A | Select-Object -First 1
 
@@ -92,7 +101,8 @@ Start-Sleep -Seconds 2
 [System.Windows.Forms.SendKeys]::SendWait('WinZ3805A')
 Start-Sleep -Seconds 4
 [System.Windows.Forms.SendKeys]::SendWait('{ENTER}')
-Start-Sleep -Seconds 8
+# The second copy hands over and exits; the first comes to the front.
+$null = Wait-For { (Get-ForegroundName) -eq 'WinZ3805A' -and @(Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue).Count -eq 1 } 20
 $after = Get-ForegroundName
 $copies = @(Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue).Count
 Result '25' 'a covered window comes to the front on a second launch' ($after -eq 'WinZ3805A') "foreground before: $before; after: $after"
@@ -108,20 +118,21 @@ $notepad | Stop-Process -Force -ErrorAction SilentlyContinue
 $displayName = (Get-AppxPackageManifest $package).Package.Properties.DisplayName
 $front = Get-ForegroundName
 [System.Windows.Forms.SendKeys]::SendWait('^d')
-Start-Sleep -Seconds 5
+$null = Wait-For { @([QaWindows]::Titles([uint32]$app.Id)) -contains "Receiver Details - $displayName" } 15
 $titles = @([QaWindows]::Titles([uint32]$app.Id))
 Result '11' 'Ctrl+D opens Details, captioned as Details' ($titles -contains "Receiver Details - $displayName") "Ctrl+D went to $front; app windows: $($titles -join ' / ')"
 
 [System.Windows.Forms.SendKeys]::SendWait('{F1}')
-Start-Sleep -Seconds 5
+$null = Wait-For { @([QaWindows]::Titles([uint32]$app.Id)) -contains "Help - $displayName" } 15
 $titles = @([QaWindows]::Titles([uint32]$app.Id))
 Result '11' 'F1 opens the guide, captioned as Help' ($titles -contains "Help - $displayName") "app windows: $($titles -join ' / ')"
 
 # --- §18: the tray icon survives an Explorer restart ----------------------------------------
 $lines = @(Get-Content $appLog).Count
 Get-Process -Name explorer -ErrorAction SilentlyContinue | Stop-Process -Force
-Start-Sleep -Seconds 15
-if (-not (Get-Process -Name explorer -ErrorAction SilentlyContinue)) { Start-Process explorer; Start-Sleep -Seconds 10 }
+# Windows restarts Explorer itself; if it has not within 15 s, start it, then wait for the app's line.
+if (-not (Wait-For { Get-Process -Name explorer -ErrorAction SilentlyContinue } 15)) { Start-Process explorer }
+$null = Wait-For { ((@(Get-Content $appLog) | Select-Object -Skip $lines) -join "`n") -match 'Explorer restarted; adding the tray icon again' } 30
 $new = (@(Get-Content $appLog) | Select-Object -Skip $lines) -join "`n"
 Result '18' 'the tray icon is added again after an Explorer restart' ($new -match 'Explorer restarted; adding the tray icon again') ''
 Result '18' 'the app survived the restart' ([bool](Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue)) ''

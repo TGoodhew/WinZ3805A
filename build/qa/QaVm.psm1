@@ -188,7 +188,8 @@ function Invoke-VmRun {
         [Parameter(Mandatory)]$Vm,
         [Parameter(Mandatory)][string]$Command,
         [string[]]$Arguments = @(),
-        [switch]$Guest
+        [switch]$Guest,
+        [int]$TimeoutSeconds = 0
     )
 
     $prefix = @('-T', 'ws')
@@ -209,11 +210,41 @@ function Invoke-VmRun {
         $secrets += $gp
     }
 
-    $output = & $script:VmRunPath @prefix $Command $Vm.Vmx @Arguments 2>&1 | Out-String
-    $code = $LASTEXITCODE
+    if ($TimeoutSeconds -le 0) {
+        $output = & $script:VmRunPath @prefix $Command $Vm.Vmx @Arguments 2>&1 | Out-String
+        $code = $LASTEXITCODE
+    }
+    else {
+        # With a deadline, vmrun runs as a child process that can be killed: a guest program that
+        # waits on something nobody answers otherwise holds the call for ever - one waited an hour
+        # on a Windows prompt (5 Oct 2026).
+        $info = New-Object System.Diagnostics.ProcessStartInfo $script:VmRunPath
+        $info.Arguments = (@($prefix) + $Command + $Vm.Vmx + @($Arguments) | ForEach-Object { ConvertTo-QaArgument $_ }) -join ' '
+        $info.UseShellExecute = $false; $info.RedirectStandardOutput = $true; $info.RedirectStandardError = $true; $info.CreateNoWindow = $true
+        $process = [System.Diagnostics.Process]::Start($info)
+        $stdout = $process.StandardOutput.ReadToEndAsync(); $stderr = $process.StandardError.ReadToEndAsync()
+        if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
+            try { $process.Kill() } catch { }
+            throw (New-Object System.TimeoutException "vmrun $Command passed its deadline of $TimeoutSeconds s")
+        }
+        $process.WaitForExit()
+        $output = $stdout.Result + $stderr.Result
+        $code = $process.ExitCode
+    }
     foreach ($s in $secrets) { if ($s) { $output = $output.Replace($s, '********') } }
     if ($code -ne 0) { throw "vmrun $Command failed ($code): $($output.Trim())" }
     $output.TrimEnd()
+}
+
+# One argument quoted for a Windows command line, by the rules the C runtime parses it with:
+# backslashes are literal unless they precede a quote, and an empty argument must be "" to survive.
+function ConvertTo-QaArgument {
+    param([string]$Value)
+    if ($Value -eq '""') { return '""' }
+    if ($Value -and $Value -notmatch '[\s"]') { return $Value }
+    $escaped = [regex]::Replace($Value, '(\\*)"', { param($m) ($m.Groups[1].Value * 2) + '\"' })
+    $escaped = [regex]::Replace($escaped, '(\\+)$', { param($m) $m.Groups[1].Value * 2 })
+    '"' + $escaped + '"'
 }
 
 # Waits until the guest is at a signed-in desktop: Explorer running, no sign-in screen, and VMware
@@ -440,16 +471,18 @@ function Invoke-QaGuest {
     param(
         [Parameter(Mandatory)]$Vm,
         [Parameter(Mandatory)][string]$Program,
-        [string[]]$Arguments = @()
+        [string[]]$Arguments = @(),
+        [int]$TimeoutSeconds = 0
     )
     # A guest whose Tools user session is still starting refuses with "must be logged in
     # interactively"; that is waited out briefly rather than failed.
     for ($attempt = 1; ; $attempt++) {
         try {
-            Invoke-VmRun $Vm runProgramInGuest -Arguments (@('-activeWindow', '-interactive', $Program) + $Arguments) -Guest | Out-Null
+            Invoke-VmRun $Vm runProgramInGuest -Arguments (@('-activeWindow', '-interactive', $Program) + $Arguments) -Guest -TimeoutSeconds $TimeoutSeconds | Out-Null
             return 0
         }
         catch {
+            if ($_.Exception -is [System.TimeoutException]) { throw }
             if ($_.Exception.Message -match 'exit code:\s*(-?\d+)') { return [int]$Matches[1] }
             if ($_.Exception.Message -match 'logged in interactively' -and $attempt -lt 10) { Start-Sleep -Seconds 5; continue }
             throw
@@ -466,7 +499,10 @@ function Invoke-QaGuestScript {
     param(
         [Parameter(Mandatory)]$Vm,
         [Parameter(Mandatory)][string]$Script,
-        [string]$Name = 'step'
+        [string]$Name = 'step',
+        # 15 minutes: longer than any step takes - Wait-QaQuiet's ten included - and short enough that
+        # a stalled one costs a quarter of an hour rather than the rest of the pass.
+        [int]$TimeoutSeconds = 900
     )
 
     $stamp = '{0}-{1:HHmmssfff}' -f $Name, (Get-Date)
@@ -484,7 +520,26 @@ function Invoke-QaGuestScript {
     Copy-QaFile $Vm -Source $local -Destination "C:\qa\$stamp.ps1" -ToGuest
     Remove-Item $local -Force
 
-    $code = Invoke-QaGuest $Vm 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe' @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "C:\qa\$stamp.ps1")
+    try {
+        $code = Invoke-QaGuest $Vm 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe' @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "C:\qa\$stamp.ps1") -TimeoutSeconds $TimeoutSeconds
+    }
+    catch [System.TimeoutException] {
+        # What the screen showed when the step stalled, from the host, which sees a prompt on the
+        # secure desktop too; then the stalled script itself, so the next step starts clean.
+        $shot = ''
+        if ($script:QaEvidenceFolder) {
+            $shot = Join-Path $script:QaEvidenceFolder "deadline-$Name.png"
+            try { Invoke-VmRun $Vm captureScreen -Arguments $shot -Guest -TimeoutSeconds 60 | Out-Null } catch { $shot = '' }
+        }
+        try {
+            $listing = Invoke-VmRun $Vm listProcessesInGuest -Guest -TimeoutSeconds 60
+            foreach ($line in ($listing -split "`n" | Where-Object { $_ -match [regex]::Escape("$stamp.ps1") })) {
+                if ($line -match 'pid=(\d+)') { try { Invoke-VmRun $Vm killProcessInGuest -Arguments $Matches[1] -Guest -TimeoutSeconds 60 | Out-Null } catch { } }
+            }
+        }
+        catch { }
+        throw "the guest step '$Name' passed its deadline of $TimeoutSeconds s$(if ($shot) { "; the screen is kept as $(Split-Path $shot -Leaf)" })"
+    }
 
     $output = ''
     $logLocal = Join-Path ([IO.Path]::GetTempPath()) "qa-$stamp.log"
@@ -497,4 +552,11 @@ function Invoke-QaGuestScript {
     [pscustomobject]@{ ExitCode = $code; Output = "$output".TrimEnd() }
 }
 
-Export-ModuleMember -Function Get-QaCredential, Set-QaCredential, New-QaIso, New-QaVm, Invoke-VmRun, Wait-QaDesktop, Wait-QaQuiet, Start-QaVm, Stop-QaVm, Save-QaCleanSnapshot, Get-QaSimulatorPipe, Add-QaSimulatorPort, Enable-Qa3dGraphics, Copy-QaFile, Invoke-QaGuest, Invoke-QaGuestScript, Wait-QaGuestReady
+# Where a guest step that passes its deadline leaves its screenshot: the running scenario's folder.
+function Set-QaEvidenceFolder {
+    [CmdletBinding()]
+    param([string]$Path)
+    $script:QaEvidenceFolder = $Path
+}
+
+Export-ModuleMember -Function Get-QaCredential, Set-QaCredential, New-QaIso, New-QaVm, Invoke-VmRun, Wait-QaDesktop, Wait-QaQuiet, Start-QaVm, Stop-QaVm, Save-QaCleanSnapshot, Get-QaSimulatorPipe, Add-QaSimulatorPort, Enable-Qa3dGraphics, Copy-QaFile, Invoke-QaGuest, Invoke-QaGuestScript, Wait-QaGuestReady, Set-QaEvidenceFolder

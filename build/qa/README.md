@@ -43,6 +43,7 @@ even when a check fails.
 | `Invoke-VmRun` | Any other `vmrun` command; guest operations with `-Guest` |
 | `Add-QaSimulatorPort` | Gives the VM a COM2 served on a named pipe for the Z3805A simulator, and re-takes *QA Clean* with it (#639) |
 | `Get-QaSimulatorPipe` | The pipe's name: `winz-qa-<VM name>` |
+| `Set-QaEvidenceFolder` | Where a guest step that passes its deadline leaves its screenshot |
 | `Enable-Qa3dGraphics` | Turns on the VM's 3D acceleration, so Windows 11 draws Mica, and re-takes *QA Clean* with it, keeping the old one as *QA Clean before 3D* |
 | `Save-QaCleanSnapshot` | Re-takes *QA Clean* from the running guest once `Wait-QaQuiet` says it has gone quiet, then powers off |
 
@@ -84,7 +85,51 @@ Every scenario reverts a VM to *QA Clean*, does what a person would do on a fres
 the outcome from the installer's exit code, its log and the guest's state, and powers the VM off
 afterwards. The report, `report.md`, goes into the release's QA-run issue; everything collected
 from the guests sits beside it. The exit code is 1 if any scenario failed or errored, and also if
-nothing ran.
+nothing ran. It is 3, **AWAITING JUDGEMENT**, when every check passed but photographs still need a
+verdict, and 0 only when nothing is left.
+
+**Judging the photographs.** Since 5 Oct 2026 the photographs are part of the verdict. Until then a
+pass reported PASS whether or not anyone had looked at them, and v1.3.5 was tagged from such a pass.
+- **What is compared.** Every photograph a scenario keeps (`QaJudging.psm1`) is compared with the same
+  photograph from the last accepted pass, kept in `%LOCALAPPDATA%\WinZ3805A QA\baselines`.
+- **Unchanged** means under 0.5 % of pixels differing. In two passes of the same v1.3.5 code, 162 of
+  244 photographs differed by less than that.
+- **The rest go to the judge.** A pixel count cannot tell a changed reading (2–5 % wherever the clock
+  or a reading is on screen) from a regression (#697's dot was a fraction of a percent). So each
+  photograph that differs, is a different size or has no baseline is written to the run's `judging\`
+  folder as **baseline | now | differences in red**, full size.
+- **Recording a verdict.**
+  `Complete-QaRun.ps1 -Run <folder> -Pass <wildcards> -Note 'what was looked at'` records one, or
+  `-Fail` does. A verdict without a note is refused, because "pass" alone says nothing about what
+  was checked.
+- **The baseline.** When every difference has a verdict and nothing failed, the run is PASS, and
+  `-Promote` makes it the baseline the next pass is compared with.
+- **The wallpaper.** Each scenario sets a fixed solid wallpaper first. Windows 11's daily Spotlight
+  picture made nine identical full-screen photographs differ by half their pixels.
+
+**Deadlines.** Every guest step has one: 15 minutes by default, set per call with `-TimeoutSeconds`.
+A step that passes it is stopped, its script killed in the guest, and the screen photographed from
+the host (`deadline-<step>.png` in the scenario's folder) before the scenario reports the error. One
+step once waited an hour on a Windows prompt nobody could answer.
+
+**One VM at a time.** The pass holds a host-wide lock (`Global\WinZ3805A-QA-one-vm-at-a-time`) while
+a VM is running. A second pass started meanwhile waits, and says so. Two VMs at once made
+`connect-cancel`, `receiver` and `upgrade-1.2.0` fail on a working app (4–5 Oct 2026); one at a time,
+all three passed.
+
+**Known nondeterminism**, so it is not mistaken for a defect:
+- **The simulator's first 30 seconds after a power cycle.** It refuses the GPS engine's identity and
+  the satellite count with −230, as the bench unit does. `accessibility` sets the elevation mask
+  whenever it gets there, so the mask's read-back can land in that window. The check accepts either
+  outcome, because what it tests is that the outcome is announced.
+- **Live readings and the clock.** These make most photographs differ from the baseline by 2–5 %;
+  the judge confirms that the red is only on them.
+- **The medallion's progress ring.** It animates, so its dots differ between photographs taken at
+  different moments.
+- **Fixed waits that remain.** Most are deliberate: the grace minute before a lock notification, a
+  receiver held off for 30 s, the absence of a retry over 70 s, a short settle after a window
+  opens. The ones that stood in for "the app has done X" now wait on X (`Wait-Until` in
+  `guest\Ui.ps1`).
 
 | Scenario | manual-qa.md section | What it requires |
 |---|---|---|

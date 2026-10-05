@@ -128,6 +128,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot 'QaVm.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'QaJudging.psm1') -Force
+$passStarted = Get-Date -Format 'yyyy-MM-dd HH:mm'
 
 # Called with powershell -File, a list such as -Scenarios a,b arrives as the one string 'a,b', which
 # names no scenario - the first run of this script ran nothing and reported success.
@@ -632,7 +634,8 @@ Start-Sleep -Seconds 10
 $connecting = [bool](Find-Control $window -Name 'Connecting' -Seconds 1)
 if ($how -eq 'esc') { Send-KeyTo $primary '{ESC}' }
 else { Invoke-Control (Find-Control $window -AutomationId 'CloseButton') }
-Start-Sleep -Seconds 8
+$null = Wait-Until { @(Get-AppLogLines | Select-Object -Skip $before) -match 'is now Disconnected' } -Seconds 15
+Start-Sleep -Seconds 2
 
 $lines = @(Get-AppLogLines | Select-Object -Skip $before)
 $pressed = $lines | Where-Object { $_ -match 'Cancel pressed while connecting' } | Select-Object -First 1
@@ -815,8 +818,7 @@ function Invoke-SignOutAndIn {
 # would. Launched from Start first: that opens the app, or brings back a window it started hidden.
 $setSignInStep = @'
 Start-Process "shell:AppsFolder\$((Get-AppxPackage -Name WinZ3805A).PackageFamilyName)!App"
-Start-Sleep -Seconds 5
-$main = Get-AppWindow
+$main = Get-AppWindow -Seconds 45
 if (-not $main) { [ordered]@{ error = "no main window ($(Get-WindowReport))" } | ConvertTo-Json -Compress; return }
 $details = Get-AppWindowNamed 'Receiver Details' -Seconds 2
 if (-not $details) { Invoke-Control (Find-Control $main -Name 'Details'); $details = Get-AppWindowNamed 'Receiver Details' }
@@ -891,7 +893,8 @@ Start-Process powershell.exe -Verb RunAs -Wait -ArgumentList '-NoProfile', '-Exe
         # Opened from Start afterwards: the window comes forward, and no second copy starts.
         $front = Invoke-UiStep $Vm 'open-from-start' '' @'
 Start-Process "shell:AppsFolder\$((Get-AppxPackage -Name WinZ3805A).PackageFamilyName)!App"
-Start-Sleep -Seconds 6
+Start-Sleep -Seconds 3
+$null = Wait-Until { $p = @(Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue); $p.Count -eq 1 -and $p[0].MainWindowHandle -ne [IntPtr]::Zero } -Seconds 20
 $processes = @(Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue)
 [ordered]@{ processes = $processes.Count; visible = [bool]($processes | Where-Object { $_.MainWindowHandle -ne [IntPtr]::Zero }) } | ConvertTo-Json -Compress
 '@
@@ -940,8 +943,7 @@ $processes = @(Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue)
         $seen = Wait-AppLog $Vm 'did not answer; trying again every 30 s' $mark 120 'retrying-again'
         $dialog = Invoke-UiStep $Vm 'dialog-stops-retry' '' @'
 Start-Process "shell:AppsFolder\$((Get-AppxPackage -Name WinZ3805A).PackageFamilyName)!App"
-Start-Sleep -Seconds 5
-$window = Get-AppWindow
+$window = Get-AppWindow -Seconds 45
 # By AutomationId: by name, 'Connect' is also the dialog's own button, which a closing dialog can
 # leave in the tree for a moment. Pressed once it is enabled, and again if UI Automation throws:
 # it threw on QA-Win10 with an empty message (5 Oct 2026).
@@ -1119,7 +1121,7 @@ elseif ($phase -eq 'exit') {
     Start-Sleep -Seconds 3
     $exit = Find-Control $d -AutomationId 'ExitButton'
     if ($exit) { Invoke-Control $exit }
-    Start-Sleep -Seconds 5
+    $null = Wait-Until { -not (Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue) } -Seconds 15
     $facts.running = @(Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue).Count
 }
 elseif ($phase -eq 'restarted') {
@@ -1454,8 +1456,7 @@ elseif ($phase -eq 'tierC') {
     if ($apply) { Invoke-Control $apply }
     $primary = Find-Control $d -AutomationId 'PrimaryButton' -Seconds 4
     if ($primary) { Invoke-Control $primary }
-    Start-Sleep -Seconds 12
-    $facts.outcome = "$((Find-Control $d -AutomationId 'MaskOutcome' -Seconds 2).Current.Name)"
+    $facts.outcome = "$(Wait-Until { $o = Find-Control $d -AutomationId 'MaskOutcome' -Seconds 1; if ($o -and "$($o.Current.Name)".Trim()) { "$($o.Current.Name)" } } -Seconds 30)"
 }
 $facts | ConvertTo-Json -Compress -Depth 4
 '@
@@ -1950,7 +1951,7 @@ else {
             'import' { Invoke-Control $primary }
             'enter'  { [System.Windows.Forms.SendKeys]::SendWait('{ENTER}') }
         }
-        Start-Sleep -Seconds 5
+        $null = Wait-Until { -not (Find-Control $d -AutomationId 'PrimaryButton' -Seconds 0) } -Seconds 15
         $facts.dialogClosed = -not (Find-Control $d -AutomationId 'PrimaryButton' -Seconds 1)
     }
     else {
@@ -3860,7 +3861,8 @@ $before = @(Get-ChildItem (Join-Path $env:LOCALAPPDATA 'WinZ3805A Installer\logs
 # started directly, the step waited on its own prompt for an hour (QA-Win11, 5 Oct 2026). Not hidden:
 # Windows does not show a warning owned by a hidden window, and the helper waited on one nobody could see.
 Start-Process powershell.exe -ArgumentList '-NoProfile', '-Command', "Start-Process -FilePath 'C:\qa\candidate\Install.cmd' -ArgumentList '-Unattended'"
-Start-Sleep -Seconds 12
+$null = Wait-Until { ($script:Ae::RootElement.FindAll([System.Windows.Automation.TreeScope]::Children, [System.Windows.Automation.Condition]::TrueCondition) | Where-Object { $_.Current.Name -match 'Security Warning|protected your PC' }) -or (@(Get-ChildItem (Join-Path $env:LOCALAPPDATA 'WinZ3805A Installer\logs') -Filter 'install-*.log' -ErrorAction SilentlyContinue).Count -gt $before) } -Seconds 30
+Start-Sleep -Seconds 2
 $titles = @($script:Ae::RootElement.FindAll([System.Windows.Automation.TreeScope]::Children, [System.Windows.Automation.Condition]::TrueCondition) | ForEach-Object { "$($_.Current.Name)" } | Where-Object { $_ })
 $facts.windows = $titles -join ' | '
 $prompt = $script:Ae::RootElement.FindAll([System.Windows.Automation.TreeScope]::Children, [System.Windows.Automation.Condition]::TrueCondition) | Where-Object { $_.Current.Name -match 'Security Warning|protected your PC' } | Select-Object -First 1
@@ -4084,17 +4086,41 @@ if ($Scenarios -contains 'binary-audit') {
 # ---------------------------------------------------------------------------
 # The VM scenarios. Every VM is powered off when its scenarios end, however they end.
 # ---------------------------------------------------------------------------
+$fixedWallpaper = @'
+Add-Type -AssemblyName System.Drawing
+Add-Type -TypeDefinition 'using System.Runtime.InteropServices; public static class QaWallpaper { [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "SystemParametersInfoW")] public static extern bool Set(int a, int p, string v, int w); }'
+New-Item -ItemType Directory -Force 'C:\qa' | Out-Null
+$bmp = New-Object System.Drawing.Bitmap 16, 16; $g = [System.Drawing.Graphics]::FromImage($bmp); $g.Clear([System.Drawing.Color]::FromArgb(0x3A, 0x6E, 0xA5)); $g.Dispose()
+$bmp.Save('C:\qa\wallpaper.bmp', [System.Drawing.Imaging.ImageFormat]::Bmp); $bmp.Dispose()
+[void][QaWallpaper]::Set(0x14, 0, 'C:\qa\wallpaper.bmp', 3)
+'@
+
+# One running VM on this host at a time, whichever pass started it. Two at once made three
+# timing-sensitive scenarios fail on a working app (4-5 Oct 2026), and nothing but memory kept them
+# apart. A pass killed while holding it leaves it abandoned, which the next one takes over.
+$hostLock = New-Object System.Threading.Mutex($false, 'Global\WinZ3805A-QA-one-vm-at-a-time')
 foreach ($machine in $Machines) {
     $vm = Get-Vm $machine
+    $held = $false
     try {
+        try { $held = $hostLock.WaitOne(0) } catch [System.Threading.AbandonedMutexException] { $held = $true }
+        if (-not $held) {
+            Say "another pass has a VM running on this host; waiting for it before starting $machine"
+            try { $held = $hostLock.WaitOne() } catch [System.Threading.AbandonedMutexException] { $held = $true }
+        }
         foreach ($name in $scenarioTable.Keys) {
             if ($Scenarios -notcontains $name) { continue }
             $result = New-Result $name $machine
             $result.Folder = Join-Path $OutDir "$machine-$name"
             New-Item -ItemType Directory -Force $result.Folder | Out-Null
+            Set-QaEvidenceFolder $result.Folder
             Say "$name on $machine"
             try {
                 Start-QaVm -Vm $vm
+                # A fixed wallpaper, so a full-screen photograph compares with the baseline's:
+                # Windows 11's Spotlight picture changes daily and made nine identical screens
+                # differ by half their pixels (5 Oct 2026).
+                $null = Invoke-QaGuestScript $vm -Name 'fixed-wallpaper' -Script $fixedWallpaper -TimeoutSeconds 120
                 & $scenarioTable[$name] $vm $result
             }
             catch {
@@ -4107,48 +4133,22 @@ foreach ($machine in $Machines) {
     finally {
         Stop-QaVm -Vm $vm
         Say "$machine powered off"
+        if ($held) { $hostLock.ReleaseMutex() }
     }
 }
 
 # ---------------------------------------------------------------------------
-# The report.
+# The report. The photographs are compared with the last accepted pass's, and the pass is not PASS
+# until every one that differs has a verdict (build\qa\QaJudging.psm1, Complete-QaRun.ps1).
 # ---------------------------------------------------------------------------
-function Get-Verdict {
-    param($Result)
-    if ($Result.Error -like 'skipped:*') { 'skipped' }
-    elseif ($Result.Error) { 'ERROR' }
-    elseif (@($Result.Checks | Where-Object { -not $_.Ok }).Count) { 'FAIL' }
-    else { 'PASS' }
-}
-
-$lines = New-Object System.Collections.Generic.List[string]
-$lines.Add("## Automated QA: $(Split-Path $Online -Leaf)")
-$lines.Add('')
-$lines.Add("Run $(Get-Date -Format 'yyyy-MM-dd HH:mm') by ``build/qa/Invoke-QaPass.ps1`` on $($Machines -join ' and '). Evidence: ``$OutDir``.")
-$lines.Add('')
-$lines.Add('| Scenario | Machine | Result | Detail |')
-$lines.Add('|---|---|---|---|')
-foreach ($r in $results) {
-    $verdict = Get-Verdict $r
-    $detail = if ($r.Error) { $r.Error } else { (($r.Checks | Where-Object { -not $_.Ok } | ForEach-Object { "$($_.Name)$(if ($_.Detail) { " ($($_.Detail))" })" }) -join '; ') }
-    $lines.Add("| $($r.Scenario) | $($r.Machine) | **$verdict** | $($detail -replace '\|', '/') |")
-}
-$lines.Add('')
-foreach ($r in $results) {
-    $lines.Add("<details><summary>$($r.Scenario) on $($r.Machine): $(Get-Verdict $r)</summary>")
-    $lines.Add('')
-    foreach ($c in $r.Checks) { $lines.Add("- $(if ($c.Ok) { 'PASS' } else { '**FAIL**' }) $($c.Name)$(if ($c.Detail) { " - $($c.Detail)" })") }
-    if ($r.Error) { $lines.Add("- $($r.Error)") }
-    $lines.Add('')
-    $lines.Add('</details>')
-}
-$report = Join-Path $OutDir 'report.md'
-$lines | Set-Content -Path $report -Encoding UTF8
 $results | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $OutDir 'results.json') -Encoding UTF8
-
-$failed = @($results | Where-Object { (Get-Verdict $_) -in 'FAIL', 'ERROR' }).Count
-Say "report: $report"
-Say "$($results.Count) scenario run(s), $failed failed"
+[ordered]@{ candidate = (Split-Path $Online -Leaf); release = $Release; machines = $Machines; started = $passStarted; finished = (Get-Date -Format 'yyyy-MM-dd HH:mm') } |
+    ConvertTo-Json | Set-Content (Join-Path $OutDir 'run.json') -Encoding UTF8
+$photographs = @(Compare-QaPhotographs -RunDir $OutDir)
+$summary = Write-QaReport $OutDir
+Say "report: $($summary.Report)"
+Say "$($results.Count) scenario run(s), $($summary.Failed) failed; $($photographs.Count) photograph(s), $(@($photographs | Where-Object { $_.status -ne 'unchanged' }).Count) to judge"
+Say "verdict: $($summary.Verdict)"
 # A run that ran nothing proves nothing, and must not read as a pass.
 if ($results.Count -eq 0) { Say 'nothing ran'; exit 1 }
-if ($failed) { exit 1 }
+exit $(switch ($summary.Verdict) { 'PASS' { 0 } 'AWAITING JUDGEMENT' { 3 } default { 1 } })
