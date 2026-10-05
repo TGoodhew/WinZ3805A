@@ -1080,7 +1080,7 @@ front is only knowable on screen.
 
 **First the automated pass**, on the release's dry-run build, before the tag:
 `build/qa/Invoke-QaPass.ps1 -Online <zip> -Offline <zip>`, with its report posted to the QA-run
-issue. It must have no FAIL and no ERROR before the tag. Then run it again on the published zips
+issue. It must have no FAIL and no ERROR before the tag, and since 5 Oct 2026 no photograph awaiting a verdict: every photograph that differs from the last accepted pass is judged from its triptych and the verdict recorded with `build/qa/Complete-QaRun.ps1` (see `build/qa/README.md`). Then run it again on the published zips
 (`-Release <tag>`). Of the sections below, it covers 8, 11, 18, 25 and most of 12.
 
 Then, by hand: sections 1–4, 9 and 13 in full, then **the rest of 12 on the published artifact** — which means the release
