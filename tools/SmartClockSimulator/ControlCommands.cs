@@ -29,6 +29,7 @@ public static class ControlCommands
         speed <factor>            run the timeline faster (the reported clock stays real)
         serial <number>           a different unit on the cable: *IDN? answers this serial
         status                    one line describing the receiver and the link
+        screen <path>             write the status screen :SYST:STAT? would print now to a file
         """;
 
     /// <summary>Applies one control line and returns what to tell whoever sent it.</summary>
@@ -148,6 +149,14 @@ public static class ControlCommands
                     fields[2] = serial;
                     receiver.Identity = string.Join(',', fields);
                     return "ok: *IDN? now answers " + receiver.Identity;
+
+                // The screen :SYST:STAT? would print now, to a file on the host: the QA pass compares
+                // every field on it with what the Details window shows (manual-qa.md section 9). A
+                // file rather than the reply, because the reply is one line and a screen is twenty.
+                case ["screen", _]:
+                    string path = line.Trim().Split(' ', 2, StringSplitOptions.RemoveEmptyEntries)[1];
+                    File.WriteAllText(path, StatusScreenWriter.Write(receiver.Snapshot()));
+                    return "ok: screen written to " + path;
 
                 case ["status"]:
                     return $"{receiver}; faults: {link.Faults}; errors queued: {engine.QueuedErrors.Count}";
