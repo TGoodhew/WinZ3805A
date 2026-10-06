@@ -96,10 +96,12 @@ function Invoke-Pass {
     $LASTEXITCODE
 }
 
+# Through Windows PowerShell, as the pass itself runs: QaJudging.psm1 compiles against System.Drawing's
+# Bitmap, which PowerShell 7 does not have, so importing it here fails before any verdict is read.
 function Get-PassVerdict {
     param([string]$OutDir)
-    Import-Module (Join-Path $repo 'build\qa\QaJudging.psm1') -Force
-    (Write-QaReport $OutDir).Verdict
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repo 'build\qa\Complete-QaRun.ps1') -Run $OutDir *>> $logPath
+    switch ($LASTEXITCODE) { 0 { 'PASS' } 3 { 'AWAITING JUDGEMENT' } default { "FAIL (exit $LASTEXITCODE)" } }
 }
 
 function Get-SoakRate {
