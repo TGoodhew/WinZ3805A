@@ -593,7 +593,7 @@ public sealed partial class MainPage : Page
             cap,
             cap <= DialogHeight.Stock ? " (the stock cap — the window is too short to raise it)" : string.Empty);
 
-        await dialog.ShowAsync();
+        await dialog.KeepBelowTitleBar().ShowAsync();
     }
 
     /// <summary>
@@ -651,7 +651,7 @@ public sealed partial class MainPage : Page
                 DefaultButton = ContentDialogButton.Close,
             };
 
-            await dialog.ShowAsync();
+            await dialog.KeepBelowTitleBar().ShowAsync();
         }
         catch (Exception exception)
         {

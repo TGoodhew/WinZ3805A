@@ -20,6 +20,7 @@ using WinZ3805A.Device.Drivers.Uccm;
 using WinZ3805A.Device.Transport;
 using WinZ3805A.Services;
 using WinZ3805A.Views;
+using WinZ3805A.Controls;
 
 namespace WinZ3805A;
 
@@ -839,7 +840,7 @@ public partial class App : Application
             DefaultButton = ContentDialogButton.Primary,
         };
 
-        return await dialog.ShowAsync() == ContentDialogResult.None;
+        return await dialog.KeepBelowTitleBar().ShowAsync() == ContentDialogResult.None;
     }
 
     /// <summary>Exits for real, from the tray menu or the first-run notice (#280).</summary>

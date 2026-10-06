@@ -310,7 +310,7 @@ public sealed partial class SettingsPage : Page
                 DefaultButton = match == ReceiverMatch.Different ? ContentDialogButton.Close : ContentDialogButton.Primary,
             };
 
-            if (await confirm.ShowAsync() != ContentDialogResult.Primary)
+            if (await confirm.KeepBelowTitleBar().ShowAsync() != ContentDialogResult.Primary)
             {
                 return;
             }
@@ -399,7 +399,7 @@ public sealed partial class SettingsPage : Page
             Title = title,
             Content = message,
             CloseButtonText = "Close",
-        }.ShowAsync();
+        }.KeepBelowTitleBar().ShowAsync();
     }
 
     private static ILogger? HistoryLog() =>

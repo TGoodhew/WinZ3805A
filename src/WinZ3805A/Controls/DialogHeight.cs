@@ -49,4 +49,47 @@ public static class DialogHeight
 
         return room > Stock ? room : Stock;
     }
+
+    /// <summary>The title bar both windows draw over the top of their content, in effective pixels.</summary>
+    public const double TitleBar = 48;
+
+    /// <summary>WinUI's stock <c>ContentDialogMaxWidth</c>, in effective pixels.</summary>
+    public const double StockWidth = 548;
+
+    /// <summary>
+    /// How far in from the right edge the caption buttons reach: three of 46 at 100 % scaling.
+    /// </summary>
+    public const double CaptionButtons = 138;
+
+    /// <summary>
+    /// The tallest a dialog may be in a window <paramref name="availableWidth"/> by
+    /// <paramref name="availableHeight"/>, keeping it out from under the caption buttons (#725).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A <c>ContentDialog</c> is centred in its window's <c>XamlRoot</c>, which with a custom title
+    /// bar includes the title strip. In a window as short as its cap the dialog reaches the very top,
+    /// and in one narrow enough that a centred dialog reaches across to the caption buttons, they are
+    /// drawn over its corner - the Manage satellites dialog in a 640 × 480 Details window, 5 Oct 2026.
+    /// There the cap is lowered so that, centred, the dialog starts below the title bar.
+    /// </para>
+    /// <para>
+    /// <b>Only where the dialog can reach the buttons.</b> In a wider window it never comes near them,
+    /// and lowering the cap there would undo #506 for nothing. The dialog's content scrolls, so a
+    /// lower cap costs a scroll, never a control.
+    /// </para>
+    /// </remarks>
+    /// <param name="availableHeight">As for <see cref="MaxFor(double, double)"/>.</param>
+    /// <param name="availableWidth">The <c>XamlRoot</c>'s width; zero or negative when not known.</param>
+    public static double MaxForWindow(double availableHeight, double availableWidth)
+    {
+        double cap = MaxFor(availableHeight);
+        if (availableHeight <= 0 || availableWidth <= 0)
+        {
+            return cap;
+        }
+
+        bool reachesTheButtons = (availableWidth - StockWidth) / 2 < CaptionButtons;
+        return reachesTheButtons ? Math.Min(cap, availableHeight - (2 * TitleBar)) : cap;
+    }
 }

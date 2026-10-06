@@ -5,6 +5,7 @@ using WinZ3805A.Device.Commands;
 using WinZ3805A.Device.Drivers;
 using WinZ3805A.Services;
 using WinZ3805A.ViewModels;
+using WinZ3805A.Controls;
 
 namespace WinZ3805A.Views;
 
@@ -57,7 +58,7 @@ public static class CommandConfirmation
 
         CommandConfirmationDialog dialog = new(model) { XamlRoot = root };
 
-        if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+        if (await dialog.KeepBelowTitleBar().ShowAsync() != ContentDialogResult.Primary)
         {
             return null;
         }

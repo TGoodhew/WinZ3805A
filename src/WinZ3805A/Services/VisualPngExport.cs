@@ -184,7 +184,7 @@ internal static class VisualPngExport
                 Title = "Couldn't save the image",
                 Content = $"{file.Name} could not be written. {exception.Message}",
                 CloseButtonText = "Close",
-            }.ShowAsync();
+            }.KeepBelowTitleBar().ShowAsync();
         }
     }
 }
