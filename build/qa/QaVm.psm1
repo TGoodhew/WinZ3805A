@@ -314,18 +314,29 @@ function Start-QaVm {
     $running = & $script:VmRunPath -T ws list
     if (-not ($running -match [regex]::Escape($Vm.Vmx))) { Invoke-VmRun $Vm start -Arguments 'nogui' | Out-Null }
     Wait-QaDesktop -Vm $Vm
-    # Edge's first-run welcome, full screen and in front of everything. Edge updated itself in
-    # QA-Win10 after a revert and opened it in the middle of app-checks (5 Oct 2026): the foreground
-    # and keyboard checks then measured Edge. The policy stops it whenever Edge next starts; one
-    # already open is closed. Elevated, which the QA VMs grant without a prompt. Best effort: a
-    # scenario that then meets Edge fails legibly, which is better than one that never starts.
+    # What the guest's own software puts in front of a check, quietened after every revert
+    # (5 Oct 2026, #704's baseline pass):
+    # - Windows Search's web results. app-checks launches the app from Start by typing its name, and
+    #   on QA-Win10 Enter went in before the search host had started, so Windows searched the web and
+    #   Edge opened over everything - twice; the first time with its first-run welcome. With web
+    #   results off a stray Enter finds nothing, and Edge's welcome is suppressed besides. The search
+    #   host is closed so it starts again with the setting.
+    # - OneDrive's "Turn On Windows Backup" pop-up, which covered ten of text-scaling's photographs.
+    # Elevated for the policies, which the QA VMs grant without a prompt. Best effort: a scenario
+    # that then meets one of these fails legibly, which is better than one that never starts.
     try {
-        $null = Invoke-QaGuestScript -Vm $Vm -Name 'quiet-edge' -TimeoutSeconds 120 -Script @'
-Start-Process powershell.exe -Verb RunAs -Wait -WindowStyle Hidden -ArgumentList '-NoProfile', '-Command', "New-Item -Force 'HKLM:\SOFTWARE\Policies\Microsoft\Edge' | Out-Null; Set-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft\Edge' -Name HideFirstRunExperience -Value 1 -Type DWord"
-Get-Process -Name msedge -ErrorAction SilentlyContinue | Stop-Process -Force
+        $null = Invoke-QaGuestScript -Vm $Vm -Name 'quiet-guest' -TimeoutSeconds 120 -Script @'
+# A key is created only when missing: New-Item -Force on an existing registry key empties it.
+$policies = "foreach (`$k in 'HKLM:\SOFTWARE\Policies\Microsoft\Edge', 'HKCU:\Software\Policies\Microsoft\Windows\Explorer') { if (-not (Test-Path `$k)) { New-Item -Path `$k -Force | Out-Null } }; Set-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft\Edge' -Name HideFirstRunExperience -Value 1 -Type DWord; Set-ItemProperty 'HKCU:\Software\Policies\Microsoft\Windows\Explorer' -Name DisableSearchBoxSuggestions -Value 1 -Type DWord"
+Start-Process powershell.exe -Verb RunAs -Wait -WindowStyle Hidden -ArgumentList '-NoProfile', '-Command', $policies
+$search = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Search'
+if (-not (Test-Path $search)) { New-Item -Path $search -Force | Out-Null }
+Set-ItemProperty $search -Name BingSearchEnabled -Value 0 -Type DWord
+Set-ItemProperty $search -Name CortanaConsent -Value 0 -Type DWord
+Get-Process -Name msedge, OneDrive, SearchApp, SearchHost -ErrorAction SilentlyContinue | Stop-Process -Force
 '@
     }
-    catch { Write-Warning "Could not quiet Edge in $(Split-Path $Vm.Vmx -Leaf): $($_.Exception.Message)" }
+    catch { Write-Warning "Could not quiet the guest in $(Split-Path $Vm.Vmx -Leaf): $($_.Exception.Message)" }
 }
 
 # Powers the VM off. Hard, because whatever a check left behind is discarded by the next revert
