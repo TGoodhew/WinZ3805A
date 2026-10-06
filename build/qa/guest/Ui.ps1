@@ -34,6 +34,22 @@ public static class QaWin32
     [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int command);
     [DllImport("user32.dll")] public static extern uint GetDpiForWindow(IntPtr hWnd);
 
+    [DllImport("user32.dll")] static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
+    [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+
+    // To the front, and says whether it got there. Windows refuses SetForegroundWindow to a process
+    // that is not in the foreground unless the last input was its own, so an Alt tap goes first: on
+    // QA-Win11 the blocked-zip warning sat behind the helper's terminal and the bare call did nothing,
+    // so Alt+R and the click both went to the terminal (5 Oct 2026).
+    public static bool BringToFront(IntPtr hWnd)
+    {
+        keybd_event(0x12, 0, 0, UIntPtr.Zero);
+        keybd_event(0x12, 0, 2, UIntPtr.Zero);
+        ShowWindow(hWnd, 9);
+        SetForegroundWindow(hWnd);
+        return GetForegroundWindow() == hWnd;
+    }
+
     public static bool IsTopmost(IntPtr hWnd) { return (GetWindowLong(hWnd, -20) & 0x8) != 0; }
     public static RECT Rect(IntPtr hWnd) { RECT r; GetWindowRect(hWnd, out r); return r; }
     public static IntPtr TopAt(int x, int y) { POINT p; p.X = x; p.Y = y; return GetAncestor(WindowFromPoint(p), 2); }

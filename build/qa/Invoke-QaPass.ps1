@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Runs the automated half of the release QA pass against a build's zips (#633).
 
@@ -4702,16 +4702,25 @@ if ($prompt) {
     # a click where Run is drawn. What UI Automation does see is recorded for the next person.
     $facts.seen = (@($prompt.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition) | ForEach-Object { "$($_.Current.ControlType.ProgrammaticName -replace 'ControlType\.', ''):$($_.Current.Name)" } | Select-Object -First 25) -join ', ')
     $stillThere = { [bool]($script:Ae::RootElement.FindAll([System.Windows.Automation.TreeScope]::Children, [System.Windows.Automation.Condition]::TrueCondition) | Where-Object { $_.Current.Name -match 'Security Warning|protected your PC' }) }
+    # The warning can open BEHIND the helper's terminal, which then takes both the keys and the click
+    # (QA-Win11, 5 Oct 2026), so it is brought to the front first and whether it got there recorded.
+    $handle = [IntPtr]$prompt.Current.NativeWindowHandle
     if (-not $facts.ran -and (& $stillThere)) {
-        [void][QaWin32]::SetForegroundWindow([IntPtr]$prompt.Current.NativeWindowHandle); Start-Sleep -Milliseconds 500
+        $facts.front = [QaWin32]::BringToFront($handle); Start-Sleep -Milliseconds 500
         [System.Windows.Forms.SendKeys]::SendWait('%r'); Start-Sleep -Seconds 2
         if (-not (& $stillThere)) { $facts.ran = $true; $facts.how = 'Alt+R' }
     }
     if (-not $facts.ran -and (& $stillThere)) {
+        [void][QaWin32]::BringToFront($handle); Start-Sleep -Milliseconds 500
         $b = $prompt.Current.BoundingRectangle
-        [QaWin32]::MoveTo([int]($b.Left + $b.Width * 0.64), [int]($b.Top + $b.Height * 0.60)); Start-Sleep -Milliseconds 300
-        [QaWin32]::LeftDown(); [QaWin32]::LeftUp(); Start-Sleep -Seconds 2
-        if (-not (& $stillThere)) { $facts.ran = $true; $facts.how = 'click' }
+        $x = [int]($b.Left + $b.Width * 0.64); $y = [int]($b.Top + $b.Height * 0.60)
+        # Only where the warning itself is: a click on whatever covers it proves nothing and may do harm.
+        $facts.clickOnPrompt = ([QaWin32]::TopAt($x, $y) -eq $handle)
+        if ($facts.clickOnPrompt) {
+            [QaWin32]::MoveTo($x, $y); Start-Sleep -Milliseconds 300
+            [QaWin32]::LeftDown(); [QaWin32]::LeftUp(); Start-Sleep -Seconds 2
+            if (-not (& $stillThere)) { $facts.ran = $true; $facts.how = 'click' }
+        }
     }
 }
 # The installer's log for this run, until it finishes.
@@ -4736,7 +4745,7 @@ function Test-BlockedZip {
     try { Invoke-VmRun $Vm captureScreen -Arguments (Join-Path $Result.Folder 'after-double-click.png') -Guest | Out-Null } catch { }
     try { Copy-QaFile $Vm -Source 'C:\qa\blocked-prompt.png' -Destination (Join-Path $Result.Folder 'blocked-prompt.png') } catch { }
     try { $null = Save-Evidence $Vm $Result.Folder } catch { Say "  evidence not collected: $($_.Exception.Message)" }
-    $saw = "$(if ($d.error) { "step failed: $($d.error); " })prompt '$($d.prompt)', Run pressed $($d.ran) by $($d.how); windows: $($d.windows); the prompt holds: $($d.seen)"
+    $saw = "$(if ($d.error) { "step failed: $($d.error); " })prompt '$($d.prompt)', Run pressed $($d.ran) by $($d.how) (brought to the front: $($d.front); click on the prompt: $($d.clickOnPrompt)); windows: $($d.windows); the prompt holds: $($d.seen)"
     # Windows 11 shows its attachment warning, naming the file and an unknown publisher; Windows 10
     # showed none (5 Oct 2026). Either is legible; what must not happen is the installer failing.
     Check $Result "[12] a blocked zip: Windows' own warning, if any, names Install.cmd, and Run goes on" (-not $d.error -and (-not $d.prompt -or ($d.prompt -match 'Security Warning|protected your PC' -and $d.ran))) $saw
