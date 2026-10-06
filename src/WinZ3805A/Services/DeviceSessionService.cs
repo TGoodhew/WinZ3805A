@@ -726,6 +726,19 @@ public sealed class DeviceSessionService : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(command);
         ObjectDisposedException.ThrowIf(_disposed, this);
 
+        // Outside an exclusive section, wait for any section in progress to end (#729). Inside one,
+        // this is the section's own transaction and goes straight on.
+        if (!_insideExclusive.Value)
+        {
+            Task open;
+            lock (_exclusiveGate)
+            {
+                open = _exclusiveEnded.Task;
+            }
+
+            await open.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+
         PendingCommand pending = new(command, argument, origin, cancellationToken);
         if (!_queue.Writer.TryWrite(pending))
         {
@@ -733,6 +746,92 @@ public sealed class DeviceSessionService : IAsyncDisposable
         }
 
         return await pending.Completion.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Runs <paramref name="sequence"/> with nobody else's transactions between its own (#729).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For a judgement that spans transactions.</b> A tier C command is judged by the error queue
+    /// read after it, with the queue drained before it (§7.2, #173), and each of those is a
+    /// transaction of its own. Between them the poll loop went on asking, and pages asked their own
+    /// questions; one the receiver refused — the time of day through power-up, a position before
+    /// it has one — put its -230 in the queue in time to be read as the command's. Seen by the QA
+    /// pass's survey-operations: a survey cancelled after a power-up was reported as failed while
+    /// it had worked.
+    /// </para>
+    /// <para>
+    /// Every transaction <paramref name="sequence"/> awaits passes straight through; every other
+    /// caller's waits at <see cref="ExecuteAsync"/> until it ends, before it is queued. Those
+    /// queued before it began are served first, as they always were, which is harmless: they come
+    /// before the drain. The holder is recognised by an <see cref="AsyncLocal{T}"/> set for the
+    /// sequence's own flow, so nothing has to be passed down to the calls it makes.
+    /// </para>
+    /// <para>
+    /// One section at a time: a second waits for the first. Not re-entrant — a section that starts
+    /// another inside itself is already exclusive, and the inner call simply runs.
+    /// </para>
+    /// </remarks>
+    /// <param name="sequence">The transactions to run together. Should be short: the poll waits on it.</param>
+    /// <param name="cancellationToken">Cancels the wait for another section to end.</param>
+    public async Task<T> RunExclusiveAsync<T>(Func<Task<T>> sequence, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(sequence);
+
+        if (_insideExclusive.Value)
+        {
+            return await sequence().ConfigureAwait(false);
+        }
+
+        await _exclusive.WaitAsync(cancellationToken).ConfigureAwait(false);
+        lock (_exclusiveGate)
+        {
+            _exclusiveEnded = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        }
+
+        try
+        {
+            return await RunMarkedAsync(sequence).ConfigureAwait(false);
+        }
+        finally
+        {
+            lock (_exclusiveGate)
+            {
+                _exclusiveEnded.TrySetResult();
+            }
+
+            _exclusive.Release();
+        }
+    }
+
+    /// <summary>
+    /// Marks the flow as the section's, in an async method of its own so the mark is undone for the
+    /// caller when it returns — an async method restores its caller's execution context.
+    /// </summary>
+    private async Task<T> RunMarkedAsync<T>(Func<Task<T>> sequence)
+    {
+        _insideExclusive.Value = true;
+        return await sequence().ConfigureAwait(false);
+    }
+
+    /// <summary>One <see cref="RunExclusiveAsync"/> at a time.</summary>
+    private readonly SemaphoreSlim _exclusive = new(1, 1);
+
+    /// <summary>Guards <see cref="_exclusiveEnded"/>, which is replaced when a section begins.</summary>
+    private readonly Lock _exclusiveGate = new();
+
+    /// <summary>Completes when the section in progress ends; already complete when there is none.</summary>
+    private TaskCompletionSource _exclusiveEnded = Ended();
+
+    /// <summary>Whether this flow is inside a section — its transactions pass the gate.</summary>
+    private readonly AsyncLocal<bool> _insideExclusive = new();
+
+    private static TaskCompletionSource Ended()
+    {
+        TaskCompletionSource ended = new();
+        ended.SetResult();
+        return ended;
     }
 
     /// <inheritdoc />

@@ -82,6 +82,23 @@ public sealed class CommandInvoker
             return Failure(command, "The receiver is not connected.");
         }
 
+        // The drain, the command and the read that judges it run with nothing else between them
+        // (#729). Draining made the queue empty before the command, but the poll and the pages
+        // went on asking between the three, and one refused question queued a -230 in time to be
+        // read as this command's: a survey cancelled after a power-up was reported as failed while
+        // it had worked.
+        return await _session
+            .RunExclusiveAsync(() => SendAndJudgeAsync(command, argument, displayValue, cancellationToken), cancellationToken)
+            .ConfigureAwait(true);
+    }
+
+    /// <summary>The drain, the command and the error read, run inside the session's exclusive section.</summary>
+    private async Task<CommandOutcome> SendAndJudgeAsync(
+        ScpiCommand command,
+        string? argument,
+        string? displayValue,
+        CancellationToken cancellationToken)
+    {
         // §7.2's check reads the error queue after the command and reports what it finds, which
         // assumes the queue holds this command's error. It does not always: the receiver queues an
         // error for anything it refuses, including a poll, so a queue left dirty by the sweep would
