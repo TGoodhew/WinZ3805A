@@ -238,7 +238,7 @@ public class ReceiverDriverTests
         }
 
         Assert.NotEmpty(driver.Plan.FastTier);
-        Assert.Null(driver.Plan.RefusableIndex);
+        Assert.Empty(driver.Plan.RefusableIndices);
         Assert.NotNull(driver.Find(driver.Plan.FullStatus));
     }
 
@@ -347,21 +347,36 @@ public class ReceiverDriverTests
     }
 
     /// <summary>
-    /// The refusable index, when there is one, points inside the sweep and never at the
-    /// discriminator.
+    /// Every refusable index points inside the sweep, never at the discriminator, and none is
+    /// listed twice.
     /// </summary>
     /// <remarks>
     /// The first entry is read unconditionally — its answer is what the suppression keys on — so a
-    /// refusable index of zero would suppress the one query the mechanism cannot work without.
+    /// refusable index of zero would suppress the one query the mechanism cannot work without. A
+    /// derived index whose query is missing from the plan comes back as -1, which this catches too.
     /// </remarks>
     [Theory]
     [MemberData(nameof(AllDrivers))]
-    public void TheRefusableIndexPointsInsideTheSweep(IReceiverDriver driver)
+    public void TheRefusableIndicesPointInsideTheSweep(IReceiverDriver driver)
     {
-        if (driver.Plan.RefusableIndex is int index)
+        foreach (int index in driver.Plan.RefusableIndices)
         {
             Assert.InRange(index, 1, driver.Plan.FastTier.Count - 1);
         }
+
+        Assert.Equal(driver.Plan.RefusableIndices.Count, driver.Plan.RefusableIndices.Distinct().Count());
+    }
+
+    /// <summary>
+    /// The SmartClock's refusable queries are the two the bench unit refuses for a whole state (#729).
+    /// </summary>
+    [Fact]
+    public void TheSmartClockSuppressesTheTimeIntervalAndTheTimeOfDayButNotTheSatelliteCount()
+    {
+        PollPlan plan = new SmartClockDriver(new FakeTimeProvider(Now)).Plan;
+        string[] refusable = [.. plan.RefusableIndices.Select(i => plan.FastTier[i])];
+
+        Assert.Equal([":SYNC:TINT?", ":PTIM:TIME?"], refusable);
     }
 
     /// <summary>

@@ -95,7 +95,7 @@ public sealed class AbsentReadoutTests
     [Fact]
     public void ADriverThatDeclaresNothingClaimsEverything()
     {
-        PollPlan silent = new(["*"], RefusableIndex: null, FullStatus: "*")
+        PollPlan silent = new(["*"], RefusableIndices: [], FullStatus: "*")
         {
             FastTierCarries = FastFields.None,
         };

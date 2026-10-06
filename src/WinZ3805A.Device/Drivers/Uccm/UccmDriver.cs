@@ -240,13 +240,13 @@ public sealed class UccmDriver(TimeProvider timeProvider) : IReceiverDriver
     /// exists because a query the receiver refuses in some states, re-asked every second, buries
     /// real faults in the error queue. It is entirely likely that <c>SYNC:TINT?</c> behaves that way
     /// here as it does on the SmartClock — but "likely" is not a measurement, and naming the wrong
-    /// index suppresses a good reading silently. Left null until a receiver shows us which query it
+    /// index suppresses a good reading silently. Left empty until a receiver shows us which query it
     /// refuses and when.
     /// </para>
     /// </remarks>
     public PollPlan Plan { get; } = new(
         [UccmCommands.LockLed, UccmCommands.TimeInterval, UccmCommands.EfcRelative, UccmCommands.Loop],
-        RefusableIndex: null,
+        RefusableIndices: [],
         FullStatus: UccmCommands.Status)
     {
         // TFOM, FFOM and the tracked count are on the status screen and nowhere else — this

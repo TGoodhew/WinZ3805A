@@ -143,14 +143,17 @@ Notes that do not fit in a table:
   entire; it goes in your catalog like any other entry, because the session's
   allowlist check does not know it is special. A talker that has gone quiet
   for longer than `TimeoutFor` answers as a timeout, and the reconnect logic
-  applies unchanged. `RefusableIndex` is `null` for a broadcast family — there
+  applies unchanged. `RefusableIndices` is empty for a broadcast family — there
   is nothing to refuse.
-- **`Plan.RefusableIndex`** marks the one query your receiver may legitimately
-  refuse in some states, or `null`. §7.3.1 records why this exists: the
+- **`Plan.RefusableIndices`** marks the queries your receiver may legitimately
+  refuse in some states, or is empty. §7.3.1 records why this exists: the
   SmartClock answers `:SYNC:TINT?` with an error while unlocked, and a refused
   query re-asked every second overflows the error queue and buries real faults.
-  The poller stops asking it until the discriminator's answer changes. The
-  index must never be `0` — the discriminator itself is read unconditionally.
+  The poller stops asking each one until the discriminator's answer changes, so
+  list only a query refused for the *whole* of a state: the SmartClock's time of
+  day is listed (refused through power-up), its satellite count is not (refused
+  only for power-up's first half minute), #729. No index may be `0` — the
+  discriminator itself is read unconditionally.
 - **`Plan.FastTierCarries` names the fields your sweep answers, and there is no
   default.** A null in `FastReadings` means *"asked, and the receiver did not
   answer"*, and the store blanks the display on it — rightly, because a reading

@@ -143,7 +143,7 @@ public sealed class FakeReceiverDriver : IReceiverDriver
     /// </remarks>
     public PollPlan Plan { get; init; } = new(
         FastTier: [":ACME:STAT?", ":ACME:LEVel?"],
-        RefusableIndex: null,
+        RefusableIndices: [],
         FullStatus: ":ACME:DUMP?")
     {
         FastTierCarries = FastFields.All,

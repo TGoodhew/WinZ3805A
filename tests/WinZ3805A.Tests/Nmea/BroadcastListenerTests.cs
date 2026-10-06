@@ -265,7 +265,7 @@ public sealed class BroadcastListenerTests : IAsyncDisposable
         public string Family => "Empty";
         public IReadOnlyList<Device.Commands.ScpiCommand> Commands => [];
         public PollCadence Cadence => new(TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2));
-        public PollPlan Plan => new([], null, "*") { FastTierCarries = FastFields.All };
+        public PollPlan Plan => new([], [], "*") { FastTierCarries = FastFields.All };
         public IReadOnlyList<SerialSettings> AutoDetectSequence => [];
         public LinkStyle Link => LinkStyle.Broadcast;
         public bool Recognises(Device.Models.DeviceIdentity? identity) => false;

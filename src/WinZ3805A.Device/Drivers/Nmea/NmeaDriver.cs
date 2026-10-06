@@ -166,7 +166,7 @@ public sealed class NmeaDriver(TimeProvider timeProvider) : IReceiverDriver
     ];
 
     /// <summary>RMC first, because it is the cycle boundary; then the sentences the readings come from; the whole cycle for the parser.</summary>
-    public PollPlan Plan { get; } = new(FastTierOrder, RefusableIndex: null, FullStatus: PollPlan.WholeCycle)
+    public PollPlan Plan { get; } = new(FastTierOrder, RefusableIndices: [], FullStatus: PollPlan.WholeCycle)
     {
         // A talker has no figure of merit, no time interval against a reference and no
         // oscillator to control. It carries a fix state and a satellite count, and nothing

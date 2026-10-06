@@ -26,12 +26,15 @@ public readonly record struct PollCadence(TimeSpan Fast, TimeSpan Full);
 /// the poller reads it on its own, ahead of the rest, and keys its refusal suppression on it.
 /// Every entry must be in <see cref="IReceiverDriver.Commands"/>.
 /// </param>
-/// <param name="RefusableIndex">
-/// The index of the one query the receiver may legitimately <i>refuse</i> in some of its states, or
-/// <see langword="null"/> when there is none. §7.3.1's lesson: a refused query re-asked every second
-/// overflows the error queue and buries real faults, so the poller stops asking it until the
-/// discriminator's answer changes. One index rather than a set, deliberately — no known receiver
-/// needs more, and a wider contract would be a guess with nothing to check it against.
+/// <param name="RefusableIndices">
+/// The indices of the queries the receiver may legitimately <i>refuse</i> in some of its states, or
+/// empty when there are none. §7.3.1's lesson: a refused query re-asked every second overflows the
+/// error queue and buries real faults, so the poller stops asking each one until the
+/// discriminator's answer changes. <b>A set since #729</b>: this was one index, "deliberately — no
+/// known receiver needs more", until #561 put the SmartClock's time of day in the sweep and the
+/// bench unit turned out to refuse it through power-up. List only a query refused for the whole of
+/// a state, because the suppression lasts until the state changes: one refused for part of a state
+/// would go unasked for the rest of it.
 /// </param>
 /// <param name="FullStatus">
 /// The query whose answer <see cref="IReceiverDriver.Parse"/> reads — the full status screen, for
@@ -41,7 +44,7 @@ public readonly record struct PollCadence(TimeSpan Fast, TimeSpan Full);
 /// </param>
 public sealed record PollPlan(
     IReadOnlyList<string> FastTier,
-    int? RefusableIndex,
+    IReadOnlyList<int> RefusableIndices,
     string FullStatus)
 {
     /// <summary>
