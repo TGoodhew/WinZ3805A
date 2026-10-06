@@ -595,7 +595,7 @@ public sealed partial class SatellitesPage : Page
             while (true)
             {
                 SatelliteManagementDialog dialog = new(device) { XamlRoot = XamlRoot };
-                await dialog.ShowAsync();
+                await dialog.KeepBelowTitleBar().ShowAsync();
 
                 if (dialog.ChosenCommand is not ScpiCommand command)
                 {

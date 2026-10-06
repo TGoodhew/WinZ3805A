@@ -1002,7 +1002,7 @@ public sealed partial class DetailsWindow : Window
                 Title = "Couldn't save the export",
                 Content = $"{file.Name} could not be written. {exception.Message}",
                 CloseButtonText = "Close",
-            }.ShowAsync();
+            }.KeepBelowTitleBar().ShowAsync();
         }
     }
 

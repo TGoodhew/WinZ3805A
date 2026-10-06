@@ -57,4 +57,42 @@ public class DialogHeightTests
     {
         Assert.Equal(1400 - DialogHeight.Clearance, DialogHeight.MaxFor(1400));
     }
+
+    /// <summary>
+    /// #725: in a window narrow enough that a centred dialog reaches the caption buttons, the dialog
+    /// starts below the title bar - the Manage satellites dialog at 640 × 480 had them on its corner.
+    /// </summary>
+    [Theory]
+    [InlineData(640, 480)]   // the Details window's Minimal breakpoint, where it was found
+    [InlineData(800, 600)]   // Compact, where it cleared the buttons by about 4 px
+    [InlineData(553, 504)]   // the main window at its default size
+    public void ANarrowWindowKeepsTheDialogBelowTheTitleBar(double width, double height)
+    {
+        double cap = DialogHeight.MaxForWindow(height, width);
+
+        double top = (height - cap) / 2;
+        Assert.True(top >= DialogHeight.TitleBar, $"a {cap} px dialog centred in {height} px starts at {top}");
+    }
+
+    /// <summary>
+    /// Where the dialog cannot reach the buttons the cap is #506's, untouched: lowering it there
+    /// would scroll the connection dialog for nothing.
+    /// </summary>
+    [Theory]
+    [InlineData(1024, 720)]  // the Details window's default size
+    [InlineData(1040, 814)]  // #506's window, where the cap is raised
+    [InlineData(1920, 1400)]
+    public void AWideWindowKeepsTheHeightOnlyCap(double width, double height)
+    {
+        Assert.Equal(DialogHeight.MaxFor(height), DialogHeight.MaxForWindow(height, width));
+    }
+
+    [Theory]
+    [InlineData(0, 0)]
+    [InlineData(480, 0)]
+    [InlineData(0, 640)]
+    public void AnUnknownWindowHasNoOpinion(double height, double width)
+    {
+        Assert.Equal(DialogHeight.MaxFor(height), DialogHeight.MaxForWindow(height, width));
+    }
 }
