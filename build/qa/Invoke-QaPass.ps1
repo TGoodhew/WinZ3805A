@@ -4180,8 +4180,11 @@ $docs = [Environment]::GetFolderPath('MyDocuments')
     # Every run writes its log to the Desktop, -ListOnly included; everything else must be as it was.
     $same = { param($s) $s | Select-Object * -ExcludeProperty desktopLog | ConvertTo-Json -Compress }
     Check $Result '[12] -ListOnly changes nothing' ((& $same $listed) -eq (& $same $before)) "exit $($list.ExitCode); its log written: $($listed.desktopLog -gt $before.desktopLog)"
+    # The installer's start check left the app running, and the script waits for it to close before
+    # asking anything: with piped answers that wait reads Enter forever, so close it first, as
+    # uninstall-sideload does. -ListOnly returns before that wait, which is why it never showed.
     # Save the data: y. Delete the saved copies: n. Then Enter to go ahead, and spare ones for any other prompt.
-    $run = Invoke-QaGuestScript $Vm -Name 'remove-everything' -Script "@('y', 'n', '', '', '', '') | & cmd.exe /c powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\qa\Remove-WinZ3805A.ps1; exit `$LASTEXITCODE"
+    $run = Invoke-QaGuestScript $Vm -Name 'remove-everything' -Script "Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue | Stop-Process -Force; Start-Sleep -Seconds 2; @('y', 'n', '', '', '', '') | & cmd.exe /c powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\qa\Remove-WinZ3805A.ps1; exit `$LASTEXITCODE"
     $after = Read-State
     Check $Result '[12] the package is gone' ($after.packages -eq 0) "exit $($run.ExitCode)"
     Check $Result '[12] Trusted People holds neither 7F47E8D7... nor 655D07E3..., for the machine or the account' ($after.machine -notmatch "$currentCert|$retiredCert" -and $after.user -notmatch "$currentCert|$retiredCert") "machine '$($after.machine)'; account '$($after.user)'"
