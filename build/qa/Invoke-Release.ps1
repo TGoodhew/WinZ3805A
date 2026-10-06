@@ -89,9 +89,31 @@ if ($Go) { $state.go = (Get-Date -Format 'yyyy-MM-dd HH:mm'); Say "Tony's go rec
 Save-State $state
 
 # The pass's verdict: 0 PASS, 3 AWAITING JUDGEMENT, anything else a failure.
+#
+# Both VMs at once unless the arguments name the machines (the soak does): one Invoke-QaPass per VM,
+# each into its own folder under <OutDir>.parts, merged into OutDir as one run (Merge-QaRuns). Halves a
+# full pass - about three hours where one pass over both VMs in turn took five and a half - and is
+# what the per-VM lock allows since 6 Oct 2026.
 function Invoke-Pass {
     param([string[]]$Arguments, [string]$OutDir)
-    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repo 'build\qa\Invoke-QaPass.ps1') @Arguments -OutDir $OutDir *>> $logPath
+    $script = Join-Path $repo 'build\qa\Invoke-QaPass.ps1'
+    if ($Arguments -contains '-Machines') {
+        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $script @Arguments -OutDir $OutDir *>> $logPath
+        return $LASTEXITCODE
+    }
+    $parts = "$OutDir.parts"
+    $quoted = @($Arguments | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } })
+    $procs = foreach ($machine in 'QA-Win10', 'QA-Win11') {
+        New-Item -ItemType Directory -Force (Join-Path $parts $machine) | Out-Null
+        $argumentList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$script`"") + $quoted + @('-Machines', $machine, '-OutDir', "`"$(Join-Path $parts $machine)`"")
+        Start-Process powershell.exe -ArgumentList $argumentList -PassThru -WindowStyle Hidden `
+            -RedirectStandardOutput (Join-Path $parts "$machine.log") -RedirectStandardError (Join-Path $parts "$machine.err")
+    }
+    Say "pass running on both VMs at once: $(($procs | ForEach-Object Id) -join ', '); logs in $parts"
+    $procs | Wait-Process
+    foreach ($machine in 'QA-Win10', 'QA-Win11') { Get-Content (Join-Path $parts "$machine.log") -ErrorAction SilentlyContinue | Add-Content $logPath }
+    $merge = "Import-Module '$(Join-Path $repo 'build\qa\QaJudging.psm1')' -Force; `$s = Merge-QaRuns -Parts '$(Join-Path $parts 'QA-Win10')', '$(Join-Path $parts 'QA-Win11')' -RunDir '$OutDir'; `"merged: `$(`$s.Verdict)`"; exit `$(switch (`$s.Verdict) { 'PASS' { 0 } 'AWAITING JUDGEMENT' { 3 } default { 1 } })"
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -Command $merge *>> $logPath
     $LASTEXITCODE
 }
 

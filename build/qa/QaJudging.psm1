@@ -237,6 +237,44 @@ function Write-QaReport {
     [pscustomobject]@{ Verdict = $overall; Failed = $failed.Count; Awaiting = $awaiting.Count; Rejected = $rejected.Count; Report = (Join-Path $RunDir 'report.md') }
 }
 
+# One run folder from several, so a pass whose VMs ran in parallel - one Invoke-QaPass per machine,
+# each with its own -OutDir - is judged, reported and promoted as one run (#633, 6 Oct 2026). Each
+# part's scenario folders are named for their machine, so they never collide; results are joined and
+# run.json covers every machine. The comparison and the report are then made afresh on the merged
+# folder. Returns the merged report's summary.
+function Merge-QaRuns {
+    param([string[]]$Parts, [string]$RunDir)
+    New-Item -ItemType Directory -Force $RunDir | Out-Null
+    # Plain arrays, not a generic List: Windows PowerShell's ConvertTo-Json fails on one ("Argument
+    # types do not match"), and a merged run with no results would read as having run nothing.
+    $results = @()
+    $runs = @()
+    $verdicts = [ordered]@{}
+    foreach ($part in $Parts) {
+        foreach ($dir in Get-ChildItem $part -Directory | Where-Object { $_.Name -ne 'judging' }) {
+            Copy-Item $dir.FullName (Join-Path $RunDir $dir.Name) -Recurse -Force
+        }
+        $results += @(Read-QaJson (Join-Path $part 'results.json'))
+        $run = Read-QaJson (Join-Path $part 'run.json')
+        if ($run) { $runs += $run }
+        # Verdicts already recorded on a part are kept: its photographs' paths are the merged run's.
+        $partVerdicts = Read-QaJson (Join-Path $part 'verdicts.json')
+        if ($partVerdicts) { foreach ($p in $partVerdicts.PSObject.Properties) { $verdicts[[string]$p.Name] = $p.Value } }
+    }
+    ConvertTo-Json -InputObject $results -Depth 5 | Set-Content (Join-Path $RunDir 'results.json') -Encoding UTF8
+    if ($verdicts.Count) { $verdicts | ConvertTo-Json -Depth 3 | Set-Content (Join-Path $RunDir 'verdicts.json') -Encoding UTF8 }
+    [ordered]@{
+        candidate = @($runs | ForEach-Object candidate | Select-Object -First 1)[0]
+        release = @($runs | ForEach-Object release | Select-Object -First 1)[0]
+        machines = @($runs | ForEach-Object { $_.machines } | Select-Object -Unique)
+        started = @($runs | ForEach-Object started | Sort-Object | Select-Object -First 1)[0]
+        finished = @($runs | ForEach-Object finished | Sort-Object | Select-Object -Last 1)[0]
+        parts = @($Parts)
+    } | ConvertTo-Json | Set-Content (Join-Path $RunDir 'run.json') -Encoding UTF8
+    $null = Compare-QaPhotographs -RunDir $RunDir
+    Write-QaReport $RunDir
+}
+
 # A run whose verdict is PASS becomes the baseline its photographs are next compared with.
 function Publish-QaBaseline {
     param([string]$RunDir, [string]$BaselineRoot = (Get-QaBaselineRoot))
@@ -257,4 +295,4 @@ function Publish-QaBaseline {
     $count
 }
 
-Export-ModuleMember -Function Get-QaBaselineRoot, Get-QaPhotographs, Read-QaPills, Compare-QaPills, Compare-QaPhotographs, Set-QaVerdict, Get-QaScenarioVerdict, Write-QaReport, Publish-QaBaseline
+Export-ModuleMember -Function Get-QaBaselineRoot, Get-QaPhotographs, Read-QaPills, Compare-QaPills, Compare-QaPhotographs, Set-QaVerdict, Get-QaScenarioVerdict, Write-QaReport, Merge-QaRuns, Publish-QaBaseline
