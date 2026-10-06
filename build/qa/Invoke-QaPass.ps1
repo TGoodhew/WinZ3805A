@@ -3909,9 +3909,32 @@ $pkg = Get-AppxPackage -Name WinZ3805A | Select-Object -First 1
 $dir = Join-Path $env:LOCALAPPDATA "Packages\$($pkg.PackageFamilyName)\LocalCache\Local\WinZ3805A"
 $db = Get-Item (Join-Path $dir 'trend.db') -ErrorAction SilentlyContinue
 $conn = Join-Path $dir 'connection.json'
+# The readings themselves, counted through Windows' own SQLite, read-only. The file's size says
+# nothing: the app is stopped by force above, so its readings are still in trend.db-wal and the main
+# file is the 4096-byte header (the first run compared 4096 with 4096).
+$rows = -1; $oldest = 0
+if ($db) {
+    Add-Type -Namespace Qa -Name Sqlite -MemberDefinition @"
+[DllImport("winsqlite3.dll")] public static extern int sqlite3_open_v2(byte[] filename, out IntPtr db, int flags, IntPtr vfs);
+[DllImport("winsqlite3.dll")] public static extern int sqlite3_prepare_v2(IntPtr db, byte[] sql, int bytes, out IntPtr statement, IntPtr tail);
+[DllImport("winsqlite3.dll")] public static extern int sqlite3_step(IntPtr statement);
+[DllImport("winsqlite3.dll")] public static extern long sqlite3_column_int64(IntPtr statement, int column);
+[DllImport("winsqlite3.dll")] public static extern int sqlite3_finalize(IntPtr statement);
+[DllImport("winsqlite3.dll")] public static extern int sqlite3_close(IntPtr db);
+"@
+    $z = { param($text) [Text.Encoding]::UTF8.GetBytes($text + [char]0) }
+    $handle = [IntPtr]::Zero; $statement = [IntPtr]::Zero
+    if ([Qa.Sqlite]::sqlite3_open_v2((& $z $db.FullName), [ref]$handle, 1, [IntPtr]::Zero) -eq 0 -and
+        [Qa.Sqlite]::sqlite3_prepare_v2($handle, (& $z 'SELECT COUNT(*), COALESCE(MIN(ticks), 0) FROM sample'), -1, [ref]$statement, [IntPtr]::Zero) -eq 0 -and
+        [Qa.Sqlite]::sqlite3_step($statement) -eq 100) {
+        $rows = [Qa.Sqlite]::sqlite3_column_int64($statement, 0); $oldest = [Qa.Sqlite]::sqlite3_column_int64($statement, 1)
+    }
+    [void][Qa.Sqlite]::sqlite3_finalize($statement); [void][Qa.Sqlite]::sqlite3_close($handle)
+}
 [ordered]@{
     version = "$($pkg.Version)"; family = $pkg.PackageFamilyName
     dbCreated = $(if ($db) { $db.CreationTimeUtc.Ticks } else { 0 }); dbBytes = $(if ($db) { $db.Length } else { 0 })
+    rows = $rows; oldest = $oldest
     connection = $(if (Test-Path $conn) { (Get-FileHash $conn).Hash } else { '' })
 } | ConvertTo-Json -Compress
 '@
@@ -3942,7 +3965,7 @@ function Test-UpgradePrevious {
         # A minute connected is some history: a sample is appended on every fast poll.
         Start-Sleep -Seconds 60
         $before = (Invoke-QaGuestScript $Vm -Name 'before-upgrade' -Script $dataFactsStep).Output -split "`r?`n" | Where-Object { $_.StartsWith('{') } | Select-Object -Last 1 | ConvertFrom-Json
-        Check $Result "[12] $previous kept history and a remembered port" ($before.dbBytes -gt 0 -and $before.connection) "trend.db $($before.dbBytes) bytes; connection.json $(if ($before.connection) { 'present' } else { 'missing' })"
+        Check $Result "[12] $previous kept history and a remembered port" ($before.rows -gt 0 -and $before.connection) "$($before.rows) readings in trend.db; connection.json $(if ($before.connection) { 'present' } else { 'missing' })"
 
         Send-Zip $Vm $Offline 'candidate'
         $mark = (Wait-AppLog $Vm 'State:' 0 5 'mark-upgrade').count
@@ -3957,7 +3980,7 @@ function Test-UpgradePrevious {
         $read = Invoke-UiStep $Vm 'upgraded-setting' "`$mode = 'read'" $lockSwitchStep
         Check $Result '[12] the setting changed on the old version is still changed' (-not $read.error -and $read.before -eq 'Off') "$($read.error) the switch reads $($read.before)"
         $after = (Invoke-QaGuestScript $Vm -Name 'after-upgrade' -Script $dataFactsStep).Output -split "`r?`n" | Where-Object { $_.StartsWith('{') } | Select-Object -Last 1 | ConvertFrom-Json
-        Check $Result '[12] the history is the same file, kept and not shrunk' ($after.dbCreated -eq $before.dbCreated -and $after.dbBytes -ge $before.dbBytes) "created $(if ($after.dbCreated -eq $before.dbCreated) { 'unchanged' } else { 'CHANGED' }); $($before.dbBytes) -> $($after.dbBytes) bytes"
+        Check $Result '[12] the history is the same file, with every reading kept and the oldest still first' ($after.dbCreated -eq $before.dbCreated -and $after.rows -ge $before.rows -and $after.oldest -eq $before.oldest) "created $(if ($after.dbCreated -eq $before.dbCreated) { 'unchanged' } else { 'CHANGED' }); $($before.rows) -> $($after.rows) readings; oldest $(if ($after.oldest -eq $before.oldest) { 'unchanged' } else { "$($before.oldest) -> $($after.oldest)" })"
         Check $Result '[12] the remembered port is untouched' ($after.connection -eq $before.connection) ''
         Check $Result '[12] no data saved aside: an upgrade in place has no earlier copy to replace' ($log -notmatch 'Replacing the earlier copy')
     }
