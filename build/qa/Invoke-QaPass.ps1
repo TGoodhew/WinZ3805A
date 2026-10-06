@@ -662,8 +662,12 @@ Start-Process "shell:AppsFolder\$($pkg.PackageFamilyName)!App"
         Check $Result '[#707] restarted mid-reply: the rest of the reply is read past before anything is asked' $seen.found "simulator: $armed; $($seen.line)$(if (-not $seen.found) { $seen.tail })"
         $seen = Wait-AppLog $Vm 'Session COM2 is now Connected' $mark 60 'mid-reply-connected'
         Check $Result '[#707] and it connects, the identity read whole' ($seen.found -and $seen.line -match 'SYMMETRICOM,Z3805A,') "$($seen.line)$(if (-not $seen.found) { $seen.tail })"
-        $seen = Wait-AppLog $Vm 'State: ' $seen.count 120 'mid-reply-polling'
-        Check $Result '[#707] and polls: a State line after it' $seen.found $seen.line
+        # Readings now come from, not a State: line - the app writes State: only on a change, and a
+        # restart into the same state writes none (the first version of this step failed for exactly
+        # that, 6 Oct 2026). From the mark, not from the connect: it follows the connect by
+        # milliseconds and can already be inside the lines that wait counted.
+        $seen = Wait-AppLog $Vm 'Readings now come from' $mark 120 'mid-reply-polling'
+        Check $Result '[#707] and polls: readings come from the receiver again' $seen.found $seen.line
     }
     finally {
         if (-not $simulator.HasExited) { $simulator.Kill() }
