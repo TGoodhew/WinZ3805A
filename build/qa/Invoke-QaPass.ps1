@@ -2980,7 +2980,9 @@ function Get-RingChange($a, $b, [int]$pad) {
 
 # Wide enough for focus visuals drawn outside the element, as a toggle switch's are.
 $pad = 8
-$tag = $surface -replace ' ', ''
+# The walks in Dark and a contrast theme pass $theme, so their photographs sit beside Light's rather
+# than over them.
+$tag = "$(if ($theme) { "$theme-" })$($surface -replace ' ', '')"
 New-Item -ItemType Directory -Force 'C:\qa\keys' | Out-Null
 $closedOn = ''
 $stops = New-Object System.Collections.Generic.List[object]
@@ -3191,7 +3193,7 @@ function Test-KeyboardFocus {
         foreach ($theme in 'dark', 'contrast') {
             $null = Invoke-UiStep $Vm "keys-theme-$theme" "`$theme = '$theme'" $keyThemeStep
             foreach ($surface in 'main', 'Overview', 'Satellites', 'Position', 'Timing', 'Holdover', 'Time', 'Status Registers', 'Diagnostics', 'Settings') {
-                $k = Invoke-UiStep $Vm "keys-$theme-$($surface -replace ' ', '')" "`$surface = '$surface'" $keyboardStep
+                $k = Invoke-UiStep $Vm "keys-$theme-$($surface -replace ' ', '')" "`$surface = '$surface'; `$theme = '$theme'" $keyboardStep
                 if ($k.error) { Check $Result "[A11Y-2] $theme, $surface" $false $k.error; continue }
                 $noRing = @(@($k.stops) | Where-Object { $_.ringPixels -ge 0 -and $_.ringPixels -lt [Math]::Max(20, $_.perimeter / 2) -and -not ($_.type -eq 'ListItem' -and $_.name -like 'PRN *') } | ForEach-Object { "$($_.type) '$($_.name)' [$($_.id)] $($_.ringPixels)/$($_.perimeter)" })
                 Check $Result "[A11Y-2] $($theme), $($surface): a focus ring is drawn at every stop" ($noRing.Count -eq 0 -and @($k.stops).Count -gt 0) "$(@($k.stops).Count) stops; no ring at: $($noRing -join '; ')"
