@@ -139,7 +139,9 @@
                         OpenPaneLength="260"
                         SelectionChanged="OnNavigationSelectionChanged"
                         PaneOpened="OnPaneStateChanged"
-                        PaneClosed="OnPaneStateChanged">
+                        PaneClosed="OnPaneStateChanged"
+                        DisplayModeChanged="OnDisplayModeChanged"
+                        Loaded="OnNavLoaded">
             <Frame x:Name="ContentFrame" />
         </NavigationView>
     </Grid>

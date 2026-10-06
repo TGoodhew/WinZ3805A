@@ -710,6 +710,31 @@ public sealed partial class DetailsWindow : Window
             _ => new SuppressNavigationTransitionInfo(),
         };
 
+    /// <summary>
+    /// Keeps the page below the pane toggle button while the navigation is Minimal (#714).
+    /// </summary>
+    /// <remarks>
+    /// In <c>Minimal</c> the control draws its toggle button over the top-left of the content, and
+    /// with no header set it reserves no room for it: every page's heading sat under the button, its
+    /// focus ring cutting through the first letters (5 Oct 2026 QA pass, 640 px Details window, at
+    /// every text size). The inset is the button's own 40 px, from §9.6's scale; in the other modes
+    /// the pane is beside the content and nothing is in its way.
+    /// </remarks>
+    private void OnDisplayModeChanged(NavigationView sender, NavigationViewDisplayModeChangedEventArgs args) =>
+        ApplyToggleButtonInset(args.DisplayMode);
+
+    // On load as well: DisplayMode starts as Minimal, so a window that opens narrow may never see it
+    // change, and the event alone would leave exactly that window uncorrected.
+    private void OnNavLoaded(object sender, RoutedEventArgs e) => ApplyToggleButtonInset(Nav.DisplayMode);
+
+    private void ApplyToggleButtonInset(NavigationViewDisplayMode mode)
+    {
+        double inset = mode == NavigationViewDisplayMode.Minimal
+            ? (double)Application.Current.Resources["WzSpace3Xl"]
+            : 0;
+        ContentFrame.Margin = new Thickness(0, inset, 0, 0);
+    }
+
     private void OnPaneStateChanged(NavigationView sender, object args)
     {
         if (_ready)
