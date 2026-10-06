@@ -86,8 +86,37 @@ function Get-QaPhotographs {
         ForEach-Object { $_.FullName.Substring($RunDir.TrimEnd('\').Length + 1) } | Sort-Object
 }
 
+# The severity pills a photograph showed, from the <photo>.pills.json written beside it in the guest
+# (#728), as 'label = severity' strings; $null when it has no record.
+function Read-QaPills {
+    param([string]$Photograph)
+    $path = "$Photograph.pills.json"
+    if (-not (Test-Path $path)) { return $null }
+    $raw = Get-Content $path -Raw
+    if (-not "$raw".Trim()) { return $null }
+    # Never the bare pipeline: an empty array would come back as nothing, which is "no record".
+    $pills = @((ConvertFrom-Json $raw) | ForEach-Object { $_ })
+    , @($pills | ForEach-Object { "$($_.name) = $($_.status)" })
+}
+
+# How two pill records differ, as text for the report; empty when they say the same. Compared as
+# sets of label and severity: a pill that moves is the pixels' business, a pill that changes what it
+# says or how bad it is is this one's.
+function Compare-QaPills {
+    param([string[]]$Baseline, [string[]]$Now)
+    $gone = @($Baseline | Where-Object { $Now -cnotcontains $_ })
+    $came = @($Now | Where-Object { $Baseline -cnotcontains $_ })
+    @(@($gone | ForEach-Object { "was $_" }) + @($came | ForEach-Object { "now $_" })) -join '; '
+}
+
 # Each photograph against the baseline: unchanged, changed, resized or new. The triptych of each that
 # is not unchanged is written to judging\, named after the photograph.
+#
+# A photograph whose severity pills differ from the baseline's is 'changed' whatever its pixel share
+# (#728): #724 turned the FFOM pill from a green circle to a red hexagon and the TFOM pill from a red
+# hexagon to a grey ring, and the photograph scored 0.33 %, under the 0.5 % that counts as unchanged.
+# A baseline taken before pills were recorded has no record to compare, and that is said, not
+# flagged, so the check starts working with the first baseline promoted after it.
 function Compare-QaPhotographs {
     param([string]$RunDir, [string]$BaselineRoot = (Get-QaBaselineRoot))
     $judging = Join-Path $RunDir 'judging'
@@ -97,13 +126,19 @@ function Compare-QaPhotographs {
         $baseline = Join-Path $BaselineRoot $rel
         $triptych = Join-Path $judging (($rel -replace '[\\/]', '__'))
         if (-not (Test-Path $baseline)) {
-            [pscustomobject]@{ image = $rel; status = 'new'; percent = $null; triptych = $null }
+            [pscustomobject]@{ image = $rel; status = 'new'; percent = $null; triptych = $null; pills = $null }
             continue
         }
         $share = [QaJudge]::Compare($baseline, $now, $null)
-        $status = if ($share -lt 0) { 'resized' } elseif ($share -lt $script:Unchanged) { 'unchanged' } else { 'changed' }
+        $pillsNow = Read-QaPills $now
+        $pillsThen = Read-QaPills $baseline
+        $pills = if ($null -eq $pillsNow) { $null }
+            elseif ($null -eq $pillsThen) { 'no pill record in the baseline to compare' }
+            else { Compare-QaPills $pillsThen $pillsNow }
+        $pillsChanged = $null -ne $pillsNow -and $null -ne $pillsThen -and $pills
+        $status = if ($share -lt 0) { 'resized' } elseif ($share -lt $script:Unchanged -and -not $pillsChanged) { 'unchanged' } else { 'changed' }
         if ($status -ne 'unchanged') { [void][QaJudge]::Compare($baseline, $now, $triptych) }
-        [pscustomobject]@{ image = $rel; status = $status; percent = $(if ($share -ge 0) { [Math]::Round($share, 2) } else { $null }); triptych = $(if ($status -ne 'unchanged') { $triptych.Substring($RunDir.TrimEnd('\').Length + 1) } else { $null }) }
+        [pscustomobject]@{ image = $rel; status = $status; percent = $(if ($share -ge 0) { [Math]::Round($share, 2) } else { $null }); triptych = $(if ($status -ne 'unchanged') { $triptych.Substring($RunDir.TrimEnd('\').Length + 1) } else { $null }); pills = $(if ($pills) { $pills } else { $null }) }
     }
     $rows = @($rows)
     ConvertTo-Json -InputObject $rows -Depth 3 | Set-Content (Join-Path $RunDir 'judging.json') -Encoding UTF8
@@ -183,6 +218,7 @@ function Write-QaReport {
         foreach ($j in $needing) {
             $v = if ($verdicts.ContainsKey([string]$j.image)) { "$($verdicts[[string]$j.image].verdict.ToUpper())$(if ($verdicts[[string]$j.image].note) { " - $($verdicts[[string]$j.image].note)" })" } else { '**awaiting**' }
             $against = switch ($j.status) { 'new' { 'no baseline' } 'resized' { 'a different size' } default { "$($j.percent) % differs" } }
+            if ($j.pills -and $j.pills -notlike 'no pill record*') { $against = "**pills changed: $($j.pills)**; $against" }
             $lines.Add("| ``$($j.image)`` | $against | $("$v" -replace '\|', '/') |")
         }
         $lines.Add('')
@@ -211,10 +247,14 @@ function Publish-QaBaseline {
         $target = Join-Path $BaselineRoot $rel
         New-Item -ItemType Directory -Force (Split-Path $target) | Out-Null
         Copy-Item (Join-Path $RunDir $rel) $target -Force
+        # Its pill record with it (#728), or the next run would have nothing to compare pills with;
+        # and an older record removed when this photograph has none, so it cannot go stale.
+        if (Test-Path (Join-Path $RunDir "$rel.pills.json")) { Copy-Item (Join-Path $RunDir "$rel.pills.json") "$target.pills.json" -Force }
+        else { Remove-Item "$target.pills.json" -Force -ErrorAction SilentlyContinue }
         $count++
     }
     Set-Content (Join-Path $BaselineRoot 'source.txt') "Baseline from $RunDir, published $(Get-Date -Format 'yyyy-MM-dd HH:mm'). $count photograph(s)." -Encoding UTF8
     $count
 }
 
-Export-ModuleMember -Function Get-QaBaselineRoot, Get-QaPhotographs, Compare-QaPhotographs, Set-QaVerdict, Get-QaScenarioVerdict, Write-QaReport, Publish-QaBaseline
+Export-ModuleMember -Function Get-QaBaselineRoot, Get-QaPhotographs, Read-QaPills, Compare-QaPills, Compare-QaPhotographs, Set-QaVerdict, Get-QaScenarioVerdict, Write-QaReport, Publish-QaBaseline

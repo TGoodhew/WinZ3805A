@@ -98,6 +98,14 @@ pass reported PASS whether or not anyone had looked at them, and v1.3.5 was tagg
   or a reading is on screen) from a regression (#697's dot was a fraction of a percent). So each
   photograph that differs, is a different size or has no baseline is written to the run's `judging\`
   folder as **baseline | now | differences in red**, full size.
+- **Severity pills are compared exactly, whatever the pixels say (#728).** Each photograph of the app
+  has a `<photo>.pills.json` beside it, written in the guest by `Save-PillRecord` (`guest\Ui.ps1`):
+  every `SeverityPill` inside the photographed region, with its label, the severity it reports as
+  its UI Automation item status, and its position. A photograph whose pills differ from the
+  baseline's, compared as a set of label and severity, is **changed** even under 0.5 %, and the report
+  names the pills: #724 turned the FFOM pill from a green circle to a red hexagon and scored 0.33 %.
+  Position is left to the pixels. A baseline taken before records existed has none, which the report
+  says rather than flagging. Promoting a run copies the records with the photographs.
 - **Recording a verdict.**
   `Complete-QaRun.ps1 -Run <folder> -Pass <wildcards> -Note 'what was looked at'` records one, or
   `-Fail` does. A verdict without a note is refused, because "pass" alone says nothing about what
