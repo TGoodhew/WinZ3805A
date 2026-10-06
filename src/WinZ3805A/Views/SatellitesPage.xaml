@@ -192,7 +192,7 @@
                                 <ColumnDefinition Width="56" />
                                 <ColumnDefinition Width="64" />
                                 <ColumnDefinition Width="64" />
-                                <ColumnDefinition Width="180" />
+                                <ColumnDefinition Width="*" MinWidth="96" MaxWidth="180" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
 
@@ -243,7 +243,7 @@
                                             <ColumnDefinition Width="56" />
                                             <ColumnDefinition Width="64" />
                                             <ColumnDefinition Width="64" />
-                                            <ColumnDefinition Width="180" />
+                                            <ColumnDefinition Width="*" MinWidth="96" MaxWidth="180" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
 
@@ -303,12 +303,20 @@
                     <StackPanel Spacing="{ThemeResource WzSpaceSm}">
                         <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Tracked" />
 
+                        <!--
+                            The strength column shrinks rather than overflows (#717). It was a fixed 180,
+                            which with the three before it and their spacing is wider than this card in
+                            the two-column layout, so the column ran past the card's edge and the number
+                            - last in SatelliteStrengthBar, and the part the bar exists to back up - was
+                            cut off on every row. 96 still fits the bar's 60 and the number's 28. The
+                            same in every table on the page, so their columns stay aligned.
+                        -->
                         <Grid ColumnSpacing="{ThemeResource WzSpaceMd}">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="56" />
                                 <ColumnDefinition Width="64" />
                                 <ColumnDefinition Width="64" />
-                                <ColumnDefinition Width="180" />
+                                <ColumnDefinition Width="*" MinWidth="96" MaxWidth="180" />
                             </Grid.ColumnDefinitions>
 
                             <TextBlock Grid.Column="0" Style="{ThemeResource WzCaptionTextStyle}"
@@ -355,7 +363,7 @@
                                             <ColumnDefinition Width="56" />
                                             <ColumnDefinition Width="64" />
                                             <ColumnDefinition Width="64" />
-                                            <ColumnDefinition Width="180" />
+                                            <ColumnDefinition Width="*" MinWidth="96" MaxWidth="180" />
                                         </Grid.ColumnDefinitions>
 
                                         <TextBlock Grid.Column="0" Style="{ThemeResource WzMonoTextStyle}"
@@ -392,7 +400,7 @@
                                 <ColumnDefinition Width="56" />
                                 <ColumnDefinition Width="64" />
                                 <ColumnDefinition Width="64" />
-                                <ColumnDefinition Width="180" />
+                                <ColumnDefinition Width="*" MinWidth="96" MaxWidth="180" />
                             </Grid.ColumnDefinitions>
 
                             <TextBlock Grid.Column="0" Style="{ThemeResource WzCaptionTextStyle}"
@@ -436,7 +444,7 @@
                                             <ColumnDefinition Width="56" />
                                             <ColumnDefinition Width="64" />
                                             <ColumnDefinition Width="64" />
-                                            <ColumnDefinition Width="180" />
+                                            <ColumnDefinition Width="*" MinWidth="96" MaxWidth="180" />
                                         </Grid.ColumnDefinitions>
 
                                         <TextBlock Grid.Column="0" Style="{ThemeResource WzMonoTextStyle}"
