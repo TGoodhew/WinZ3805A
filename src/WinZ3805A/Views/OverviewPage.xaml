@@ -395,16 +395,16 @@
                         <StackPanel x:Name="OscillatorRangeSelector"
                                     Orientation="Horizontal"
                                     Spacing="{ThemeResource WzSpaceXs}">
-                            <RadioButton x:Name="OverviewRange1h" Content="1 h"
+                            <RadioButton Style="{ThemeResource WzRangeRadioButtonStyle}" x:Name="OverviewRange1h" Content="1 h"
                                          GroupName="OverviewTrendRange"
                                          Checked="OnRangeChanged" Tag="1" />
-                            <RadioButton x:Name="OverviewRange6h" Content="6 h"
+                            <RadioButton Style="{ThemeResource WzRangeRadioButtonStyle}" x:Name="OverviewRange6h" Content="6 h"
                                          GroupName="OverviewTrendRange"
                                          Checked="OnRangeChanged" Tag="6" />
-                            <RadioButton x:Name="OverviewRange24h" Content="24 h"
+                            <RadioButton Style="{ThemeResource WzRangeRadioButtonStyle}" x:Name="OverviewRange24h" Content="24 h"
                                          GroupName="OverviewTrendRange"
                                          Checked="OnRangeChanged" Tag="24" />
-                            <RadioButton x:Name="OverviewRange7d" Content="7 d"
+                            <RadioButton Style="{ThemeResource WzRangeRadioButtonStyle}" x:Name="OverviewRange7d" Content="7 d"
                                          GroupName="OverviewTrendRange"
                                          Checked="OnRangeChanged" Tag="168" />
                         </StackPanel>

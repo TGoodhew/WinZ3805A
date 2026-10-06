@@ -219,6 +219,18 @@
     </Style>
 
     <!--
+        §9.10.2's trend range selectors - 1 h / 6 h / 24 h / 7 d - on the Overview's EFC card and the
+        Timing page (#715). The stock RadioButton has a MinWidth of 120, so four in a row need about
+        490 px, and in the Overview's two-column layout at the width Details opens at the card is
+        narrower: the fourth button sat on the card's edge with its "7 d" cut off entirely (5 Oct 2026
+        QA pass). With no minimum each is as wide as its label, about 60 px. Only the width changes:
+        the height, and with it A11Y-5's 32 px target, is the stock one.
+    -->
+    <Style x:Key="WzRangeRadioButtonStyle" TargetType="RadioButton" BasedOn="{StaticResource DefaultRadioButtonStyle}">
+        <Setter Property="MinWidth" Value="0" />
+    </Style>
+
+    <!--
         §9.11's skeleton placeholder, built 30 Aug 2026 (#320).
 
         NOTHING ANIMATES. §9.13's rule is no animation without a row in §9.8.2, and there is no
