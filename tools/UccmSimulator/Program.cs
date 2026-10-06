@@ -121,7 +121,7 @@ internal static class Program
                         line = line.Trim();
                         if (line.Length > 0)
                         {
-                            await WriteAsync(module.Respond(line));
+                            await WriteAsync(module.Respond(line) + module.Prompt);
                         }
                     }
                 }
@@ -201,7 +201,7 @@ internal static class Program
                 string line = serial.ReadLine().Trim();
                 if (line.Length > 0)
                 {
-                    serial.Write(module.Respond(line));
+                    serial.Write(module.Respond(line) + module.Prompt);
                 }
             }
             catch (TimeoutException)

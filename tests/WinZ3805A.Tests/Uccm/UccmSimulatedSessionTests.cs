@@ -39,6 +39,23 @@ public sealed class UccmSimulatedSessionTests
     private static SweepInterpretation Sweep(UccmDriver driver, UccmModuleSimulator module) =>
         driver.InterpretSweep([.. driver.Plan.FastTier.Select(module.Respond)]);
 
+    // ---- the prompt, which a stream needs and a parsed reply does not ------------------------------
+
+    [Theory]
+    [InlineData(UccmVariant.UccmP, "UCCM-P")]
+    [InlineData(UccmVariant.Uccm, "UCCM")]
+    public void TheModulesPromptIsOneTheDriverWaitsFor(UccmVariant variant, string word)
+    {
+        // Without it the application could not connect to the simulator at all: every transaction
+        // ran to its timeout and auto-detect reported no receiver (#633's receiver-families).
+        (UccmDriver driver, UccmModuleSimulator module, _) = Bench(UccmVendor.Trimble, variant);
+
+        Assert.True(driver.Prompt.TryMatch(module.Prompt, out int length, out string? status, out string? matched));
+        Assert.Equal(module.Prompt.Length, length);
+        Assert.Null(status);
+        Assert.Equal(word, matched);
+    }
+
     // ---- the fast sweep, through the module's real reply shape ------------------------------------
 
     [Fact]
