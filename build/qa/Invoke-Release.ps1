@@ -62,8 +62,10 @@ param(
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $Version = ($Version -replace '^v', '')
-if ($Version -notmatch '^\d+\.\d+\.\d+(\.0)?$') { throw "a version is x.y.z: $Version" }
-$short = $Version -replace '\.0$', ''
+if ($Version -notmatch '^(\d+\.\d+\.\d+)(\.0)?$') { throw "a version is x.y.z: $Version" }
+# The first three parts, from the match: stripping a trailing ".0" instead turned 1.4.0 into 1.4, a
+# tag of v1.4 and a manifest check for the wrong version (6 Oct 2026, the first x.y.0 release).
+$short = $Matches[1]
 $full = "$short.0"
 $tag = "v$short"
 $home_ = Join-Path $env:LOCALAPPDATA "WinZ3805A QA\releases\$tag"
