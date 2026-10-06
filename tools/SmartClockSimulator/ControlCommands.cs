@@ -153,7 +153,8 @@ public static class ControlCommands
                 // The screen :SYST:STAT? would print now, to a file on the host: the QA pass compares
                 // every field on it with what the Details window shows (manual-qa.md section 9). A
                 // file rather than the reply, because the reply is one line and a screen is twenty.
-                case ["screen", _]:
+                // Any number of words: the QA pass's run folder is under "WinZ3805A QA".
+                case ["screen", _, ..]:
                     string path = line.Trim().Split(' ', 2, StringSplitOptions.RemoveEmptyEntries)[1];
                     File.WriteAllText(path, StatusScreenWriter.Write(receiver.Snapshot()));
                     return "ok: screen written to " + path;
