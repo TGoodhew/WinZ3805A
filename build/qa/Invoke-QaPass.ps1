@@ -293,6 +293,14 @@ Start-Sleep -Seconds 2
     if ($r.Output -notmatch 'wrote=True') { throw "the copy $Family wrote no data within 90 s of starting, so there is nothing for the upgrade to save" }
 }
 
+# A photograph from the guest, and its pill record with it when there is one (#728): Save-PillRecord
+# writes <photo>.pills.json beside each photograph of the app, and the judging gate compares it with
+# the baseline's. The record is optional, so a missing one is not an error.
+function Copy-QaPhoto {
+    param($Vm, [string]$Source, [string]$Destination)
+    Copy-QaFile $Vm -Source $Source -Destination $Destination
+    try { Copy-QaFile $Vm -Source "$Source.pills.json" -Destination "$Destination.pills.json" } catch { }
+}
 # The guest's state as far as WinZ3805A is concerned, as an object.
 function Get-Facts {
     param($Vm)
@@ -2059,6 +2067,7 @@ try {
     $bmp = New-Object System.Drawing.Bitmap ([int]$r.Width), ([int]$r.Height)
     $g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen([int]$r.Left, [int]$r.Top, 0, 0, $bmp.Size); $g.Dispose()
     $bmp.Save('C:\qa\overview-opening.png', [System.Drawing.Imaging.ImageFormat]::Png); $bmp.Dispose()
+    Save-PillRecord 'C:\qa\overview-opening.png' ([int]$r.Left) ([int]$r.Top) ([int]$r.Width) ([int]$r.Height)
 } catch { }
 $range = Find-Control $d -AutomationId 'OverviewRange7d' -Seconds 10
 if ($range) { $range.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select() }
@@ -2186,7 +2195,7 @@ Start-Sleep -Seconds 3
         Check $Result '[#668] the Overview''s 1 PPS readout is drawn whole at the size Details opens at' ($trend.wide -gt 0 -and $trend.narrow -le $trend.wide + 1) "caption $($trend.narrow) px tall there, $($trend.wide) px maximised"
         Check $Result '[21] the Overview trend shown at 7 d, photographed for the agent to judge' ($trend.selected -eq $true) "$(if ($trend.error) { $trend.error } else { "7 d selected $($trend.selected)" })"
         try { Invoke-VmRun $Vm captureScreen -Arguments (Join-Path $Result.Folder 'trend-7d.png') -Guest | Out-Null } catch { }
-        try { Copy-QaFile $Vm -Source 'C:\qa\overview-opening.png' -Destination (Join-Path $Result.Folder 'overview-opening.png') } catch { }
+        try { Copy-QaPhoto $Vm -Source 'C:\qa\overview-opening.png' -Destination (Join-Path $Result.Folder 'overview-opening.png') } catch { }
     }
     finally {
         if (-not $simulator.HasExited) { $simulator.Kill() }
@@ -2286,6 +2295,7 @@ function Save-Area([string]$path) {
     $g.Dispose()
     $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
     $bmp.Dispose()
+    Save-PillRecord $path $left $top 860 778
 }
 
 # A page's own Refresh button is disabled while it reads, as the capture script found.
@@ -2382,7 +2392,7 @@ function Test-GuidePages {
         Add-Type -AssemblyName System.Drawing
         foreach ($name in $taken) {
             $now = Join-Path $Result.Folder $name
-            try { Copy-QaFile $Vm -Source "C:\qa\guide\$name" -Destination $now } catch { continue }
+            try { Copy-QaPhoto $Vm -Source "C:\qa\guide\$name" -Destination $now } catch { continue }
             $old = Join-Path $guide $name
             if (-not (Test-Path $old)) { continue }
             $a = [System.Drawing.Image]::FromFile($old); $b = [System.Drawing.Image]::FromFile($now)
@@ -2497,6 +2507,7 @@ function Save-Window($element, [string]$path, $Highlighted, $Subtitle) {
     $bmp = New-Object System.Drawing.Bitmap ([int]$r.Width), ([int]$r.Height)
     $g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen([int]$r.Left, [int]$r.Top, 0, 0, $bmp.Size); $g.Dispose()
     $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
+    Save-PillRecord $path ([int]$r.Left) ([int]$r.Top) ([int]$r.Width) ([int]$r.Height)
     # #672: text on the highlight colour must be highlight text. Window-text pixels inside a highlighted
     # control mean the label is on a backplate; none of the four themes uses one colour for both.
     $inside = $null
@@ -2606,7 +2617,7 @@ function Test-HighContrast {
                     Check $Result "[A11Y-8] $name, $($part): $what is highlight text, not on a backplate (#672)" ($m.highlightedWindowText -le 10) "$($m.highlightedWindowText) window-text pixels inside it"
                 }
                 Check $Result "[A11Y-8] $name, $($part): the app follows the theme live, in its colours" ($m.commonest -eq $s.windowColour -and $m.textSamples -ge 100) "commonest $($m.commonest) against window $($s.windowColour); $($m.textSamples) text-colour samples"
-                try { Copy-QaFile $Vm -Source "C:\qa\hc\$tag-$part.png" -Destination (Join-Path $Result.Folder "$tag-$part.png") } catch { }
+                try { Copy-QaPhoto $Vm -Source "C:\qa\hc\$tag-$part.png" -Destination (Join-Path $Result.Folder "$tag-$part.png") } catch { }
             }
         }
         # By name, not by colour: three of Windows 10's four have a black window.
@@ -2733,6 +2744,7 @@ function Measure-Window($element, [string]$label) {
     $bmp = New-Object System.Drawing.Bitmap ([int]$r.Width), ([int]$r.Height)
     $g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen([int]$r.Left, [int]$r.Top, 0, 0, $bmp.Size); $g.Dispose()
     $bmp.Save("C:\qa\scaling\$tag-$label.png", [System.Drawing.Imaging.ImageFormat]::Png); $bmp.Dispose()
+    Save-PillRecord "C:\qa\scaling\$tag-$label.png" ([int]$r.Left) ([int]$r.Top) ([int]$r.Width) ([int]$r.Height)
     $m
 }
 
@@ -2788,7 +2800,7 @@ function Test-DisplayScaling {
                 Check $Result "[3] $scale %, $($name): opens inside the work area" ($m.inside -eq $true) "frame $($m.frame); work area $($m.work)"
                 Check $Result "[3] $scale %, $($name): its title-bar buttons stop short of the caption buttons" ($m.clear -eq $true) "$($m.ownButtons) buttons ending at $($m.ownRight); caption buttons from $($m.captionLeft) ($($m.captionFrom))"
                 Check $Result "[3] $scale %, $($name): a drag on the title bar moves the window" ($m.dragged -eq $true) "moved $($m.moved) for a drag of 96,64"
-                try { Copy-QaFile $Vm -Source "C:\qa\scaling\$scale-$part.png" -Destination (Join-Path $Result.Folder "$scale-$part.png") } catch { }
+                try { Copy-QaPhoto $Vm -Source "C:\qa\scaling\$scale-$part.png" -Destination (Join-Path $Result.Folder "$scale-$part.png") } catch { }
             }
         }
     }
@@ -2862,7 +2874,9 @@ function Save-Shot($element, [string]$label) {
     $left = [Math]::Max(0, [int]$r.Left); $top = [Math]::Max(0, [int]$r.Top)
     $bmp = New-Object System.Drawing.Bitmap ([Math]::Min([int]$r.Width, $width - $left)), ([Math]::Min([int]$r.Height, $height - $top))
     $g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen($left, $top, 0, 0, $bmp.Size); $g.Dispose()
+    $shotWidth = $bmp.Width; $shotHeight = $bmp.Height
     $bmp.Save("C:\qa\text\$tag-$label.png", [System.Drawing.Imaging.ImageFormat]::Png); $bmp.Dispose()
+    Save-PillRecord "C:\qa\text\$tag-$label.png" $left $top $shotWidth $shotHeight
 }
 
 # How much the clock's text grew, which is the text size reaching the app.
@@ -2938,7 +2952,7 @@ function Test-TextScaling {
                 if ($bp -eq 'medium') { $clock[$text] = $s.clockHeight }
                 Check $Result "[A11Y-6] text $text %, $bp ($w x $h): the Manage dialog's buttons stay on screen" ($s.dialogButtonOnScreen -eq $true) "Close at $($s.dialogButton); Details $($s.detailsWidth) px wide"
                 foreach ($part in 'main', 'overview', 'settings', 'dialog') {
-                    try { Copy-QaFile $Vm -Source "C:\qa\text\$tag-$part.png" -Destination (Join-Path $Result.Folder "$tag-$part.png") } catch { }
+                    try { Copy-QaPhoto $Vm -Source "C:\qa\text\$tag-$part.png" -Destination (Join-Path $Result.Folder "$tag-$part.png") } catch { }
                 }
             }
         }
@@ -3392,6 +3406,7 @@ function Save-Pair($element, [string]$label) {
     $pg.DrawImage($bmp, (New-Object System.Drawing.Rectangle ($bmp.Width + 8), 0, $bmp.Width, $bmp.Height), 0, 0, $bmp.Width, $bmp.Height, [System.Drawing.GraphicsUnit]::Pixel, $attributes)
     $pg.Dispose(); $bmp.Dispose()
     $pair.Save("C:\qa\grey\$tag-$label.png", [System.Drawing.Imaging.ImageFormat]::Png); $pair.Dispose()
+    Save-PillRecord "C:\qa\grey\$tag-$label.png" ([int]$r.Left) ([int]$r.Top) ([int]$r.Width) ([int]$r.Height)
 }
 New-Item -ItemType Directory -Force 'C:\qa\grey' | Out-Null
 Save-Pair $w 'main'
@@ -3418,7 +3433,7 @@ function Test-GreyscaleStates {
     function Shoot([string]$tag, [string]$what) {
         $g = Invoke-UiStep $Vm "grey-$tag" "`$tag = '$tag'" $greyStep
         Check $Result "[A11Y-12] $what, photographed in colour and greyscale" (-not $g.error -and $g.details) "$($g.error)"
-        foreach ($part in 'main', 'overview') { try { Copy-QaFile $Vm -Source "C:\qa\grey\$tag-$part.png" -Destination (Join-Path $Result.Folder "$tag-$part.png"); $taken.Add("$tag-$part") } catch { } }
+        foreach ($part in 'main', 'overview') { try { Copy-QaPhoto $Vm -Source "C:\qa\grey\$tag-$part.png" -Destination (Join-Path $Result.Folder "$tag-$part.png"); $taken.Add("$tag-$part") } catch { } }
     }
     try {
         $null = Invoke-UiStep $Vm 'grey-resolution' '' $resolutionStep
@@ -3705,6 +3720,7 @@ function Measure-View([int]$view) {
     $shot = New-Object System.Drawing.Bitmap ([int]$r.Width), ([int]$r.Height)
     $g = [System.Drawing.Graphics]::FromImage($shot); $g.CopyFromScreen([int]$r.Left, [int]$r.Top, 0, 0, $shot.Size); $g.Dispose()
     $shot.Save("C:\qa\contrast\$tag-$($surface -replace ' ', '')-$view.png", [System.Drawing.Imaging.ImageFormat]::Png)
+    Save-PillRecord "C:\qa\contrast\$tag-$($surface -replace ' ', '')-$view.png" ([int]$r.Left) ([int]$r.Top) ([int]$r.Width) ([int]$r.Height)
     foreach ($t in (Get-Texts $root)) {
         try {
             $b = $t.Current.BoundingRectangle
@@ -3810,7 +3826,7 @@ function Test-Contrast {
             foreach ($h in @($m.hidden)) { if ($h) { $script:contrastHidden.Add($h) } }
             if ($m.lowest -and (-not $lowest -or $m.margin -lt $lowest.margin)) { $lowest = [pscustomobject]@{ margin = $m.margin; text = "$surface $($m.lowest)" } }
             try { Copy-QaFile $Vm -Source "C:\qa\contrast\$tag-$short.json" -Destination (Join-Path $Result.Folder "$tag-$short.json") } catch { }
-            if (@($m.under).Count) { foreach ($view in 0..$m.views) { try { Copy-QaFile $Vm -Source "C:\qa\contrast\$tag-$short-$view.png" -Destination (Join-Path $Result.Folder "$tag-$short-$view.png") } catch { } } }
+            if (@($m.under).Count) { foreach ($view in 0..$m.views) { try { Copy-QaPhoto $Vm -Source "C:\qa\contrast\$tag-$short-$view.png" -Destination (Join-Path $Result.Folder "$tag-$short-$view.png") } catch { } } }
         }
         Check $Result "[A11Y-4] $($label): every piece of text meets its floor" ($under.Count -eq 0 -and $count -ge 200) "$count measured; lowest against its floor: $(if ($lowest) { $lowest.text }); under: $($under -join '; ')"
     }
@@ -4035,6 +4051,7 @@ function Save-Shot($element, [string]$path) {
     $bmp = New-Object System.Drawing.Bitmap ([int]$r.Width), ([int]$r.Height)
     $g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen([int]$r.Left, [int]$r.Top, 0, 0, $bmp.Size); $g.Dispose()
     $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png); $bmp.Dispose()
+    Save-PillRecord $path ([int]$r.Left) ([int]$r.Top) ([int]$r.Width) ([int]$r.Height)
 }
 Save-Shot $w "C:\qa\families\$tag-main.png"
 if ($d) { Save-Shot $d "C:\qa\families\$tag-overview.png" }
@@ -4078,7 +4095,7 @@ function Test-ReceiverFamilies {
             Check $Result "[$($f.Family)] nothing logged as an error while it ran" ($errors.Count -eq 0) (($errors | Select-Object -First 3) -join ' | ')
             $shot = Invoke-UiStep $Vm "photograph-$tag" "`$tag = '$tag'" $familyPhotoStep
             Check $Result "[$($f.Family)] the main window and Details photographed for the judge" (-not $shot.error -and $shot.details) "$($shot.error)"
-            foreach ($part in 'main', 'overview') { try { Copy-QaFile $Vm -Source "C:\qa\families\$tag-$part.png" -Destination (Join-Path $Result.Folder "$tag-$part.png") } catch { } }
+            foreach ($part in 'main', 'overview') { try { Copy-QaPhoto $Vm -Source "C:\qa\families\$tag-$part.png" -Destination (Join-Path $Result.Folder "$tag-$part.png") } catch { } }
         }
         finally {
             if (-not $simulator.HasExited) { $simulator.Kill() }

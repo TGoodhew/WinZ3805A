@@ -276,6 +276,35 @@ function Get-AppWindow {
     $null
 }
 
+# Every severity pill inside a photographed region, written beside the photograph as
+# <photo>.pills.json (#728): its label, its severity as UI Automation reports it, and where it is in
+# the photograph. The judging gate compares these exactly with the baseline's, because a pill
+# changing from red to green moves a fraction of one per cent of a photograph and a pixel count
+# cannot see it. Only pills that fall inside the region, so a pill in a window the photograph does
+# not show cannot mark it changed. Best effort: a photograph is never lost to its record.
+function Save-PillRecord {
+    param([string]$Path, [int]$Left, [int]$Top, [int]$Width, [int]$Height)
+    try {
+        $pills = New-Object System.Collections.Generic.List[object]
+        $isPill = New-Object System.Windows.Automation.PropertyCondition($script:Ae::ClassNameProperty, 'SeverityPill')
+        foreach ($process in @(Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue)) {
+            $own = New-Object System.Windows.Automation.PropertyCondition($script:Ae::ProcessIdProperty, $process.Id)
+            foreach ($window in $script:Ae::RootElement.FindAll([System.Windows.Automation.TreeScope]::Children, $own)) {
+                foreach ($pill in $window.FindAll([System.Windows.Automation.TreeScope]::Descendants, $isPill)) {
+                    $r = $pill.Current.BoundingRectangle
+                    if ($r.IsEmpty -or $r.Width -le 0) { continue }
+                    $x = [int]$r.Left - $Left; $y = [int]$r.Top - $Top
+                    if ($x + $r.Width -le 0 -or $y + $r.Height -le 0 -or $x -ge $Width -or $y -ge $Height) { continue }
+                    $pills.Add([ordered]@{ name = "$($pill.Current.Name)"; status = "$($pill.Current.ItemStatus)"; x = $x; y = $y })
+                }
+            }
+        }
+        $sorted = @($pills | Sort-Object { $_.y }, { $_.x })
+        ConvertTo-Json -InputObject $sorted -Compress | Set-Content "$Path.pills.json" -Encoding UTF8
+    }
+    catch { }
+}
+
 # What was there when a window was not found: every WinZ3805A process and its windows' titles.
 function Get-WindowReport {
     @(Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue | ForEach-Object {
