@@ -99,13 +99,30 @@ $before = Get-ForegroundName
 [QaWindows]::keybd_event(0x5B, 0, 2, [UIntPtr]::Zero)   # and up: the Start menu opens
 Start-Sleep -Seconds 2
 [System.Windows.Forms.SendKeys]::SendWait('WinZ3805A')
-Start-Sleep -Seconds 4
+# Enter only once the search lists the app. On QA-Win10 the search host was still starting after the
+# revert when a fixed four seconds ran out, so Enter went to "search the web" and Edge opened a Bing
+# search for WinZ3805A instead (5 Oct 2026, twice). Failing to see it in 20 s, Enter goes in anyway,
+# as before, and the detail says the search never showed the app.
+Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
+function Test-SearchShowsApp {
+    $hosts = @(Get-Process -Name SearchApp, SearchHost, SearchUI -ErrorAction SilentlyContinue | ForEach-Object Id)
+    foreach ($id in $hosts) {
+        $mine = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ProcessIdProperty, $id)
+        foreach ($window in [System.Windows.Automation.AutomationElement]::RootElement.FindAll([System.Windows.Automation.TreeScope]::Children, $mine)) {
+            $hit = $window.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition) |
+                Where-Object { $_.Current.Name -match '^WinZ3805A\b' -and $_.Current.Name -match '\bApp\b' } | Select-Object -First 1
+            if ($hit) { return $true }
+        }
+    }
+    $false
+}
+$searchShowedApp = [bool](Wait-For { Test-SearchShowsApp } 20)
 [System.Windows.Forms.SendKeys]::SendWait('{ENTER}')
 # The second copy hands over and exits; the first comes to the front.
 $null = Wait-For { (Get-ForegroundName) -eq 'WinZ3805A' -and @(Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue).Count -eq 1 } 20
 $after = Get-ForegroundName
 $copies = @(Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue).Count
-Result '25' 'a covered window comes to the front on a second launch' ($after -eq 'WinZ3805A') "foreground before: $before; after: $after"
+Result '25' 'a covered window comes to the front on a second launch' ($after -eq 'WinZ3805A') "foreground before: $before; after: $after; the search listed the app before Enter: $searchShowedApp"
 Result '25' 'one copy still running' ($copies -eq 1) "$copies running"
 Result '25' 'the app logged taking the foreground' ((Get-Content $appLog -Raw) -match 'Brought to the front') ''
 $notepad | Stop-Process -Force -ErrorAction SilentlyContinue
