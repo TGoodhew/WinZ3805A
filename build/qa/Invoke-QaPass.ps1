@@ -4680,6 +4680,9 @@ $titles = @($script:Ae::RootElement.FindAll([System.Windows.Automation.TreeScope
 $facts.windows = $titles -join ' | '
 $prompt = $script:Ae::RootElement.FindAll([System.Windows.Automation.TreeScope]::Children, [System.Windows.Automation.Condition]::TrueCondition) | Where-Object { $_.Current.Name -match 'Security Warning|protected your PC' } | Select-Object -First 1
 $facts.prompt = if ($prompt) { "$($prompt.Current.Name)" } else { '' }
+# To the front before the photograph, or the photograph shows whatever covers it - the helper's
+# terminal, on QA-Win11 (5 Oct 2026) - and the judge has nothing to judge.
+if ($prompt) { $facts.frontForPhoto = [QaWin32]::BringToFront([IntPtr]$prompt.Current.NativeWindowHandle); Start-Sleep -Milliseconds 500 }
 $screen = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
 $bmp = New-Object System.Drawing.Bitmap $screen.Width, $screen.Height
 $g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen(0, 0, 0, 0, $bmp.Size); $g.Dispose()
