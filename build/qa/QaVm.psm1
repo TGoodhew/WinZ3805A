@@ -529,7 +529,9 @@ function Invoke-QaGuestScript {
     )
 
     $stamp = '{0}-{1:HHmmssfff}' -f $Name, (Get-Date)
-    $local = Join-Path ([IO.Path]::GetTempPath()) "qa-$stamp.ps1"
+    # The host's copies carry the process too: passes on two VMs at once run the same steps, and the
+    # guest's name alone could meet the other pass's in the shared temporary folder.
+    $local = Join-Path ([IO.Path]::GetTempPath()) "qa-$PID-$stamp.ps1"
     # A terminating error leaves the block, and the redirection with it, so it never reached the
     # log: a failing step came back with empty output and nothing to say why (2 Oct 2026). Caught
     # outside the block, it is appended to the same log, with its line, and the exit code is 99.
@@ -565,7 +567,7 @@ function Invoke-QaGuestScript {
     }
 
     $output = ''
-    $logLocal = Join-Path ([IO.Path]::GetTempPath()) "qa-$stamp.log"
+    $logLocal = Join-Path ([IO.Path]::GetTempPath()) "qa-$PID-$stamp.log"
     try {
         Copy-QaFile $Vm -Source "C:\qa\$stamp.log" -Destination $logLocal
         $output = Get-Content $logLocal -Raw
