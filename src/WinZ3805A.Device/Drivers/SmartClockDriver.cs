@@ -111,14 +111,26 @@ public sealed class SmartClockDriver(TimeProvider timeProvider) : IReceiverDrive
 
     /// <inheritdoc />
     /// <remarks>
-    /// §7.3's schedule, in §7.3's order. The refusable entry is <c>:SYNC:TINT?</c>, which has no
-    /// answer while the receiver is unlocked (§7.3.1) — its index is derived rather than written as
-    /// a literal, because an index that drifted from the list would suppress the wrong reading,
-    /// silently, and only while the receiver was unlocked.
+    /// <para>
+    /// §7.3's schedule, in §7.3's order. The refusable entries are <c>:SYNC:TINT?</c>, which has no
+    /// answer while the receiver is unlocked (§7.3.1), and <c>:PTIM:TIME?</c>, which the bench unit
+    /// refuses with -230 through the whole of power-up (measured 2 Oct 2026) — asked every second
+    /// since #561, it filled the error queue with stale entries that a confirmed command then
+    /// reported as its own failure (#729). The indices are derived rather than written as literals,
+    /// because one that drifted from the list would suppress the wrong reading, silently, and only
+    /// while the receiver was unlocked.
+    /// </para>
+    /// <para>
+    /// <b><c>:GPS:SAT:TRAC:COUN?</c> is refused too, and deliberately not listed.</b> The bench unit
+    /// refuses it only for the first half minute of power-up, while its GPS engine starts, and the
+    /// suppression lasts until the sync state changes — so listing it would hide the satellite count
+    /// for the rest of power-up, which is when somebody is watching it climb. Its few refusals are
+    /// what the confirmed-command path's exclusive section keeps out of a verdict.
+    /// </para>
     /// </remarks>
     public PollPlan Plan { get; } = new(
         FastTierOrder,
-        Array.IndexOf(FastTierOrder, ":SYNC:TINT?"),
+        [Array.IndexOf(FastTierOrder, ":SYNC:TINT?"), Array.IndexOf(FastTierOrder, ":PTIM:TIME?")],
         FullStatus: ":SYST:STAT?")
     {
         // §7.3's sweep asks all six, which is why the common currency has exactly these

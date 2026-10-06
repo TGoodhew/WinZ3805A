@@ -747,6 +747,63 @@ public class PollingServiceTests
     }
 
     /// <summary>
+    /// The time of day, refused through power-up, is asked once there too (#729).
+    /// </summary>
+    /// <remarks>
+    /// #561 put <c>:PTIM:TIME?</c> in the sweep, and the bench unit refuses every time query until
+    /// lock, so through power-up it queued a -230 every second — enough stale entries that a
+    /// confirmed command read one as its own failure. The time interval is refused in the same
+    /// sweep, so this also shows the two are suppressed independently.
+    /// </remarks>
+    [Fact]
+    public async Task TheTimeOfDayRefusedThroughPowerUpIsAskedOnce()
+    {
+        int askedTime = 0;
+        int askedInterval = 0;
+        ControllableTransport transport = new(command =>
+        {
+            if (command.StartsWith("*IDN", StringComparison.OrdinalIgnoreCase))
+            {
+                return Identity;
+            }
+
+            switch (command)
+            {
+                case ":PTIM:TIME?":
+                    askedTime++;
+                    return null;
+                case ":SYNC:TINT?":
+                    askedInterval++;
+                    return null;
+            }
+
+            return command switch
+            {
+                ":SYNC:STAT?" => " POW",
+                ":SYST:STAT?" => StatusScreen(),
+                _ => " +0",
+            };
+        })
+        {
+            Banner = Identity,
+            PromptFor = command => command is ":PTIM:TIME?" or ":SYNC:TINT?" ? "E-230> " : null,
+        };
+
+        FakeTimeProvider clock = new();
+        (DeviceSessionService session, ReceiverStateStore store) = await ConnectedAsync(transport, clock);
+        await using DeviceSessionService owned = session;
+
+        await using PollingService poller = new(owned, store, clock);
+        poller.Start();
+
+        // Two skips a sweep from the second on: three sweeps in, both have been skipped twice.
+        await WaitFor(clock, () => poller.RefusedQuerySkips >= 4, () => (int)poller.FastSweeps);
+
+        Assert.Equal(1, askedTime);
+        Assert.Equal(1, askedInterval);
+    }
+
+    /// <summary>
     /// And it is asked again the moment the receiver's state changes, without anything knowing
     /// which states support the reading.
     /// </summary>

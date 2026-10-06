@@ -58,17 +58,19 @@ public sealed class PollingService : IAsyncDisposable
     private int _fullRequested;
 
     /// <summary>
-    /// The discriminator's answer under which the receiver last refused the plan's refusable query,
-    /// or null.
+    /// For each of the plan's refusable queries the receiver has refused, the discriminator's answer
+    /// it refused it under, keyed by the query's index in the plan.
     /// </summary>
     /// <remarks>
     /// See <see cref="PollFastAsync"/>. Holding the state rather than a bare flag is what makes the
     /// suppression self-clearing: the question is asked again the moment the receiver's state
-    /// changes, so nothing has to know which states support the reading.
+    /// changes, so nothing has to know which states support the reading. One entry per query since
+    /// #729, because two queries can be refused under different states — <c>:SYNC:TINT?</c> in
+    /// every unlocked state, <c>:PTIM:TIME?</c> only in power-up.
     /// </remarks>
-    private string? _refusedUnder;
+    private readonly Dictionary<int, string> _refusedUnder = [];
 
-    /// <summary>How many sweeps have skipped the refusable query, for the tests to see.</summary>
+    /// <summary>How many times a sweep has skipped a refusable query, for the tests to see.</summary>
     public long RefusedQuerySkips { get; private set; }
 
     /// <summary>Creates a poller for one session.</summary>
@@ -333,14 +335,14 @@ public sealed class PollingService : IAsyncDisposable
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>The sweep is conditional on the plan's one refusable command, and it has to be.</b> The
+    /// <b>The sweep is conditional on the plan's refusable commands, and it has to be.</b> The
     /// case the mechanism was built for (§7.3.1): while a SmartClock receiver is not locked there
     /// is no 1 PPS to measure against, so <c>:SYNC:TINT?</c> answers nothing and puts <c>E-230</c>
     /// in the prompt — once a second, indefinitely. On the bench receiver that overflowed the
     /// error queue outright: it began answering <c>E-350</c>, and the Diagnostics page could not
-    /// drain it because the poll refilled it faster than the page emptied it (#155). Which command
-    /// that is, if any, is the driver's to say (<see cref="PollPlan.RefusableIndex"/>, #287); the
-    /// suppression policy is this loop's either way.
+    /// drain it because the poll refilled it faster than the page emptied it (#155). Which commands
+    /// those are, if any, is the driver's to say (<see cref="PollPlan.RefusableIndices"/>, #287,
+    /// #729); the suppression policy is this loop's either way.
     /// </para>
     /// <para>
     /// <b>The cost is not the churn.</b> §7.2 requires the error queue to be read after every tier C
@@ -388,9 +390,10 @@ public sealed class PollingService : IAsyncDisposable
 
         for (int i = 1; i < answers.Length; i++)
         {
-            if (i == plan.RefusableIndex)
+            if (plan.RefusableIndices.Contains(i))
             {
-                if (string.Equals(_refusedUnder, state ?? string.Empty, StringComparison.Ordinal))
+                if (_refusedUnder.TryGetValue(i, out string? refusedUnder)
+                    && string.Equals(refusedUnder, state ?? string.Empty, StringComparison.Ordinal))
                 {
                     RefusedQuerySkips++;
                     continue;
@@ -399,7 +402,15 @@ public sealed class PollingService : IAsyncDisposable
                 (answers[i], bool refused) =
                     await AskWithStatusAsync(driver, plan.FastTier[i], cancellationToken).ConfigureAwait(false);
 
-                _refusedUnder = refused ? state ?? string.Empty : null;
+                if (refused)
+                {
+                    _refusedUnder[i] = state ?? string.Empty;
+                }
+                else
+                {
+                    _refusedUnder.Remove(i);
+                }
+
                 continue;
             }
 
@@ -574,7 +585,7 @@ public sealed class PollingService : IAsyncDisposable
         }
 
         _observedDriver = driver;
-        _refusedUnder = null;
+        _refusedUnder.Clear();
         _warnedAboutEmptyPlan = false;
     }
 
