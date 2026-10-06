@@ -293,6 +293,35 @@ Start-Sleep -Seconds 2
     if ($r.Output -notmatch 'wrote=True') { throw "the copy $Family wrote no data within 90 s of starting, so there is nothing for the upgrade to save" }
 }
 
+# The four contrast themes, by the tag their photographs are filed under and the internal name they are
+# applied by. Windows 11 shows its four as Aquatic, Desert, Dusk and Night sky but applies them only by
+# the old names - asked for its own names it applies High Contrast Black every time - and the old names
+# do not map to its themes in the order they are listed in Settings. Established on QA-Win11 (build
+# 26300) from the theme files under %WINDIR%\Resources\Ease of Access Themes, each matching one
+# published Windows 11 palette on five colours - window, hyperlink, selection, selected text, button
+# text: hc1 is Dusk (#2D3236, link #70EBDE), hc2 Night sky (#000000, link #8080FF), hcblack Aquatic
+# (#202020, link #75E9FC), hcwhite Desert (#FFFAEF, link #1C5E75). Until 6 Oct 2026 three of the four
+# were filed under the wrong name. Background is that theme's window colour, which the high-contrast
+# scenario checks, so a mislabel fails instead of passing quietly.
+function Get-ContrastSchemes {
+    param([int]$Build)
+    if ($Build -ge 22000) {
+        [ordered]@{
+            dusk     = [pscustomobject]@{ Name = 'High Contrast #1'; Background = '#2D3236' }
+            nightsky = [pscustomobject]@{ Name = 'High Contrast #2'; Background = '#000000' }
+            aquatic  = [pscustomobject]@{ Name = 'High Contrast Black'; Background = '#202020' }
+            desert   = [pscustomobject]@{ Name = 'High Contrast White'; Background = '#FFFAEF' }
+        }
+    }
+    else {
+        [ordered]@{
+            hc1   = [pscustomobject]@{ Name = 'High Contrast #1'; Background = '#000000' }
+            hc2   = [pscustomobject]@{ Name = 'High Contrast #2'; Background = '#000000' }
+            black = [pscustomobject]@{ Name = 'High Contrast Black'; Background = '#000000' }
+            white = [pscustomobject]@{ Name = 'High Contrast White'; Background = '#FFFFFF' }
+        }
+    }
+}
 # A photograph from the guest, and its pill record with it when there is one (#728): Save-PillRecord
 # writes <photo>.pills.json beside each photograph of the app, and the judging gate compares it with
 # the baseline's. The record is optional, so a missing one is not an error.
@@ -2588,12 +2617,8 @@ function Test-HighContrast {
         -ArgumentList '--pipe-client', $pipe, '--start', 'locked', '--speed', '2', '--control', "$pipe-control" `
         -RedirectStandardOutput (Join-Path $Result.Folder 'simulator.log') -RedirectStandardError (Join-Path $Result.Folder 'simulator.err')
     $null = Invoke-QaGuestScript $Vm -Name 'connect-com2' -Script $connectCom2
-    # The schemes by their internal names, on both systems. Windows 11 shows them as Aquatic, Dusk, Night
-    # sky and Desert, but asked for those names it applies High Contrast Black every time, which is what
-    # the distinct-themes check below caught; asked for the old names, it applies its own four.
     $build = (Get-Facts $Vm).build
-    $schemes = if ($build -ge 22000) { [ordered]@{ aquatic = 'High Contrast #1'; dusk = 'High Contrast #2'; nightsky = 'High Contrast Black'; desert = 'High Contrast White' } }
-               else { [ordered]@{ hc1 = 'High Contrast #1'; hc2 = 'High Contrast #2'; black = 'High Contrast Black'; white = 'High Contrast White' } }
+    $schemes = Get-ContrastSchemes $build
     $active = @{}
     try {
         $seen = Wait-AppLog $Vm 'State: LOCK' 0 120 'locked'
@@ -2601,11 +2626,14 @@ function Test-HighContrast {
         if (-not $seen.found) { return }
         $null = Invoke-UiStep $Vm 'hc-resolution' '' $resolutionStep
         foreach ($tag in $schemes.Keys) {
-            $name = $schemes[$tag]
+            $name = $schemes[$tag].Name
             $s = Invoke-UiStep $Vm "hc-$tag" "`$scheme = '$name'; `$tag = '$tag'" $contrastStep
             if ($s.error) { Check $Result "[A11Y-8] $name" $false $s.error; continue }
             $active[$tag] = [pscustomobject]@{ Name = $s.active; Window = $s.windowColour; Text = $s.textColour }
             Check $Result "[A11Y-8] $name is on ($tag)" ($s.applied -and $s.active -eq $name) "applied $($s.applied); active '$($s.active)'; window $($s.windowColour), text $($s.textColour)"
+            # The tag is the photographs' name, so it must be the theme on screen: three of Windows 11's
+            # four were filed under the wrong name until 6 Oct 2026 (Get-ContrastSchemes).
+            Check $Result "[A11Y-8] $name is the $tag theme: its window colour is $($schemes[$tag].Background)" ($s.windowColour -eq $schemes[$tag].Background) "window $($s.windowColour)"
             foreach ($part in 'main', 'overview', 'satellites') {
                 $m = $s.$part
                 if (-not $m) { Check $Result "[A11Y-8] $name, $part" $false 'not photographed'; continue }
@@ -3867,12 +3895,11 @@ function Test-Contrast {
                 Measure-Condition "$($theme.ToLowerInvariant())-$($worst.ToLowerInvariant())" "$theme, over Mica on a $($worst.ToLowerInvariant()) wallpaper (the hardest of six, backdrop $($set.backdrop))"
             }
         }
-        $schemes = if ($build -ge 22000) { [ordered]@{ aquatic = 'High Contrast #1'; dusk = 'High Contrast #2'; nightsky = 'High Contrast Black'; desert = 'High Contrast White' } }
-                   else { [ordered]@{ hc1 = 'High Contrast #1'; hc2 = 'High Contrast #2'; black = 'High Contrast Black'; white = 'High Contrast White' } }
+        $schemes = Get-ContrastSchemes $build
         foreach ($name in $schemes.Keys) {
-            $set = Invoke-UiStep $Vm "contrast-$name" "`$theme = ''; `$wall = 'Gray'; `$scheme = '$($schemes[$name])'; `$hues = ''" $contrastSetStep
-            if ($set.error -or $set.contrast -ne $schemes[$name]) { Check $Result "[A11Y-4] $($schemes[$name]) is on ($name)" $false "$($set.error) active '$($set.contrast)'"; continue }
-            Measure-Condition "hc-$name" "$($schemes[$name]) ($name)"
+            $set = Invoke-UiStep $Vm "contrast-$name" "`$theme = ''; `$wall = 'Gray'; `$scheme = '$($schemes[$name].Name)'; `$hues = ''" $contrastSetStep
+            if ($set.error -or $set.contrast -ne $schemes[$name].Name) { Check $Result "[A11Y-4] $($schemes[$name].Name) is on ($name)" $false "$($set.error) active '$($set.contrast)'"; continue }
+            Measure-Condition "hc-$name" "$($schemes[$name].Name) ($name)"
         }
     }
     finally {
