@@ -43,8 +43,9 @@
       receiver           the app against the simulated Z3805A on the VM's COM2 (#639): connects and
                               locks, follows a pulled antenna into holdover and back, and comes
                               back by itself after the receiver goes silent; the lock
-                              notification on screen, and none with the switch off (§10). Needs
-                              the VM's simulator port (Add-QaSimulatorPort)
+                              notification on screen, and none with the switch off (§10); and
+                              restarted into a reply already under way, it realigns and connects
+                              (#707). Needs the VM's simulator port (Add-QaSimulatorPort)
       sign-in            §20  start at sign-in, signed out and in for real: hidden, then with the
                               window, then off; a receiver that answers only a minute after
                               sign-in; the setting turned off in Windows. UI Automation and the
@@ -645,6 +646,24 @@ Start-Process "shell:AppsFolder\$($pkg.PackageFamilyName)!App"
         $quiet = Wait-AppLog $Vm 'Notified:' $mark 100 'silence'
         Check $Result '[10] and no notification with the switch off, 100 s on' (-not $quiet.found) $(if ($quiet.found) { $quiet.line } else { 'none logged' })
         $null = Send-SimulatorControl "$pipe-control" 'antenna on'
+
+        # #707: the app restarted while the receiver is partway through a reply. The simulator's
+        # mid-reply fault (#710) sends a status screen with no prompt until the next command, so the
+        # connect listen hears a reply under way and no prompt, and the first *CLS reads the rest of
+        # it. #708 reads that command's own prompt after it; before, *IDN? read a bare prompt and the
+        # connect failed (QA-Win10, 5 Oct 2026). The app is stopped before the fault is armed, so it
+        # cannot land in a running session's poll instead.
+        $null = Invoke-QaGuestScript $Vm -Name 'stop-for-mid-reply' -Script 'Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue | Stop-Process -Force'
+        $mark = (Wait-AppLog $Vm 'a line that is never written' 0 1 'mark-mid-reply').count
+        $armed = Send-SimulatorControl "$pipe-control" 'fault mid-reply'
+        Start-Sleep -Seconds 2
+        $null = Invoke-QaGuestScript $Vm -Name 'start-mid-reply' -Script 'Start-Process "shell:AppsFolder\$((Get-AppxPackage -Name WinZ3805A).PackageFamilyName)!App"'
+        $seen = Wait-AppLog $Vm 'The port opened mid-reply' $mark 90 'mid-reply'
+        Check $Result '[#707] restarted mid-reply: the rest of the reply is read past before anything is asked' $seen.found "simulator: $armed; $($seen.line)$(if (-not $seen.found) { $seen.tail })"
+        $seen = Wait-AppLog $Vm 'Session COM2 is now Connected' $mark 60 'mid-reply-connected'
+        Check $Result '[#707] and it connects, the identity read whole' ($seen.found -and $seen.line -match 'SYMMETRICOM,Z3805A,') "$($seen.line)$(if (-not $seen.found) { $seen.tail })"
+        $seen = Wait-AppLog $Vm 'State: ' $seen.count 120 'mid-reply-polling'
+        Check $Result '[#707] and polls: a State line after it' $seen.found $seen.line
     }
     finally {
         if (-not $simulator.HasExited) { $simulator.Kill() }
