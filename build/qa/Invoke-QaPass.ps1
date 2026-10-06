@@ -4387,8 +4387,23 @@ function Get-ScreenNumbers {
         foreach ($column in $columns) {
             # The clock: the Time page shows it, and it moves between the screen and the read.
             if ($column.Trim() -match '^(UTC|GPS)\s+\d\d:\d\d:\d\d') { continue }
+            # A satellite row - digits only, in the left column - holds the two tables side by side:
+            # tracked (PRN El Az C/N) up to column 18, not tracked (PRN El Az) after it. Each number
+            # carries its satellite and field, so it is compared with the app's own line for that
+            # PRN rather than with any number anywhere (Test-ShownSatellite).
+            # (Against the left 46 characters, not $columns[0]: a one-element array from the if above
+            # unwraps to a string, and [0] is then its first character.)
+            $satelliteRow = $column -ceq $line.Substring(0, [Math]::Min(46, $line.Length)) -and $column -match '^[\s\d]+$' -and $column.Trim()
+            $group = @{ $true = @(); $false = @() }
             foreach ($m in [regex]::Matches($column, '(?<![\w.])[-+]?\d+(\.\d+)?(?![\w.])')) {
-                [pscustomobject]@{ text = $m.Value; value = [double]($m.Value -replace '^\+', ''); line = $column.Trim() }
+                $n = [pscustomobject]@{ text = $m.Value; value = [double]($m.Value -replace '^\+', ''); line = $column.Trim(); prn = $null; field = $null }
+                if ($satelliteRow) {
+                    $tracked = $m.Index -lt 18
+                    $n.field = @('prn', 'el', 'az', 'cn')[[Math]::Min(3, $group[$tracked].Count)]
+                    $n.prn = if ($group[$tracked].Count) { $group[$tracked][0].value } else { $n.value }
+                    $group[$tracked] += $n
+                }
+                $n
             }
         }
     }
@@ -4401,6 +4416,37 @@ function Test-ShownValue {
         if ([Math]::Abs($s.value - $Value) -le $s.tolerance) { return $true }
     }
     $false
+}
+
+# The app's own line for each satellite - "PRN 31, elevation 54 degrees, azimuth 53 degrees, C/N 36
+# of 55" - by PRN.
+function Get-ShownSky {
+    param([string]$ShownText)
+    $sky = @{}
+    foreach ($m in [regex]::Matches($ShownText, 'PRN (\d+), elevation (\d+) degrees, azimuth (\d+) degrees(?:, C/N (\d+))?')) {
+        $sky[[double]$m.Groups[1].Value] = @{
+            el = [double]$m.Groups[2].Value; az = [double]$m.Groups[3].Value
+            cn = if ($m.Groups[4].Success) { [double]$m.Groups[4].Value } else { $null }
+        }
+    }
+    $sky
+}
+
+# Whether a satellite-table number matches the app's line for the same satellite. The sky moves on
+# whatever the simulator's speed, and the app is read before the screen is taken, so elevation and
+# azimuth get a degree and C/N two: the first run found C/N 35 and 37 on the screen against 34 and 36
+# in the app, the same satellites ~48 s apart. Compared per PRN, because against any number anywhere
+# that slack let a C/N of 33 pass on a neighbour's 34.
+function Test-ShownSatellite {
+    param($Number, $Sky)
+    $s = $Sky[$Number.prn]
+    if (-not $s) { return $false }
+    switch ($Number.field) {
+        'prn' { $true }
+        'el' { [Math]::Abs($s.el - $Number.value) -le 1 }
+        'az' { $d = [Math]::Abs($s.az - $Number.value); [Math]::Min($d, 360 - $d) -le 1 }
+        'cn' { $null -ne $s.cn -and [Math]::Abs($s.cn - $Number.value) -le 2 }
+    }
 }
 
 function Test-ScreenFields {
@@ -4452,7 +4498,10 @@ function Test-ScreenFields {
                 [pscustomobject]@{ value = [double]($m.Value -replace '^\+', ''); tolerance = 0.5 * [Math]::Pow(10, -$decimals) + 1e-9 }
             }
             $numbers = @(Get-ScreenNumbers (Get-Content $screenPath -Raw))
-            $missing = @($numbers | Where-Object { -not (Test-ShownValue $_.value $shown) } | Where-Object {
+            $sky = Get-ShownSky $shownText
+            $missing = @($numbers | Where-Object {
+                    if ($_.field) { -not (Test-ShownSatellite $_ $sky) } else { -not (Test-ShownValue $_.value $shown) }
+                } | Where-Object {
                 $n = $_; -not ($allowed | Where-Object { $n.line -match $_.pattern })
             })
             Check $Result "[9] $($state): every number on the status screen is shown somewhere in the app" ($missing.Count -eq 0 -and $numbers.Count -gt 20) "$($numbers.Count) numbers on the screen, $($missing.Count) not found: $((@($missing | ForEach-Object { "$($_.text) in '$($_.line)'" }) | Select-Object -Unique | Select-Object -First 12) -join '; ')"
