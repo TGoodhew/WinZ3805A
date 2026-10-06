@@ -291,11 +291,16 @@ function Save-PillRecord {
             $own = New-Object System.Windows.Automation.PropertyCondition($script:Ae::ProcessIdProperty, $process.Id)
             foreach ($window in $script:Ae::RootElement.FindAll([System.Windows.Automation.TreeScope]::Children, $own)) {
                 foreach ($pill in $window.FindAll([System.Windows.Automation.TreeScope]::Descendants, $isPill)) {
+                    # The footer's staleness pill says how old the readings were at the instant of the
+                    # photograph ("overdue" past 15 s), which is timing, not a state: it came and went
+                    # between two runs of the same build (6 Oct 2026). The pixels already treat that
+                    # line as noise.
+                    if ($pill.Current.AutomationId -eq 'FooterStalenessPill') { continue }
                     $r = $pill.Current.BoundingRectangle
                     if ($r.IsEmpty -or $r.Width -le 0) { continue }
                     $x = [int]$r.Left - $Left; $y = [int]$r.Top - $Top
                     if ($x + $r.Width -le 0 -or $y + $r.Height -le 0 -or $x -ge $Width -or $y -ge $Height) { continue }
-                    $pills.Add([ordered]@{ name = "$($pill.Current.Name)"; status = "$($pill.Current.ItemStatus)"; x = $x; y = $y })
+                    $pills.Add([ordered]@{ id = "$($pill.Current.AutomationId)"; name = "$($pill.Current.Name)"; status = "$($pill.Current.ItemStatus)"; x = $x; y = $y })
                 }
             }
         }
