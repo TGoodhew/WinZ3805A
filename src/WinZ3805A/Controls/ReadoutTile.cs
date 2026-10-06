@@ -74,6 +74,59 @@ public sealed class ReadoutTile : Control
     private const string SpacerRunPart = "PART_SpacerRun";
     private const string UnitRunPart = "PART_UnitRun";
     private const string ReserveValueRunPart = "PART_ReserveValueRun";
+    private const string CaptionTextPart = "PART_CaptionText";
+
+    /// <summary>Identifies the <see cref="Caption"/> dependency property.</summary>
+    public static readonly DependencyProperty CaptionProperty = DependencyProperty.Register(
+        nameof(Caption), typeof(string), typeof(ReadoutTile), new PropertyMetadata(string.Empty, OnCaptionChanged));
+
+    /// <summary>
+    /// What the number is measured against - "relative to GPS" - set under the value on the same axis
+    /// as <see cref="Label"/>; empty for none.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Inside the tile because the axis is (#716). The Overview drew this line as a TextBlock beside the
+    /// tile, which could only align to the tile's edges or its middle - and the label is centred on the
+    /// decimal point, not on either, the tile's width being the reserve for the widest value rather than
+    /// the one showing. Left-aligned, the caption sat apart from the reading; centred on the tile, it was
+    /// still off the axis by the empty reserve. Here it takes the label's own transform.
+    /// </para>
+    /// <para>
+    /// Assigned only when it differs, as <see cref="Value"/> is (#403): the page sets it on every render.
+    /// </para>
+    /// </remarks>
+    public string Caption
+    {
+        get => (string)GetValue(CaptionProperty);
+        set
+        {
+            if (string.Equals(_captionShown, value, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            SetValue(CaptionProperty, value);
+        }
+    }
+
+    private string _captionShown = string.Empty;
+
+    private static void OnCaptionChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        var tile = (ReadoutTile)d;
+        tile._captionShown = (string?)e.NewValue ?? string.Empty;
+        tile.ApplyCaption();
+    }
+
+    private void ApplyCaption()
+    {
+        if (GetTemplateChild(CaptionTextPart) is TextBlock caption)
+        {
+            caption.Text = _captionShown;
+            caption.Visibility = _captionShown.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
+        }
+    }
 
     /// <summary>Identifies the <see cref="Label"/> dependency property.</summary>
     public static readonly DependencyProperty LabelProperty = DependencyProperty.Register(
@@ -186,6 +239,7 @@ public sealed class ReadoutTile : Control
         base.OnApplyTemplate();
         UpdateSizeState(useTransitions: false);
         Refresh();
+        ApplyCaption();
     }
 
     private static void OnAnyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -326,6 +380,19 @@ public sealed class ReadoutTile : Control
         }
 
         shift.X = offset;
+
+        // The caption under the value hangs from the same axis, by the same transform and for the
+        // same reason (#716).
+        if (GetTemplateChild(CaptionTextPart) is FrameworkElement caption)
+        {
+            if (caption.RenderTransform is not TranslateTransform captionShift)
+            {
+                captionShift = new TranslateTransform();
+                caption.RenderTransform = captionShift;
+            }
+
+            captionShift.X = offset;
+        }
     }
 
     /// <summary>Resolves a theme brush, or null when the key is absent.</summary>

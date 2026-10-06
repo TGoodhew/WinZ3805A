@@ -152,34 +152,21 @@
                                            Foreground="{ThemeResource WzTextSecondaryBrush}" />
                             </StackPanel>
 
-                            <StackPanel Spacing="{ThemeResource WzSpaceXxs}">
-                                <controls:ReadoutTile x:Name="TimeInterval"
-                                                      Label="1 PPS TI"
-                                                      Unit="ns"
-                                                      DecimalPlaces="1"
-                                                      MaxIntegerDigits="5"
-                                                      AllowNegative="True"
-                                                      Size="Medium" />
-                                <!--
-                                    Written from the view model rather than as a literal (#435).
-                                    "relative to GPS" under an em dash is prose about a measurement
-                                    the receiver may have no way of making, and a literal here is
-                                    exactly how the Lifetime card's oven-controlled-oscillator
-                                    sentence survived.
-
-                                    Centred, on the axis the tile already centres its label, value
-                                    and unit on (#716). Left-aligned, it sat at the edge of the tile's
-                                    reserved width, apart from the reading it describes: a little left
-                                    of the value beside the pills, and far from it once the block wraps
-                                    under them in a narrow card, where it read as a separate scrap of
-                                    text. Centred, the four are one block wherever the row puts it.
-                                -->
-                                <TextBlock x:Name="TimeIntervalCaption"
-                                           Style="{ThemeResource WzCaptionTextStyle}"
-                                           Foreground="{ThemeResource WzTextSecondaryBrush}"
-                                           TextAlignment="Center"
-                                           TextWrapping="Wrap" />
-                            </StackPanel>
+                            <!--
+                                The caption ("relative to GPS") is the tile's own since #716, so it
+                                hangs from the decimal axis with the label rather than from the edge
+                                of the width the tile reserves. It is written from the view model
+                                rather than as a literal (#435): it is prose about a measurement the
+                                receiver may have no way of making, and a literal here is exactly how
+                                the Lifetime card's oven-controlled-oscillator sentence survived.
+                            -->
+                            <controls:ReadoutTile x:Name="TimeInterval"
+                                                  Label="1 PPS TI"
+                                                  Unit="ns"
+                                                  DecimalPlaces="1"
+                                                  MaxIntegerDigits="5"
+                                                  AllowNegative="True"
+                                                  Size="Medium" />
                         </controls:FlowPanel>
                     </StackPanel>
                 </Border>
