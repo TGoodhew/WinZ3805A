@@ -186,7 +186,11 @@ function Get-ReleaseZip {
     if (-not (Test-Path $path)) {
         Say "downloading $name"
         $ProgressPreference = 'SilentlyContinue'
-        Invoke-WebRequest -UseBasicParsing "https://github.com/TGoodhew/WinZ3805A/releases/download/$Tag/$name" -OutFile $path
+        # To a file of this process's own, then moved into place: a pass on the other VM may be
+        # fetching the same release at the same moment.
+        $partial = "$path.$PID.part"
+        Invoke-WebRequest -UseBasicParsing "https://github.com/TGoodhew/WinZ3805A/releases/download/$Tag/$name" -OutFile $partial
+        try { Move-Item $partial $path -ErrorAction Stop } catch { Remove-Item $partial -Force -ErrorAction SilentlyContinue }
     }
     $path
 }
@@ -497,7 +501,14 @@ function Get-Simulator {
     $folder = if ($Kind -eq 'SmartClock') { 'simulator' } else { "simulator-$($Kind.ToLowerInvariant())" }
     $exe = Join-Path $OutDir "$folder\$($Kind)Simulator.exe"
     if (-not (Test-Path $exe)) {
-        $output = & dotnet build (Join-Path $repo "tools\$($Kind)Simulator\$($Kind)Simulator.csproj") -c Release -o (Split-Path $exe) 2>&1 | Out-String
+        # One build at a time on this host: passes on two VMs at once build the same project, and
+        # its obj folder is shared whatever -o says.
+        $buildLock = New-Object System.Threading.Mutex($false, 'Global\WinZ3805A-QA-simulator-build')
+        try {
+            try { [void]$buildLock.WaitOne() } catch [System.Threading.AbandonedMutexException] { }
+            $output = & dotnet build (Join-Path $repo "tools\$($Kind)Simulator\$($Kind)Simulator.csproj") -c Release -o (Split-Path $exe) 2>&1 | Out-String
+        }
+        finally { $buildLock.ReleaseMutex(); $buildLock.Dispose() }
         if ($LASTEXITCODE -ne 0 -or -not (Test-Path $exe)) { throw "the simulator did not build: $output" }
     }
     $exe
@@ -5073,18 +5084,23 @@ $bmp.Save('C:\qa\wallpaper.bmp', [System.Drawing.Imaging.ImageFormat]::Bmp); $bm
 [void][QaWallpaper]::Set(0x14, 0, 'C:\qa\wallpaper.bmp', 3)
 '@
 
-# One running VM on this host at a time, whichever pass started it. Two at once made three
-# timing-sensitive scenarios fail on a working app (4-5 Oct 2026), and nothing but memory kept them
-# apart. A pass killed while holding it leaves it abandoned, which the next one takes over.
-$hostLock = New-Object System.Threading.Mutex($false, 'Global\WinZ3805A-QA-one-vm-at-a-time')
+# One pass per VM at a time: two passes reverting, starting and driving the same machine would wreck
+# each other. Different VMs may run at once - one pass per machine, each with its own -OutDir - which
+# halves a full pass. Until 6 Oct 2026 this was one VM per HOST, after two at once made three
+# scenarios fail (4-5 Oct); read again, two of the three were real app bugs that also failed alone
+# (#711 and #707, both fixed) and the third (upgrade-1.2.0) passed in every run before and after. The
+# host-side collisions two passes could have - the simulator build, temporary files, a release
+# download - are guarded where they happen. A pass killed while holding a VM's lock leaves it
+# abandoned, which the next one takes over.
 foreach ($machine in $Machines) {
     $vm = Get-Vm $machine
+    $vmLock = New-Object System.Threading.Mutex($false, "Global\WinZ3805A-QA-vm-$machine")
     $held = $false
     try {
-        try { $held = $hostLock.WaitOne(0) } catch [System.Threading.AbandonedMutexException] { $held = $true }
+        try { $held = $vmLock.WaitOne(0) } catch [System.Threading.AbandonedMutexException] { $held = $true }
         if (-not $held) {
-            Say "another pass has a VM running on this host; waiting for it before starting $machine"
-            try { $held = $hostLock.WaitOne() } catch [System.Threading.AbandonedMutexException] { $held = $true }
+            Say "another pass is using $machine; waiting for it"
+            try { $held = $vmLock.WaitOne() } catch [System.Threading.AbandonedMutexException] { $held = $true }
         }
         foreach ($name in $scenarioTable.Keys) {
             if ($Scenarios -notcontains $name) { continue }
@@ -5111,7 +5127,8 @@ foreach ($machine in $Machines) {
     finally {
         Stop-QaVm -Vm $vm
         Say "$machine powered off"
-        if ($held) { $hostLock.ReleaseMutex() }
+        if ($held) { $vmLock.ReleaseMutex() }
+        $vmLock.Dispose()
     }
 }
 

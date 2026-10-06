@@ -112,10 +112,16 @@ A step that passes it is stopped, its script killed in the guest, and the screen
 the host (`deadline-<step>.png` in the scenario's folder) before the scenario reports the error. One
 step once waited an hour on a Windows prompt nobody could answer.
 
-**One VM at a time.** The pass holds a host-wide lock (`Global\WinZ3805A-QA-one-vm-at-a-time`) while
-a VM is running. A second pass started meanwhile waits, and says so. Two VMs at once made
-`connect-cancel`, `receiver` and `upgrade-1.2.0` fail on a working app (4–5 Oct 2026); one at a time,
-all three passed.
+**One pass per VM, and the VMs in parallel.** A pass holds a lock on each VM while it drives it
+(`Global\WinZ3805A-QA-vm-<name>`), so a second pass wanting the same machine waits and says so. Two
+passes on *different* VMs run at once, each given its own `-Machines` and `-OutDir`, which halves a
+full pass. Until 6 Oct 2026 the lock was host-wide, after two VMs at once made `connect-cancel`,
+`receiver` and `upgrade-1.2.0` fail (4–5 Oct). Read again, two of those were real app bugs that also
+failed with one VM running (#711 and #707, both since fixed), and `upgrade-1.2.0` passed in every
+run before and after. What two passes share on the host is guarded where it is shared: the
+simulator build (one at a time, since `obj` is common to every `-o`), the host's temporary copies of
+guest steps (named with the process), and release downloads (written to a file of their own, then
+moved into place).
 
 **Known nondeterminism**, so it is not mistaken for a defect:
 - **The simulator's first 30 seconds after a power cycle.** It refuses the GPS engine's identity and
