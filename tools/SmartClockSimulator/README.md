@@ -81,6 +81,7 @@ start locked              jump straight to a settled lock
 holdover | recover        force holdover, or start recovery, as the commands would
 health <item> fail | ok   item: selftest intpwr ovenpwr ocxo efc gpsrcv
 fault silent | garbage | truncate | latency <ms> | drop | none
+fault mid-reply           a reply goes out with no prompt until the next command (#707)
 echo on | off             the receiver's FDUPLEX setting
 speed <factor>            run the timeline faster (the reported clock stays real)
 serial <number>           a different unit on the cable: *IDN? answers this serial
@@ -92,6 +93,13 @@ The faults behave as follows:
 - `garbage` replaces every reply with noise, as a wrong baud rate does.
 - `truncate` cuts the next reply off before its prompt.
 - `drop` closes the connection.
+- `mid-reply` puts the link partway through a reply, as an application restarted mid-poll finds
+  it (#707). The status screen's lines go out every 300 ms with no prompt. When the next command
+  arrives, the reply ends with one more line and its prompt, and only then is the command answered.
+  The trickle stands in for a tail that outlasts the application's 2 s listen. On a real wire that
+  depends on when the port happened to open; a tail that ends inside the listen is the ordinary
+  case and needs no fault. `MidReplyFaultTests` runs the application's own protocol against it, and
+  fails with #708's fix taken out.
 
 ## The timeline
 

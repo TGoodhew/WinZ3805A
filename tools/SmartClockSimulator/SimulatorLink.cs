@@ -56,6 +56,20 @@ public sealed class LinkFaults
     /// <summary>Set to drop the connection: the host closes the stream, as a pulled cable does.</summary>
     public bool DropRequested { get; set; }
 
+    /// <summary>
+    /// Set to put the link mid-reply (#707): a status screen's lines trickle out with no prompt
+    /// until the next command arrives, and that reply then ends - one more line and its prompt -
+    /// before the command is answered.
+    /// </summary>
+    /// <remarks>
+    /// What an application restarted while the receiver was partway through a long reply sees: the
+    /// port opens into the tail, its listen hears lines and no prompt, and the first command's read
+    /// gets the rest of the tail and the tail's prompt before its own. The trickle stands in for a
+    /// tail that outlasts the listen, which on the wire depends on when the port happened to open;
+    /// one that ends within the listen is the ordinary case and needs no fault. One-shot.
+    /// </remarks>
+    public bool MidReplyRequested { get; set; }
+
     /// <summary>Back to a healthy link.</summary>
     public void Clear()
     {
@@ -64,6 +78,7 @@ public sealed class LinkFaults
         TruncateNext = false;
         ExtraLatency = TimeSpan.Zero;
         DropRequested = false;
+        MidReplyRequested = false;
     }
 
     /// <inheritdoc/>
@@ -90,6 +105,11 @@ public sealed class LinkFaults
             on.Add($"latency +{ExtraLatency.TotalMilliseconds:0} ms");
         }
 
+        if (MidReplyRequested)
+        {
+            on.Add("mid-reply");
+        }
+
         return on.Count == 0 ? "none" : string.Join(", ", on);
     }
 }
@@ -114,6 +134,21 @@ public sealed class SimulatorLink(ScpiEngine engine, TimeProvider clock)
 {
     private readonly LineAssembler _lines = new();
     private readonly Random _noise = new(9600);
+
+    // The mid-reply fault's state: the reply being trickled, the next line of it, and the trickle.
+    // Started by the fault watcher and ended by the read loop, so guarded by its own lock.
+    private readonly Lock _staleGate = new();
+    private string[] _staleLines = [];
+    private int _staleNext;
+    private Task? _stale;
+    private CancellationTokenSource? _staleStop;
+
+    /// <summary>How long the mid-reply fault waits between the lines it trickles.</summary>
+    /// <remarks>
+    /// Several lines inside the application's two-second listen, so it hears a reply under way and
+    /// no prompt.
+    /// </remarks>
+    public TimeSpan StaleLineInterval { get; set; } = TimeSpan.FromMilliseconds(300);
 
     /// <summary>The lock the control channel takes before touching the engine or the receiver.</summary>
     public object Gate { get; } = new();
@@ -162,7 +197,7 @@ public sealed class SimulatorLink(ScpiEngine engine, TimeProvider clock)
 
         byte[] buffer = new byte[256];
         using CancellationTokenSource dropped = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        Task watchdog = WatchForDropAsync(dropped);
+        Task watchdog = WatchFaultsAsync(stream, dropped);
 
         try
         {
@@ -177,6 +212,10 @@ public sealed class SimulatorLink(ScpiEngine engine, TimeProvider clock)
                 foreach (string line in _lines.Feed(buffer.AsSpan(0, read)))
                 {
                     Trace?.Invoke("> " + line);
+
+                    // A command while a reply is still going out is answered after it, as the
+                    // receiver works through its input in order.
+                    await EndStaleReplyAsync(stream, dropped.Token).ConfigureAwait(false);
                     Reply? reply;
                     lock (Gate)
                     {
@@ -202,10 +241,11 @@ public sealed class SimulatorLink(ScpiEngine engine, TimeProvider clock)
         {
             await dropped.CancelAsync().ConfigureAwait(false);
             await watchdog.ConfigureAwait(false);
+            await StopStaleReplyAsync().ConfigureAwait(false);
         }
     }
 
-    private async Task WatchForDropAsync(CancellationTokenSource dropped)
+    private async Task WatchFaultsAsync(Stream stream, CancellationTokenSource dropped)
     {
         try
         {
@@ -218,6 +258,12 @@ public sealed class SimulatorLink(ScpiEngine engine, TimeProvider clock)
                     return;
                 }
 
+                if (Faults.MidReplyRequested)
+                {
+                    Faults.MidReplyRequested = false;
+                    StartStaleReply(stream, dropped.Token);
+                }
+
                 await Task.Delay(TimeSpan.FromMilliseconds(100), clock, dropped.Token).ConfigureAwait(false);
             }
         }
@@ -225,6 +271,101 @@ public sealed class SimulatorLink(ScpiEngine engine, TimeProvider clock)
         {
             // The connection ended some other way.
         }
+    }
+
+    private void StartStaleReply(Stream stream, CancellationToken connection)
+    {
+        string screen;
+        lock (Gate)
+        {
+            screen = engine.StatusScreen();
+        }
+
+        lock (_staleGate)
+        {
+            if (_stale is not null)
+            {
+                return;
+            }
+
+            _staleLines = screen.Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
+            _staleNext = 0;
+            _staleStop = CancellationTokenSource.CreateLinkedTokenSource(connection);
+            _stale = TrickleStaleReplyAsync(stream, _staleStop.Token, connection);
+        }
+
+        Trace?.Invoke("* mid-reply: a status screen trickles out with no prompt until the next command");
+    }
+
+    // Line by line, round the screen, never the prompt. Each line is written whole - the stop is
+    // only heard between lines - so the reply's end picks up at a line boundary.
+    private async Task TrickleStaleReplyAsync(Stream stream, CancellationToken stop, CancellationToken connection)
+    {
+        try
+        {
+            while (true)
+            {
+                string line = _staleLines[_staleNext % _staleLines.Length];
+                await WritePacedAsync(stream, Encoding.Latin1.GetBytes(line + "\r\n"), connection).ConfigureAwait(false);
+                _staleNext++;
+                await Task.Delay(StaleLineInterval, clock, stop).ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException) when (stop.IsCancellationRequested)
+        {
+            // Ended: by a command, or by the connection going.
+        }
+    }
+
+    // The reply the port opened into, ended: its next line and its prompt. Nothing if none is going.
+    private async Task EndStaleReplyAsync(Stream stream, CancellationToken connection)
+    {
+        if (!await StopStaleReplyAsync().ConfigureAwait(false))
+        {
+            return;
+        }
+
+        string prompt;
+        lock (Gate)
+        {
+            prompt = engine.Prompt;
+        }
+
+        string end = _staleLines[_staleNext % _staleLines.Length] + "\r\n" + prompt;
+        Trace?.Invoke("< (the reply under way ends) " + Summarise(end));
+        await WritePacedAsync(stream, Encoding.Latin1.GetBytes(end), connection).ConfigureAwait(false);
+    }
+
+    private async Task<bool> StopStaleReplyAsync()
+    {
+        Task? stale;
+        CancellationTokenSource? stop;
+        lock (_staleGate)
+        {
+            (stale, stop) = (_stale, _staleStop);
+            (_stale, _staleStop) = (null, null);
+        }
+
+        if (stale is null || stop is null)
+        {
+            return false;
+        }
+
+        await stop.CancelAsync().ConfigureAwait(false);
+        try
+        {
+            await stale.ConfigureAwait(false);
+        }
+        catch (IOException)
+        {
+            // The client went while a line was going out; the read loop hears that itself.
+        }
+        finally
+        {
+            stop.Dispose();
+        }
+
+        return true;
     }
 
     private async Task SendAsync(Stream stream, Reply reply, CancellationToken cancellationToken)

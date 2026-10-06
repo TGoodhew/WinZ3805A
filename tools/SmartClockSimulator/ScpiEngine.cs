@@ -117,6 +117,13 @@ public sealed class ScpiEngine
         ? "scpi > "
         : string.Create(Invariant, $"E{_newestError}> ");
 
+    /// <summary>The status screen <c>:SYST:STAT?</c> would print now, with no prompt.</summary>
+    /// <remarks>
+    /// For the link's mid-reply fault (#707), which plays a reply nobody asked for: nothing is
+    /// queued, echoed or counted as the first command after power returned, as asking would.
+    /// </remarks>
+    public string StatusScreen() => StatusScreenWriter.Write(_receiver.Snapshot());
+
     /// <summary>The port has just been opened and DTR asserted.</summary>
     /// <returns>The banner: the identity and a prompt, sent unasked a moment later.</returns>
     /// <remarks>
