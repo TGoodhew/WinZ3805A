@@ -66,7 +66,6 @@ if ($Version -notmatch '^\d+\.\d+\.\d+(\.0)?$') { throw "a version is x.y.z: $Ve
 $short = $Version -replace '\.0$', ''
 $full = "$short.0"
 $tag = "v$short"
-$stages = 'dry-run', 'pass', 'soak', 'issue', 'go', 'tag', 'published', 'close'
 $home_ = Join-Path $env:LOCALAPPDATA "WinZ3805A QA\releases\$tag"
 New-Item -ItemType Directory -Force $home_ | Out-Null
 $statePath = Join-Path $home_ 'state.json'
