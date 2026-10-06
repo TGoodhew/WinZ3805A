@@ -86,6 +86,73 @@ public class CommandInvokerTests
         Assert.StartsWith(":SYST:ERR?", bench.Written[2], StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// Nothing runs between the command and the read that judges it (#729).
+    /// </summary>
+    /// <remarks>
+    /// The poll asks while the command is on the wire, and the receiver refuses what it asks — the
+    /// time of day through power-up, on the bench unit — queuing a -230. Before the exclusive
+    /// section that poll was served between the command and the error read, and the command was
+    /// reported as failed with the poll's error: what the QA pass's survey-operations saw.
+    /// </remarks>
+    [Fact]
+    public async Task NothingRunsBetweenTheCommandAndTheReadThatJudgesIt()
+    {
+        List<string> written = [];
+        bool refusedSinceRead = false;
+        DeviceSessionService? session = null;
+        Task<Transaction>? poll = null;
+
+        ControllableTransport transport = new(command =>
+        {
+            if (command.StartsWith("*IDN", StringComparison.OrdinalIgnoreCase))
+            {
+                return Identity;
+            }
+
+            written.Add(command);
+
+            if (command.StartsWith(":DIAG:LOG:CLE", StringComparison.OrdinalIgnoreCase))
+            {
+                // The poll loop asks while the command is still on the wire.
+                poll = session!.ExecuteAsync(Command(":PTIM:TIME?"), origin: CommandOrigin.Poll);
+                return string.Empty;
+            }
+
+            if (command.StartsWith(":PTIM:TIME", StringComparison.OrdinalIgnoreCase))
+            {
+                refusedSinceRead = true;
+                return string.Empty;
+            }
+
+            if (command.StartsWith(":SYST:ERR", StringComparison.OrdinalIgnoreCase))
+            {
+                string answer = refusedSinceRead ? "-230,\"Data corrupt or stale\"" : "0,\"No error\"";
+                refusedSinceRead = false;
+                return answer;
+            }
+
+            return string.Empty;
+        })
+        { Banner = Identity };
+
+        session = new((_, _) => transport, new FakeTimeProvider());
+        await using DeviceSessionService owned = session;
+        await session.ConnectAsync("COM3", SerialSettings.Default).WaitAsync(TestTimeout);
+        written.Clear();
+
+        CommandOutcome outcome = await new CommandInvoker(session)
+            .ExecuteAsync(Command(":DIAG:LOG:CLEar")).WaitAsync(TestTimeout);
+        await poll!.WaitAsync(TestTimeout);
+
+        Assert.True(outcome.Succeeded, outcome.Message);
+        Assert.Equal(4, written.Count);
+        Assert.StartsWith(":SYST:ERR?", written[0], StringComparison.OrdinalIgnoreCase);
+        Assert.StartsWith(":DIAG:LOG:CLE", written[1], StringComparison.OrdinalIgnoreCase);
+        Assert.StartsWith(":SYST:ERR?", written[2], StringComparison.OrdinalIgnoreCase);
+        Assert.StartsWith(":PTIM:TIME?", written[3], StringComparison.OrdinalIgnoreCase);
+    }
+
     /// <summary>An empty queue after the command means it worked.</summary>
     [Fact]
     public async Task AnEmptyQueueMeansTheCommandSucceeded()
