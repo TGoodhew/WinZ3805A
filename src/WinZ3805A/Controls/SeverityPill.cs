@@ -183,9 +183,21 @@ public sealed class SeverityPill : Control
     /// </remarks>
     protected override AutomationPeer OnCreateAutomationPeer() => new SeverityPillPeer(this);
 
-    /// <summary>Answers with the pill's label as it stands when asked (#487).</summary>
+    /// <summary>
+    /// Answers with the pill's label and its severity as they stand when asked (#487, #728).
+    /// </summary>
+    /// <remarks>
+    /// The severity is the item status, pulled like the name and for the same reason: nothing is
+    /// pushed on a change, so neither #403's growth nor a stray announcement can come of it. The
+    /// class name is stated rather than left to the default, because the QA pass finds every pill
+    /// by it and a default is somebody else's to change.
+    /// </remarks>
     private sealed class SeverityPillPeer(SeverityPill owner) : FrameworkElementAutomationPeer(owner)
     {
         protected override string GetNameCore() => ((SeverityPill)Owner).SpokenText;
+
+        protected override string GetItemStatusCore() => SeverityStatus.Word(((SeverityPill)Owner).Severity);
+
+        protected override string GetClassNameCore() => nameof(SeverityPill);
     }
 }

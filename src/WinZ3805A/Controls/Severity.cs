@@ -36,3 +36,34 @@ public enum Severity
     /// <summary>A neutral advisory such as the week-rollover notice. Circled i.</summary>
     Info,
 }
+
+/// <summary>The word a severity is reported by outside the pixels (#728).</summary>
+public static class SeverityStatus
+{
+    /// <summary>
+    /// What a pill reports as its UI Automation item status: the severity's own name, lower case.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>So that a pill's meaning can be read without its colour.</b> Its name is its label
+    /// ("FFOM 3"), which says nothing about whether that is good: until this, neither a screen
+    /// reader nor the QA pass could tell a red hexagon from a green circle without the pixels. The
+    /// QA pass's judging gate had only the pixels, and a pill changing from red to green moved 0.33 %
+    /// of a photograph, under its 0.5 % threshold, so #724's whole change was filed as unchanged.
+    /// </para>
+    /// <para>
+    /// The enum's names, not prose, because the harness compares these exactly and a reworded
+    /// string would read as every pill changing at once. They are also short, plain words a screen
+    /// reader can say after the label.
+    /// </para>
+    /// </remarks>
+    public static string Word(Severity severity) => severity switch
+    {
+        Severity.Neutral => "neutral",
+        Severity.Success => "success",
+        Severity.Caution => "caution",
+        Severity.Critical => "critical",
+        Severity.Info => "info",
+        _ => "neutral",
+    };
+}
