@@ -4312,6 +4312,10 @@ function Test-SurveyOperations {
             if ($s.error) { Check $Result "[6] $action" $false $s.error; continue }
             Check $Result "[6] $($action): a survey ran after the power cycle, showing a partial estimate" ($s.estimate -and $s.estimate -ne $held.height) "estimate '$($s.estimate)' against held '$($held.height)'; '$($s.statusBefore)'"
             Check $Result "[6] $($action): confirmed, and the outcome reported after about ten seconds" ($s.confirmed -and $s.outcome -and $s.seconds -ge 5 -and $s.seconds -le 30) "after $($s.seconds) s: '$($s.outcome)'"
+            # The outcome must be the success, not merely an outcome: the first run accepted
+            # "Couldn't restore last position ... error -230" for both, which was #729.
+            $success = if ($action -eq 'cancel') { 'Restored the last held position.' } else { 'Adopted the surveyed position.' }
+            Check $Result "[6] $($action): reported as done, not as failed" ($s.outcome -match [regex]::Escape($success) -and $s.outcome -notmatch "Couldn't") "'$($s.outcome)'"
             if ($action -eq 'cancel') {
                 Check $Result '[6] cancel: the Position page shows the previously held position, not the partial estimate' ($s.after -eq $held.height) "after '$($s.after)', held '$($held.height)', estimate '$($s.estimate)'"
             }
