@@ -1101,8 +1101,8 @@ public sealed partial class MainPage : Page
         TfomPill.Visibility = _model.ShowsTfom ? Visibility.Visible : Visibility.Collapsed;
         FfomPill.Visibility = _model.ShowsFfom ? Visibility.Visible : Visibility.Collapsed;
 
-        RenderMerit(TfomPill, "TFOM", _model.Tfom, ref _tfomShown);
-        RenderMerit(FfomPill, "FFOM", _model.Ffom, ref _ffomShown);
+        RenderMerit(TfomPill, "TFOM", _model.Tfom, MeritSeverity.OfTfom(_model.Tfom), ref _tfomShown);
+        RenderMerit(FfomPill, "FFOM", _model.Ffom, MeritSeverity.OfFfom(_model.Ffom), ref _ffomShown);
 
         RenderClock();
 
@@ -1171,16 +1171,9 @@ public sealed partial class MainPage : Page
     /// </para>
     /// </remarks>
     private static void RenderMerit(
-        SeverityPill pill, string label, int? value, ref (string Text, Severity Severity)? shown)
+        SeverityPill pill, string label, int? value, Severity severity, ref (string Text, Severity Severity)? shown)
     {
         string text = value is int merit ? $"{label} {merit}" : $"{label} —";
-        Severity severity = value switch
-        {
-            null => Severity.Neutral,
-            <= 3 => Severity.Success,
-            <= 6 => Severity.Caution,
-            _ => Severity.Critical,
-        };
 
         if (shown is { } was && was.Text == text && was.Severity == severity)
         {

@@ -2142,6 +2142,17 @@ Two behavioural principles remain here because they are functional rather than v
   > the same holdover, which reads the screen, said *Receiver in holdover*. Both now draw as holdover;
   > the text keeps them apart, so a lost antenna can still be told from a forced holdover at a glance.
 
+- **The figures of merit (#719, decided 5 Oct 2026).** The two `SeverityPill`s are judged by different rules, here and on the Overview page (§10.4), both in `MeritSeverity`:
+
+  | Pill | Value | Severity | Why |
+  |---|---|---|---|
+  | FFOM | 0 | `WzSuccessBrush` ● | PLL stabilized, 10 MHz within specification |
+  | FFOM | 1, 2 | `WzCautionBrush` ▲ | stabilizing; unlocked in holdover and drifting |
+  | FFOM | 3 | `WzCriticalBrush` ⬢ | unlocked, not in holdover: "do not use the output" |
+  | TFOM | any | `WzNeutralBrush` ○ | an amount, not a state; its caption gives the time error |
+
+  FFOM reports the state of the loop that steers the 10 MHz output (*Operating and Programming Guide*, p. 5-30), so it is judged. TFOM is the 1 PPS time error, and on this family 3 — 100 ns to 1 µs — is the best it reaches (*"will display TFOM values ranging from 9 to 3"*, p. 5-32), so a colour judging it says nothing its caption does not. Both pills had run one set of thresholds, TFOM's 0–3 / 4–6 / 7+, which made every FFOM green, FFOM 3 included.
+
 - When mode is `HOLD` or `WAIT`, the sub-line carries the reason from `:SYNC:HOLD:WAIT?`. The query is **Not built** — nothing sends it, the §7.3 sweep being seven commands (six until #560) and this not one of them; what the sub-line shows is the status screen's own mode detail (`MainViewModel.ModeDetail`; `HoldoverViewModel.WaitingReasonText` on §10.8), which carries the same sentence when the receiver prints one. **Amended to the code 30 Aug 2026 (#320):** the mode detail is the source. The query arrives with no extra wire time, and adding another fast-tier command for a field that is usually blank would spend a query a second on a rare state.
 - **Locked with zero satellites** renders a `WzCautionBrush` `SeverityPill` beside the count reading "coasting", with tooltip *"Locked but tracking no satellites. The receiver is coasting on a 1 PPS it can no longer verify."* This condition appears in real units with antenna or bias-tee faults and is the single most useful diagnostic the app surfaces — it is the reason the satellite count shares top billing with the mode.
 - Date shows the rollover-corrected value with a trailing `\uE946` Info glyph when `WeekRolloverEpochs != 0`; the raw device date is in the tooltip (§7.4).

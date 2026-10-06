@@ -229,8 +229,8 @@ public sealed partial class OverviewPage : Page
         OutputsPill.Severity = model.OutputsSeverity;
         OutputsPill.Text = model.OutputsText;
 
-        RenderMerit(TfomPill, TfomDetailText, "TFOM", model.Tfom, model.TfomDetail);
-        RenderMerit(FfomPill, FfomDetailText, "FFOM", model.Ffom, model.FfomDetail);
+        RenderMerit(TfomPill, TfomDetailText, "TFOM", model.Tfom, MeritSeverity.OfTfom(model.Tfom), model.TfomDetail);
+        RenderMerit(FfomPill, FfomDetailText, "FFOM", model.Ffom, MeritSeverity.OfFfom(model.Ffom), model.FfomDetail);
 
         // Attached properties take their value as object, so the string is boxed into an
         // IInspectable and every set mints a COM wrapper (#399). The tooltip changes when the
@@ -446,10 +446,10 @@ public sealed partial class OverviewPage : Page
         }
     }
 
-    private static void RenderMerit(SeverityPill pill, TextBlock caption, string label, int? value, string detail)
+    private static void RenderMerit(SeverityPill pill, TextBlock caption, string label, int? value, Severity severity, string detail)
     {
         pill.Text = value is int merit ? $"{label} {merit}" : $"{label} {ReadoutFormatter.NoValue}";
-        pill.Severity = OverviewViewModel.SeverityOfMerit(value);
+        pill.Severity = severity;
         caption.Text = detail;
     }
 

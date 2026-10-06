@@ -314,22 +314,6 @@ public sealed class OverviewViewModel : INotifyPropertyChanged, IDisposable
     /// <summary>The longer FFOM explanation, for a tooltip.</summary>
     public string? FfomTooltip => FiguresOfMerit.PllDetail(Ffom);
 
-    /// <summary>
-    /// How bad a figure of merit is, for the pill it renders through.
-    /// </summary>
-    /// <remarks>
-    /// The thresholds are the same ones the main window uses, kept here rather than shared because
-    /// they are a display judgement rather than a device fact: the guide gives ranges, not a verdict
-    /// on which range is acceptable, and a lab user's answer depends on what they are measuring.
-    /// </remarks>
-    public static Severity SeverityOfMerit(int? value) => value switch
-    {
-        null => Severity.Neutral,
-        <= 3 => Severity.Success,
-        <= 6 => Severity.Caution,
-        _ => Severity.Critical,
-    };
-
     /// <summary>1 PPS time interval against GPS, in nanoseconds.</summary>
     public double? TimeIntervalNanoseconds =>
         Connection == ConnectionStatus.Connected ? _store.OnePpsTiNanoseconds : null;

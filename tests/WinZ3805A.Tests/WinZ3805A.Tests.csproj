@@ -207,6 +207,7 @@
     <Compile Include="..\..\src\WinZ3805A\ViewModels\ReceiverClock.cs" Link="ViewModels\ReceiverClock.cs" />
     <Compile Include="..\..\src\WinZ3805A\ViewModels\StateAnnouncer.cs" Link="ViewModels\StateAnnouncer.cs" />
     <Compile Include="..\..\src\WinZ3805A\ViewModels\OverviewViewModel.cs" Link="ViewModels\OverviewViewModel.cs" />
+    <Compile Include="..\..\src\WinZ3805A\ViewModels\MeritSeverity.cs" Link="ViewModels\MeritSeverity.cs" />
     <Compile Include="..\..\src\WinZ3805A\ViewModels\DiagnosticsViewModel.cs" Link="ViewModels\DiagnosticsViewModel.cs" />
     <Compile Include="..\..\src\WinZ3805A\ViewModels\SatellitesViewModel.cs" Link="ViewModels\SatellitesViewModel.cs" />
     <Compile Include="..\..\src\WinZ3805A\ViewModels\PositionViewModel.cs" Link="ViewModels\PositionViewModel.cs" />
