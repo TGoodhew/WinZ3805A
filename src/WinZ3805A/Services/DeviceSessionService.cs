@@ -57,6 +57,14 @@ public sealed class DeviceSessionService : IAsyncDisposable
     private static readonly TimeSpan FirstBackoff = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan MaximumBackoff = TimeSpan.FromSeconds(30);
 
+    /// <summary>
+    /// How many times auto-detect tries again to open a port it opened earlier in the same walk, and
+    /// how long it waits each time (#711): at most three quarters of a second, spent only when a
+    /// reopen is refused.
+    /// </summary>
+    private const int ReopenRetries = 3;
+    private static readonly TimeSpan ReopenRetryDelay = TimeSpan.FromMilliseconds(250);
+
     private readonly Func<string, SerialSettings, ITransport> _transportFactory;
     private readonly TimeProvider _timeProvider;
     private readonly IReadOnlyList<IReceiverDriver> _drivers;
@@ -465,6 +473,9 @@ public sealed class DeviceSessionService : IAsyncDisposable
             PortName = portName;
             SetStatus(ConnectionStatus.Connecting, $"Detecting settings on {portName}.");
 
+            // Whether this walk has opened the port yet. See the reopen below (#711).
+            bool opened = false;
+
             foreach (SerialSettings candidate in AutoDetectOrder(preferred))
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -472,18 +483,36 @@ public sealed class DeviceSessionService : IAsyncDisposable
                 _logger.LogDebug("Auto-detect trying {Settings} on {Port}.", candidate, portName);
 
                 Settings = candidate;
-                if (await OpenAndSynchroniseAsync(cancellationToken).ConfigureAwait(false))
+                bool connected = await OpenAndSynchroniseAsync(cancellationToken).ConfigureAwait(false);
+
+                // #711: a port this walk opened a moment ago can refuse the next open, because
+                // Windows may not have let go of the handle when Close returned - its own
+                // documentation says to wait before reopening. Seen on QA-Win11: the second
+                // setting's open was refused 6 ms after the first's close, and the walk gave up on
+                // a port that worked. So a refusal after an earlier open is waited out briefly.
+                for (int retry = 1; !connected && opened && IsRefusal(LastFault) && retry <= ReopenRetries; retry++)
+                {
+                    await TearDownAsync().ConfigureAwait(false);
+                    _logger.LogInformation(
+                        "{Port} refused to reopen at {Settings} ({Fault}); trying again, {Retry} of {Retries}.",
+                        portName, candidate, LastFault, retry, ReopenRetries);
+                    await Task.Delay(ReopenRetryDelay, _timeProvider, cancellationToken).ConfigureAwait(false);
+                    connected = await OpenAndSynchroniseAsync(cancellationToken).ConfigureAwait(false);
+                }
+
+                if (connected)
                 {
                     _logger.LogInformation("Auto-detect settled on {Settings}: {Identity}.", candidate, Identity);
                     return candidate;
                 }
 
+                opened |= !IsRefusal(LastFault);
                 await TearDownAsync().ConfigureAwait(false);
 
                 // A port Windows will not open, or one that is not there, fails identically at
                 // every baud rate. Walking the rest of the plan only delays the message §9.11 has
                 // for that case, and its copy is nothing like "no receiver answered".
-                if (LastFault is TransportFault.AccessDenied or TransportFault.PortNotFound)
+                if (IsRefusal(LastFault))
                 {
                     SetStatus(ConnectionStatus.Faulted, $"Could not open {portName}.");
                     return null;
@@ -504,6 +533,10 @@ public sealed class DeviceSessionService : IAsyncDisposable
             _lifecycle.Release();
         }
     }
+
+    /// <summary>Whether a fault means Windows would not open the port at all, rather than a failed exchange.</summary>
+    private static bool IsRefusal(TransportFault fault) =>
+        fault is TransportFault.AccessDenied or TransportFault.PortNotFound;
 
     /// <summary>Records a connect attempt as the one in flight, cancellable by its caller or by
     /// <see cref="DisconnectAsync"/> (#609).</summary>
