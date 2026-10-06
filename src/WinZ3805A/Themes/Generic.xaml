@@ -192,16 +192,31 @@
                             Background="{TemplateBinding Background}"
                             CornerRadius="{ThemeResource WzControlCornerRadius}"
                             Padding="{TemplateBinding Padding}">
-                        <StackPanel Orientation="Horizontal"
-                                    Spacing="{ThemeResource WzSpaceXxs}"
-                                    VerticalAlignment="Center">
+                        <!--
+                            Grids rather than horizontal StackPanels, so the port can give way (#713).
+                            A StackPanel offers its children unlimited width, so nothing in it can trim:
+                            at 200 % text in a 640 px Details window the bar's slot was narrower than the
+                            pill, and "Connected · COM2" was cut through the M with no ellipsis. Now the
+                            state keeps its width and the port, in the star column, ends in an ellipsis -
+                            the state being the part of this bar that matters. With room, nothing changes.
+                        -->
+                        <Grid ColumnSpacing="{ThemeResource WzSpaceXxs}"
+                              VerticalAlignment="Center">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
                             <controls:SeverityPill Severity="{TemplateBinding Severity}"
                                                    Text="{TemplateBinding StateText}" />
 
-                            <StackPanel x:Name="PART_PortGroup"
-                                        Orientation="Horizontal"
-                                        Spacing="{ThemeResource WzSpaceXxs}"
-                                        VerticalAlignment="Center">
+                            <Grid x:Name="PART_PortGroup"
+                                  Grid.Column="1"
+                                  ColumnSpacing="{ThemeResource WzSpaceXxs}"
+                                  VerticalAlignment="Center">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
                                 <!--
                                     Secondary, like the port beside it, and not tertiary (#697). A title
                                     bar shows bare Mica Alt, #DADADA in Light, where tertiary is 4.37:1;
@@ -212,13 +227,16 @@
                                            VerticalAlignment="Center"
                                            AutomationProperties.AccessibilityView="Raw"
                                            Text="&#183;" />
-                                <TextBlock Style="{ThemeResource WzBodyTextStyle}"
+                                <TextBlock Grid.Column="1"
+                                           Style="{ThemeResource WzBodyTextStyle}"
                                            Foreground="{ThemeResource WzTextSecondaryBrush}"
                                            VerticalAlignment="Center"
+                                           TextWrapping="NoWrap"
+                                           TextTrimming="CharacterEllipsis"
                                            AutomationProperties.AccessibilityView="Raw"
                                            Text="{TemplateBinding PortName}" />
-                            </StackPanel>
-                        </StackPanel>
+                            </Grid>
+                        </Grid>
 
                         <VisualStateManager.VisualStateGroups>
                             <VisualStateGroup x:Name="CommonStates">
