@@ -296,8 +296,9 @@ source that a script could check.
 
   Pick **Desert** for this leg specifically. Its cream `#FFFAEF` is distinct from both the Light and
   Dark page backgrounds, so a matching corner proves the flatten resolved the *high-contrast* token
-  rather than coincidentally agreeing with one of the others. Night sky would not: its window colour
-  is `#202020`, which is also the Dark fallback, and the check would pass either way.
+  rather than coincidentally agreeing with one of the others. Aquatic would not: its window colour
+  is `#202020`, which is also the Dark fallback, and the check would pass either way. *(Corrected
+  6 Oct 2026: this said Night sky, whose window is `#000000`; `hcblack.theme`'s colours are Aquatic's.)*
 
   Also confirm the plot is not painted in the surface colour — the #218 failure. Count
   `SystemColorWindowTextColor` pixels inside the plot region; 3,303 were present against 862,623 of
