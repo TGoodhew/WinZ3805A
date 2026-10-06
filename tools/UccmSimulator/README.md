@@ -40,7 +40,8 @@ the original four.** Every sitting before 13 Sep 2026 caught the module locked a
 simulator's other states had never been checked against anything. `transitions-13sep2026` took the
 module through a cold power-up, acquisition and fourteen minutes of true holdover, and the simulator
 disagrees with it here too; the prompt, in the last row, was in every sitting from the first. None
-of them has been changed in the simulator. *(Added 29 Sep 2026, #556.)*
+of them has been changed in the simulator, except the prompt in its port and pipe modes (see that
+row). *(Added 29 Sep 2026, #556; the exception 6 Oct 2026.)*
 
 | What this simulator does | What the module did | Where |
 |---|---|---|
@@ -49,7 +50,7 @@ of them has been changed in the simulator. *(Added 29 Sep 2026, #556.)*
 | Emits lock byte `0x41` for `--vendor Trimble --state PowerUp`, whichever `--variant` | The very first frame after boot already read `4F`. **`0x41` is a plain-UCCM value this variant never shows** at offset 35 | `transitions-13sep2026.md`, L81–85 |
 | Emits leap byte `0x12` — 18, the current GPS-UTC offset — at offset 32 in every state, `PowerUp` included | A cold module read **`00`** until it had a fix, and became `12` at 10:08:38, about two minutes after the antenna went back on | `transitions-13sep2026.md`, L60–61 and L72–73; `transitions-13sep2026.events.txt`, L24 |
 | With `--variant UccmP`, answers `:ROSC:HOLD:DUR?` (`412,1` in `Holdover`, `0,0` otherwise), `:GPS:POS:SURV:STAT?` (`0`) and `:GPS:POS:SURV:PROG?` (`100`) | **Refused all three in every state**, in all 27 probes: `Command error` for the holdover duration, when cold, when locked and through fourteen minutes of holdover; `Undefined header` for both survey queries | `transitions-13sep2026.md`, L100–103; `transitions-13sep2026.replies.txt` |
-| Ends each reply at `COMMAND COMPLETE`, with **no prompt** | Every reply is followed by `UCCM-P >`, no trailing space — 9 of 9 in the first sitting, 50 of 50 in `hypothesis2-12sep2026` | `trimble-uccm-p-2026-09-10.md`, L49; `trimble-uccm-p-2026-09-11.md`, L87; `hypothesis2-12sep2026.md`, L15 |
+| `Respond()` ends each reply at `COMMAND COMPLETE`, with **no prompt**. *Since 6 Oct 2026 the `--port` and `--pipe-client` modes write `UCCM-P >` after it with `--variant UccmP`, and `UCCM >` otherwise*: without one the application could not connect at all, because the driver has waited for the prompt since #470 — found by the QA pass's `receiver-families`, the first thing ever to try | Every reply is followed by `UCCM-P >`, no trailing space — 9 of 9 in the first sitting, 50 of 50 in `hypothesis2-12sep2026`. A plain UCCM's `UCCM >` is unmeasured | `trimble-uccm-p-2026-09-10.md`, L49; `trimble-uccm-p-2026-09-11.md`, L87; `hypothesis2-12sep2026.md`, L15 |
 
 **What it means for anyone reading a green test.** A pass involving the echo, a mid-reply time code
 or the absent prompt proves the driver survives something no measured module does; a pass driven

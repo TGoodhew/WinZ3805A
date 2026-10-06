@@ -4023,7 +4023,9 @@ function Test-ReceiverFamilies {
     $null = Invoke-UiStep $Vm 'families-resolution' '' $resolutionStep
     $families = [ordered]@{
         nmea = @{ Family = 'NMEA 0183'; Kind = 'Nmea'; Arguments = @('--pipe-client', $pipe, '--fix-after', '5', '--3d-after', '10') }
-        uccm = @{ Family = 'UCCM'; Kind = 'Uccm'; Arguments = @('--pipe-client', $pipe) }
+        # The one UCCM ever measured: a Trimble UCCM-P. A Symmetricom's prompt is unknown, and the
+        # driver deliberately does not guess it, so that vendor could not connect here either.
+        uccm = @{ Family = 'UCCM'; Kind = 'Uccm'; Arguments = @('--pipe-client', $pipe, '--vendor', 'Trimble', '--variant', 'UccmP') }
     }
     foreach ($tag in $families.Keys) {
         $f = $families[$tag]

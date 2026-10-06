@@ -62,6 +62,23 @@ public sealed class UccmModuleSimulator(
     /// <summary>How many satellites the status table lists.</summary>
     public int SatelliteCount { get; set; } = 7;
 
+    /// <summary>The prompt the module prints after every reply, with no trailing space.</summary>
+    /// <remarks>
+    /// <para>
+    /// <b><c>UCCM-P &gt;</c> is measured</b> — 9 of 9 replies in the first sitting with a Trimble
+    /// UCCM-P and 50 of 50 in <c>hypothesis2-12sep2026</c> — and <c>UCCM &gt;</c> for a plain UCCM is
+    /// the driver's own claim (#513), which no plain module has confirmed.
+    /// </para>
+    /// <para>
+    /// <b>Not part of <see cref="Respond"/></b>, whose callers parse a reply rather than read a
+    /// stream; the program's port and pipe modes write it after each reply. Until they did, nothing
+    /// could connect the application to this simulator at all: since #470 the driver waits for this
+    /// prompt, every transaction ran to its timeout, and auto-detect said no receiver had answered
+    /// (found by the QA pass's <c>receiver-families</c> scenario, the first thing to try, #633).
+    /// </para>
+    /// </remarks>
+    public string Prompt => variant == UccmVariant.UccmP ? "UCCM-P >" : "UCCM >";
+
     /// <summary>Answers one command, exactly as the module would put it on the wire.</summary>
     /// <remarks>
     /// Lines are CRLF-terminated, echo first. An unknown command produces the error reply a real
