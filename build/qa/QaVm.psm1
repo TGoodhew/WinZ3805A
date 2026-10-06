@@ -314,6 +314,18 @@ function Start-QaVm {
     $running = & $script:VmRunPath -T ws list
     if (-not ($running -match [regex]::Escape($Vm.Vmx))) { Invoke-VmRun $Vm start -Arguments 'nogui' | Out-Null }
     Wait-QaDesktop -Vm $Vm
+    # Edge's first-run welcome, full screen and in front of everything. Edge updated itself in
+    # QA-Win10 after a revert and opened it in the middle of app-checks (5 Oct 2026): the foreground
+    # and keyboard checks then measured Edge. The policy stops it whenever Edge next starts; one
+    # already open is closed. Elevated, which the QA VMs grant without a prompt. Best effort: a
+    # scenario that then meets Edge fails legibly, which is better than one that never starts.
+    try {
+        $null = Invoke-QaGuestScript -Vm $Vm -Name 'quiet-edge' -TimeoutSeconds 120 -Script @'
+Start-Process powershell.exe -Verb RunAs -Wait -WindowStyle Hidden -ArgumentList '-NoProfile', '-Command', "New-Item -Force 'HKLM:\SOFTWARE\Policies\Microsoft\Edge' | Out-Null; Set-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft\Edge' -Name HideFirstRunExperience -Value 1 -Type DWord"
+Get-Process -Name msedge -ErrorAction SilentlyContinue | Stop-Process -Force
+'@
+    }
+    catch { Write-Warning "Could not quiet Edge in $(Split-Path $Vm.Vmx -Leaf): $($_.Exception.Message)" }
 }
 
 # Powers the VM off. Hard, because whatever a check left behind is discarded by the next revert
