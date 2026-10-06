@@ -242,7 +242,7 @@ public sealed partial class OverviewPage : Page
         }
 
         TimeInterval.Value = model.TimeIntervalNanoseconds;
-        TimeIntervalCaption.Text = model.TimeIntervalDetail;
+        TimeInterval.Caption = model.TimeIntervalDetail ?? string.Empty;
 
         // #435's last reading. Three captions that are each a full sentence do not belong side by
         // side in columns sized for "PLL stable", so when the whole set is unobtainable one

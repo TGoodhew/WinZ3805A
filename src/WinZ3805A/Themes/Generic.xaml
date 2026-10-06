@@ -416,6 +416,20 @@
                             </StackPanel>
                         </Grid>
 
+                        <!--
+                            The optional caption under the value (#716) - "relative to GPS". Centred
+                            like the label, and moved onto the decimal axis by the same transform in
+                            AlignLabelToAxis, so label, value and caption share one axis. Collapsed
+                            until a caption is set, so tiles without one are unchanged.
+                        -->
+                        <TextBlock x:Name="PART_CaptionText"
+                                   Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   HorizontalAlignment="Center"
+                                   TextAlignment="Center"
+                                   TextWrapping="Wrap"
+                                   Visibility="Collapsed" />
+
                         <VisualStateManager.VisualStateGroups>
                         </VisualStateManager.VisualStateGroups>
                     </StackPanel>
