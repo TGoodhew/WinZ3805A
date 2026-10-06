@@ -105,12 +105,25 @@ function Invoke-Pass {
     }
     $parts = "$OutDir.parts"
     $quoted = @($Arguments | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } })
-    $procs = foreach ($machine in 'QA-Win10', 'QA-Win11') {
-        New-Item -ItemType Directory -Force (Join-Path $parts $machine) | Out-Null
-        $argumentList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$script`"") + $quoted + @('-Machines', $machine, '-OutDir', "`"$(Join-Path $parts $machine)`"")
-        Start-Process powershell.exe -ArgumentList $argumentList -PassThru -WindowStyle Hidden `
-            -RedirectStandardOutput (Join-Path $parts "$machine.log") -RedirectStandardError (Join-Path $parts "$machine.err")
+    # Windows PowerShell's own module path for the children. PowerShell 7 hands it to a powershell.exe
+    # it runs with &, but Start-Process passes its own on, and Windows PowerShell then cannot load its
+    # built-in modules: the first parallel pass of 1.4.0 failed every scenario on Get-FileHash not
+    # being found (6 Oct 2026).
+    $savedModulePath = $env:PSModulePath
+    $env:PSModulePath = @(
+        (Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'WindowsPowerShell\Modules')
+        (Join-Path $env:ProgramFiles 'WindowsPowerShell\Modules')
+        (Join-Path $env:SystemRoot 'system32\WindowsPowerShell\v1.0\Modules')
+    ) -join ';'
+    try {
+        $procs = foreach ($machine in 'QA-Win10', 'QA-Win11') {
+            New-Item -ItemType Directory -Force (Join-Path $parts $machine) | Out-Null
+            $argumentList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$script`"") + $quoted + @('-Machines', $machine, '-OutDir', "`"$(Join-Path $parts $machine)`"")
+            Start-Process powershell.exe -ArgumentList $argumentList -PassThru -WindowStyle Hidden `
+                -RedirectStandardOutput (Join-Path $parts "$machine.log") -RedirectStandardError (Join-Path $parts "$machine.err")
+        }
     }
+    finally { $env:PSModulePath = $savedModulePath }
     Say "pass running on both VMs at once: $(($procs | ForEach-Object Id) -join ', '); logs in $parts"
     $procs | Wait-Process
     foreach ($machine in 'QA-Win10', 'QA-Win11') { Get-Content (Join-Path $parts "$machine.log") -ErrorAction SilentlyContinue | Add-Content $logPath }
