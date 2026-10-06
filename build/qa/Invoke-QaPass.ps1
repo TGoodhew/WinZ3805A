@@ -4259,8 +4259,26 @@ $w = Get-AppWindow -Seconds 60
 [ordered]@{ window = [bool]$w } | ConvertTo-Json -Compress
 '@
     $logged = Wait-AppLog $Vm 'Windows App Runtime: PackageInstallFailed, 0x80070005' $mark 60 'companions-missing'
+    # Every runtime package present once the app is up, kept with the evidence: on QA-Win11 the app
+    # found its parts in place with both named companions gone (6 Oct 2026), and that guest carries
+    # five runtime packages where QA-Win10 has one.
+    $runtimes = Invoke-QaGuestScript $Vm -Name 'runtime-packages' -Script "Get-AppxPackage | Where-Object { `$_.Name -match 'WinAppRuntime|WindowsAppRuntime' } | Sort-Object Name, Version | ForEach-Object { '{0} {1} {2}' -f `$_.Name, `$_.Version, `$_.Architecture }"
+    $runtimes.Output | Set-Content (Join-Path $Result.Folder 'runtime-packages.txt')
     Check $Result '[12] it opens without them' ([bool]$opened.window) ''
-    Check $Result '[12] and logs the failure with the advice to run the installer again' ($logged.found -and $logged.line -match 'Install\.cmd again') "$($logged.line)$(if (-not $logged.found) { $logged.tail })"
+    # Windows 11 (QA-Win11, build 26300) puts both companions back by itself: it carries the runtime
+    # as part of the system (the WindowsAppRuntime.CBS packages), and the listing after the app
+    # started showed Main.2 2.5.1.0 and Singleton 8002.5.1.0 again, ten seconds after left=0. There
+    # the app is right to find its parts in place, and the missing-companions path cannot be reached
+    # by removing them for the user. So: if they are still gone, the failure must be logged; if
+    # Windows restored them, the app must say its parts are in place - and the report says which.
+    $restored = ($runtimes.Output -match 'WinAppRuntime\.Main\.2 ') -and ($runtimes.Output -match 'WinAppRuntime\.Singleton ')
+    if ($restored) {
+        $parts = Wait-AppLog $Vm 'Windows App Runtime: its parts are in place' $mark 60 'companions-restored'
+        Check $Result '[12] Windows put both companions back before the app needed them (Windows 11 servicing), and the app says its parts are in place' $parts.found "$($parts.line)$(if (-not $parts.found) { $parts.tail })"
+    }
+    else {
+        Check $Result '[12] and logs the failure with the advice to run the installer again' ($logged.found -and $logged.line -match 'Install\.cmd again') "$($logged.line)$(if (-not $logged.found) { $logged.tail })"
+    }
     $null = Invoke-QaGuestScript $Vm -Name 'close-app' -Script 'Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue | Stop-Process -Force'
     $code = Install-Candidate $Vm 'candidate'
     $back = Invoke-QaGuestScript $Vm -Name 'companions-back' -Script "`"back=`$(@(Get-AppxPackage MicrosoftCorporationII.WinAppRuntime.Main.2) + @(Get-AppxPackage MicrosoftCorporationII.WinAppRuntime.Singleton) | Measure-Object | ForEach-Object Count)`""
