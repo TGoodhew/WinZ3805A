@@ -3841,14 +3841,18 @@ function Test-Contrast {
 # publisher, same package family, so Windows upgrades in place, and everything must still be there.
 # Until 5 Oct 2026 nothing tested it: upgrade-1.2.0 is the publisher change and repair-damaged the
 # same version.
+# The newest published release OLDER than the candidate, by version rather than by position: a dry-run
+# build of main carries the version of the release it follows, so "the newest" would be the same
+# version, and Windows treats installing that over itself as nothing to do - every check would pass
+# without an upgrade having happened.
 function Get-PreviousRelease {
+    param([Parameter(Mandatory)][string]$CandidateVersion)
+    # Four parts each: [version]'1.3.5' has a revision of -1, so it compares BELOW [version]'1.3.5.0'.
+    function Full([string]$v) { $p = @(($v -replace '^v', '') -split '\.'); while ($p.Count -lt 4) { $p += '0' }; [version]($p[0..3] -join '.') }
+    $candidate = Full $CandidateVersion
     $tags = @(gh release list --repo TGoodhew/WinZ3805A --limit 30 --json tagName,isDraft,isPrerelease -q '.[] | select(.isDraft | not) | select(.isPrerelease | not) | .tagName' 2>$null)
-    if ($Release) {
-        $i = [array]::IndexOf($tags, $Release)
-        if ($i -ge 0 -and $i + 1 -lt $tags.Count) { return $tags[$i + 1] }
-        return $null
-    }
-    $tags | Select-Object -First 1
+    $tags | Where-Object { $_ -match '^v\d+(\.\d+){1,3}$' -and (Full $_) -lt $candidate } |
+        Sort-Object { Full $_ } -Descending | Select-Object -First 1
 }
 
 # The lock-notification switch on the Settings page: turned off ($mode 'set') or read ($mode 'read').
@@ -3896,9 +3900,9 @@ function Test-UpgradePrevious {
         $Result.Error = "skipped: the VM has no simulator port; run Add-QaSimulatorPort (build/qa/README.md)"
         return
     }
-    $previous = Get-PreviousRelease
-    if (-not $previous) { $Result.Error = "skipped: no published release before $(if ($Release) { $Release } else { 'this candidate' })"; return }
     $candidateVersion = (Split-Path $Offline -Leaf) -replace '^WinZ3805A-(.+)-x64-offline\.zip$', '$1'
+    $previous = Get-PreviousRelease -CandidateVersion $candidateVersion
+    if (-not $previous) { $Result.Error = "skipped: no published release older than $candidateVersion"; return }
     Send-Zip $Vm (Get-ReleaseZip $previous -OfflineZip) 'previous'
     $code = Install-Candidate $Vm 'previous'
     Check $Result "$previous installed (exit 0, or 2 with the start check timing out)" ($code -in 0, 2) "exit $code"
