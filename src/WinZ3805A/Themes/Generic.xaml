@@ -150,7 +150,38 @@
                                      MinWidth="60"
                                      VerticalAlignment="Center"
                                      AutomationProperties.AccessibilityView="Raw"
-                                     Foreground="{ThemeResource WzAccentFillBrush}" />
+                                     Foreground="{ThemeResource WzAccentFillBrush}">
+                            <!--
+                                High contrast only (#718). The stock HighContrast dictionary defines the
+                                bar's track and outline as StaticResource aliases of SystemColorWindowColor
+                                and SystemColorWindowTextColor, taken once when the bar loads, so a live
+                                switch between contrast themes never reached them: every bar kept the
+                                first theme's yellow outline and black track, which on High Contrast White
+                                is a palette the theme does not have (5 Oct 2026 QA pass). Redefined here
+                                the way Colors.xaml builds its own high-contrast tokens, as ThemeResource
+                                colours, which do follow a switch. Light and Dark are given their stock
+                                values built the same way, so all three themes are alike and the parity
+                                gate holds.
+                            -->
+                            <ProgressBar.Resources>
+                                <ResourceDictionary>
+                                    <ResourceDictionary.ThemeDictionaries>
+                                        <ResourceDictionary x:Key="Light">
+                                            <SolidColorBrush x:Key="ProgressBarBackground" Color="{ThemeResource ControlStrongStrokeColorDefault}" />
+                                            <SolidColorBrush x:Key="ProgressBarBorderBrush" Color="{ThemeResource ControlStrokeColorDefault}" />
+                                        </ResourceDictionary>
+                                        <ResourceDictionary x:Key="Dark">
+                                            <SolidColorBrush x:Key="ProgressBarBackground" Color="{ThemeResource ControlStrongStrokeColorDefault}" />
+                                            <SolidColorBrush x:Key="ProgressBarBorderBrush" Color="{ThemeResource ControlStrokeColorDefault}" />
+                                        </ResourceDictionary>
+                                        <ResourceDictionary x:Key="HighContrast">
+                                            <SolidColorBrush x:Key="ProgressBarBackground" Color="{ThemeResource SystemColorWindowColor}" />
+                                            <SolidColorBrush x:Key="ProgressBarBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+                                        </ResourceDictionary>
+                                    </ResourceDictionary.ThemeDictionaries>
+                                </ResourceDictionary>
+                            </ProgressBar.Resources>
+                        </ProgressBar>
 
                         <!-- Tabular figures so a column of readings stays aligned (§9.5.3). -->
                         <TextBlock x:Name="PART_Value"

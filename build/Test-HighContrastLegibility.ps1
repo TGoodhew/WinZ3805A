@@ -46,6 +46,7 @@ $surfaces = [ordered]@{
     'WzLayerFillBrush'              = 'A layer fill. §9.2 collapses fills to the window colour under high contrast; strokes separate.'
     'WzCardFillBrush'               = 'A card fill, collapsed by the same §9.2 rule. Its border carries the edge.'
     'WzOverlayFillBrush'            = 'The flyout and dialog surface, which content is drawn on.'
+    'ProgressBarBackground'         = 'The strength bar''s track (#718): drawn under the fill and inside the outline, which carries its edge - the stock HighContrast value, redefined only so it follows a live theme switch.'
 }
 
 $backgroundColour = 'SystemColorWindowColor'
