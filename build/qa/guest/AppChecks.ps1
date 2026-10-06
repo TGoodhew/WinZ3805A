@@ -99,30 +99,59 @@ $before = Get-ForegroundName
 [QaWindows]::keybd_event(0x5B, 0, 2, [UIntPtr]::Zero)   # and up: the Start menu opens
 Start-Sleep -Seconds 2
 [System.Windows.Forms.SendKeys]::SendWait('WinZ3805A')
-# Enter only once the search lists the app. On QA-Win10 the search host was still starting after the
+# Enter only once the search is ready. On QA-Win10 the search host was still starting after the
 # revert when a fixed four seconds ran out, so Enter went to "search the web" and Edge opened a Bing
-# search for WinZ3805A instead (5 Oct 2026, twice). Failing to see it in 20 s, Enter goes in anyway,
-# as before, and the detail says the search never showed the app.
-Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
-function Test-SearchShowsApp {
-    $hosts = @(Get-Process -Name SearchApp, SearchHost, SearchUI -ErrorAction SilentlyContinue | ForEach-Object Id)
-    foreach ($id in $hosts) {
-        $mine = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ProcessIdProperty, $id)
-        foreach ($window in [System.Windows.Automation.AutomationElement]::RootElement.FindAll([System.Windows.Automation.TreeScope]::Children, $mine)) {
-            $hit = $window.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition) |
-                Where-Object { $_.Current.Name -match '^WinZ3805A\b' -and $_.Current.Name -match '\bApp\b' } | Select-Object -First 1
-            if ($hit) { return $true }
-        }
+# search for WinZ3805A instead (5 Oct 2026, twice).
+#
+# The results themselves cannot be read: they are drawn in a WebView2 pane that shows UI Automation
+# no children from here, and Start's window is not among the desktop's children at all (measured on
+# both VMs, 6 Oct 2026). The match that looked for "WinZ3805A ... App" there never matched once; its
+# 20-second timeout was what made Enter wait. So the step waits on what can be seen: the focused
+# search box holding the name, which means the search host is up, and then the search window's pixels
+# holding still, which means the results have finished drawing. Up to 20 s for both; Enter goes in
+# either way, as before, and the detail says what was seen and when.
+Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, System.Drawing
+function Test-SearchHolds([string]$Text) {
+    try {
+        $focus = [System.Windows.Automation.AutomationElement]::FocusedElement
+        $value = $focus.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).Current.Value
+        $owner = (Get-Process -Id $focus.Current.ProcessId).ProcessName
+        ($owner -in 'SearchHost', 'SearchApp', 'SearchUI') -and $value -eq $Text
     }
-    $false
+    catch { $false }
 }
-$searchShowedApp = [bool](Wait-For { Test-SearchShowsApp } 20)
+function Get-ForegroundHash {
+    try {
+        $window = [System.Windows.Automation.AutomationElement]::FromHandle([QaWindows]::GetForegroundWindow())
+        $r = $window.Current.BoundingRectangle
+        if ($r.IsEmpty -or $r.Width -lt 50) { return '' }
+        $bmp = New-Object System.Drawing.Bitmap ([int]$r.Width), ([int]$r.Height)
+        $g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen([int]$r.Left, [int]$r.Top, 0, 0, $bmp.Size); $g.Dispose()
+        $stream = New-Object System.IO.MemoryStream; $bmp.Save($stream, [System.Drawing.Imaging.ImageFormat]::Bmp); $bmp.Dispose()
+        [BitConverter]::ToString([System.Security.Cryptography.SHA1]::Create().ComputeHash($stream.ToArray()))
+    }
+    catch { '' }
+}
+$searchStarted = Get-Date
+$searchHeldName = [bool](Wait-For { Test-SearchHolds 'WinZ3805A' } 20)
+$heldAfter = ((Get-Date) - $searchStarted).TotalSeconds
+$previous = ''; $still = 0; $settled = $false
+while (((Get-Date) - $searchStarted).TotalSeconds -lt 20) {
+    Start-Sleep -Milliseconds 500
+    $hash = Get-ForegroundHash
+    if ($hash -and $hash -eq $previous) { $still++ } else { $still = 0 }
+    $previous = $hash
+    # Two unchanged frames, a second apart in all, after at least two seconds of looking.
+    if ($still -ge 2 -and ((Get-Date) - $searchStarted).TotalSeconds -ge 2) { $settled = $true; break }
+}
+$settledAfter = ((Get-Date) - $searchStarted).TotalSeconds
+$searchReady = "the search box held the name: $searchHeldName ($([int]$heldAfter) s); the results settled: $settled ($([int]$settledAfter) s)"
 [System.Windows.Forms.SendKeys]::SendWait('{ENTER}')
 # The second copy hands over and exits; the first comes to the front.
 $null = Wait-For { (Get-ForegroundName) -eq 'WinZ3805A' -and @(Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue).Count -eq 1 } 20
 $after = Get-ForegroundName
 $copies = @(Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue).Count
-Result '25' 'a covered window comes to the front on a second launch' ($after -eq 'WinZ3805A') "foreground before: $before; after: $after; the search listed the app before Enter: $searchShowedApp"
+Result '25' 'a covered window comes to the front on a second launch' ($after -eq 'WinZ3805A') "foreground before: $before; after: $after; before Enter, $searchReady"
 Result '25' 'one copy still running' ($copies -eq 1) "$copies running"
 Result '25' 'the app logged taking the foreground' ((Get-Content $appLog -Raw) -match 'Brought to the front') ''
 $notepad | Stop-Process -Force -ErrorAction SilentlyContinue
