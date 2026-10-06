@@ -209,6 +209,113 @@ public class DeviceSessionServiceTests
     }
 
     // -------------------------------------------------------------------------------------
+    // A reopen refused moments after a close (#711)
+    // -------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// A port Windows refuses to open, as it does for a handle another program holds - or, for a
+    /// moment after Close returns, one this program has just let go of.
+    /// </summary>
+    private sealed class RefusedTransport : ITransport
+    {
+        public string Description => "RefusedTransport";
+
+        public bool IsOpen => false;
+
+        public System.IO.Pipelines.PipeReader Input =>
+            throw new TransportException(TransportFault.NotOpen, "Not open.");
+
+        public ValueTask OpenAsync(CancellationToken cancellationToken = default) =>
+            throw new UnauthorizedAccessException("Access to the port 'COM3' is denied.");
+
+        public ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default) =>
+            throw new TransportException(TransportFault.NotOpen, "Not open.");
+
+        public void DiscardInput()
+        {
+        }
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    /// <summary>
+    /// QA-Win11, 5 Oct 2026: the second setting's open was refused 6 ms after the first setting's
+    /// port closed, and the walk ended with "Could not open COM3" on a port that worked. A refusal
+    /// after this walk has opened the port is waited out, and the walk goes on.
+    /// </summary>
+    [Fact]
+    public async Task AReopenRefusedAMomentAfterAnEarlierOpenIsTriedAgain()
+    {
+        FakeTimeProvider clock = new();
+        List<SerialSettings> tried = [];
+        await using DeviceSessionService session = new(
+            (_, settings) =>
+            {
+                tried.Add(settings);
+                return tried.Count switch
+                {
+                    1 => WrongSettings(),
+                    2 => new RefusedTransport(),
+                    _ => Receiver(),
+                };
+            },
+            clock);
+
+        SerialSettings? found = await AdvanceUntilComplete(clock, session.AutoDetectAsync("COM3"));
+
+        Assert.NotNull(found);
+        Assert.Equal(SerialSettings.AutoDetectSequence[1], found);
+        Assert.Equal(ConnectionStatus.Connected, session.Status);
+        Assert.Equal([SerialSettings.AutoDetectSequence[0], SerialSettings.AutoDetectSequence[1], SerialSettings.AutoDetectSequence[1]], tried);
+    }
+
+    /// <summary>
+    /// The rule #711 narrows, kept: a port refused on the walk's first open fails the same way at
+    /// every setting, so the walk ends at once with §9.11's message for it, and nothing is waited.
+    /// </summary>
+    [Fact]
+    public async Task APortRefusedOnTheWalksFirstOpenStillEndsTheWalkAtOnce()
+    {
+        int opens = 0;
+        await using DeviceSessionService session = new(
+            (_, _) =>
+            {
+                opens++;
+                return new RefusedTransport();
+            },
+            new FakeTimeProvider());
+        string? detail = null;
+        session.StatusChanged += (_, e) => detail = e.Detail;
+
+        SerialSettings? found = await session.AutoDetectAsync("COM3").WaitAsync(TestTimeout);
+
+        Assert.Null(found);
+        Assert.Equal(1, opens);
+        Assert.Equal(ConnectionStatus.Faulted, session.Status);
+        Assert.Equal("Could not open COM3.", detail);
+    }
+
+    /// <summary>A port that goes on refusing after an earlier open is given up on after three tries.</summary>
+    [Fact]
+    public async Task AReopenThatKeepsBeingRefusedGivesUpAfterThreeTries()
+    {
+        FakeTimeProvider clock = new();
+        int opens = 0;
+        await using DeviceSessionService session = new(
+            (_, _) => ++opens == 1 ? WrongSettings() : new RefusedTransport(),
+            clock);
+        string? detail = null;
+        session.StatusChanged += (_, e) => detail = e.Detail;
+
+        SerialSettings? found = await AdvanceUntilComplete(clock, session.AutoDetectAsync("COM3"));
+
+        Assert.Null(found);
+        Assert.Equal(1 + 1 + 3, opens);
+        Assert.Equal(ConnectionStatus.Faulted, session.Status);
+        Assert.Equal("Could not open COM3.", detail);
+    }
+
+    // -------------------------------------------------------------------------------------
     // Remembered settings go first (#502)
     // -------------------------------------------------------------------------------------
 
