@@ -67,13 +67,15 @@ window is shorter as a result. A GPSDO such as the Z3805A shows all of them.
 
 ### The figures of merit
 
-![Two pills: a green dot with "TFOM 3" and a green dot with "FFOM 0"](images/how-to-use/main-figures-of-merit.png)
+![Two pills: a grey ring with "TFOM 3" and a green dot with "FFOM 0"](images/how-to-use/main-figures-of-merit.png)
 
 **TFOM** is the receiver's own estimate of its time error, on a scale where lower is better —
-TFOM 3 means the error is between 100 ns and 1 µs. **FFOM** is the state of the frequency loop;
-FFOM 0 means the PLL has stabilised. The Overview page spells both out in words next to the
-number. The pills use colour, a shape and text together: green circle for good, amber triangle for
-caution, red hexagon for critical.
+TFOM 3 means the error is between 100 ns and 1 µs, which is the best this receiver family reports.
+It is an amount rather than a verdict, so its pill has no colour: a grey ring and the number.
+**FFOM** is the state of the frequency loop, and its pill does judge it, with colour, a shape and
+text together: a green circle at 0, the PLL stabilised; an amber triangle at 1 or 2, stabilising or
+in holdover; a red hexagon at 3, unlocked — do not use the 10 MHz output. The Overview page spells
+both out in words next to the number.
 
 ### The clock line
 
