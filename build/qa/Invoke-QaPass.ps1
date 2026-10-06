@@ -4204,7 +4204,9 @@ Start-Sleep -Seconds 15
     Send-Zip $Vm $Offline 'candidate'
     $r = Invoke-UiStep $Vm 'replace-running' '' $replaceRunningStep
     $log = "$($r.log)"
-    Check $Result '[12] it asks for the running copy to be closed, and waits' ($r.runningAtStart -and $r.askedToClose -and $r.waited) "running at start $($r.runningAtStart); asked $($r.askedToClose); still waiting $($r.waited)"
+    # The step's own error when it stopped early: 1.4.0's pass on QA-Win10 came back with every field
+    # empty and nothing to say why (6 Oct 2026).
+    Check $Result '[12] it asks for the running copy to be closed, and waits' ($r.runningAtStart -and $r.askedToClose -and $r.waited) "$(if ($r.error) { "step failed: $($r.error); " })running at start $($r.runningAtStart); asked $($r.askedToClose); still waiting $($r.waited)"
     Check $Result '[12] before anything changes it lists version 1.3.0.0 and the certificate 655D07E3...' ($log -match '1\.3\.0\.0' -and $log -match "decide cert\s+$retiredCert") ''
     $elevations = @($log -split "`r?`n" | Where-Object { $_ -match 'elevating for:' })
     Check $Result '[12] one administrator prompt' ($elevations.Count -eq 1) ($elevations -join ' | ')
