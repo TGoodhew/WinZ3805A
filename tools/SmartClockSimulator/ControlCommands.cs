@@ -24,7 +24,8 @@ public static class ControlCommands
         holdover | recover        force holdover, or start recovery, as the commands would
         health <item> fail | ok   item: selftest intpwr ovenpwr ocxo efc gpsrcv
         fault silent | garbage | truncate | latency <ms> | drop | none
-        echo on | off             the receiver's FDUPLEX setting
+        fault mid-reply           a reply goes out with no prompt until the next command (#707)
+        echo on | off            the receiver's FDUPLEX setting
         speed <factor>            run the timeline faster (the reported clock stays real)
         serial <number>           a different unit on the cable: *IDN? answers this serial
         status                    one line describing the receiver and the link
@@ -113,6 +114,12 @@ public static class ControlCommands
                 case ["fault", "drop"]:
                     link.Faults.DropRequested = true;
                     return "ok: dropping the connection";
+
+                // #707: the port opening into a reply's tail, which a restart mid-poll gives a real
+                // receiver. Started within 100 ms, ended by the next command.
+                case ["fault", "mid-reply"]:
+                    link.Faults.MidReplyRequested = true;
+                    return "ok: a reply goes out with no prompt until the next command";
 
                 case ["fault", "none"]:
                     link.Faults.Clear();
