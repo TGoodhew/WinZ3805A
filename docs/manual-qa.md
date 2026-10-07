@@ -1085,14 +1085,16 @@ front is only knowable on screen.
 
 ## Before a release
 
-**First the automated pass**, on the release's dry-run build, before the tag:
-`build/qa/Invoke-QaPass.ps1 -Online <zip> -Offline <zip>`, with its report posted to the QA-run
-issue. It must have no FAIL and no ERROR before the tag, and since 5 Oct 2026 no photograph awaiting a verdict: every photograph that differs from the last accepted pass is judged from its triptych and the verdict recorded with `build/qa/Complete-QaRun.ps1` (see `build/qa/README.md`). Then run it again on the published zips
-(`-Release <tag>`). Of the sections below, it covers 8, 11, 18, 25 and most of 12.
+**First the automated pass**, on the release's own zips while it is still a draft: the tag makes a
+draft that only the repository's owner can see, and `build/qa/Invoke-Release.ps1` runs
+`build/qa/Invoke-QaPass.ps1 -Release <tag> -Draft` on it, with its report posted to the QA-run
+issue. It must have no FAIL and no ERROR before the go, and since 5 Oct 2026 no photograph awaiting a verdict: every photograph that differs from the last accepted pass is judged from its triptych and the verdict recorded with `build/qa/Complete-QaRun.ps1` (see `build/qa/README.md`). The go publishes
+that draft, and the runner checks the public zips are byte for byte the ones that passed (#743,
+7 Oct 2026; until then the pass ran on a dry-run rebuild and again after publishing). Of the
+sections below, it covers 8, 11, 18, 25 and most of 12.
 
-Then, by hand: sections 1–4, 9 and 13 in full, then **the rest of 12 on the published artifact** — which means the release
-exists before the last check passes. That is the right way round: a release nobody can install is
-worth catching after it is published rather than not at all, and the fix is another tag. Section 5
+Then, by hand: sections 1–4, 9 and 13 in full, then **the rest of 12 on the draft's zips**
+(`gh release download <tag>`), which are the artifact the go will publish. Section 5
 only if the hardware is being moved, with sections 7 and 10 alongside it since they need the same
 antenna; **section 16 the first time anyone is in front of the receiver**, since the lamp shipped in
 v1.0.14 verified only through a register read and the two minutes it costs are the only way anyone

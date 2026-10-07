@@ -1,7 +1,7 @@
 <#
 .SYNOPSIS
     Runs a release from its version bump to its closed QA-run issue, stopping only for judging and
-    for Tony's go (#633).
+    for Tony's go (#633, #743).
 
 .DESCRIPTION
     A release was a dozen steps stitched together by hand: dispatch the dry run, download it, run
@@ -10,36 +10,45 @@
     stages with their state in a file, so it can run for hours detached and be resumed where it
     stopped.
 
+    Since #743 (7 Oct 2026) the tag makes a DRAFT release, which nobody but the repository's owner
+    can see, and the pass and the soak run on that draft's own zips. So the bump is merged and the
+    tag pushed without a go - neither makes anything public - and Tony's go is what publishes the
+    draft. What users download is byte for byte what passed, which the publish stage checks by hash.
+    Until then a tag published at once: the pass ran on a dry-run rebuild before the go and on the
+    public zips after it, so the bits users got were tested only once they had them.
+
     It stops, and says so in its state, at three points:
       - judging: a pass whose photographs need verdicts (Complete-QaRun.ps1), then -Resume;
-      - the go: nothing is merged or tagged without -Go, which is passed only on Tony's word -
-        his standing rule is that releases are tagged on his go and no one else's;
+      - the go: nothing is published without -Go, which is passed only on Tony's word;
       - a failure: any FAIL or ERROR, a soak that grew, a workflow that failed. Fix, then -Resume,
-        or start the stage again with -Restart <stage>.
+        or start the stage again with -Restart <stage>. A fault in the app itself needs a new build:
+        delete the draft and its tag (gh release delete vX --cleanup-tag), merge the fix, then
+        -Restart tag, which tags the new main. Nothing was released, so nothing is withdrawn.
 
     Stages, in order:
-      dry-run      dispatch release.yml with dry_run on the bump branch, wait, download the zips
-      pass         Invoke-QaPass.ps1 on the dry run's zips, every default scenario
-      soak         the soak scenario for the last release and for the dry run, on QA-Win11,
-                   compared: the candidate may not grow more than 3 MB/hour faster than the release
+      tag          check the bump PR sets the manifest, merge it (rebase), tag the merge commit,
+                   wait for release.yml, and check what it made is a draft
+      pass         Invoke-QaPass.ps1 -Release -Draft on the draft's zips, every default scenario
+                   (release-assets included, checking the release is a draft)
+      soak         the soak scenario for the last published release and for the draft, on
+                   QA-Win11, compared: the draft may not grow more than 3 MB/hour faster
       issue        the QA-run issue, created with the pass's report and the soak's numbers
       go           waits for -Go
-      tag          merge the bump PR (rebase), tag the merge commit, wait for the publish
-      published    Invoke-QaPass.ps1 -Release on the published zips (release-assets included)
-      close        the results posted on the QA-run issue, the issue closed
-
+      publish      the draft made public; the public zips' hashes checked against the tested ones
+      close        the hashes posted on the QA-run issue, the issue closed
 .PARAMETER Version
     The version being released, as the manifest gives it (1.3.6 or 1.3.6.0).
 
 .PARAMETER BumpPr
-    The pull request that bumps Package.appxmanifest to this version. Its branch is what the dry run
-    builds and what is merged before the tag.
+    The pull request that bumps Package.appxmanifest to this version. The tag stage merges it, once
+    its branch is checked to set the manifest to this version, and tags the merge.
 
 .PARAMETER Resume
     Carry on from the stage the state file records.
 
 .PARAMETER Go
-    Tony's go: lets the tag stage run. Recorded in the state with the time it was given.
+    Tony's go: lets the publish stage make the draft public. Recorded in the state with the time it
+    was given.
 
 .PARAMETER Restart
     Start again from the named stage.
@@ -56,7 +65,7 @@ param(
     [int]$BumpPr,
     [switch]$Resume,
     [switch]$Go,
-    [ValidateSet('dry-run', 'pass', 'soak', 'issue', 'go', 'tag', 'published', 'close')][string]$Restart
+    [ValidateSet('tag', 'pass', 'soak', 'issue', 'go', 'publish', 'close')][string]$Restart
 )
 
 $ErrorActionPreference = 'Stop'
@@ -77,7 +86,7 @@ function Say { param([string]$Text) $line = '{0:yyyy-MM-dd HH:mm:ss}  {1}' -f (G
 
 function Read-State {
     if (Test-Path $statePath) { Get-Content $statePath -Raw | ConvertFrom-Json -AsHashtable }
-    else { @{ version = $full; tag = $tag; stage = 'dry-run'; status = 'new'; started = (Get-Date -Format 'yyyy-MM-dd HH:mm') } }
+    else { @{ version = $full; tag = $tag; stage = 'tag'; status = 'new'; started = (Get-Date -Format 'yyyy-MM-dd HH:mm') } }
 }
 function Save-State { param($State) $State.updated = (Get-Date -Format 'yyyy-MM-dd HH:mm'); $State | ConvertTo-Json -Depth 5 | Set-Content $statePath -Encoding UTF8 }
 function Stop-At { param($State, [string]$Status, [string]$Why) $State.status = $Status; $State.why = $Why; Save-State $State; Say "STOPPED at $($State.stage): $Status - $Why"; exit $(if ($Status -like 'waiting*') { 3 } else { 1 }) }
@@ -181,47 +190,54 @@ function Get-SoakRate {
 while ($true) {
     Say "stage $($state.stage)"
     switch ($state.stage) {
-        'dry-run' {
-            $branch = gh pr view $state.bumpPr --json headRefName -q .headRefName
-            $manifest = gh api "repos/TGoodhew/WinZ3805A/contents/src/WinZ3805A/Package.appxmanifest?ref=$branch" -H 'Accept: application/vnd.github.raw'
-            if (($manifest -join "`n") -notmatch "Version=""$([regex]::Escape($full))""") { Stop-At $state 'failed' "the bump branch $branch does not set the manifest to $full" }
-            $since = [DateTimeOffset]::UtcNow.AddSeconds(-5)
-            gh workflow run release.yml --ref $branch -f dry_run=true | Out-Null
-            $run = $null
-            for ($i = 0; $i -lt 30 -and -not $run; $i++) {
+        'tag' {
+            # Merged and tagged without a go: the tag makes only a draft, which no user can see
+            # (#743, decided by Tony 7 Oct 2026). The go is what publishes it.
+            $branch = gh pr view --repo TGoodhew/WinZ3805A $state.bumpPr --json headRefName -q .headRefName
+            $pr = gh pr view --repo TGoodhew/WinZ3805A $state.bumpPr --json state | ConvertFrom-Json
+            if ($pr.state -ne 'MERGED') {
+                $manifest = gh api "repos/TGoodhew/WinZ3805A/contents/src/WinZ3805A/Package.appxmanifest?ref=$branch" -H 'Accept: application/vnd.github.raw'
+                if (($manifest -join "`n") -notmatch "Version=""$([regex]::Escape($full))""") { Stop-At $state 'failed' "the bump branch $branch does not set the manifest to $full" }
+                gh pr merge --repo TGoodhew/WinZ3805A $state.bumpPr --rebase --delete-branch *>> $logPath
+                if ($LASTEXITCODE -ne 0) { Stop-At $state 'failed' "PR #$($state.bumpPr) did not merge" }
                 Start-Sleep -Seconds 5
-                $run = gh run list --workflow release.yml --branch $branch --limit 5 --json databaseId,createdAt | ConvertFrom-Json |
-                    Where-Object { [DateTimeOffset]$_.createdAt -ge $since } | Select-Object -First 1
             }
-            if (-not $run) { Stop-At $state 'failed' 'the dry run did not start' }
-            $state.dryRun = $run.databaseId; Save-State $state
-            Say "dry run $($run.databaseId) building"
-            gh run watch $run.databaseId --exit-status --interval 30 *> $null
-            if ($LASTEXITCODE -ne 0) { Stop-At $state 'failed' "dry run $($run.databaseId) failed" }
-            $zips = Join-Path $home_ 'dry-run-zips'
-            gh run download $run.databaseId -D $zips *>> $logPath
-            $state.online = (Get-ChildItem $zips -Recurse -Filter "WinZ3805A-$full-x64.zip" | Select-Object -First 1).FullName
-            $state.offline = (Get-ChildItem $zips -Recurse -Filter "WinZ3805A-$full-x64-offline.zip" | Select-Object -First 1).FullName
-            if (-not $state.online -or -not $state.offline) { Stop-At $state 'failed' "the dry run's artifact has no zips named for $full" }
+            git -C $repo fetch -q origin main
+            $sha = git -C $repo rev-parse origin/main
+            $manifest = git -C $repo show "${sha}:src/WinZ3805A/Package.appxmanifest"
+            if (($manifest -join "`n") -notmatch "Version=""$([regex]::Escape($full))""") { Stop-At $state 'failed' "main at $sha does not carry $full" }
+            if (-not (git -C $repo tag -l $tag)) { git -C $repo tag $tag $sha }
+            git -C $repo push origin $tag *>> $logPath
+            $state.tagged = $sha; Save-State $state
+            Say "tagged $tag on $sha; release.yml makes it a draft"
+            $run = $null
+            for ($i = 0; $i -lt 60 -and -not $run; $i++) { Start-Sleep -Seconds 10; $run = gh run list --repo TGoodhew/WinZ3805A --workflow release.yml --branch $tag --limit 1 --json databaseId | ConvertFrom-Json | Select-Object -First 1 }
+            if (-not $run) { Stop-At $state 'failed' "release.yml did not start for $tag" }
+            $state.build = $run.databaseId; Save-State $state
+            gh run watch --repo TGoodhew/WinZ3805A $run.databaseId --exit-status --interval 30 *> $null
+            if ($LASTEXITCODE -ne 0) { Stop-At $state 'failed' "release.yml run $($run.databaseId) failed for $tag" }
+            $view = gh release view $tag --repo TGoodhew/WinZ3805A --json isDraft | ConvertFrom-Json
+            if (-not $view.isDraft) { Stop-At $state 'failed' "$tag is public already: release.yml must create a draft (#743)" }
             $state.stage = 'pass'
         }
         'pass' {
-            $out = Join-Path $home_ 'dry-run-pass'
+            # The draft's own zips: what passes here is what the go publishes.
+            $out = Join-Path $home_ 'draft-pass'
             if ($state.status -ne 'waiting for judgement' -or -not (Test-Path (Join-Path $out 'results.json'))) {
                 $state.passStarted = (Get-Date -Format 'yyyy-MM-dd HH:mm'); Save-State $state
-                $null = Invoke-Pass @('-Online', $state.online, '-Offline', $state.offline) $out
+                $null = Invoke-Pass @('-Release', $tag, '-Draft') $out
             }
             $verdict = Get-PassVerdict $out
             $state.passVerdict = $verdict
             if ($verdict -eq 'AWAITING JUDGEMENT') { Stop-At $state 'waiting for judgement' "judge $out with Complete-QaRun.ps1, then -Resume" }
-            if ($verdict -ne 'PASS') { Stop-At $state 'failed' "the dry run's pass is ${verdict}: $out\report.md" }
+            if ($verdict -ne 'PASS') { Stop-At $state 'failed' "the draft's pass is ${verdict}: $out\report.md" }
             $state.stage = 'soak'
         }
         'soak' {
             $previous = @(gh release list --repo TGoodhew/WinZ3805A --limit 10 --json tagName,isDraft,isPrerelease -q '.[] | select(.isDraft | not) | select(.isPrerelease | not) | .tagName') | Where-Object { $_ -ne $tag } | Select-Object -First 1
             $baseOut = Join-Path $home_ 'soak-baseline'; $candOut = Join-Path $home_ 'soak-candidate'
             $null = Invoke-Pass @('-Release', $previous, '-Machines', 'QA-Win11', '-Scenarios', 'soak') $baseOut
-            $null = Invoke-Pass @('-Online', $state.online, '-Offline', $state.offline, '-Machines', 'QA-Win11', '-Scenarios', 'soak') $candOut
+            $null = Invoke-Pass @('-Release', $tag, '-Draft', '-Machines', 'QA-Win11', '-Scenarios', 'soak') $candOut
             $base = Get-SoakRate $baseOut; $cand = Get-SoakRate $candOut
             $state.soak = @{ previous = $previous; baseline = $base; candidate = $cand }
             if ($null -eq $base -or $null -eq $cand) { Stop-At $state 'failed' "a soak did not measure private bytes: $baseOut, $candOut" }
@@ -235,15 +251,15 @@ while ($true) {
         'issue' {
             if (-not $state.issue) {
                 $body = Join-Path $home_ 'issue.md'
-                $report = Split-Report (Join-Path $home_ 'dry-run-pass\report.md')
+                $report = Split-Report (Join-Path $home_ 'draft-pass\report.md')
                 # Scenarios re-run after a first-attempt failure, when the run says so (reruns.md).
-                $reruns = Join-Path $home_ 'dry-run-pass\reruns.md'
+                $reruns = Join-Path $home_ 'draft-pass\reruns.md'
                 @(
-                    "The release QA for **$tag**, built from PR #$($state.bumpPr) (dry run $($state.dryRun)). Run by ``build/qa/Invoke-Release.ps1``."
+                    "The release QA for **$tag**, run on the draft release's own zips (build $($state.build), from PR #$($state.bumpPr)). Run by ``build/qa/Invoke-Release.ps1``. The release is not public until Tony's go."
                     ''
                     "## Soak (§14): $($state.soak.previous) $($state.soak.baseline) MB/hour private, this build $($state.soak.candidate) MB/hour"
                     ''
-                    '## The pass on the signed dry run'
+                    '## The pass on the draft'
                     ''
                     $report.Summary
                     ''
@@ -251,74 +267,59 @@ while ($true) {
                     ''
                     "Every scenario's checks follow in the comments below ($($report.Details.Count))."
                     ''
-                    '## Owed after the tag'
-                    '- [ ] The pass on the published zips, with `release-assets`.'
+                    '## Owed after the go'
+                    '- [ ] The draft published, its zips unchanged.'
                     ''
                     '🤖 Generated with [Claude Code](https://claude.com/claude-code)'
                 ) | Set-Content $body -Encoding UTF8
                 $url = gh issue create --repo TGoodhew/WinZ3805A --title "QA run: $tag" --label documentation --body-file $body
                 if ($LASTEXITCODE -ne 0 -or -not $url) { Stop-At $state 'failed' "the QA-run issue was not created: $url" }
                 $state.issue = [int]($url -replace '.*/', ''); Save-State $state
-                Add-ReportDetails $state.issue $report.Details 'The dry run''s pass'
+                Add-ReportDetails $state.issue $report.Details 'The draft''s pass'
                 Say "QA-run issue #$($state.issue)"
             }
             $state.stage = 'go'
         }
         'go' {
-            if (-not $state.go) { Stop-At $state 'waiting for the go' "the dry run passed and #$($state.issue) has the report; tag only on Tony's go: -Resume -Go" }
-            $state.stage = 'tag'
+            if (-not $state.go) { Stop-At $state 'waiting for the go' "the draft passed and #$($state.issue) has the report; publish only on Tony's go: -Resume -Go" }
+            $state.stage = 'publish'
         }
-        'tag' {
+        'publish' {
             if (-not $state.go) { Stop-At $state 'waiting for the go' 'no go recorded' }
-            $pr = gh pr view $state.bumpPr --json state,mergeCommit | ConvertFrom-Json
-            if ($pr.state -ne 'MERGED') {
-                gh pr merge $state.bumpPr --rebase --delete-branch *>> $logPath
-                if ($LASTEXITCODE -ne 0) { Stop-At $state 'failed' "PR #$($state.bumpPr) did not merge" }
-                Start-Sleep -Seconds 5
+            # The zips that passed, hashed before publishing, so publishing provably changed none.
+            $tested = @{}
+            foreach ($name in "WinZ3805A-$full-x64.zip", "WinZ3805A-$full-x64-offline.zip") {
+                $tested[$name] = (Get-FileHash (Join-Path $env:LOCALAPPDATA "WinZ3805A QA\cache\$name") -Algorithm SHA256).Hash
             }
-            git -C $repo fetch -q origin main
-            $sha = git -C $repo rev-parse origin/main
-            $manifest = git -C $repo show "${sha}:src/WinZ3805A/Package.appxmanifest"
-            if (($manifest -join "`n") -notmatch "Version=""$([regex]::Escape($full))""") { Stop-At $state 'failed' "main at $sha does not carry $full" }
-            if (-not (git -C $repo tag -l $tag)) { git -C $repo tag $tag $sha }
-            git -C $repo push origin $tag *>> $logPath
-            $state.tagged = $sha; Save-State $state
-            Say "tagged $tag on $sha"
-            $run = $null
-            for ($i = 0; $i -lt 60 -and -not $run; $i++) { Start-Sleep -Seconds 10; $run = gh run list --workflow release.yml --branch $tag --limit 1 --json databaseId | ConvertFrom-Json | Select-Object -First 1 }
-            if (-not $run) { Stop-At $state 'failed' "release.yml did not start for $tag" }
-            gh run watch $run.databaseId --exit-status --interval 30 *> $null
-            if ($LASTEXITCODE -ne 0) { Stop-At $state 'failed' "release.yml run $($run.databaseId) failed for $tag" }
-            $state.stage = 'published'
-        }
-        'published' {
-            $out = Join-Path $home_ 'published-pass'
-            if ($state.status -ne 'waiting for judgement' -or -not (Test-Path (Join-Path $out 'results.json'))) {
-                $null = Invoke-Pass @('-Release', $tag) $out
-            }
-            $verdict = Get-PassVerdict $out
-            $state.publishedVerdict = $verdict
-            if ($verdict -eq 'AWAITING JUDGEMENT') { Stop-At $state 'waiting for judgement' "judge $out with Complete-QaRun.ps1, then -Resume" }
-            if ($verdict -ne 'PASS') { Stop-At $state 'failed' "the published pass is ${verdict}: $out\report.md" }
+            gh release edit $tag --repo TGoodhew/WinZ3805A --draft=false *>> $logPath
+            if ($LASTEXITCODE -ne 0) { Stop-At $state 'failed' "$tag did not publish" }
+            $check = Join-Path $home_ 'published-zips'
+            if (Test-Path $check) { Remove-Item -LiteralPath $check -Recurse -Force }
+            gh release download $tag --repo TGoodhew/WinZ3805A --pattern '*.zip' --dir $check *>> $logPath
+            $same = foreach ($name in $tested.Keys) { $tested[$name] -eq (Get-FileHash (Join-Path $check $name) -Algorithm SHA256).Hash }
+            $view = gh release view $tag --repo TGoodhew/WinZ3805A --json isDraft,url | ConvertFrom-Json
+            if ($view.isDraft -or @($same | Where-Object { -not $_ }).Count -or @($same).Count -ne 2) { Stop-At $state 'failed' "$tag published, but its zips do not match the ones that passed: check $check" }
+            $state.published = (Get-Date -Format 'yyyy-MM-dd HH:mm'); $state.hashes = $tested; Save-State $state
+            Say "published $tag ($($view.url)); its zips are the ones that passed"
             $state.stage = 'close'
         }
         'close' {
             $comment = Join-Path $home_ 'close.md'
-            $report = Split-Report (Join-Path $home_ 'published-pass\report.md')
             @(
-                "## The pass on the published $tag zips: $($state.publishedVerdict)"
+                "## $tag published on Tony's go: $($state.published)"
                 ''
-                $report.Summary
+                'The public zips are byte for byte the ones the pass and the soak ran on:'
                 ''
-                "Every scenario's checks follow in the next comments ($($report.Details.Count))."
+                '| Zip | SHA-256 |'
+                '|---|---|'
+                $($state.hashes.GetEnumerator() | Sort-Object Name | ForEach-Object { "| ``$($_.Name)`` | ``$($_.Value)`` |" })
                 ''
                 '🤖 Generated with [Claude Code](https://claude.com/claude-code)'
             ) | Set-Content $comment -Encoding UTF8
             gh issue comment $state.issue --repo TGoodhew/WinZ3805A --body-file $comment *>> $logPath
-            Add-ReportDetails $state.issue $report.Details 'The published pass'
             gh issue close $state.issue --repo TGoodhew/WinZ3805A *>> $logPath
             $state.status = 'done'; Save-State $state
-            Say "$tag released and QA'd; #$($state.issue) closed"
+            Say "$tag QA'd as a draft and published; #$($state.issue) closed"
             exit 0
         }
     }

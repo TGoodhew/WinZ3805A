@@ -218,7 +218,7 @@ same `dist\WinZ3805A-<version>-x64.zip` from a clone.
 
 Releases are built by [`.github/workflows/release.yml`](.github/workflows/release.yml)
 on a `v*` tag — it runs the gates and the tests, builds and signs, then attaches
-the zip with its thumbprint and checksum.
+the zip with its thumbprint and checksum to a draft release.
 
 **The tag does not set the version.** `Package.appxmanifest` does, and the
 workflow refuses to build when the two disagree rather than restamping either:
@@ -231,8 +231,11 @@ manifest in a pull request, merge, then tag the merge:
 git tag v1.0.1 && git push origin v1.0.1
 ```
 
-The whole sequence - dry run, the QA pass, the soak, the QA-run issue, then on the go the merge,
-the tag and the pass on the published zips - is `build\qa\Invoke-Release.ps1`; see
+The tag makes a **draft** release, which nobody but the repository's owner can see. The QA pass
+and the soak run on that draft's own zips, and the draft is published only on the go, so what
+anyone downloads is exactly what passed (#743). The whole sequence - merge and tag, the QA pass,
+the soak, the QA-run issue, then on the go the publish and a check that the public zips are the
+tested ones - is `build\qa\Invoke-Release.ps1`; see
 [build/qa/README.md](build/qa/README.md#running-a-release).
 
 Signing on the runner needs `SIGNING_PFX_BASE64` and `SIGNING_PFX_PASSWORD` as

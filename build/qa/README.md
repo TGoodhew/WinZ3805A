@@ -78,6 +78,7 @@ missing) in 17 seconds and the offline zip 0 (installed .NET, started) in 41.
 
 ```powershell
 .\build\qa\Invoke-QaPass.ps1 -Online <online zip> -Offline <offline zip>   # a dry-run build
+.\build\qa\Invoke-QaPass.ps1 -Release v1.4.1 -Draft                        # a draft release's zips
 .\build\qa\Invoke-QaPass.ps1 -Release v1.3.4                               # published zips
 ```
 
@@ -147,7 +148,7 @@ moved into place).
 
 | Scenario | manual-qa.md section | What it requires |
 |---|---|---|
-| `release-assets` | 12 | On the host. Any candidate: both zips named for one version, the bundle signed with this release's certificate and the zip's `WinZ3805A.cer` that certificate, the bundle's own manifest installing that version, and the offline zip's .NET installer validly signed by Microsoft. With `-Release`, the published release as well: not a draft, exactly the two zips, and its notes' SHA-256 for each matching the download, its thumbprint row, and its .NET row naming the runtime the offline zip carries. Proved able to fail: a v1.3.4 zip with one file added failed the hash check and nothing else. These were checked by hand after every tag. `-Machines none` runs the host scenarios alone |
+| `release-assets` | 12 | On the host. Any candidate: both zips named for one version, the bundle signed with this release's certificate and the zip's `WinZ3805A.cer` that certificate, the bundle's own manifest installing that version, and the offline zip's .NET installer validly signed by Microsoft. With `-Release`, the published release as well: not a draft (with `-Draft`, still a draft and not a pre-release), exactly the two zips, and its notes' SHA-256 for each matching the download, its thumbprint row, and its .NET row naming the runtime the offline zip carries. Proved able to fail: a v1.3.4 zip with one file added failed the hash check and nothing else. These were checked by hand after every tag. `-Machines none` runs the host scenarios alone |
 | `binary-audit` | 8 | No excluded command in the assemblies this repository builds (host, no VM) |
 | `fresh-online` | 12 | Online zip, no .NET: exit 3, this release installed and trusted, start check skipped |
 | `fresh-offline` | 12 | Offline zip: .NET and the app in one elevation, exit 0, start check passed. It also checks the runtime case each VM has (#594, #595): QA-Win11 carries the Store's newer `Microsoft.WindowsAppRuntime.2` (2.5.1.0), which must be kept with the companions following it; QA-Win10 has none, so the zip's 2.3.1.0 is installed. Windows 10 with only a newer Store runtime is not reproduced |
@@ -194,24 +195,35 @@ exactly as #617 did.
 ```powershell
 pwsh build\qa\Invoke-Release.ps1 -Version 1.3.6 -BumpPr 712   # from the version bump's PR
 pwsh build\qa\Invoke-Release.ps1 -Version 1.3.6 -Resume       # after judging, or a fix
-pwsh build\qa\Invoke-Release.ps1 -Version 1.3.6 -Resume -Go   # on Tony's go, and only then
+pwsh build\qa\Invoke-Release.ps1 -Version 1.3.6 -Resume -Go   # on Tony's go: publishes the draft
 ```
 
 `Invoke-Release.ps1` runs a release as stages, keeping its state in
 `%LOCALAPPDATA%\WinZ3805A QA\releases\<tag>\` beside its log and every pass it ran. Run it detached,
-because it outlives any tool call. The stages:
+because it outlives any tool call.
 
-1. **dry run**: `release.yml` with `dry_run` on the bump branch, which must already set the manifest
-   to the version;
-2. **pass**: the full pass on the dry run's zips;
-3. **soak**: the last release and the dry run, 60 minutes each on QA-Win11. The candidate may not
-   grow more than 3 MB/hour faster than the release; two soaks of one build differed by about 1.6,
-   and #399's leak was 19;
+**The QA runs on the release itself, before anyone can download it** (#743, 7 Oct 2026). A tag makes
+a *draft* release, which only the repository's owner can see; the pass and the soak run on the
+draft's own zips, and Tony's go is what publishes it. So the bump is merged and the tag pushed
+without a go - neither makes anything public - and the bits users download are byte for byte the
+bits that passed. Until then a tag published at once, the pass ran on a dry-run rebuild before the
+go, and the published zips were tested only after users had them. The stages:
+
+1. **tag**: check the bump branch sets the manifest to the version, merge it, tag the merge commit,
+   wait for `release.yml`, and check it made a draft;
+2. **pass**: the full pass on the draft's zips (`-Release <tag> -Draft`), `release-assets` included;
+3. **soak**: the last published release and the draft, 60 minutes each on QA-Win11. The draft may
+   not grow more than 3 MB/hour faster than the release; two soaks of one build differed by about
+   1.6, and #399's leak was 19;
 4. **issue**: the QA-run issue, with the report and the soak;
 5. **go**: waits for Tony;
-6. **tag**: merge the bump, tag the merge commit, and wait for the publish;
-7. **published**: the pass on the published zips, with `release-assets`;
-8. **close**: the results posted, the issue closed.
+6. **publish**: the draft made public, then the public zips downloaded and their SHA-256 checked
+   against the zips that passed;
+7. **close**: the hashes posted, the issue closed.
+
+A fault in the app after the tag needs a new build, not a new stage: delete the draft and its tag
+(`gh release delete <tag> --cleanup-tag`), merge the fix, then `-Restart tag`, which tags the new
+main. Nothing was published, so nothing is withdrawn.
 
 It **stops** in three cases:
 - a pass awaits judgement: judge with `Complete-QaRun.ps1`, then `-Resume`;
