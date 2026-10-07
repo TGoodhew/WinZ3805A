@@ -154,6 +154,11 @@ picking one shows the latest of what was heard.
 > every tier C command. A talker has no tier C commands and the invoker never runs for it. The
 > test now requires the entry of query/response families and requires a broadcast family to have
 > no tier C command at all — exempt by construction, not by exception.
+>
+> *Re-keyed 7 Oct 2026 (#748):* the exemption now reads `Reports(ReceiverReading.ErrorQueue)` rather
+> than the link style, because the UCCM is query/response and keeps no queue either — it answers an
+> error in place of the reply. The talker meets the new rule through the `ErrorQueue => false` it
+> already declared; the link style had only ever been standing in for that fact.
 
 ## Step 5 — the exclusions
 
@@ -291,7 +296,7 @@ Made here, because the issue said to make the contract changes here or file them
 | `BroadcastListener` | `Transport/BroadcastListener.cs` | The read side of a broadcast link — and, since #508, its one write: `PollAsync` sends the driver's outgoing text and waits on the reply's *arrival* rather than on a clock |
 | The connect sequence overhears before it asks; a broadcast driver is served from its listener | `Services/DeviceSessionService.cs` | Recognition by hearing; nothing on the wire |
 | 4800 and 38400 baud | `Transport/SerialSettings.cs`, §7.1 | The standard's rate was not offered |
-| The error-queue contract test binds query/response families | `ReceiverDriverTests` | Finding 4 |
+| The error-queue contract test binds query/response families (since #748, families that report an error queue) | `ReceiverDriverTests` | Finding 4 |
 
 Left open when this was written. The first two were
 [#304](https://github.com/TGoodhew/WinZ3805A/issues/304)'s items 3 and 1, which this family made

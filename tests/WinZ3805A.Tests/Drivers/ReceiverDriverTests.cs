@@ -4,6 +4,7 @@ using WinZ3805A.Controls;
 using WinZ3805A.Device.Commands;
 using WinZ3805A.Device.Drivers;
 using WinZ3805A.Device.Drivers.Nmea;
+using WinZ3805A.Device.Drivers.Uccm;
 using WinZ3805A.Device.Models;
 
 namespace WinZ3805A.Tests.Drivers;
@@ -31,12 +32,19 @@ public class ReceiverDriverTests
 
     private static SmartClockDriver Driver() => new(new FakeTimeProvider(Now));
 
-    /// <summary>Every driver the contract binds: the two real families and the test-only one.</summary>
+    /// <summary>Every driver the contract binds: the three real families and the test-only one.</summary>
+    /// <remarks>
+    /// The UCCM joined on 7 Oct 2026 (#748), having shipped since #416 without ever being held to
+    /// the contract. Two tests failed it on arrival: one found a sweep it accepted from anybody
+    /// (#739), and the other an error queue it implied it kept while the contract was asking the
+    /// wrong question about it — see <see cref="TheErrorQueueQueryIsCatalogued"/>.
+    /// </remarks>
     public static TheoryData<IReceiverDriver> AllDrivers => new()
     {
         new SmartClockDriver(new FakeTimeProvider(Now)),
         new FakeReceiverDriver(),
         new NmeaDriver(new FakeTimeProvider(Now)),
+        new UccmDriver(new FakeTimeProvider(Now)),
     };
 
     [Fact]
@@ -154,23 +162,44 @@ public class ReceiverDriverTests
         Assert.Null(driver.Find(":NO:SUCH:COMMAND?"));
 
     /// <summary>
-    /// Every driver's catalog carries IEEE 488.2's error query.
+    /// A family that reports an error queue catalogues IEEE 488.2's error query, and a family that
+    /// does not has no tier C command.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// <c>CommandInvoker</c> reads <c>:SYST:ERR?</c> after every tier C command (§7.2) and throws
     /// if the driver cannot supply it, so this is a contract requirement rather than a SmartClock
     /// habit — <b>for a family that can be sent a tier C command at all.</b> #310's talker cannot
     /// be sent anything: its link is broadcast, its catalog is reads only, and the invoker never
-    /// runs for it. The requirement therefore binds query/response families, which is what the
-    /// invoker serves; a broadcast family is exempt by construction rather than by exception.
+    /// runs for it.
+    /// </para>
+    /// <para>
+    /// <b>The exemption was keyed on the link style until #748, and the link style was the wrong
+    /// question.</b> The UCCM is query/response and has no error queue either: it answers an error
+    /// <i>in place of</i> the reply — <c>Command error</c>, <c>Undefined header</c>, captured in
+    /// <c>Uccm/Captures/</c> — so there is nothing left over to read afterwards, and its catalog has
+    /// no query to read it with. What the invoker needs is a queue, and whether a family keeps one
+    /// is already a declaration every driver makes: <see cref="IReceiverDriver.Reports"/> with
+    /// <see cref="ReceiverReading.ErrorQueue"/>, defaulted to <see langword="true"/> (#435). So the
+    /// rule reads that, and it binds both ways. A family that reports a queue must be able to read
+    /// it — or Diagnostics offers a Read button with nothing behind it and says "No errors." about
+    /// a queue nobody can see. A family that declares none must offer nothing that needs one, and
+    /// must not catalogue the query either, because a catalogue that can ask the question and a
+    /// declaration that says there is no answer cannot both be true.
+    /// </para>
+    /// <para>
+    /// A broadcast family meets this by declaring the same absence, which it does: the talker never
+    /// had a queue, and the link style was only ever standing in for that fact.
+    /// </para>
     /// </remarks>
     [Theory]
     [MemberData(nameof(AllDrivers))]
     public void TheErrorQueueQueryIsCatalogued(IReceiverDriver driver)
     {
-        if (driver.Link == LinkStyle.Broadcast)
+        if (!driver.Reports(ReceiverReading.ErrorQueue))
         {
             Assert.DoesNotContain(driver.Commands, command => command.Tier == SafetyTier.Confirm);
+            Assert.Null(driver.Find(":SYST:ERR?"));
             return;
         }
 

@@ -558,10 +558,19 @@ Note that the catalog's construction helpers are private to the SmartClock
 catalog; your driver builds its own `ScpiCommand` instances (the fake driver
 shows the minimal form).
 
-One entry is a **contract requirement** of every query/response family:
-`:SYST:ERR?`, IEEE 488.2's error query, which `CommandInvoker` drains after
-every tier C command (§7.2). A broadcast family must instead have no tier C
-entry at all, since the invoker never runs for it. Both are contract-tested.
+One entry is a **contract requirement** of every family that keeps an error
+queue: `:SYST:ERR?`, IEEE 488.2's error query, which `CommandInvoker` drains
+after every tier C command (§7.2). A family that keeps none says so with
+`Reports(ReceiverReading.ErrorQueue)` returning `false`, and must then have no
+tier C entry at all and no `:SYST:ERR?` entry either — the invoker could not do
+§7.2's check for it, and a catalogue that can ask the question contradicts a
+declaration that there is no answer. Both halves are contract-tested.
+
+This was keyed on the link style until #748, which was the wrong question. A
+broadcast talker has no queue, but neither does the UCCM, which is
+query/response: it answers an error *in place of* the reply (`Command error`,
+`Undefined header`), so nothing is left queued to read. Ask whether your
+receiver keeps a queue, not how it talks.
 
 ### Step 5 — the exclusions
 
@@ -739,8 +748,8 @@ Before opening the pull request:
       null and torn inputs
 - [ ] Absent fields are `null`, never zero or a guess
 - [ ] Catalog is an allowlist; tiers per §8.2/§8.3; confirmation texts state
-      measured consequences; `:SYST:ERR?` present (query/response) or no tier
-      C entries (broadcast)
+      measured consequences; `:SYST:ERR?` present, or `Reports(ErrorQueue)`
+      `false` and no tier C entries
 - [ ] Exclusions: your own list, one `internal` file, verdict-only `IsBlocked`,
       no excluded name written anywhere — `Test-NoBlockedCommands.ps1` green
 - [ ] Timeouts and cadence measured on your hardware, not copied
