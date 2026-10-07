@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 <ContentDialog
     x:Class="WinZ3805A.Views.SatelliteManagementDialog"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -40,110 +40,148 @@
         truncated to "COM3 - Prolific l". MinWidth keeps the designed proportions at 100 % while
         letting the dialog use the width it has when the text is larger.
     -->
-    <ScrollViewer VerticalScrollBarVisibility="Auto"
-                  VerticalScrollMode="Auto"
-                  HorizontalScrollMode="Disabled"
-                  HorizontalScrollBarVisibility="Disabled">
-        <StackPanel MinWidth="440" Spacing="{StaticResource WzSpaceMd}">
+    <!--
+        The scrolling area and, below it, the sentence that says it scrolls (#767).
 
-            <TextBlock x:Name="SummaryText"
-                       Style="{ThemeResource WzBodyTextStyle}"
-                       Foreground="{ThemeResource WzTextSecondaryBrush}"
-                       TextWrapping="Wrap" />
+        Fluent hides the scroll bar until the pointer comes near it, so the only sign of more was
+        whatever the bottom edge cut through - usually half a row of PRNs, until 200 % text in the
+        Minimal window ended the view exactly on a row boundary and twenty satellites were out of
+        view with nothing to say so. The cue sits outside the ScrollViewer so scrolling cannot carry
+        it away, shows only while the content is taller than the view, and is a polite live region so
+        a screen reader hears it when it appears. OverflowCue holds the rule and its reasons.
+    -->
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
 
-            <!--
-                PRN 1-32 as a wrapped grid of toggles rather than a 32-row list: the whole
-                constellation fits in six rows this way, and a user looking for "is 17 excluded"
-                finds it by position instead of by scrolling.
+        <ScrollViewer x:Name="DialogScroller"
+                      Grid.Row="0"
+                      VerticalScrollBarVisibility="Auto"
+                      VerticalScrollMode="Auto"
+                      HorizontalScrollMode="Disabled"
+                      HorizontalScrollBarVisibility="Disabled"
+                      ViewChanged="OnDialogScrollerViewChanged"
+                      SizeChanged="OnDialogLayoutChanged">
+            <StackPanel x:Name="DialogContent"
+                        MinWidth="440"
+                        Spacing="{StaticResource WzSpaceMd}"
+                        SizeChanged="OnDialogLayoutChanged">
 
-                Which is why this no longer carries MaxHeight="240" (#26). That was six rows at
-                100 % text and five and a half at 200 %, so the grid became its own scroll region
-                and cut PRN 31 and 32 across the middle - losing exactly the property the sentence
-                above promises, in the one case where finding a satellite by position matters most.
+                <TextBlock x:Name="SummaryText"
+                           Style="{ThemeResource WzBodyTextStyle}"
+                           Foreground="{ThemeResource WzTextSecondaryBrush}"
+                           TextWrapping="Wrap" />
 
-                The height is now the grid's own. When the dialog cannot fit it, the ScrollViewer
-                around the whole content scrolls instead, so there is one scroll region rather than
-                a small one nested inside a large one.
-            -->
-            <ItemsRepeaterScrollHost>
-                <ScrollViewer x:Name="PrnScroller"
-                              VerticalScrollMode="Disabled"
-                              VerticalScrollBarVisibility="Disabled"
-                              HorizontalScrollMode="Disabled">
-                    <ItemsRepeater x:Name="PrnRepeater">
-                        <ItemsRepeater.Layout>
-                            <UniformGridLayout MinItemWidth="72"
-                                               MinItemHeight="36"
-                                               MinRowSpacing="{StaticResource WzSpaceXs}"
-                                               MinColumnSpacing="{StaticResource WzSpaceXs}" />
-                        </ItemsRepeater.Layout>
-                        <ItemsRepeater.ItemTemplate>
-                            <DataTemplate x:DataType="vm:SatelliteChoice">
-                                <ToggleButton IsChecked="{x:Bind IsSelected, Mode=TwoWay}"
-                                              MinWidth="72"
-                                              MinHeight="36"
-                                              AutomationProperties.Name="{x:Bind AutomationName, Mode=OneWay}"
-                                              ToolTipService.ToolTip="{x:Bind StateText, Mode=OneWay}">
-                                    <StackPanel Orientation="Horizontal"
-                                                Spacing="{ThemeResource WzSpaceXxs}">
-                                        <TextBlock Style="{ThemeResource WzMonoTextStyle}"
-                                                   Text="{x:Bind PrnText}" />
-                                        <TextBlock Style="{ThemeResource WzCaptionTextStyle}"
-                                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
-                                                   Text="{x:Bind Marker, Mode=OneWay}" />
-                                    </StackPanel>
-                                </ToggleButton>
-                            </DataTemplate>
-                        </ItemsRepeater.ItemTemplate>
-                    </ItemsRepeater>
-                </ScrollViewer>
-            </ItemsRepeaterScrollHost>
+                <!--
+                    PRN 1-32 as a wrapped grid of toggles rather than a 32-row list: the whole
+                    constellation fits in six rows this way, and a user looking for "is 17 excluded"
+                    finds it by position instead of by scrolling.
 
-            <TextBlock x:Name="SelectionText"
+                    Which is why this no longer carries MaxHeight="240" (#26). That was six rows at
+                    100 % text and five and a half at 200 %, so the grid became its own scroll region
+                    and cut PRN 31 and 32 across the middle - losing exactly the property the sentence
+                    above promises, in the one case where finding a satellite by position matters most.
+
+                    The height is now the grid's own. When the dialog cannot fit it, the ScrollViewer
+                    around the whole content scrolls instead, so there is one scroll region rather than
+                    a small one nested inside a large one.
+                -->
+                <ItemsRepeaterScrollHost>
+                    <ScrollViewer x:Name="PrnScroller"
+                                  VerticalScrollMode="Disabled"
+                                  VerticalScrollBarVisibility="Disabled"
+                                  HorizontalScrollMode="Disabled">
+                        <ItemsRepeater x:Name="PrnRepeater">
+                            <ItemsRepeater.Layout>
+                                <UniformGridLayout MinItemWidth="72"
+                                                   MinItemHeight="36"
+                                                   MinRowSpacing="{StaticResource WzSpaceXs}"
+                                                   MinColumnSpacing="{StaticResource WzSpaceXs}" />
+                            </ItemsRepeater.Layout>
+                            <ItemsRepeater.ItemTemplate>
+                                <DataTemplate x:DataType="vm:SatelliteChoice">
+                                    <ToggleButton IsChecked="{x:Bind IsSelected, Mode=TwoWay}"
+                                                  MinWidth="72"
+                                                  MinHeight="36"
+                                                  AutomationProperties.Name="{x:Bind AutomationName, Mode=OneWay}"
+                                                  ToolTipService.ToolTip="{x:Bind StateText, Mode=OneWay}">
+                                        <StackPanel Orientation="Horizontal"
+                                                    Spacing="{ThemeResource WzSpaceXxs}">
+                                            <TextBlock Style="{ThemeResource WzMonoTextStyle}"
+                                                       Text="{x:Bind PrnText}" />
+                                            <TextBlock Style="{ThemeResource WzCaptionTextStyle}"
+                                                       Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                                       Text="{x:Bind Marker, Mode=OneWay}" />
+                                        </StackPanel>
+                                    </ToggleButton>
+                                </DataTemplate>
+                            </ItemsRepeater.ItemTemplate>
+                        </ItemsRepeater>
+                    </ScrollViewer>
+                </ItemsRepeaterScrollHost>
+
+                <TextBlock x:Name="SelectionText"
+                           Style="{ThemeResource WzCaptionTextStyle}"
+                           Foreground="{ThemeResource WzTextTertiaryBrush}"
+                           TextWrapping="Wrap" />
+
+                <Button x:Name="ApplyIncludeButton"
+                        Content="Track only the selected satellites…"
+                        HorizontalAlignment="Stretch"
+                        Click="OnApplyIncludeClicked" />
+
+                <!--
+                    The bulk forms, each its own catalogued command. Two of them drive the receiver into
+                    holdover and carry acknowledge:true in the catalog, so §9.7.4's checkbox appears on
+                    those two and not on the other two - the catalog decides, not this page.
+                -->
+                <Grid ColumnSpacing="{ThemeResource WzSpaceXs}" RowSpacing="{ThemeResource WzSpaceXs}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <Button x:Name="IncludeAllButton" Grid.Row="0" Grid.Column="0"
+                            Content="Track all…" HorizontalAlignment="Stretch"
+                            Click="OnIncludeAllClicked" />
+                    <Button x:Name="ExcludeNoneButton" Grid.Row="0" Grid.Column="1"
+                            Content="Clear exclusions…" HorizontalAlignment="Stretch"
+                            Click="OnExcludeNoneClicked" />
+                    <Button x:Name="IncludeNoneButton" Grid.Row="1" Grid.Column="0"
+                            Content="Track none…" HorizontalAlignment="Stretch"
+                            Style="{ThemeResource WzDestructiveButtonStyle}"
+                            Click="OnIncludeNoneClicked" />
+                    <Button x:Name="ExcludeAllButton" Grid.Row="1" Grid.Column="1"
+                            Content="Exclude all…" HorizontalAlignment="Stretch"
+                            Style="{ThemeResource WzDestructiveButtonStyle}"
+                            Click="OnExcludeAllClicked" />
+                </Grid>
+
+                <TextBlock Style="{ThemeResource WzCaptionTextStyle}"
+                           Foreground="{ThemeResource WzTextTertiaryBrush}"
+                           TextWrapping="Wrap"
+                           Text="Every change here is confirmed before it is sent, and nothing is staged: closing this dialog sends nothing. Tracking no satellites, or excluding them all, drives the receiver into holdover." />
+            </StackPanel>
+        </ScrollViewer>
+
+        <Border x:Name="ScrollCue"
+                Grid.Row="1"
+                Visibility="Collapsed"
+                Margin="0,8,0,0"
+                Padding="0,8,0,0"
+                BorderThickness="0,1,0,0"
+                BorderBrush="{ThemeResource WzStrokeSubtleBrush}">
+            <TextBlock x:Name="ScrollCueText"
                        Style="{ThemeResource WzCaptionTextStyle}"
-                       Foreground="{ThemeResource WzTextTertiaryBrush}"
-                       TextWrapping="Wrap" />
-
-            <Button x:Name="ApplyIncludeButton"
-                    Content="Track only the selected satellites…"
-                    HorizontalAlignment="Stretch"
-                    Click="OnApplyIncludeClicked" />
-
-            <!--
-                The bulk forms, each its own catalogued command. Two of them drive the receiver into
-                holdover and carry acknowledge:true in the catalog, so §9.7.4's checkbox appears on
-                those two and not on the other two - the catalog decides, not this page.
-            -->
-            <Grid ColumnSpacing="{ThemeResource WzSpaceXs}" RowSpacing="{ThemeResource WzSpaceXs}">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
-
-                <Button x:Name="IncludeAllButton" Grid.Row="0" Grid.Column="0"
-                        Content="Track all…" HorizontalAlignment="Stretch"
-                        Click="OnIncludeAllClicked" />
-                <Button x:Name="ExcludeNoneButton" Grid.Row="0" Grid.Column="1"
-                        Content="Clear exclusions…" HorizontalAlignment="Stretch"
-                        Click="OnExcludeNoneClicked" />
-                <Button x:Name="IncludeNoneButton" Grid.Row="1" Grid.Column="0"
-                        Content="Track none…" HorizontalAlignment="Stretch"
-                        Style="{ThemeResource WzDestructiveButtonStyle}"
-                        Click="OnIncludeNoneClicked" />
-                <Button x:Name="ExcludeAllButton" Grid.Row="1" Grid.Column="1"
-                        Content="Exclude all…" HorizontalAlignment="Stretch"
-                        Style="{ThemeResource WzDestructiveButtonStyle}"
-                        Click="OnExcludeAllClicked" />
-            </Grid>
-
-            <TextBlock Style="{ThemeResource WzCaptionTextStyle}"
-                       Foreground="{ThemeResource WzTextTertiaryBrush}"
+                       Foreground="{ThemeResource WzTextSecondaryBrush}"
                        TextWrapping="Wrap"
-                       Text="Every change here is confirmed before it is sent, and nothing is staged: closing this dialog sends nothing. Tracking no satellites, or excluding them all, drives the receiver into holdover." />
-        </StackPanel>
-    </ScrollViewer>
+                       AutomationProperties.LiveSetting="Polite" />
+        </Border>
+    </Grid>
 </ContentDialog>

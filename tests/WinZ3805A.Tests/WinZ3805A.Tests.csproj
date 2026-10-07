@@ -103,6 +103,7 @@
     <Compile Include="..\..\src\WinZ3805A\Controls\ReadoutFormatter.cs" Link="Formatting\ReadoutFormatter.cs" />
     <Compile Include="..\..\src\WinZ3805A\Controls\MedallionRingMath.cs" Link="Controls\MedallionRingMath.cs" />
     <Compile Include="..\..\src\WinZ3805A\Controls\Severity.cs" Link="Controls\Severity.cs" />
+    <Compile Include="..\..\src\WinZ3805A\Controls\OverflowCue.cs" Link="Controls\OverflowCue.cs" />
     <Compile Include="..\..\src\WinZ3805A\Controls\ReceiverMode.cs" Link="Controls\ReceiverMode.cs" />
     <!-- §11.1's two signal-strength scales differ by a factor of five, so which one a reading is on
          is not a detail a control may guess. Split out of SatelliteStrengthBar precisely so it can

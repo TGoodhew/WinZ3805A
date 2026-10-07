@@ -1,8 +1,12 @@
 ﻿using System.ComponentModel;
 
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 
+using Windows.Foundation;
+
+using WinZ3805A.Controls;
 using WinZ3805A.Device.Commands;
 using WinZ3805A.Device.Transport;
 using WinZ3805A.Services;
@@ -141,6 +145,68 @@ public sealed partial class SatelliteManagementDialog : ContentDialog
         IncludeNoneButton.IsEnabled = connected;
         ExcludeAllButton.IsEnabled = connected;
         ExcludeNoneButton.IsEnabled = connected;
+    }
+
+    // ===========================================================================================
+    // Saying that the dialog scrolls (#767). OverflowCue decides; this only measures.
+    // ===========================================================================================
+
+    private void OnDialogScrollerViewChanged(object? sender, ScrollViewerViewChangedEventArgs e) =>
+        RenderScrollCue();
+
+    private void OnDialogLayoutChanged(object sender, SizeChangedEventArgs e) => RenderScrollCue();
+
+    /// <summary>Shows, updates or hides the sentence below the scrolling area.</summary>
+    /// <remarks>
+    /// Run on every scroll and every size change of the view or of what it holds, which between them
+    /// cover the receiver being read, the text size changing, the window being resized, and
+    /// <see cref="DialogFit"/> lowering the dialog's cap once it has opened. Each is after layout, so
+    /// the positions measured are the ones on screen.
+    /// </remarks>
+    private void RenderScrollCue()
+    {
+        double viewport = DialogScroller.ViewportHeight;
+        bool overflows = OverflowCue.Overflows(DialogScroller.ExtentHeight, viewport);
+        string? cue = OverflowCue.Describe(overflows, overflows ? CountPrnsInView(viewport) : 0, _choices.Count);
+
+        if (cue is null)
+        {
+            ScrollCue.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        bool appearing = ScrollCue.Visibility == Visibility.Collapsed;
+        if (ScrollCueText.Text != cue)
+        {
+            ScrollCueText.Text = cue;
+        }
+
+        ScrollCue.Visibility = Visibility.Visible;
+
+        // Announced when it appears and not on every scroll: a count read aloud at each step of a
+        // scroll would talk over the toggles a keyboard user is moving between. WinUI raises nothing
+        // for a live region by itself (see LiveRegion), so the event is raised here, once.
+        if (appearing)
+        {
+            FrameworkElementAutomationPeer.CreatePeerForElement(ScrollCueText)
+                ?.RaiseAutomationEvent(AutomationEvents.LiveRegionChanged);
+        }
+    }
+
+    /// <summary>How many PRN buttons are wholly inside the scrolling area's view.</summary>
+    private int CountPrnsInView(double viewport)
+    {
+        List<(double Top, double Height)> items = new(_choices.Count);
+        for (int index = 0; index < _choices.Count; index++)
+        {
+            if (PrnRepeater.TryGetElement(index) is FrameworkElement element)
+            {
+                Point origin = element.TransformToVisual(DialogScroller).TransformPoint(default);
+                items.Add((origin.Y, element.ActualHeight));
+            }
+        }
+
+        return OverflowCue.CountInView(items, viewport);
     }
 
     /// <summary>Asks one catalogued query and returns its lines, or null.</summary>
