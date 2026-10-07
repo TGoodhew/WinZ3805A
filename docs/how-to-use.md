@@ -232,8 +232,9 @@ from cellular base stations — is recognised from its identity. It is **read-on
 asks it questions and never writes to it, so nothing on its pages can change a setting. Treat what
 it reports as provisional. Most of this driver was written from another program's source rather
 than from a vendor's manual, and only one module of one variant has ever been on the bench, so a
-reading that looks wrong probably is. It reports no status registers, no health monitor and no
-leap-second queries, and those pages and cards say so rather than waiting.
+reading that looks wrong probably is. It reports no status registers, no health monitor, no
+holdover uncertainty and no leap-second queries, and those pages and cards say so rather than
+waiting.
 
 ### When a receiver cannot do something
 
@@ -307,7 +308,9 @@ Everything from the main window, with the words behind the numbers:
 - **Holdover uncertainty** — the receiver's own prediction of how far its time would drift in 24
   hours of holdover, the threshold that prediction is compared against, and how long it has been in
   holdover if it is. The threshold is **not** the point at which the receiver enters holdover;
-  the Holdover page explains what it is and what the separate, settable duration limit does.
+  the Holdover page explains what it is and what the separate, settable duration limit does. A
+  receiver that makes no such prediction — a UCCM — shows a sentence saying so in place of the
+  prediction and the threshold, and keeps the duration.
 - **Health monitor** — one pill per subsystem the receiver checks (self test, internal power,
   oven power, the oscillator, its control voltage, the GPS receiver), and **Run test** to run the
   receiver's self-test now — it asks first, because the receiver stops doing other things while it
@@ -476,7 +479,9 @@ Holdover is what the receiver does when it loses GPS: it keeps its oscillator ru
 corrections it had learned, and its time error grows from there.
 
 - **Predicted 24 h uncertainty**, **present time error**, **duration** and — while it is *waiting to
-  recover* — the **waiting reason** the receiver gives.
+  recover* — the **waiting reason** the receiver gives. A receiver that makes no holdover prediction
+  — a UCCM — says so on each card in place of the uncertainty and the uncertainty threshold, and
+  keeps the rest.
 - **Thresholds** — there are two here, they measure different things, and **only the second can be
   changed**. The page says so beside each; this is the short version.
 

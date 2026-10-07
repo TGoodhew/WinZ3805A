@@ -316,6 +316,25 @@ public sealed partial class HoldoverPage : Page
         DurationLimitExplanationText.Text = model.DurationLimitExplanation;
         ToolTipService.SetToolTip(ThresholdBox, model.DurationLimitExplanation);
 
+        // #751: a family that predicts nothing about its holdover loses the uncertainty rows on both
+        // cards, label and value together, and each card says why in one sentence.
+        Visibility uncertainty = model.UncertaintyReported ? Visibility.Visible : Visibility.Collapsed;
+        PredictedLabel.Visibility = uncertainty;
+        PredictedText.Visibility = uncertainty;
+        PresentErrorLabel.Visibility = uncertainty;
+        PresentErrorText.Visibility = uncertainty;
+        ThresholdReadings.Visibility = uncertainty;
+        ThresholdExplanationText.Visibility = uncertainty;
+
+        UncertaintyUnavailableText.Text = model.UncertaintyUnavailableText ?? string.Empty;
+        UncertaintyUnavailableText.Visibility = model.UncertaintyUnavailableText is null
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+        ThresholdUnavailableText.Text = model.ThresholdUnavailableText ?? string.Empty;
+        ThresholdUnavailableText.Visibility = model.ThresholdUnavailableText is null
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+
         PowerUpText.Text = model.PowerUpText;
         PowerUpPill.Severity = model.PowerUpSeverity;
         PowerUpPill.Text = model.PowerUpVerdictText;

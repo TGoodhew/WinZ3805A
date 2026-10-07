@@ -34,4 +34,21 @@ public sealed class UccmReportsTests
 
         Assert.True(driver.Reports(ReceiverReading.Holdover));
     }
+
+    /// <summary>
+    /// The prediction is absent while holdover itself is present, and the split is the point (#751).
+    /// </summary>
+    /// <remarks>
+    /// Declaring <see cref="ReceiverReading.Holdover"/> absent to explain two dashes would hide a
+    /// state the time code reports; leaving the prediction under it drew those dashes on the Overview
+    /// card for as long as a UCCM was connected. The narrow reading answers each separately.
+    /// </remarks>
+    [Fact]
+    public void TheHoldoverPredictionIsAbsentWithoutHidingHoldover()
+    {
+        IReceiverDriver driver = new UccmDriver(new FakeTimeProvider());
+
+        Assert.False(driver.Reports(ReceiverReading.HoldoverUncertainty));
+        Assert.True(driver.Reports(ReceiverReading.Holdover));
+    }
 }

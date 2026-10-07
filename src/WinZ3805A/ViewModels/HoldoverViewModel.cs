@@ -196,6 +196,49 @@ public sealed class HoldoverViewModel : INotifyPropertyChanged, IDisposable
         ReadoutFormatter.Seconds(Status?.HoldThresholdSeconds, decimalPlaces: 3);
 
     /// <summary>
+    /// Whether this family can ever fill the uncertainty rows: the predicted 24 h uncertainty, the
+    /// present time error, the uncertainty threshold and whether it is exceeded (#751).
+    /// </summary>
+    /// <remarks>
+    /// When it cannot, the page takes the rows away, label and value together, and puts
+    /// <see cref="UncertaintyUnavailableText"/> and <see cref="ThresholdUnavailableText"/> in their
+    /// place. Duration and the waiting reason are not covered: they are about the holdover itself,
+    /// which such a family may report perfectly well.
+    /// </remarks>
+    public bool UncertaintyReported => Driver.Reports(ReceiverReading.HoldoverUncertainty);
+
+    /// <summary>
+    /// The sentence on the State card in place of the predicted uncertainty and the present time
+    /// error, or <see langword="null"/> when the family reports them (#751).
+    /// </summary>
+    /// <remarks>
+    /// A UCCM showed a dash in both for as long as it was connected. §9.11's dash is a field that
+    /// has not arrived yet; these never would, which is the Overview card's defect on a second page.
+    /// </remarks>
+    public string? UncertaintyUnavailableText => UncertaintyReported
+        ? null
+        : NotReported("a predicted holdover uncertainty or a present time error");
+
+    /// <summary>
+    /// The sentence on the Thresholds card in place of the uncertainty threshold, whether it is
+    /// exceeded, and the explanation of that comparison, or <see langword="null"/> when the family
+    /// reports them (#751).
+    /// </summary>
+    /// <remarks>
+    /// The explanation goes with the rows. It describes a comparison the receiver makes, and a
+    /// paragraph about what a family's threshold means, under a sentence saying it has none, would
+    /// contradict it.
+    /// </remarks>
+    public string? ThresholdUnavailableText => UncertaintyReported
+        ? null
+        : NotReported("an uncertainty threshold");
+
+    /// <summary>The sentence a card shows for a reading this family can never supply (#435).</summary>
+    /// <remarks>The Overview page's wording, so the two pages say the same thing the same way.</remarks>
+    private string NotReported(string what) =>
+        $"This receiver does not report {what}. The {Driver.Family} protocol does not carry it.";
+
+    /// <summary>
     /// Whether the predicted uncertainty is past the threshold the receiver is holding it to.
     /// </summary>
     /// <remarks>

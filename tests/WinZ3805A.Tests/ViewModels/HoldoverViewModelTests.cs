@@ -2,6 +2,7 @@
 
 using WinZ3805A.Controls;
 using WinZ3805A.Device.Drivers;
+using WinZ3805A.Device.Drivers.Uccm;
 using WinZ3805A.Device.Models;
 using WinZ3805A.Services;
 using WinZ3805A.ViewModels;
@@ -334,5 +335,47 @@ public sealed class HoldoverViewModelTests
 
         Assert.False(model.CanForceHoldover);
         Assert.False(model.CanRecover);
+    }
+
+    // ---- A family that predicts nothing about its holdover (#751) ---------------------------
+
+    /// <summary>
+    /// A UCCM's uncertainty rows give way to a sentence on each card, as the Overview's do.
+    /// </summary>
+    /// <remarks>
+    /// The real <c>UccmDriver</c> over a store that carries a prediction and a threshold anyway, so
+    /// the assertion is about what the family can report rather than about an empty store. A UCCM
+    /// showed a dash in all four rows for as long as it was connected; §9.11's dash is a field that
+    /// has not arrived yet, and these never would.
+    /// </remarks>
+    [Fact]
+    public void AUccmSaysItReportsNoHoldoverUncertaintyOnEitherCard()
+    {
+        FakeTimeProvider clock = new(Captured);
+        HoldoverViewModel uccm = new(Store(), new UccmDriver(clock))
+        {
+            Connection = ConnectionStatus.Connected,
+        };
+
+        Assert.False(uccm.UncertaintyReported);
+        Assert.Equal(
+            "This receiver does not report a predicted holdover uncertainty or a present time error. "
+            + "The UCCM protocol does not carry it.",
+            uccm.UncertaintyUnavailableText);
+        Assert.Equal(
+            "This receiver does not report an uncertainty threshold. The UCCM protocol does not carry it.",
+            uccm.ThresholdUnavailableText);
+    }
+
+    /// <summary>A SmartClock's page is unchanged: every row, and neither sentence.</summary>
+    [Fact]
+    public void ASmartClockKeepsItsUncertaintyRows()
+    {
+        HoldoverViewModel model = Connected();
+
+        Assert.True(model.UncertaintyReported);
+        Assert.Null(model.UncertaintyUnavailableText);
+        Assert.Null(model.ThresholdUnavailableText);
+        Assert.Equal(("2.0", "µs"), model.Predicted);
     }
 }

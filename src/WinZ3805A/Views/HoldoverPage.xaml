@@ -92,7 +92,8 @@
                                 <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
 
-                            <TextBlock Grid.Row="0" Grid.Column="0"
+                            <TextBlock x:Name="PredictedLabel"
+                                       Grid.Row="0" Grid.Column="0"
                                        Style="{ThemeResource WzBodyTextStyle}"
                                        Foreground="{ThemeResource WzTextSecondaryBrush}"
                                        Text="Predicted 24 h uncertainty" />
@@ -100,7 +101,8 @@
                                        controls:CopyMenu.IsCopyable="True" Grid.Row="0" Grid.Column="1"
                                        Style="{ThemeResource WzMonoTextStyle}" />
 
-                            <TextBlock Grid.Row="1" Grid.Column="0"
+                            <TextBlock x:Name="PresentErrorLabel"
+                                       Grid.Row="1" Grid.Column="0"
                                        Style="{ThemeResource WzBodyTextStyle}"
                                        Foreground="{ThemeResource WzTextSecondaryBrush}"
                                        Text="Present time error" />
@@ -123,6 +125,19 @@
                                        Style="{ThemeResource WzBodyTextStyle}"
                                        TextWrapping="Wrap" />
                         </Grid>
+
+                        <!--
+                            #751. A family that predicts nothing about its holdover - a UCCM - loses
+                            the two uncertainty rows, label and value together, and this says why
+                            rather than leaving two dashes that read as "not arrived yet".
+                        -->
+                        <TextBlock x:Name="UncertaintyUnavailableText"
+                                   Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}"
+                                   HorizontalAlignment="Left"
+                                   TextWrapping="Wrap"
+                                   Visibility="Collapsed" />
                     </StackPanel>
                 </Border>
 
@@ -131,7 +146,22 @@
                     <StackPanel Spacing="{ThemeResource WzSpaceSm}">
                         <TextBlock Style="{ThemeResource WzBodyStrongTextStyle}" Text="Thresholds" />
 
-                        <Grid RowSpacing="{ThemeResource WzSpaceXs}" ColumnSpacing="{ThemeResource WzSpaceXl}">
+                        <!--
+                            #751. A family with no uncertainty threshold loses this grid and the
+                            explanation under it, and the sentence below says why. The duration limit
+                            editor stays, disabled and explained by its own sentence, because it is a
+                            control rather than a reading.
+                        -->
+                        <TextBlock x:Name="ThresholdUnavailableText"
+                                   Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}"
+                                   HorizontalAlignment="Left"
+                                   TextWrapping="Wrap"
+                                   Visibility="Collapsed" />
+
+                        <Grid x:Name="ThresholdReadings"
+                              RowSpacing="{ThemeResource WzSpaceXs}" ColumnSpacing="{ThemeResource WzSpaceXl}">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" MinWidth="220" />
                                 <ColumnDefinition Width="*" />
