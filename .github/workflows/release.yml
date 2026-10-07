@@ -2,7 +2,8 @@
 # Publishing a release.
 #
 # Push a tag and this builds the thing a person with no Visual Studio can
-# install, then attaches it to a GitHub release:
+# install, then attaches it to a DRAFT GitHub release, which nobody but the
+# repository's owner can see until it is published (#743):
 #
 #     git tag v1.0.1 && git push origin v1.0.1
 #
@@ -207,9 +208,14 @@ jobs:
           if-no-files-found: error
 
       # ---------------------------------------------------------------------
-      # Publish. Tag runs only; a dry run stops at the artifact above.
+      # The release, as a DRAFT. Tag runs only; a dry run stops at the artifact
+      # above. A draft is not public: build/qa/Invoke-Release.ps1 runs the QA
+      # pass on this draft's own zips, and only Tony's go publishes it, so what
+      # users download is byte for byte what passed (#743, 7 Oct 2026). Until
+      # then a tag published at once and the QA ran on a rebuild beforehand
+      # and on the public zips afterwards.
       # ---------------------------------------------------------------------
-      - name: Publish the release
+      - name: Create the release as a draft
         if: github.ref_type == 'tag'
         shell: pwsh
         env:
@@ -226,4 +232,5 @@ jobs:
             --title "WinZ3805A $env:GITHUB_REF_NAME" `
             --notes-file $notes `
             --generate-notes `
-            --verify-tag
+            --verify-tag `
+            --draft
