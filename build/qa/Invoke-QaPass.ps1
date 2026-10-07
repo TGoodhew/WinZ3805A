@@ -123,6 +123,11 @@
 .PARAMETER Release
     A published release tag (e.g. v1.3.3) whose zips are downloaded and used as the candidate.
 
+.PARAMETER Draft
+    With -Release: the release is a draft, not yet public (#743). Its zips come down through
+    gh release download, since a draft has no public URL, and release-assets expects a draft. This is
+    how a release is checked before it is published: what passes here is what the go makes public.
+
 .PARAMETER Machines
     Which VMs to run on: QA-Win10, QA-Win11, or both (the default).
 
@@ -141,6 +146,7 @@ param(
     [string]$Online,
     [string]$Offline,
     [string]$Release,
+    [switch]$Draft,
     [string[]]$Machines = @('QA-Win10', 'QA-Win11'),
     [string[]]$Scenarios = @('binary-audit', 'release-assets', 'fresh-online', 'fresh-offline', 'unblocked-download', 'offline-no-network', 'blocked-zip', 'upgrade-1.2.0', 'upgrade-previous', 'leftover-cert', 'replace-v130', 'remove-everything', 'uninstall-sideload', 'companions-removed', 'repair-damaged', 'app-checks', 'receiver', 'connect-cancel', 'sign-in', 'pin-compact', 'whole-layout', 'accessibility', 'sky-export', 'history-reinstall', 'guide-pages', 'high-contrast', 'display-scaling', 'text-scaling', 'keyboard-focus', 'reduced-motion', 'greyscale-states', 'contrast', 'receiver-families', 'survey-operations', 'screen-fields'),
     [string]$OutDir,
@@ -192,7 +198,22 @@ function Get-ReleaseZip {
     $path
 }
 
+# A draft release's zips (#743): it has no public download URL, so through gh, which is signed in.
+# Into a folder of this process's own, then moved into the cache, where a later pass on the same
+# release once published finds them - the same bytes, since publishing a draft changes no asset.
+function Get-DraftZips {
+    param([string]$Tag)
+    $staging = Join-Path $cache "draft-$PID"
+    New-Item -ItemType Directory -Force $staging | Out-Null
+    Say "downloading the draft $Tag's zips"
+    gh release download $Tag --repo TGoodhew/WinZ3805A --pattern '*.zip' --dir $staging --clobber 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "the draft $Tag's zips did not download" }
+    foreach ($zip in Get-ChildItem $staging -Filter *.zip) { Move-Item $zip.FullName (Join-Path $cache $zip.Name) -Force }
+    Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
+}
+
 if ($Release) {
+    if ($Draft) { Get-DraftZips $Release }
     $Online = Get-ReleaseZip $Release
     $Offline = Get-ReleaseZip $Release -OfflineZip
 }
@@ -5039,7 +5060,9 @@ if ($Scenarios -contains 'release-assets') {
         if ($Release) {
             $view = gh release view $Release --repo TGoodhew/WinZ3805A --json isDraft,isPrerelease,assets,body 2>$null | ConvertFrom-Json
             $body = "$($view.body)"
-            Check $result "[published] $Release is published, not a draft or pre-release" ($view -and -not $view.isDraft -and -not $view.isPrerelease) ''
+            # A draft is what a release is checked as before the go makes it public (#743).
+            if ($Draft) { Check $result "[draft] $Release is a draft, not yet public, and not a pre-release" ($view -and $view.isDraft -and -not $view.isPrerelease) '' }
+            else { Check $result "[published] $Release is published, not a draft or pre-release" ($view -and -not $view.isDraft -and -not $view.isPrerelease) '' }
             $assetNames = @($view.assets | ForEach-Object { $_.name } | Sort-Object)
             Check $result '[published] the release carries exactly the two zips' (($assetNames -join ',') -eq ((@("WinZ3805A-$version-x64-offline.zip", "WinZ3805A-$version-x64.zip") | Sort-Object) -join ',')) ($assetNames -join ', ')
             foreach ($name in $hashes.Keys) {
