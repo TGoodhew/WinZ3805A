@@ -2752,9 +2752,21 @@ function Measure-Window($element, [string]$label) {
     Start-Sleep -Seconds 1
     $m.dpi = [QaCaption]::GetDpiForWindow($h)
     $rect = New-Object QaCaption+RECT; [void][QaCaption]::GetWindowRect($h, [ref]$rect)
+    # Read once the window is ready for it: its frame drawn and its title bar present to UI Automation.
+    # A read straight after launch got an empty frame and no title bar while the same handle dragged
+    # perfectly a moment later - twice on QA-Win10 in 1.4.0's passes (#762). Bounded, and the reads it
+    # took recorded, so a window that really is missing still fails, with its reason.
+    $deadline = (Get-Date).AddSeconds(15); $m.reads = 0
+    do {
+        $m.reads++
+        $frame = [QaCaption]::Frame($h)
+        $bar = Find-Control $element -AutomationId 'AppTitleBar' -Seconds 1
+        $ready = ($frame.Right - $frame.Left) -gt 0 -and ($frame.Bottom - $frame.Top) -gt 0 -and $bar
+        if (-not $ready) { Start-Sleep -Milliseconds 500 }
+    } while (-not $ready -and (Get-Date) -lt $deadline)
     # Opened inside the work area, with nothing stored to restore: the screen less the taskbar. The
     # visible frame, so the invisible resize borders do not count against it.
-    $frame = [QaCaption]::Frame($h); $work = [System.Windows.Forms.Screen]::FromHandle($h).WorkingArea
+    $work = [System.Windows.Forms.Screen]::FromHandle($h).WorkingArea
     $m.frame = "$($frame.Left),$($frame.Top) $($frame.Right - $frame.Left)x$($frame.Bottom - $frame.Top)"; $m.work = "$($work.Left),$($work.Top) $($work.Width)x$($work.Height)"
     # A frame with no size is no window, and is trivially "inside": 1.4.0's pass read 0,0 0x0 for the
     # main window at 150 % on QA-Win10 and passed this (6 Oct 2026).
@@ -2765,7 +2777,7 @@ function Measure-Window($element, [string]$label) {
     $minimise = $element.FindFirst([System.Windows.Automation.TreeScope]::Descendants, (New-Object System.Windows.Automation.AndCondition($buttonType, (New-Object System.Windows.Automation.PropertyCondition($script:Ae::NameProperty, 'Minimize')))))
     $captionLeft = if ($minimise -and -not $minimise.Current.BoundingRectangle.IsEmpty) { [int]$minimise.Current.BoundingRectangle.Left } else { [QaCaption]::MinimiseLeft($h) }
     $m.captionFrom = if ($minimise) { 'UI Automation' } else { 'WM_GETTITLEBARINFOEX' }
-    $bar = Find-Control $element -AutomationId 'AppTitleBar' -Seconds 5
+    if (-not $bar) { $bar = Find-Control $element -AutomationId 'AppTitleBar' -Seconds 5 }
     $own = @(if ($bar) { $bar.FindAll([System.Windows.Automation.TreeScope]::Descendants, $buttonType) | Where-Object { -not $_.Current.BoundingRectangle.IsEmpty -and $_.Current.Name -notin 'Minimize', 'Maximize', 'Restore', 'Close' } })
     $ownRight = if ($own.Count) { [int](($own | ForEach-Object { $_.Current.BoundingRectangle.Right } | Measure-Object -Maximum).Maximum) } else { 0 }
     $m.captionLeft = $captionLeft; $m.ownRight = $ownRight; $m.ownButtons = $own.Count
@@ -2849,7 +2861,7 @@ function Test-DisplayScaling {
                 $name = if ($part -eq 'main') { 'the main window' } else { 'Details' }
                 if (-not $m) { Check $Result "[3] $scale %, $name" $false 'not opened'; continue }
                 Check $Result "[3] $scale %, $($name): at the display's scaling" ($m.dpi -eq $dpi) "dpi $($m.dpi)"
-                Check $Result "[3] $scale %, $($name): opens inside the work area" ($m.inside -eq $true) "frame $($m.frame); work area $($m.work)"
+                Check $Result "[3] $scale %, $($name): opens inside the work area" ($m.inside -eq $true) "frame $($m.frame); work area $($m.work)$(if ($m.reads -gt 1) { "; ready after $($m.reads) reads" })"
                 Check $Result "[3] $scale %, $($name): its title-bar buttons stop short of the caption buttons" ($m.clear -eq $true) "$($m.ownButtons) buttons ending at $($m.ownRight); caption buttons from $($m.captionLeft) ($($m.captionFrom))"
                 Check $Result "[3] $scale %, $($name): a drag on the title bar moves the window" ($m.dragged -eq $true) "moved $($m.moved) for a drag of 96,64"
                 try { Copy-QaPhoto $Vm -Source "C:\qa\scaling\$scale-$part.png" -Destination (Join-Path $Result.Folder "$scale-$part.png") } catch { }
