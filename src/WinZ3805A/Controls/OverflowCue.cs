@@ -26,6 +26,14 @@ namespace WinZ3805A.Controls;
 /// One shape, differing only in its digits, has nothing to flip between.
 /// </para>
 /// <para>
+/// <b>Except when every satellite is in view and the dialog still scrolls</b>, because what is out
+/// of view is then the buttons below the grid. "Showing 32 of 32 satellites. Scroll for more." says
+/// there is more of what is all on screen (Win11 VM, 150 % and 200 % text in the Medium window, 7 Oct
+/// 2026), so the line says only "Scroll for more." That cannot flip either: it is the sentence's own
+/// last words, which wrap onto no more lines than the whole, so switching to it can only give the
+/// view more room — and more room cannot take a satellite out of view.
+/// </para>
+/// <para>
 /// This is the arithmetic only; the dialog measures, and this decides. It reads no UI type, so it is
 /// tested headlessly.
 /// </para>
@@ -90,6 +98,10 @@ public static class OverflowCue
     /// <param name="overflows">Whether the content is taller than its view.</param>
     /// <param name="inView">How many satellites are at least half in view.</param>
     /// <param name="total">How many there are; zero before the receiver has been read.</param>
+    /// <returns>
+    /// Null when the content fits; "Scroll for more." alone when there is nothing to count or every
+    /// satellite is already in view; otherwise how many are in view, and that there is more.
+    /// </returns>
     public static string? Describe(bool overflows, int inView, int total)
     {
         if (!overflows)
@@ -97,8 +109,8 @@ public static class OverflowCue
             return null;
         }
 
-        return total <= 0
+        return total <= 0 || inView >= total
             ? "Scroll for more."
-            : $"Showing {Math.Clamp(inView, 0, total)} of {total} satellites. Scroll for more.";
+            : $"Showing {Math.Max(inView, 0)} of {total} satellites. Scroll for more.";
     }
 }
