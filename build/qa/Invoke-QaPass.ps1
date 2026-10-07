@@ -4529,7 +4529,13 @@ function Get-ScreenNumbers {
                 }
                 # The 1 PPS time interval wanders by tenths of a nanosecond between the app's read and
                 # the screen's: 1.4.0's pass saw -1.4 and -1.5 in the app against -1.6 on the screen.
-                elseif ($column -match '1PPS TI') { $n.field = 'ti' }
+                elseif ($column -match '1PPS TI') {
+                    $n.field = 'ti'
+                    # In the app's unit, which is always nanoseconds. The screen changes unit with the
+                    # figure's size - '1PPS TI -200 ps' below a nanosecond, '-1.6 ns' above - and the
+                    # published pass compared -200 ps as -200 ns against the app's -0.2 (#764).
+                    if ($column -match '1PPS TI\s+[-+]?[\d.]+\s*([pnu])s\b') { $n.value *= @{ 'p' = 0.001; 'n' = 1; 'u' = 1000 }[$Matches[1]] }
+                }
                 $n
             }
         }
