@@ -3466,6 +3466,19 @@ if ($d) { Save-Pair $d 'overview' }
 [ordered]@{ details = [bool]$d } | ConvertTo-Json -Compress
 '@
 
+# Waits, for $seconds at most, until the main window's mode text reads $want, and reports what it read:
+# the state a photograph is about to show, confirmed on screen rather than assumed from the log (#755).
+$greyModeStep = @'
+$w = Get-AppWindow
+if (-not $w) { [ordered]@{ error = "no main window ($(Get-WindowReport))" } | ConvertTo-Json -Compress; return }
+$shown = Wait-Until { $t = Find-Control $w -AutomationId 'ModeText' -Seconds 1; if ($t -and "$($t.Current.Name)" -eq $want) { $true } } -Seconds $seconds
+[ordered]@{
+    shown     = [bool]$shown
+    mode      = "$((Find-Control $w -AutomationId 'ModeText' -Seconds 1).Current.Name)"
+    medallion = "$((Find-Control $w -AutomationId 'Medallion' -Seconds 1).Current.Name)"
+} | ConvertTo-Json -Compress
+'@
+
 function Test-GreyscaleStates {
     param($Vm, $Result)
     $pipe = Get-QaSimulatorPipe -Vm $Vm
@@ -3498,9 +3511,24 @@ function Test-GreyscaleStates {
         $seen = Wait-AppLog $Vm 'State: (WAIT|HOLD)' $seen.count 150 'holdover'
         if ($seen.found) { Shoot '2-holdover' 'Holdover (antenna pulled)' } else { Check $Result '[A11Y-12] holdover reached' $false $seen.tail }
 
+        # Recovery is the one state here that ends by itself, and photographing both windows takes
+        # longer than it lasts at speed 2: 3-recovery caught Locked on 6 Oct 2026 (#755). So the
+        # timeline runs at real speed until the app logs REC, which gives 55 s rather than 27 to see
+        # it in, and is then all but frozen, as screen-fields freezes it, until both photographs are
+        # taken. The main window is read before either: a recovery that ended before the freeze is a
+        # failed check naming what the app showed instead, never a photograph labelled Recovery.
+        $null = Send-SimulatorControl $control 'speed 1'
         $null = Send-SimulatorControl $control 'antenna on'
         $seen = Wait-AppLog $Vm 'State: REC' $seen.count 150 'recovery'
-        if ($seen.found) { Shoot '3-recovery' 'Recovery' } else { Check $Result '[A11Y-12] recovery reached' $false $seen.tail }
+        if ($seen.found) {
+            $null = Send-SimulatorControl $control 'speed 0.0001'
+            $mode = Invoke-UiStep $Vm 'grey-recovering' "`$want = 'Recovering'; `$seconds = 30" $greyModeStep
+            $held = -not $mode.error -and $mode.shown
+            Check $Result '[A11Y-12] recovery held on screen for its photograph' $held $(if ($mode.error) { "$($mode.error)" } else { "the main window read '$($mode.mode)' ('$($mode.medallion)')" })
+            if ($held) { Shoot '3-recovery' 'Recovery' }
+        }
+        else { Check $Result '[A11Y-12] recovery reached' $false $seen.tail }
+        $null = Send-SimulatorControl $control 'speed 2'
         $seen = Wait-AppLog $Vm 'State: LOCK' $seen.count 150 'relocked'
 
         $null = Send-SimulatorControl $control 'health ocxo fail'
