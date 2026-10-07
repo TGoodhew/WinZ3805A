@@ -530,6 +530,12 @@ closed six-token set, because a misaligned link once delivered a diagnostic
 dump into the sync-state slot while the same sweep's EFC read a perfectly
 plausible +2 % (#209 — the write-up in `SmartClockDriver.InterpretSweep`'s
 remarks is worth reading whole). Return the readings anyway; say what you saw.
+Skipping this because a family's answers look harmless is how the UCCM driver
+came to accept any line as its lock lamp's answer, until a stray one put
+"Disconnected" on a connected session (#739). If your driver adds a word of its
+own to the token, as the UCCM's holdover marker does, judge the receiver's
+answer *before* adding it — a marker your own vocabulary always accepts would
+otherwise vouch for whatever line it was appended to.
 
 **Do not hard-code column positions.** The SmartClock parser derives every
 column from the header row, which is what lets it survive a firmware revision
