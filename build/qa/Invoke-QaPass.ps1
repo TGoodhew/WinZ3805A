@@ -3097,8 +3097,13 @@ function Get-RingChange($a, $b, [int]$pad, $valid = $null) {
 # 7 Oct 2026). So nothing here writes to the app; everything below only reads. The stop is followed
 # instead: its rectangle is read again after Tab and, if it moved, the unfocused shot is taken where it
 # now is. What lies outside a scroller's viewport does not move with what is inside it, so the band is
-# compared only where both crops are inside every scroller the stop sits in; a stop that changed size,
-# went, or is not wholly inside that region in both shots is not comparable, and is measured not at all.
+# compared only where both crops are inside every scroller the stop sits in.
+#
+# A stop that did not move is measured exactly as before #754, at the focused shot's rectangle, whatever
+# its size does: the navigation items, the Position page's height box and Diagnostics' subsystem box all
+# reported another size once the focus had left them without moving, and calling that "not comparable"
+# skipped 20 stops of a walk that main measured (QA-Win11, 7 Oct 2026). Only a stop that moved and changed size by more than a few pixels, or that moved
+# and is not wholly in view in both shots, or that went, is not comparable, and is measured not at all.
 
 # A rectangle UI Automation reported for something on screen: finite, with a size.
 function Test-RealRect($r) {
@@ -3106,12 +3111,20 @@ function Test-RealRect($r) {
     foreach ($v in $r.Left, $r.Top, $r.Width, $r.Height) { if ([double]::IsNaN($v) -or [double]::IsInfinity($v)) { return $false } }
     $r.Width -gt 0 -and $r.Height -gt 0
 }
-# How a stop's rectangle changed between its two shots: 'same', 'moved', 'resized' or 'gone'.
-function Get-StopMove($before, $after, [double]$tolerance) {
+# How a stop's rectangle changed between its two shots: 'same' when its corner stayed within $tolerance,
+# whatever its size did; 'moved'; 'resized' when it moved and its size changed by more than $sizeTolerance;
+# or 'gone'.
+function Get-StopMove($before, $after, [double]$tolerance, [double]$sizeTolerance) {
     if (-not (Test-RealRect $before) -or -not (Test-RealRect $after)) { return 'gone' }
-    if ([Math]::Abs($after.Width - $before.Width) -gt $tolerance -or [Math]::Abs($after.Height - $before.Height) -gt $tolerance) { return 'resized' }
     if ([Math]::Abs($after.Left - $before.Left) -le $tolerance -and [Math]::Abs($after.Top - $before.Top) -le $tolerance) { return 'same' }
+    if ([Math]::Abs($after.Width - $before.Width) -gt $sizeTolerance -or [Math]::Abs($after.Height - $before.Height) -gt $sizeTolerance) { return 'resized' }
     'moved'
+}
+# Whether two readings of a rectangle agree, corner and size, within $tolerance: still, rather than moving.
+function Test-SameRect($a, $b, [double]$tolerance) {
+    if (-not (Test-RealRect $a) -or -not (Test-RealRect $b)) { return $false }
+    [Math]::Abs($a.Left - $b.Left) -le $tolerance -and [Math]::Abs($a.Top - $b.Top) -le $tolerance -and
+        [Math]::Abs($a.Width - $b.Width) -le $tolerance -and [Math]::Abs($a.Height - $b.Height) -le $tolerance
 }
 function ConvertTo-Rectangle($r) {
     if (-not (Test-RealRect $r)) { return [System.Drawing.Rectangle]::Empty }
@@ -3167,13 +3180,17 @@ function Wait-Still($e) {
         if (-not (Test-RealRect $last)) { return $last }
         Start-Sleep -Milliseconds 100
         try { $now = $e.Current.BoundingRectangle } catch { return $null }
-        if ((Get-StopMove $last $now $stillTolerance) -eq 'same') { return $now }
+        if (Test-SameRect $last $now $stillTolerance) { return $now }
         $last = $now
     }
     $last
 }
-# Half a pixel: anything further is a different picture to the comparison above.
+# Half a pixel: anything further is still moving.
 $stillTolerance = 0.5
+# A stop whose corner stayed within a pixel did not move; one that moved may change size by a few pixels
+# and still be followed.
+$placeTolerance = 1
+$sizeTolerance = 4
 
 # Wide enough for focus visuals drawn outside the element, as a toggle switch's are.
 $pad = 8
@@ -3202,9 +3219,9 @@ foreach ($i in 1..400) {
     # if Tab scrolled it (#754). Only reads: nothing here may change where the next Tab goes.
     if ($prev -and $prevShot) {
         $now = $null; try { $now = $prevElement.Current.BoundingRectangle } catch { }
-        $move = Get-StopMove $prevBounds $now $stillTolerance
+        $move = Get-StopMove $prevBounds $now $placeTolerance $sizeTolerance
         # Moved, or still moving: where it comes to rest.
-        if ($move -ne 'same') { $now = Wait-Still $prevElement; $move = Get-StopMove $prevBounds $now $stillTolerance }
+        if ($move -ne 'same') { $now = Wait-Still $prevElement; $move = Get-StopMove $prevBounds $now $placeTolerance $sizeTolerance }
         $target = $prevRect; $valid = $null; $covers = $move -eq 'same'
         if ($move -eq 'moved') {
             $target = New-Object System.Drawing.Rectangle ([int]$now.Left - $pad), ([int]$now.Top - $pad), $prevRect.Width, $prevRect.Height
@@ -3215,8 +3232,10 @@ foreach ($i in 1..400) {
         try { $after = Get-Shot $target } catch { }
         if (-not $after) { $after = Get-Shot $prevRect; $covers = $false }
         $prev.shots = Get-RingShots $move $covers
-        if ($move -eq 'moved') { $prev.moved = [int][Math]::Round([Math]::Sqrt([Math]::Pow($now.Left - $prevBounds.Left, 2) + [Math]::Pow($now.Top - $prevBounds.Top, 2))) }
-        if ($prev.shots -eq 'not comparable') { $prev.why = $(if ($move -eq 'moved') { 'moved out of view' } else { $move }) }
+        # For information: how far it moved, and how its size changed whether it moved or not.
+        if ($move -eq 'moved' -or $move -eq 'resized') { $prev.moved = [int][Math]::Round([Math]::Sqrt([Math]::Pow($now.Left - $prevBounds.Left, 2) + [Math]::Pow($now.Top - $prevBounds.Top, 2))) }
+        if ($move -ne 'gone') { $prev.widthChange = [int][Math]::Round($now.Width - $prevBounds.Width); $prev.heightChange = [int][Math]::Round($now.Height - $prevBounds.Height) }
+        if ($prev.shots -eq 'not comparable') { $prev.why = $(switch ($move) { 'moved' { 'moved out of view' } 'resized' { "moved and changed size by $($prev.widthChange) x $($prev.heightChange) px" } default { $move } }) }
         else { $prev.ringPixels = Get-RingChange $prevShot $after $pad $valid }
         # The pair kept for the agent to look at wherever no ring was measured, or none could be.
         if ($prev.ringPixels -lt [Math]::Max(20, $prev.perimeter / 2) -or $prev.shots -eq 'not comparable') {
@@ -3246,7 +3265,7 @@ foreach ($i in 1..400) {
         id = "$($f.Current.AutomationId)"; name = "$($f.Current.Name)"; type = "$($f.Current.ControlType.ProgrammaticName -replace 'ControlType\.', '')"
         left = [int]$r.Left; top = [int]$r.Top; width = [int]$r.Width; height = [int]$r.Height
         ringPixels = -1; perimeter = [int](2 * ($r.Width + $r.Height)); repeats = 0
-        shots = ''; moved = 0; why = ''
+        shots = ''; moved = 0; widthChange = 0; heightChange = 0; why = ''
         scroll = $(if ($scroller) { try { [Math]::Round($scroller[0].GetCurrentPattern([System.Windows.Automation.ScrollPattern]::Pattern).Current.VerticalScrollPercent, 1) } catch { -1 } } else { -1 })
         parent = ($(try { [System.Windows.Automation.TreeWalker]::ControlViewWalker.GetParent($f).GetRuntimeId() -join '.' } catch { '' }))
     }
@@ -3421,7 +3440,8 @@ function Test-KeyboardFocus {
                 Check $Result "[A11Y-1] $($surface): Tab order recorded; the page scrolled during the walk, so it is read from the stop list" $true "$($stops.Count) stops"
             }
         }
-        $all | ConvertTo-Json -Depth 6 | Set-Content (Join-Path $Result.Folder 'focus-stops.json')
+        # UTF-8: Windows PowerShell's default is the ANSI code page, which wrote 'Import history...'s ellipsis as 0x85.
+        $all | ConvertTo-Json -Depth 6 | Set-Content (Join-Path $Result.Folder 'focus-stops.json') -Encoding UTF8
 
         # A11Y-2 in all three themes: the walk again in Dark and in a contrast theme, for the rings alone.
         foreach ($theme in 'dark', 'contrast') {
