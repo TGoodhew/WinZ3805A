@@ -546,6 +546,39 @@ public sealed class UccmDriver(TimeProvider timeProvider) : IReceiverDriver
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// <b>The rejection rule is #209's, applied to this family's discriminator (#739).</b> The lamp
+    /// is the one answer in the sweep with a small closed set of values, so an answer outside it did
+    /// not come from <c>LED:GPSL?</c> and the whole sweep is somebody else's bytes rather than a
+    /// reading. Until #739 this driver rejected only an outright error there and accepted anything
+    /// else: a stray line taken as the lamp's answer — on 6 Oct 2026 the hex text of a time code the
+    /// simulator sent as a line (#738) — became the sync token, the token mapped to
+    /// <see cref="ReceiverMode.Disconnected"/>, and the main window said Disconnected about a
+    /// session that was connected and showing readings.
+    /// </para>
+    /// <para>
+    /// <b>The set is whatever <see cref="InterpretSyncState"/> recognises, and deliberately nothing
+    /// more is decided here</b> — one source for "is this a state?" and "which state is it?", as
+    /// #304 made it for the SmartClock. That is <c>0</c> and <c>1</c>, measured on a Trimble UCCM-P
+    /// (<c>0</c> from a cold power-up until the module had a fix, <c>1</c> from then on, holdover
+    /// included — <c>transitions-13sep2026</c>; <c>1</c> in every earlier, locked sitting); the free
+    /// text Heather says a plain UCCM prints instead, read by the words <c>NORMAL</c>,
+    /// <c>INIT</c> and <c>HOLD</c>, which is a hypothesis with that citation; and
+    /// <see cref="HoldoverMarker"/>, this driver's own word from the overheard time code.
+    /// </para>
+    /// <para>
+    /// <b>The lamp is judged on its own before the marker is added.</b> The marked token always
+    /// contains <c>HOLD</c>, so judging only that would let any stray line through whenever the
+    /// time code says holdover — exactly when a coasting receiver's readings matter most. Only an
+    /// <i>absent</i> lamp answer is judged by the token, so a holdover the time code reports still
+    /// reads as holdover when the lamp says nothing.
+    /// </para>
+    /// <para>
+    /// The readings come back even when rejected, as the interface requires: the poller's
+    /// state-change log records what was seen either way.
+    /// </para>
+    /// </remarks>
     public SweepInterpretation InterpretSweep(IReadOnlyList<string?> answers)
     {
         ArgumentNullException.ThrowIfNull(answers);
@@ -572,7 +605,8 @@ public sealed class UccmDriver(TimeProvider timeProvider) : IReceiverDriver
                 $"The receiver answered '{UccmCommands.LockLed}' with an error rather than a lock state.");
         }
 
-        string? lockState = UccmReply.FirstPayload(led, UccmCommands.LockLed);
+        string? lamp = UccmReply.FirstPayload(led, UccmCommands.LockLed);
+        string? lockState = lamp;
 
         // The lamp says 1 - locked - all the way through holdover, so it cannot be the only thing
         // in the token. The overheard time code can tell the difference and the lamp cannot, so
@@ -600,7 +634,16 @@ public sealed class UccmDriver(TimeProvider timeProvider) : IReceiverDriver
             Disciplining = loopReading?.Disciplining,
         };
 
-        return new SweepInterpretation(readings, Rejection: null);
+        // #209's rule (#739). The lamp's own answer when it gave one, so the holdover marker cannot
+        // vouch for a stray line; the marked token only when the lamp said nothing at all.
+        string? judged = string.IsNullOrWhiteSpace(lamp) ? lockState : lamp;
+
+        return InterpretSyncState(judged) != ReceiverMode.Disconnected
+            ? new SweepInterpretation(readings, Rejection: null)
+            : new SweepInterpretation(
+                readings,
+                $"The receiver answered '{UccmCommands.LockLed}' with \"{Summarise(lamp ?? led)}\", "
+                + "which is not a lock state this receiver reports.");
     }
 
     /// <summary>
@@ -660,6 +703,20 @@ public sealed class UccmDriver(TimeProvider timeProvider) : IReceiverDriver
 
     private static string? At(IReadOnlyList<string?> answers, int index) =>
         index < answers.Count ? answers[index] : null;
+
+    /// <summary>A rejected lamp answer, short enough to log and long enough to recognise.</summary>
+    /// <remarks>The SmartClock driver's rule, so the two families' rejections read alike in a log.</remarks>
+    private static string Summarise(string? answer)
+    {
+        if (string.IsNullOrWhiteSpace(answer))
+        {
+            return "(empty)";
+        }
+
+        string oneLine = answer.ReplaceLineEndings(" ").Trim();
+
+        return oneLine.Length <= 60 ? oneLine : oneLine[..60] + "…";
+    }
 
     private static double? Number(string? response, string sent)
     {
