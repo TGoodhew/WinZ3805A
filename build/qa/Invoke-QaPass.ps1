@@ -3661,6 +3661,12 @@ public static class QaContrast {
         GetClassName(h, a, 256); GetClassName(top, b, 256);
         return a + " in " + b + (top == root ? "" : " (another window)");
     }
+    // The process that owns the top-level window at a point, so a window left covering the app is named.
+    public static string Owner(int x, int y) {
+        POINT p; p.X = x; p.Y = y; IntPtr top = GetAncestor(WindowFromPoint(p), 2);
+        uint pid; GetWindowThreadProcessId(top, out pid);
+        try { return System.Diagnostics.Process.GetProcessById((int)pid).ProcessName; } catch { return "pid " + pid; }
+    }
     static double Lin(int c) { double v = c / 255.0; return v <= 0.03928 ? v / 12.92 : Math.Pow((v + 0.055) / 1.055, 2.4); }
     public static double Lum(int argb) { return 0.2126 * Lin((argb >> 16) & 0xFF) + 0.7152 * Lin((argb >> 8) & 0xFF) + 0.0722 * Lin(argb & 0xFF); }
     public static double Ratio(double a, double b) { return (Math.Max(a, b) + 0.05) / (Math.Min(a, b) + 0.05); }
@@ -3763,26 +3769,55 @@ $seen = @{}
 $measured = New-Object System.Collections.Generic.List[object]
 $covered = New-Object System.Collections.Generic.List[string]
 $script:hiddenWindows = @()
-function Measure-View([int]$view) {
+$script:remeasured = 0
+# The window, brought forward with other processes' topmost windows hidden, as a bitmap.
+function Get-Shot {
     $h = [QaContrast]::HideForeignTopmost($handle); if ($h) { $script:hiddenWindows += $h }
     [void][QaContrast]::SetForegroundWindow($handle)
     [QaWin32]::MoveTo(2550, 1590)
     Start-Sleep -Seconds 2
-    $r = $root.Current.BoundingRectangle
+    $script:shotRect = $root.Current.BoundingRectangle
+    $r = $script:shotRect
     $shot = New-Object System.Drawing.Bitmap ([int]$r.Width), ([int]$r.Height)
     $g = [System.Drawing.Graphics]::FromImage($shot); $g.CopyFromScreen([int]$r.Left, [int]$r.Top, 0, 0, $shot.Size); $g.Dispose()
+    $shot
+}
+function Measure-View([int]$view) {
+    $shot = Get-Shot; $r = $script:shotRect
     $shot.Save("C:\qa\contrast\$tag-$($surface -replace ' ', '')-$view.png", [System.Drawing.Imaging.ImageFormat]::Png)
     Save-PillRecord "C:\qa\contrast\$tag-$($surface -replace ' ', '')-$view.png" ([int]$r.Left) ([int]$r.Top) ([int]$r.Width) ([int]$r.Height)
-    foreach ($t in (Get-Texts $root)) {
+    $pending = @(foreach ($t in (Get-Texts $root)) { if ((Measure-Text $t $shot $r $view) -eq 'covered') { $t } })
+    $shot.Dispose()
+    # Measured again what another window covered, on a fresh picture. What covers the app for a moment -
+    # a notification Windows raises whatever ToastEnabled says, 370 x 170 at the screen's foot on
+    # QA-Win11 in both of 1.4.0's passes (#765) - is gone in a few seconds; what is still covered after
+    # three tries is reported, with the process that owns the window on top.
+    for ($try = 1; $pending.Count -and $try -le 3; $try++) {
+        Start-Sleep -Seconds 5
+        $shot = Get-Shot; $r = $script:shotRect
+        $still = @(foreach ($t in $pending) { if ((Measure-Text $t $shot $r $view) -eq 'covered') { $t } })
+        $shot.Dispose()
+        $script:remeasured += $pending.Count - $still.Count
+        $pending = $still
+    }
+    foreach ($t in $pending) {
+        try {
+            $b = $t.Current.BoundingRectangle; $x = [int]($b.Left + $b.Width / 2); $y = [int]($b.Top + $b.Height / 2)
+            $covered.Add("'$($t.Current.Name)' at $([int]$b.Left),$([int]$b.Top) under $([QaContrast]::Under($handle, $x, $y)), owned by $([QaContrast]::Owner($x, $y))")
+        } catch { }
+    }
+}
+# One text element measured on a picture of its window: 'covered' when another window is on top of it,
+# so the caller can try again; otherwise added to the measurements, or skipped when it draws nothing.
+function Measure-Text($t, $shot, $r, [int]$view) {
         try {
             $b = $t.Current.BoundingRectangle
-            if ($b.IsEmpty -or $b.Width -lt 3 -or $b.Height -lt 3 -or $t.Current.IsOffscreen) { continue }
-            $key = "$($t.Current.Name)|$([int]$b.Left)|$([int]($b.Top))"
+            if ($b.IsEmpty -or $b.Width -lt 3 -or $b.Height -lt 3 -or $t.Current.IsOffscreen) { return }
             $id = ($t.GetRuntimeId() -join '.')
-            if ($seen.ContainsKey($id)) { continue }
-            if (-not [QaContrast]::Owns($handle, [int]($b.Left + $b.Width / 2), [int]($b.Top + $b.Height / 2))) { $covered.Add("'$($t.Current.Name)' at $([int]$b.Left),$([int]$b.Top) under $([QaContrast]::Under($handle, [int]($b.Left + $b.Width / 2), [int]($b.Top + $b.Height / 2)))"); continue }
+            if ($seen.ContainsKey($id)) { return }
+            if (-not [QaContrast]::Owns($handle, [int]($b.Left + $b.Width / 2), [int]($b.Top + $b.Height / 2))) { return 'covered' }
             $m = [QaContrast]::Measure($shot, [int]($b.Left - $r.Left), [int]($b.Top - $r.Top), [int]$b.Width, [int]$b.Height)
-            if (-not $m -or $m[3] -lt 6) { continue }
+            if (-not $m -or $m[3] -lt 6) { return }
             $seen[$id] = $true
             # An unnamed text element that draws something is a glyph - a FontIcon, a NumberBox's spin
             # arrows - and takes the 3:1 floor for icons carrying meaning, not text's.
@@ -3795,8 +3830,6 @@ function Measure-View([int]$view) {
                 px = $size.px; weight = $size.weight; kind = $(if ($icon) { 'icon' } elseif ($size.large) { 'large text' } else { 'text' }); floor = $(if ($icon -or $size.large) { 3.0 } else { 4.5 }); enabled = (Test-Enabled $t)
             })
         } catch { }
-    }
-    $shot.Dispose()
 }
 
 New-Item -ItemType Directory -Force 'C:\qa\contrast' | Out-Null
@@ -3819,7 +3852,7 @@ if ($surface -ne 'main') {
 $measured | ConvertTo-Json -Depth 3 | Set-Content "C:\qa\contrast\$tag-$($surface -replace ' ', '').json" -Encoding UTF8
 $under = @($measured | Where-Object { $_.enabled -and $_.ratio -lt $_.floor } | ForEach-Object { "$($_.kind) '$($_.text)' at $($_.left),$($_.top) $($_.ratio):1 ($($_.foreground) on $($_.background), floor $($_.floor))" })
 $lowest = $measured | Where-Object enabled | Sort-Object { $_.ratio / $_.floor } | Select-Object -First 1
-[ordered]@{ surface = $surface; measured = $measured.Count; covered = @($covered | Select-Object -Unique); hidden = @($script:hiddenWindows | Select-Object -Unique); views = $views; under = $under; margin = $(if ($lowest) { [Math]::Round($lowest.ratio / $lowest.floor, 3) } else { 99 }); lowest = $(if ($lowest) { "$($lowest.kind) '$($lowest.text)' $($lowest.ratio):1 ($($lowest.foreground) on $($lowest.background), floor $($lowest.floor))" }) } | ConvertTo-Json -Compress -Depth 3
+[ordered]@{ surface = $surface; measured = $measured.Count; covered = @($covered | Select-Object -Unique); remeasured = $script:remeasured; hidden = @($script:hiddenWindows | Select-Object -Unique); views = $views; under = $under; margin = $(if ($lowest) { [Math]::Round($lowest.ratio / $lowest.floor, 3) } else { 99 }); lowest = $(if ($lowest) { "$($lowest.kind) '$($lowest.text)' $($lowest.ratio):1 ($($lowest.foreground) on $($lowest.background), floor $($lowest.floor))" }) } | ConvertTo-Json -Compress -Depth 3
 '@
 
 # The app started again after the sign-out that brought 200 %, and the scaling it opened at.
@@ -3858,6 +3891,7 @@ function Test-Contrast {
     $null = Invoke-QaGuestScript $Vm -Name 'connect-com2' -Script $connectCom2
     $script:contrastCovered = New-Object System.Collections.Generic.List[string]
     $script:contrastHidden = New-Object System.Collections.Generic.List[string]
+    $script:contrastRemeasured = 0
     $surfaces = 'main', 'Overview', 'Satellites', 'Position', 'Timing', 'Holdover', 'Time', 'Status Registers', 'Diagnostics', 'Settings'
     $hues = 'Red', 'Lime', 'Blue', 'Yellow', 'Cyan', 'Magenta'
     function Get-Luminance([string]$hex) {
@@ -3876,6 +3910,7 @@ function Test-Contrast {
             foreach ($u in @($m.under)) { if ($u) { $under.Add("$surface $u") } }
             foreach ($c in @($m.covered)) { if ($c) { $script:contrastCovered.Add("$label, $surface $c") } }
             foreach ($h in @($m.hidden)) { if ($h) { $script:contrastHidden.Add($h) } }
+            if ($m.remeasured) { $script:contrastRemeasured += [int]$m.remeasured }
             if ($m.lowest -and (-not $lowest -or $m.margin -lt $lowest.margin)) { $lowest = [pscustomobject]@{ margin = $m.margin; text = "$surface $($m.lowest)" } }
             try { Copy-QaFile $Vm -Source "C:\qa\contrast\$tag-$short.json" -Destination (Join-Path $Result.Folder "$tag-$short.json") } catch { }
             if (@($m.under).Count) { foreach ($view in 0..$m.views) { try { Copy-QaPhoto $Vm -Source "C:\qa\contrast\$tag-$short-$view.png" -Destination (Join-Path $Result.Folder "$tag-$short-$view.png") } catch { } } }
@@ -3927,7 +3962,7 @@ function Test-Contrast {
         }
     }
     finally {
-        if ($null -ne $script:contrastCovered) { Check $Result '[A11Y-4] every element was measured on its own window''s pixels (nothing covered it)' ($script:contrastCovered.Count -eq 0) "$($script:contrastCovered.Count) covered: $(@($script:contrastCovered | Select-Object -First 12) -join '; '); other processes' windows hidden first: $(@($script:contrastHidden | Select-Object -Unique) -join ', ')" }
+        if ($null -ne $script:contrastCovered) { Check $Result '[A11Y-4] every element was measured on its own window''s pixels (nothing covered it)' ($script:contrastCovered.Count -eq 0) "$($script:contrastCovered.Count) covered: $(@($script:contrastCovered | Select-Object -First 12) -join '; '); other processes' windows hidden first: $(@($script:contrastHidden | Select-Object -Unique) -join ', ')$(if ($script:contrastRemeasured) { "; $($script:contrastRemeasured) measured again after another window had covered them for a moment" })" }
         $null = Invoke-QaGuestScript $Vm -Name 'contrast-off' -Script $contrastOff
         if (-not $simulator.HasExited) { $simulator.Kill() }
         $null = Save-Evidence $Vm $Result.Folder
