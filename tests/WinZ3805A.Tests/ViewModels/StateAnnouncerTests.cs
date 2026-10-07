@@ -148,6 +148,28 @@ public sealed class StateAnnouncerTests
         Assert.Equal("Connected on COM3.", announcement.Text);
     }
 
+    /// <summary>
+    /// #752: a connect now arrives with the wait rather than Disconnected. The connection is what is
+    /// said, as before, and the first reading's mode follows it.
+    /// </summary>
+    [Fact]
+    public void AConnectThatArrivesWaitingSaysConnectedThenTheFirstMode()
+    {
+        StateAnnouncer announcer = new();
+        announcer.Observe(ConnectionStatus.Connecting, ReceiverMode.Disconnected, isCoasting: false);
+
+        Announcement? connected = announcer.Observe(
+            ConnectionStatus.Connected,
+            ReceiverMode.AwaitingReading,
+            isCoasting: false,
+            portName: "COM2");
+        Announcement? locked = announcer.Observe(ConnectionStatus.Connected, ReceiverMode.Locked, isCoasting: false);
+
+        Assert.Equal("Connected on COM2.", connected?.Text);
+        Assert.Equal("Locked to GPS", locked?.Text);
+        Assert.Equal(AnnouncementUrgency.Polite, locked?.Urgency);
+    }
+
     /// <remarks>
     /// The receiver reaches Locked and reports no satellites in the same poll. Announcing "Locked
     /// to GPS" and stopping would tell the listener the opposite of what has happened.

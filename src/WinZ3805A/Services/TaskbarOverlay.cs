@@ -147,6 +147,7 @@ public sealed class TaskbarOverlay : IDisposable
         ReceiverMode.Holdover => "Holdover: the receiver is free-running without GPS.",
         ReceiverMode.PowerUp => "Powering up: the receiver is not yet reporting a state.",
         ReceiverMode.Off => "Diagnostic or off: the receiver is not disciplining.",
+        ReceiverMode.AwaitingReading => "Connected: waiting for the receiver's first reading.",
         _ => "Disconnected: this application is not talking to the receiver.",
     };
 

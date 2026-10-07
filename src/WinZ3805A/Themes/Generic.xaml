@@ -661,6 +661,15 @@
                                         <Setter Target="PART_Ring.Stroke" Value="{ThemeResource WzNeutralBrush}" />
                                     </VisualState.Setters>
                                 </VisualState>
+                                <!-- Connected, no sweep stored yet (#752): Disconnected's drive without the slash. -->
+                                <VisualState x:Name="AwaitingReading">
+                                    <VisualState.Setters>
+                                        <Setter Target="Glyph.Text" Value="&#xE8CE;" />
+                                        <Setter Target="Glyph.Foreground" Value="{ThemeResource WzNeutralBrush}" />
+                                        <Setter Target="Count.Foreground" Value="{ThemeResource WzNeutralBrush}" />
+                                        <Setter Target="PART_Ring.Stroke" Value="{ThemeResource WzNeutralBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
                             </VisualStateGroup>
 
                             <!--

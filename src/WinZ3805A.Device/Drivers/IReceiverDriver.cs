@@ -426,6 +426,11 @@ public interface IReceiverDriver
     /// mode means a severity, a glyph and a label, which is §9's decision.
     /// </para>
     /// <para>
+    /// <b>Never <see cref="ReceiverMode.AwaitingReading"/>.</b> That member says the session has
+    /// connected and no sweep has been stored yet (#752), which is a fact about the link that only
+    /// the session knows; a token cannot mean it.
+    /// </para>
+    /// <para>
     /// <b>Unrecognised means <see cref="ReceiverMode.Disconnected"/>, never a guess</b>, on §11.1's
     /// reasoning: a mode the driver cannot name is one it cannot describe honestly, and showing
     /// "Locked to GPS" on a maybe is the worst available default. It must never throw.

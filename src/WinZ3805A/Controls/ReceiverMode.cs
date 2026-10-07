@@ -47,6 +47,7 @@ public static class ReceiverModes
         ReceiverMode.Holdover => "\uE7BA",      // Warning, the fallback behind §9.9's custom holdover icon
         ReceiverMode.PowerUp => "\uE823",       // Clock
         ReceiverMode.Off => "\uE7E8",           // PowerButton
+        ReceiverMode.AwaitingReading => "\uE8CE", // MapDrive: DisconnectDrive without the slash (#752)
         _ => "\uE8CD",                          // DisconnectDrive
     };
 
@@ -74,6 +75,11 @@ public static class ReceiverModes
         mode is ReceiverMode.Holdover or ReceiverMode.Waiting ? "WzIconHoldover" : null;
 
     /// <summary>The sentence-case label §10.3 gives this mode.</summary>
+    /// <remarks>
+    /// <see cref="ReceiverMode.AwaitingReading"/> says only what is known — the link is up — and
+    /// leaves "waiting for the first reading" to the sub-line, so compact mode, which shows this
+    /// label alone, still fits it beside the medallion (#752).
+    /// </remarks>
     public static string TextOf(ReceiverMode mode) => mode switch
     {
         ReceiverMode.Locked => "Locked to GPS",
@@ -82,6 +88,13 @@ public static class ReceiverModes
         ReceiverMode.Holdover => "Holdover",
         ReceiverMode.PowerUp => "Power-up",
         ReceiverMode.Off => "Diagnostic / off",
+        ReceiverMode.AwaitingReading => "Connected",
         _ => "Disconnected",
     };
+
+    /// <summary>
+    /// The sub-line under <see cref="ReceiverMode.AwaitingReading"/>'s label (#752), shared by the
+    /// main window and the Overview page so the two say it alike.
+    /// </summary>
+    public const string AwaitingReadingDetail = "Waiting for the first reading";
 }

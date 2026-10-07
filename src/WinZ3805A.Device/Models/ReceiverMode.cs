@@ -19,6 +19,13 @@
 /// it means a new severity, a new glyph and a new label, which is §9's decision and not a driver
 /// author's.
 /// </para>
+/// <para>
+/// <b>One member is the session's rather than the receiver's</b>, and no driver may return it:
+/// <see cref="AwaitingReading"/>, which <c>ShellMode</c> shows between a successful connect and
+/// the first stored sweep (#752). <see cref="Disconnected"/> is the other state that describes the
+/// link rather than the receiver, and the two keep "not connected" apart from "connected, nothing
+/// heard yet".
+/// </para>
 /// </remarks>
 public enum ReceiverMode
 {
@@ -42,4 +49,12 @@ public enum ReceiverMode
 
     /// <summary>In diagnostics, or with outputs off.</summary>
     Off,
+
+    /// <summary>
+    /// Connected, and no sweep stored yet (#752). The session's state, never a driver's answer.
+    /// </summary>
+    /// <remarks>
+    /// Last, so the members before it keep the values the trend charts plot them at.
+    /// </remarks>
+    AwaitingReading,
 }
