@@ -223,7 +223,8 @@
                                        Grid.Row="1" Grid.Column="1"
                                        Style="{ThemeResource WzMonoTextStyle}" />
 
-                            <TextBlock Grid.Row="2" Grid.Column="0"
+                            <TextBlock x:Name="HoldoverDurationLabel"
+                                       Grid.Row="2" Grid.Column="0"
                                        Style="{ThemeResource WzBodyTextStyle}"
                                        Foreground="{ThemeResource WzTextSecondaryBrush}"
                                        Text="Duration" />
@@ -233,11 +234,12 @@
                         </Grid>
 
                         <!--
-                            #751. A family that knows whether it is in holdover but predicts nothing
-                            about it - a UCCM - loses the Predicted and Threshold rows, label and
-                            value together, and this says why. Duration stays: the mode answers it.
+                            #751. A family that knows whether it is in holdover but predicts and
+                            counts nothing about it - a UCCM - loses the Predicted and Threshold rows,
+                            label and value together, and this says why. Duration stays while it
+                            reads "Not in holdover", which the mode answers, and goes during one.
                         -->
-                        <TextBlock x:Name="HoldoverUncertaintyUnavailableText"
+                        <TextBlock x:Name="HoldoverAbsentText"
                                    Style="{ThemeResource WzCaptionTextStyle}"
                                    Foreground="{ThemeResource WzTextSecondaryBrush}"
                                    MaxWidth="{ThemeResource WzProseMaxWidth}"

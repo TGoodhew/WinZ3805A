@@ -196,4 +196,23 @@ public enum ReceiverReading
     /// </para>
     /// </remarks>
     HoldoverUncertainty,
+
+    /// <summary>
+    /// How long the receiver has been in holdover, as the receiver itself counts it (§10.4, §10.8).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Narrower than <see cref="Holdover"/>, for the reason <see cref="HoldoverUncertainty"/>
+    /// is.</b> A family can say whether it is in holdover and still have no count of how long: a
+    /// UCCM-P refuses its duration query in every state, holdover included. For such a family the
+    /// pages still say <i>Not in holdover</i> while it is not, because the mode answers that, and say
+    /// in words that the count is not reported rather than drawing a dash while it is.
+    /// </para>
+    /// <para>
+    /// The application does not time a holdover itself. It would know only when it started
+    /// watching, not when the receiver lost GPS, and a figure that is a lower bound presented as a
+    /// duration is a claim the receiver never made.
+    /// </para>
+    /// </remarks>
+    HoldoverDuration,
 }

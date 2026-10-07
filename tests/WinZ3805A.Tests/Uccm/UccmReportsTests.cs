@@ -49,6 +49,7 @@ public sealed class UccmReportsTests
         IReceiverDriver driver = new UccmDriver(new FakeTimeProvider());
 
         Assert.False(driver.Reports(ReceiverReading.HoldoverUncertainty));
+        Assert.False(driver.Reports(ReceiverReading.HoldoverDuration));
         Assert.True(driver.Reports(ReceiverReading.Holdover));
     }
 }

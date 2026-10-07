@@ -491,14 +491,15 @@ public sealed class OverviewViewModelTests
     /// carries a prediction and a threshold anyway — so the assertions below are about what the
     /// family can report rather than about what happened to be in the store.
     /// </remarks>
-    private static OverviewViewModel Uccm()
+    private static OverviewViewModel Uccm(string syncState = "1")
     {
         FakeTimeProvider clock = new(Captured);
         ReceiverStateStore store = new(clock);
 
         store.UpdateFull(Status());
-        // "1" is what LED:GPSL? answered throughout every sitting, locked (Uccm/Captures/).
-        store.UpdateFast("1", tfom: 2, ffom: 0, onePpsTiNanoseconds: 20.7,
+        // "1" is what LED:GPSL? answered throughout every sitting, locked (Uccm/Captures/). The
+        // driver appends HOLDOVER to it when the time code says the module is coasting.
+        store.UpdateFast(syncState, tfom: 2, ffom: 0, onePpsTiNanoseconds: 20.7,
             oscillatorControl: 4.2, trackedCount: 7);
 
         return new OverviewViewModel(store, new UccmDriver(clock))
@@ -508,12 +509,13 @@ public sealed class OverviewViewModelTests
     }
 
     /// <summary>
-    /// A family that cannot predict holdover says so in words instead of two dashes (#751).
+    /// A family that cannot predict or count holdover says so in words instead of dashes (#751).
     /// </summary>
     /// <remarks>
     /// Found judging 1.4.0's release pass: a UCCM-P's card showed a bare dash beside Predicted (24 h)
     /// and Threshold for as long as it was connected, while the Health monitor card below it gave its
-    /// own absence in exactly this sentence's form. The dash is §9.11's "not arrived yet".
+    /// own absence in exactly this sentence's form. The dash is §9.11's "not arrived yet". Duration
+    /// was a dash through every holdover too, the module refusing its duration query in all states.
     /// </remarks>
     [Fact]
     public void AUccmSaysItReportsNoHoldoverPredictionRatherThanShowingDashes()
@@ -522,30 +524,50 @@ public sealed class OverviewViewModelTests
 
         Assert.False(uccm.HoldoverUncertaintyReported);
         Assert.Equal(
-            "This receiver does not report a predicted holdover uncertainty or an uncertainty threshold. "
-            + "The UCCM protocol does not carry it.",
-            uccm.HoldoverUncertaintyUnavailableText);
+            "This receiver does not report a predicted holdover uncertainty, an uncertainty threshold "
+            + "or a holdover duration. The UCCM protocol does not carry it.",
+            uccm.HoldoverAbsentText);
     }
 
-    /// <summary>The Duration row is not part of it, because the mode answers it (#751).</summary>
+    /// <summary>Locked, a UCCM's Duration row says so: the mode answers it (#751).</summary>
     [Fact]
-    public void AUccmKeepsTheDurationRow()
+    public void ALockedUccmSaysItIsNotInHoldover()
     {
         OverviewViewModel uccm = Uccm();
 
         Assert.Equal(ReceiverMode.Locked, uccm.Mode);
+        Assert.True(uccm.HoldoverDurationShown);
         Assert.Equal("Not in holdover", uccm.HoldoverDuration);
     }
 
-    /// <summary>A SmartClock's card is unchanged: both rows, and no sentence.</summary>
+    /// <summary>
+    /// In holdover, a UCCM's Duration row goes rather than showing a dash it can never fill (#751).
+    /// </summary>
     [Fact]
-    public void ASmartClockKeepsBothHoldoverRows()
+    public void AUccmInHoldoverDropsTheDurationRow()
+    {
+        OverviewViewModel uccm = Uccm("1 HOLDOVER");
+
+        Assert.Equal(ReceiverMode.Holdover, uccm.Mode);
+        Assert.False(uccm.HoldoverDurationShown);
+        Assert.NotNull(uccm.HoldoverAbsentText);
+    }
+
+    /// <summary>A SmartClock's card is unchanged: every row, in holdover too, and no sentence.</summary>
+    [Fact]
+    public void ASmartClockKeepsEveryHoldoverRow()
     {
         (OverviewViewModel smartClock, _) = Connected(Status());
+        (OverviewViewModel holding, _) = Connected(Status(), syncState: "HOLD");
 
         Assert.True(smartClock.HoldoverUncertaintyReported);
-        Assert.Null(smartClock.HoldoverUncertaintyUnavailableText);
+        Assert.True(smartClock.HoldoverDurationShown);
+        Assert.Null(smartClock.HoldoverAbsentText);
         Assert.Equal(("2.7", "µs"), smartClock.HoldoverPredicted);
+
+        // In holdover with no duration printed, still the §11.1 dash: the screen does print it.
+        Assert.True(holding.HoldoverDurationShown);
+        Assert.Equal(ReadoutFormatter.NoValue, holding.HoldoverDuration);
     }
 
     /// <summary>
@@ -561,7 +583,7 @@ public sealed class OverviewViewModelTests
         OverviewViewModel talker = Talker();
 
         Assert.False(talker.HoldoverUncertaintyReported);
-        Assert.Null(talker.HoldoverUncertaintyUnavailableText);
+        Assert.Null(talker.HoldoverAbsentText);
     }
 
     /// <remarks>

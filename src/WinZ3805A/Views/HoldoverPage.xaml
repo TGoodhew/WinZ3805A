@@ -110,7 +110,8 @@
                                        controls:CopyMenu.IsCopyable="True" Grid.Row="1" Grid.Column="1"
                                        Style="{ThemeResource WzMonoTextStyle}" />
 
-                            <TextBlock Grid.Row="2" Grid.Column="0"
+                            <TextBlock x:Name="DurationLabel"
+                                       Grid.Row="2" Grid.Column="0"
                                        Style="{ThemeResource WzBodyTextStyle}"
                                        Foreground="{ThemeResource WzTextSecondaryBrush}"
                                        Text="Duration" />
@@ -127,11 +128,12 @@
                         </Grid>
 
                         <!--
-                            #751. A family that predicts nothing about its holdover - a UCCM - loses
-                            the two uncertainty rows, label and value together, and this says why
-                            rather than leaving two dashes that read as "not arrived yet".
+                            #751. A family that predicts and counts nothing about its holdover - a
+                            UCCM - loses the two uncertainty rows, label and value together, and
+                            the Duration row while in holdover; this says why rather than leaving
+                            dashes that read as "not arrived yet".
                         -->
-                        <TextBlock x:Name="UncertaintyUnavailableText"
+                        <TextBlock x:Name="StateAbsentText"
                                    Style="{ThemeResource WzCaptionTextStyle}"
                                    Foreground="{ThemeResource WzTextSecondaryBrush}"
                                    MaxWidth="{ThemeResource WzProseMaxWidth}"

@@ -255,16 +255,20 @@ public sealed partial class OverviewPage : Page
         HoldoverThresholdText.Text = WithUnit(model.HoldoverThreshold);
         HoldoverDurationText.Text = model.HoldoverDuration;
 
-        // #751: the label goes with the value, and one sentence says why both rows went.
+        // #751: the label goes with the value, and one sentence says what the card will never show.
         Visibility uncertaintyRows = model.HoldoverUncertaintyReported ? Visibility.Visible : Visibility.Collapsed;
         HoldoverPredictedLabel.Visibility = uncertaintyRows;
         HoldoverPredictedText.Visibility = uncertaintyRows;
         HoldoverThresholdLabel.Visibility = uncertaintyRows;
         HoldoverThresholdText.Visibility = uncertaintyRows;
-        HoldoverUncertaintyUnavailableText.Text = model.HoldoverUncertaintyUnavailableText ?? string.Empty;
-        HoldoverUncertaintyUnavailableText.Visibility = model.HoldoverUncertaintyUnavailableText is null
-            ? Visibility.Collapsed
-            : Visibility.Visible;
+
+        Visibility durationRow = model.HoldoverDurationShown ? Visibility.Visible : Visibility.Collapsed;
+        HoldoverDurationLabel.Visibility = durationRow;
+        HoldoverDurationText.Visibility = durationRow;
+
+        string? absent = model.HoldoverAbsentText;
+        HoldoverAbsentText.Text = absent ?? string.Empty;
+        HoldoverAbsentText.Visibility = absent is null ? Visibility.Collapsed : Visibility.Visible;
 
         HealthSummaryText.Text = model.HealthSummary;
 

@@ -326,10 +326,13 @@ public sealed partial class HoldoverPage : Page
         ThresholdReadings.Visibility = uncertainty;
         ThresholdExplanationText.Visibility = uncertainty;
 
-        UncertaintyUnavailableText.Text = model.UncertaintyUnavailableText ?? string.Empty;
-        UncertaintyUnavailableText.Visibility = model.UncertaintyUnavailableText is null
-            ? Visibility.Collapsed
-            : Visibility.Visible;
+        Visibility durationRow = model.DurationShown ? Visibility.Visible : Visibility.Collapsed;
+        DurationLabel.Visibility = durationRow;
+        DurationText.Visibility = durationRow;
+
+        string? stateAbsent = model.StateAbsentText;
+        StateAbsentText.Text = stateAbsent ?? string.Empty;
+        StateAbsentText.Visibility = stateAbsent is null ? Visibility.Collapsed : Visibility.Visible;
         ThresholdUnavailableText.Text = model.ThresholdUnavailableText ?? string.Empty;
         ThresholdUnavailableText.Visibility = model.ThresholdUnavailableText is null
             ? Visibility.Collapsed

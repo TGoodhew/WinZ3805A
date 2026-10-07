@@ -97,6 +97,7 @@ public sealed class ReceiverReadingTests
     [InlineData(ReceiverReading.OscillatorControl)]
     [InlineData(ReceiverReading.Holdover)]
     [InlineData(ReceiverReading.HoldoverUncertainty)]
+    [InlineData(ReceiverReading.HoldoverDuration)]
     [InlineData(ReceiverReading.AntennaDelay)]
     [InlineData(ReceiverReading.OutputValidity)]
     [InlineData(ReceiverReading.DeviceIdentity)]
@@ -130,10 +131,11 @@ public sealed class ReceiverReadingTests
     /// completes the switch on the way past with entries no sitting supports.
     /// </para>
     /// <para>
-    /// <b>One more at #751, and it is the narrow half of holdover rather than holdover.</b> The
+    /// <b>Two more at #751, and they are the narrow halves of holdover rather than holdover.</b> The
     /// prediction and the threshold have no query in <c>UccmCommands</c> and no field on any status
-    /// reply, the holdover sitting of 13 Sep 2026 included — while whether the module is in holdover
-    /// is read from its time code, which is why <see cref="ReceiverReading.Holdover"/> stays present.
+    /// reply, the holdover sitting of 13 Sep 2026 included; the duration has a query, refused in
+    /// every state that sitting produced. Whether the module is in holdover is read from its time
+    /// code, which is why <see cref="ReceiverReading.Holdover"/> stays present.
     /// </para>
     /// </remarks>
     [Fact]
@@ -143,7 +145,8 @@ public sealed class ReceiverReadingTests
 
         // :DIAG:IDEN:GPS? is a SmartClock node and :SYST:ERR? is not in UccmCommands either - this
         // family answers an error in place of the reply (#748); the next four never answered in any
-        // sitting; and the holdover uncertainty has no query and no field on any status reply (#751).
+        // sitting; the holdover uncertainty has no query and no field on any status reply; and
+        // :ROSC:HOLD:DUR? was refused cold, locked and in holdover (#751).
         ReceiverReading[] absent =
         [
             ReceiverReading.GpsEngineIdentity,
@@ -153,6 +156,7 @@ public sealed class ReceiverReadingTests
             ReceiverReading.HealthMonitor,
             ReceiverReading.ErrorQueue,
             ReceiverReading.HoldoverUncertainty,
+            ReceiverReading.HoldoverDuration,
         ];
 
         foreach (ReceiverReading reading in absent)
