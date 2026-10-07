@@ -324,7 +324,9 @@ public sealed class UccmDriver(TimeProvider timeProvider) : IReceiverDriver
     /// receiver — true when written, and the reason the rest was left alone. It has met one since:
     /// <c>TRIMBLE,57964-80,40896646,V2.0.1.6-01</c>, across five sittings whose captures are in
     /// <c>tests/WinZ3805A.Tests/Uccm/Captures/</c>. The four added below are the ones that never
-    /// answered in any of them.
+    /// answered in any of them. <b>Two are not measurements and say so</b> — the first and the
+    /// last, each a reading this driver's own catalogue has no query for, so that the driver knows
+    /// without hardware it cannot ask.
     /// </para>
     /// <para>
     /// <b>Why this matters more than a tidy switch.</b> The interface defaults every reading to
@@ -375,6 +377,16 @@ public sealed class UccmDriver(TimeProvider timeProvider) : IReceiverDriver
 
         // No health-monitor apparatus. The Overview card said "No health data" indefinitely.
         ReceiverReading.HealthMonitor => false,
+
+        // A catalogue fact like the first entry rather than a measurement (#748). This family
+        // answers an error IN PLACE OF the reply - "Command error", "Undefined header" in every
+        // sitting under Uccm/Captures/, which UccmReply.Classify reads as the reply's kind - so
+        // nothing is left queued to read afterwards, and UccmCommands has no :SYST:ERR? to read it
+        // with. Whether some firmware keeps an IEEE 488.2 queue as well is unasked; if a sitting
+        // finds one answered, catalogue it and flip this together, which the contract test
+        // TheErrorQueueQueryIsCatalogued holds the two to. Until this arm existed Diagnostics said
+        // "No errors." about a queue this driver cannot see.
+        ReceiverReading.ErrorQueue => false,
 
         _ => true,
     };

@@ -134,7 +134,9 @@ public sealed class ReceiverReadingTests
     {
         IReceiverDriver driver = new UccmDriver(new FakeTimeProvider(Whenever));
 
-        // :DIAG:IDEN:GPS? is a SmartClock node; the other four never answered in any sitting.
+        // :DIAG:IDEN:GPS? is a SmartClock node and :SYST:ERR? is not in UccmCommands either - this
+        // family answers an error in place of the reply (#748); the other four never answered in
+        // any sitting.
         ReceiverReading[] absent =
         [
             ReceiverReading.GpsEngineIdentity,
@@ -142,6 +144,7 @@ public sealed class ReceiverReadingTests
             ReceiverReading.LeapSecond,
             ReceiverReading.TimeCodeFormat,
             ReceiverReading.HealthMonitor,
+            ReceiverReading.ErrorQueue,
         ];
 
         foreach (ReceiverReading reading in absent)
