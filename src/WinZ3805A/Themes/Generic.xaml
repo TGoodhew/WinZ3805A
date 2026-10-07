@@ -468,8 +468,10 @@
                         <!--
                             The optional caption under the value (#716) - "relative to GPS". Centred
                             like the label, and moved onto the decimal axis by the same transform in
-                            AlignLabelToAxis, so label, value and caption share one axis. Collapsed
-                            until a caption is set, so tiles without one are unchanged.
+                            AlignToAxis, so label, value and caption share one axis. Collapsed
+                            until a caption is set, so tiles without one are unchanged. A caption
+                            or label wider than the room beside the axis widens the tile rather
+                            than overhanging it (#753): see ReadoutTile.MeasureOverride.
                         -->
                         <TextBlock x:Name="PART_CaptionText"
                                    Style="{ThemeResource WzCaptionTextStyle}"
