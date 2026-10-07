@@ -90,12 +90,12 @@ internal static class Program
                 Console.WriteLine("* connected");
                 using StreamReader reader = new(pipe, Encoding.ASCII, detectEncodingFromByteOrderMarks: false, leaveOpen: true);
                 SemaphoreSlim writing = new(1, 1);
-                async Task WriteAsync(string text)
+                async Task WriteAsync(byte[] bytes)
                 {
                     await writing.WaitAsync();
                     try
                     {
-                        await pipe.WriteAsync(Encoding.ASCII.GetBytes(text));
+                        await pipe.WriteAsync(bytes);
                         await pipe.FlushAsync();
                     }
                     finally
@@ -110,7 +110,7 @@ internal static class Program
                     using PeriodicTimer tick = new(TimeSpan.FromSeconds(1));
                     while (await tick.WaitForNextTickAsync(gone.Token))
                     {
-                        await WriteAsync(module.TimeCodeLine() + "\r\n");
+                        await WriteAsync(module.TimeCodeFrame());
                     }
                 });
 
@@ -121,7 +121,7 @@ internal static class Program
                         line = line.Trim();
                         if (line.Length > 0)
                         {
-                            await WriteAsync(module.Respond(line) + module.Prompt);
+                            await WriteAsync(module.RespondOnWire(line));
                         }
                     }
                 }
@@ -153,7 +153,7 @@ internal static class Program
     {
         Console.WriteLine($"# {module.Vendor} {module.Variant}, {module.State}");
         Console.WriteLine();
-        Console.WriteLine("# unsolicited time code");
+        Console.WriteLine("# unsolicited time code, as hex text; a port or pipe gets these 44 bytes raw");
         Console.WriteLine(module.TimeCodeLine());
 
         foreach (string command in new[]
@@ -201,7 +201,8 @@ internal static class Program
                 string line = serial.ReadLine().Trim();
                 if (line.Length > 0)
                 {
-                    serial.Write(module.Respond(line) + module.Prompt);
+                    byte[] reply = module.RespondOnWire(line);
+                    serial.Write(reply, 0, reply.Length);
                 }
             }
             catch (TimeoutException)
@@ -211,7 +212,9 @@ internal static class Program
 
             if (DateTimeOffset.UtcNow >= nextTick)
             {
-                serial.Write(module.TimeCodeLine() + "\r\n");
+                // Bytes, never text (#738): the measured frame has no separator and no terminator.
+                byte[] frame = module.TimeCodeFrame();
+                serial.Write(frame, 0, frame.Length);
                 nextTick = DateTimeOffset.UtcNow.AddSeconds(1);
             }
         }

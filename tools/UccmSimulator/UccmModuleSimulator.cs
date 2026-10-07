@@ -23,6 +23,11 @@ namespace WinZ3805A.Simulation;
 /// ends with <c>COMMAND COMPLETE</c>, and an unsolicited <c>C5</c> time code can be
 /// <b>interleaved</b> anywhere — including between the echo and the value.
 /// </para>
+/// <para>
+/// <b>The time code's shape is the exception, and is measured.</b> Since #738 it goes on the wire as
+/// the 44 binary bytes a Trimble UCCM-P sends, laid out as the captures have it; only
+/// <see cref="Respond"/>, which a test hands to a parser as a string, still renders it as hex text.
+/// </para>
 /// </remarks>
 /// <param name="vendor">Which vendor's reply shapes to produce.</param>
 /// <param name="variant">Whether to answer the three UCCM-P-only queries.</param>
@@ -35,7 +40,25 @@ public sealed class UccmModuleSimulator(
     private static readonly DateTimeOffset GpsEpoch = new(1980, 1, 6, 0, 0, 0, TimeSpan.Zero);
 
     /// <summary>Leap seconds between GPS and UTC. 18 since 2017.</summary>
-    private const int LeapSeconds = 18;
+    private const byte LeapSeconds = 18;
+
+    /// <summary>A time code's length in bytes, marker and terminator included.</summary>
+    private const int FrameLength = 44;
+
+    /// <summary>
+    /// Offsets 1 to 26 of every measured frame, which no state the bench produced ever moved.
+    /// </summary>
+    /// <remarks>
+    /// Copied from <c>tests/WinZ3805A.Tests/Uccm/Captures/frames-13sep2026.txt</c>; the same 26
+    /// bytes open all 935 frames there and in <c>transitions-13sep2026.frames.txt</c>, locked, cold,
+    /// acquiring and in holdover. What they mean is unknown, which is why they are reproduced rather
+    /// than modelled.
+    /// </remarks>
+    private static ReadOnlySpan<byte> MeasuredConstantPrefix =>
+    [
+        0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x28, 0x1C, 0x52, 0x00, 0x00, 0x20, 0x60,
+        0xC1, 0x91, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    ];
 
     /// <summary>Which vendor this module reports as.</summary>
     public UccmVendor Vendor => vendor;
@@ -79,62 +102,139 @@ public sealed class UccmModuleSimulator(
     /// </remarks>
     public string Prompt => variant == UccmVariant.UccmP ? "UCCM-P >" : "UCCM >";
 
-    /// <summary>Answers one command, exactly as the module would put it on the wire.</summary>
+    /// <summary>Answers one command, with any time code rendered as a line of hex text.</summary>
     /// <remarks>
+    /// <para>
     /// Lines are CRLF-terminated, echo first. An unknown command produces the error reply a real
     /// module gives rather than silence, because silence and a refusal look identical to a parser
     /// and only one of them is a bug.
+    /// </para>
+    /// <para>
+    /// <b>This is the parser's view, not the wire's.</b> A time code here is the hex-text line
+    /// Heather renders in her logs, which is what lets a test hand the reply straight to a parser as
+    /// a string. No module sends that shape: <see cref="RespondOnWire"/> is what the port and pipe
+    /// modes write (#738).
+    /// </para>
     /// </remarks>
-    public string Respond(string command)
+    public string Respond(string command) =>
+        Encoding.ASCII.GetString(Compose(command, binaryTimeCodes: false));
+
+    /// <summary>
+    /// Answers one command exactly as the port and pipe modes put it on the wire: the reply, any
+    /// time code in it as the measured 44-byte binary frame, and then <see cref="Prompt"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Until #738 the wire carried <see cref="Respond"/>'s hex text</b>, which no module sends.
+    /// The driver lifts a binary frame out of the byte stream before splitting lines, so the text
+    /// form went straight past that and arrived as a line of its own — and the application, polling
+    /// <c>LED:GPSL?</c>, sometimes took that line for the answer and showed a connected, locked
+    /// receiver as <i>Disconnected</i>. Writing the frame as bytes is what puts the transport's real
+    /// framing in the path at all.
+    /// </para>
+    /// <para>
+    /// A frame here carries <b>no line terminator</b>, as the measured one does, and sits wherever
+    /// <see cref="Respond"/> would have put its line: after the echo with
+    /// <see cref="InterleaveTimeCode"/>, and inside a status reply.
+    /// </para>
+    /// </remarks>
+    public byte[] RespondOnWire(string command)
+    {
+        byte[] reply = Compose(command, binaryTimeCodes: true);
+        byte[] prompt = Encoding.ASCII.GetBytes(Prompt);
+
+        byte[] wire = new byte[reply.Length + prompt.Length];
+        reply.CopyTo(wire, 0);
+        prompt.CopyTo(wire, reply.Length);
+        return wire;
+    }
+
+    /// <summary>
+    /// The unsolicited time code as the module broadcasts it: 44 bytes, <c>0xC5</c> through
+    /// <c>0xCA</c>, with no separator and no line terminator.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The layout is the captures', not Heather's rendering of it</b> (#738). Offsets 1 to 26, 31
+    /// and 37 to 40 never moved in any of the 935 frames captured on 13 Sep 2026, so they are
+    /// reproduced byte for byte. Offsets 27 to 30 are the GPS second counter, big-endian, which is
+    /// confirmed against hardware; 32 to 36 are the leap, PPS, antenna, lock and date bytes, taken
+    /// from this simulator's state exactly as before — the README lists where those disagree with
+    /// the module.
+    /// </para>
+    /// <para>
+    /// <b>Offsets 41 and 42 are left zero.</b> On the module they move with every frame and look like
+    /// a checksum, but the function is unidentified — <c>frames-13sep2026.md</c> rules out every CRC
+    /// and the common arithmetic sums — so there is nothing true to put there. The driver validates
+    /// a frame by its length and its two marker bytes only, which zeros satisfy; a driver that ever
+    /// starts checking those two bytes will reject this simulator's frames, and should.
+    /// </para>
+    /// </remarks>
+    public byte[] TimeCodeFrame()
+    {
+        byte[] frame = new byte[FrameLength];
+        frame[0] = 0xC5;
+        MeasuredConstantPrefix.CopyTo(frame.AsSpan(1));
+
+        long seconds = (long)(timeProvider.GetUtcNow() - GpsEpoch).TotalSeconds + LeapSeconds;
+        frame[27] = (byte)((seconds >> 24) & 0xFF);
+        frame[28] = (byte)((seconds >> 16) & 0xFF);
+        frame[29] = (byte)((seconds >> 8) & 0xFF);
+        frame[30] = (byte)(seconds & 0xFF);
+
+        frame[32] = LeapSeconds;
+        frame[33] = (byte)(State == UccmSimulatedState.Locked ? 0x60 : 0x41);
+        frame[34] = (byte)(AntennaConnected ? 0x04 : 0x0C);
+        frame[35] = (byte)LockByte();
+        frame[36] = (byte)DateByte();
+
+        frame[FrameLength - 1] = 0xCA;
+        return frame;
+    }
+
+    /// <summary>
+    /// <see cref="TimeCodeFrame"/> as hex text, two digits per byte with a space between — the
+    /// shape Heather logs and <see cref="Respond"/> uses, and the shape no module sends.
+    /// </summary>
+    public string TimeCodeLine() =>
+        string.Join(' ', TimeCodeFrame().Select(b => b.ToString("X2", CultureInfo.InvariantCulture)));
+
+    /// <summary>One reply's bytes, with its time codes as hex-text lines or as binary frames.</summary>
+    private byte[] Compose(string command, bool binaryTimeCodes)
     {
         ArgumentNullException.ThrowIfNull(command);
 
-        StringBuilder reply = new();
-        reply.Append(command).Append("\r\n");
+        ReplyWriter reply = new(this, binaryTimeCodes);
+        reply.Line(command);
 
         if (InterleaveTimeCode)
         {
-            reply.Append(TimeCodeLine()).Append("\r\n");
+            reply.TimeCode();
         }
 
         string mnemonic = command.Trim();
-        string? payload = PayloadFor(mnemonic);
-
-        if (payload is null)
+        if (Is(mnemonic, UccmCommands.Status))
         {
-            reply.Append("UNDEFINED HEADER\r\n");
-            return reply.ToString();
+            WriteStatus(reply);
+        }
+        else
+        {
+            string? payload = PayloadFor(mnemonic);
+
+            if (payload is null)
+            {
+                reply.Line("UNDEFINED HEADER");
+                return reply.ToArray();
+            }
+
+            if (payload.Length > 0)
+            {
+                reply.Line(payload);
+            }
         }
 
-        if (payload.Length > 0)
-        {
-            reply.Append(payload).Append("\r\n");
-        }
-
-        reply.Append("COMMAND COMPLETE\r\n");
-        return reply.ToString();
-    }
-
-    /// <summary>The unsolicited time code the module emits on its own.</summary>
-    public string TimeCodeLine()
-    {
-        int[] values = new int[44];
-        values[0] = 0xC5;
-
-        long seconds = (long)(timeProvider.GetUtcNow() - GpsEpoch).TotalSeconds + LeapSeconds;
-        values[27] = (int)((seconds >> 24) & 0xFF);
-        values[28] = (int)((seconds >> 16) & 0xFF);
-        values[29] = (int)((seconds >> 8) & 0xFF);
-        values[30] = (int)(seconds & 0xFF);
-
-        values[32] = LeapSeconds;
-        values[33] = State == UccmSimulatedState.Locked ? 0x60 : 0x41;
-        values[34] = AntennaConnected ? 0x04 : 0x0C;
-        values[35] = LockByte();
-        values[36] = DateByte();
-
-        return string.Join(
-            ' ', values.Select(v => v.ToString("X2", CultureInfo.InvariantCulture)));
+        reply.Line("COMMAND COMPLETE");
+        return reply.ToArray();
     }
 
     /// <summary>
@@ -167,11 +267,6 @@ public sealed class UccmModuleSimulator(
     /// <summary>The payload lines for a command, empty for none, or null for "not understood".</summary>
     private string? PayloadFor(string mnemonic)
     {
-        if (Is(mnemonic, UccmCommands.Status))
-        {
-            return StatusBody();
-        }
-
         if (Is(mnemonic, UccmCommands.Loop))
         {
             return LoopBody();
@@ -237,20 +332,18 @@ public sealed class UccmModuleSimulator(
     /// <summary>
     /// The multi-line status reply: state text, the satellite table, and a time code.
     /// </summary>
-    private string StatusBody()
+    private void WriteStatus(ReplyWriter body)
     {
-        StringBuilder body = new();
-
         switch (State)
         {
             case UccmSimulatedState.PowerUp:
-                body.Append("WARMUP\r\n");
+                body.Line("WARMUP");
                 break;
             case UccmSimulatedState.Settling:
-                body.Append("SETTLING\r\n");
+                body.Line("SETTLING");
                 break;
             case UccmSimulatedState.Holdover:
-                body.Append("NO REF\r\n");
+                body.Line("NO REF");
                 break;
             default:
                 break;
@@ -258,22 +351,23 @@ public sealed class UccmModuleSimulator(
 
         if (!AntennaConnected)
         {
-            body.Append("WAIT FOR GPS\r\n");
+            body.Line("WAIT FOR GPS");
         }
 
-        body.Append(CultureInfo.InvariantCulture, $"TFOM {Tfom()} FFOM {Ffom()}\r\n");
+        body.Line(string.Create(CultureInfo.InvariantCulture, $"TFOM {Tfom()} FFOM {Ffom()}"));
 
         // The time code lands INSIDE the status, which is where Heather says it turns up.
-        body.Append(TimeCodeLine()).Append("\r\n");
+        body.TimeCode();
 
-        body.Append("PRN  EL  AZ  SS\r\n");
+        body.Line("PRN  EL  AZ  SS");
         for (int i = 0; i < SatelliteCount; i++)
         {
-            body.Append(CultureInfo.InvariantCulture, $"{i + 1,3} {20 + (i * 5),3} {(i * 40) % 360,4} {35 + i,3}\r\n");
+            body.Line(string.Create(
+                CultureInfo.InvariantCulture,
+                $"{i + 1,3} {20 + (i * 5),3} {(i * 40) % 360,4} {35 + i,3}"));
         }
 
-        body.Append("ELEV MASK 10\r\n");
-        return body.ToString().TrimEnd('\r', '\n');
+        body.Line("ELEV MASK 10");
     }
 
     private int Tfom() => State == UccmSimulatedState.Locked ? 3 : 9;
@@ -294,6 +388,37 @@ public sealed class UccmModuleSimulator(
 
         _ => string.Empty,
     };
+
+    /// <summary>One reply's bytes, with each time code in whichever of its two shapes was asked for.</summary>
+    private sealed class ReplyWriter(UccmModuleSimulator module, bool binaryTimeCodes)
+    {
+        private readonly List<byte> _bytes = [];
+
+        /// <summary>Appends a line of text and its CRLF.</summary>
+        public void Line(string text)
+        {
+            _bytes.AddRange(Encoding.ASCII.GetBytes(text));
+            _bytes.AddRange("\r\n"u8);
+        }
+
+        /// <summary>
+        /// Appends a time code: its 44 bytes with nothing after them, as the module sends it, or a
+        /// hex-text line for <see cref="Respond"/>.
+        /// </summary>
+        public void TimeCode()
+        {
+            if (binaryTimeCodes)
+            {
+                _bytes.AddRange(module.TimeCodeFrame());
+            }
+            else
+            {
+                Line(module.TimeCodeLine());
+            }
+        }
+
+        public byte[] ToArray() => [.. _bytes];
+    }
 
     private static bool Is(string mnemonic, string command) =>
         string.Equals(mnemonic, command, StringComparison.OrdinalIgnoreCase);

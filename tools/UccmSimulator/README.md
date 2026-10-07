@@ -26,8 +26,22 @@ belief for two of them:
 | What this simulator does | What the module did | Status |
 |---|---|---|
 | Echoes each command before answering | Did not echo, in 9 of 9 replies across two sittings | **Refuted** for this module |
-| Emits `C5` time codes as text, interleaved mid-reply | Emits **44-byte binary packets**, `0xC5`–`0xCA`, every 2 s, with **no line terminator** — and 0 of 25 landed mid-reply in a sitting where chance predicted ~9 | **Wrong shape**; the module defers a broadcast to the end of a reply |
+| Puts `C5` time codes mid-reply — inside every status, and after the echo with `--interleave` — and ticks one every second. *Since 7 Oct 2026 the `--port` and `--pipe-client` modes write each as the measured 44-byte binary frame; until then they were a line of hex text* | Emits **44-byte binary packets**, `0xC5`–`0xCA`, every 2 s, with **no line terminator** — and 0 of 25 landed mid-reply in a sitting where chance predicted ~9 | **Shape corrected** (#738); the placement still diverges — the module defers a broadcast to the end of a reply |
 | Terminates replies with `COMMAND COMPLETE` | Spelled `Command complete`, in 6 of 9 | Confirmed |
+
+**The time code's shape was the one divergence that broke the application rather than flattering
+it.** The driver lifts a binary frame out of the byte stream before it splits lines, so the hex text
+went straight past that and arrived as a line of its own; polling `LED:GPSL?`, the application
+sometimes took that line for the answer, and a connected, locked module read *Disconnected* on the
+primary window (found judging 1.4.0's `receiver-families` QA step). The frame now copies the
+captures byte for byte wherever they never moved — offsets 1 to 26, 31 and 37 to 40, constant across
+all 935 frames of `frames-13sep2026` and `transitions-13sep2026` — carries the GPS second counter at
+27 to 30 and this simulator's state bytes at 32 to 36 as before, and **leaves 41 and 42 zero**,
+because they look like a checksum whose function nobody has identified (`frames-13sep2026.md`). The
+driver checks only the length and the two marker bytes. Writing to stdout still shows the hex text,
+for reading, and so does `Respond()`, which the tests hand to a parser as a string; what reaches a
+port or a pipe is `RespondOnWire()` and `TimeCodeFrame()`, and `UccmSimulatorWireTests` pushes those
+through the driver's real framing. *(Added 7 Oct 2026, #738.)*
 
 **Neither refutation covers the family.** Heather's interleaving claim names *Symmetricom* units and
 no Symmetricom module has ever been seen here, so it stands untested rather than disproved; a plain
