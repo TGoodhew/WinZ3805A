@@ -377,7 +377,11 @@ Everything from the main window, with the words behind the numbers:
   exclusion lists and offers the commands that change them: track only the selected satellites,
   track all, clear exclusions, track none, exclude all. Each is confirmed before it is sent and
   nothing is staged, so closing the dialog sends nothing. Tracking none, or excluding them all,
-  drives the receiver into holdover — the dialog says so.
+  drives the receiver into holdover — the dialog says so. In a small window or at a large text size
+  the dialog is taller than the room it has, and its contents scroll; a line along its bottom edge
+  then says how many satellites are in view — *Showing 12 of 32 satellites. Scroll for more.* — so
+  you know the rest are there even when the scroll bar is hidden. The line goes away when everything
+  fits.
 
 #### Position — `Ctrl+3`
 
