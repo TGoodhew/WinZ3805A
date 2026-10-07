@@ -4168,7 +4168,12 @@ $info = New-Object System.Diagnostics.ProcessStartInfo 'cmd.exe', '/c "C:\qa\can
 $info.UseShellExecute = $false; $info.RedirectStandardInput = $true
 $installer = [System.Diagnostics.Process]::Start($info)
 $facts = [ordered]@{ runningAtStart = [bool](Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue) }
-function Get-RunLog { $f = @(Get-ChildItem $logs -Filter 'install-*.log' -ErrorAction SilentlyContinue | Sort-Object Name); if ($f.Count -gt $count) { Get-Content $f[-1].FullName -Raw } else { '' } }
+# The installer's log, read while the installer may still be writing it. It appends a line at a time
+# and holds the file for each write, so a plain Get-Content can land in that moment and throw - which,
+# with the step's errors stopping it, failed v1.4.0's scenario 12 outright (#745). Shared for writing,
+# and an empty answer when it is held anyway, so the poll simply looks again.
+function Read-LiveLog { param([string]$Path) try { $s = New-Object System.IO.FileStream($Path, 'Open', 'Read', 'ReadWrite, Delete'); try { (New-Object System.IO.StreamReader($s)).ReadToEnd() } finally { $s.Dispose() } } catch { '' } }
+function Get-RunLog { $f = @(Get-ChildItem $logs -Filter 'install-*.log' -ErrorAction SilentlyContinue | Sort-Object Name); if ($f.Count -gt $count) { Read-LiveLog $f[-1].FullName } else { '' } }
 $asked = Wait-Until { (Get-RunLog) -match 'waiting\s+WinZ3805A is running' } -Seconds 120
 $facts.askedToClose = [bool]$asked
 Start-Sleep -Seconds 5
@@ -4804,12 +4809,17 @@ if ($prompt) {
         }
     }
 }
+# The installer's log, read while the installer may still be writing it. It appends a line at a time
+# and holds the file for each write, so a plain Get-Content can land in that moment and throw - which,
+# with the step's errors stopping it, failed v1.4.0's scenario 12 outright (#745). Shared for writing,
+# and an empty answer when it is held anyway, so the poll simply looks again.
+function Read-LiveLog { param([string]$Path) try { $s = New-Object System.IO.FileStream($Path, 'Open', 'Read', 'ReadWrite, Delete'); try { (New-Object System.IO.StreamReader($s)).ReadToEnd() } finally { $s.Dispose() } } catch { '' } }
 # The installer's log for this run, until it finishes.
 $deadline = (Get-Date).AddSeconds(240)
 do {
     Start-Sleep -Seconds 3
     $logs = @(Get-ChildItem (Join-Path $env:LOCALAPPDATA 'WinZ3805A Installer\logs') -Filter 'install-*.log' -ErrorAction SilentlyContinue | Sort-Object Name)
-    $text = if ($logs.Count -gt $before) { Get-Content $logs[-1].FullName -Raw } else { '' }
+    $text = if ($logs.Count -gt $before) { Read-LiveLog $logs[-1].FullName } else { '' }
 } while ((Get-Date) -lt $deadline -and $text -notmatch 'finished ')
 $facts.started = $logs.Count -gt $before
 $facts.finished = (($text -split "`r?`n") | Where-Object { $_ -match 'finished |FAILED' } | Select-Object -Last 1)
