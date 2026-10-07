@@ -3087,6 +3087,88 @@ function Get-RingChange($a, $b, [int]$pad) {
     $changed
 }
 
+# #754: the two shots of a stop must be of the same content, and Tab moving on can scroll the page
+# between them - on Satellites the unfocused crop was of another row, so the ring was measured against
+# the wrong pixels. So each scroller the stop sits in is read with each shot, as an offset in pixels;
+# when Tab moved one, it is put back through ScrollPattern and the unfocused shot taken again, and a
+# pair whose offsets still differ is marked not comparable rather than measured.
+#
+# An offset in pixels from what ScrollPattern says: the scrolled share of the extent beyond the
+# viewport, the extent being the viewport over the share of it on view. Nothing to scroll is 0. A
+# scroller with no size on screen is compared by its percentage, a hundredth of one counting as a pixel.
+function Get-ScrollPixels([double]$percent, [double]$viewSize, [double]$viewport) {
+    if ($percent -lt 0 -or $viewSize -ge 100) { return 0.0 }
+    if (-not ($viewport -gt 0) -or [double]::IsInfinity($viewport) -or -not ($viewSize -gt 0)) { return 100 * $percent }
+    $percent / 100 * ($viewport * 100 / $viewSize - $viewport)
+}
+# The furthest any scroller moved between two readings, in pixels. Readings of different scrollers are
+# infinitely far apart, and one that could not be read (NaN) is never near anything.
+function Get-ScrollDrift($before, $after) {
+    $a = @($before); $b = @($after)
+    if ($a.Count -ne $b.Count) { return [double]::PositiveInfinity }
+    $most = 0.0
+    for ($n = 0; $n -lt $a.Count; $n++) { $most = [Math]::Max($most, [Math]::Abs([double]$a[$n] - [double]$b[$n])) }
+    $most
+}
+# What a stop's pair of shots can say: 'same' when nothing moved between them, 'retaken' when the
+# scroll was put back and the unfocused shot taken again, 'not comparable' when it would not go back.
+function Get-RingShots([double]$moved, [double]$restored, [double]$tolerance) {
+    if ($moved -le $tolerance) { return 'same' }
+    if ($restored -le $tolerance) { return 'retaken' }
+    'not comparable'
+}
+# A drift for the JSON, which has no NaN or Infinity: -1 when it is not a number of pixels.
+function Format-Drift([double]$d) { if ([double]::IsNaN($d) -or [double]::IsInfinity($d)) { -1 } else { [Math]::Round($d, 1) } }
+# The scrollers that can carry an element's pixels: itself, if it scrolls, and each ancestor that does.
+function Get-Scrollers($e) {
+    $found = New-Object System.Collections.Generic.List[object]
+    $walker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
+    $node = $e
+    try {
+        while ($node) {
+            if ($node.GetCurrentPropertyValue($Ae::IsScrollPatternAvailableProperty)) { $found.Add($node) }
+            if ([System.Windows.Automation.Automation]::Compare($node, $root)) { break }
+            $node = $walker.GetParent($node)
+        }
+    }
+    catch { }
+    , $found.ToArray()
+}
+function Read-Scroll($scrollers) {
+    $percent = New-Object System.Collections.Generic.List[double]; $pixels = New-Object System.Collections.Generic.List[double]
+    foreach ($s in @($scrollers)) {
+        try {
+            $c = $s.GetCurrentPattern([System.Windows.Automation.ScrollPattern]::Pattern).Current; $b = $s.Current.BoundingRectangle
+            $percent.Add($c.HorizontalScrollPercent); $percent.Add($c.VerticalScrollPercent)
+            $pixels.Add((Get-ScrollPixels $c.HorizontalScrollPercent $c.HorizontalViewSize $b.Width)); $pixels.Add((Get-ScrollPixels $c.VerticalScrollPercent $c.VerticalViewSize $b.Height))
+        }
+        catch { $percent.Add(-1); $percent.Add(-1); $pixels.Add([double]::NaN); $pixels.Add([double]::NaN) }
+    }
+    [pscustomobject]@{ percent = $percent.ToArray(); pixels = $pixels.ToArray() }
+}
+# Read until two readings 100 ms apart agree, so a scroll Tab animates is photographed where it ends.
+function Wait-Scroll($scrollers) {
+    $last = Read-Scroll $scrollers
+    if (@($scrollers).Count -eq 0) { return $last }
+    for ($t = 0; $t -lt 20; $t++) {
+        Start-Sleep -Milliseconds 100
+        $now = Read-Scroll $scrollers
+        if ((Get-ScrollDrift $last.pixels $now.pixels) -le $scrollTolerance) { return $now }
+        $last = $now
+    }
+    $last
+}
+# Each scroller to the percentages of a reading; -1 (NoScroll) leaves that axis alone.
+function Set-Scroll($scrollers, $reading) {
+    $n = 0
+    foreach ($s in @($scrollers)) {
+        try { $s.GetCurrentPattern([System.Windows.Automation.ScrollPattern]::Pattern).SetScrollPercent($reading.percent[$n], $reading.percent[$n + 1]) } catch { }
+        $n += 2
+    }
+}
+# Half a pixel: anything further is a different picture to the comparison above.
+$scrollTolerance = 0.5
+
 # Wide enough for focus visuals drawn outside the element, as a toggle switch's are.
 $pad = 8
 # The walks in Dark and a contrast theme pass $theme, so their photographs sit beside Light's rather
@@ -3109,14 +3191,32 @@ foreach ($i in 1..400) {
     Start-Sleep -Milliseconds 350
     $f = $Ae::FocusedElement
     if (-not $f) { continue }
-    $r = $f.Current.BoundingRectangle
     $key = ($f.GetRuntimeId() -join '.')
-    # The ring on the previous stop, now that the focus has left it.
+    # The ring on the previous stop, now that the focus has left it - at the scroll it was photographed
+    # focused at (#754).
     if ($prev -and $prevShot) {
-        $after = Get-Shot $prevRect
+        $moved = Wait-Scroll $prevScrollers
+        $drift = Get-ScrollDrift $prevScroll.pixels $moved.pixels
+        $restored = [double]::NaN
+        if ($drift -le $scrollTolerance) { $after = Get-Shot $prevRect }
+        else {
+            Set-Scroll $prevScrollers $prevScroll
+            $back = Wait-Scroll $prevScrollers
+            Start-Sleep -Milliseconds 150
+            $after = Get-Shot $prevRect
+            # Both sides of the shot, so a scroll that drifted while it was taken is not called still.
+            $restored = [Math]::Max((Get-ScrollDrift $prevScroll.pixels $back.pixels), (Get-ScrollDrift $prevScroll.pixels (Read-Scroll $prevScrollers).pixels))
+            # And back to where Tab left the page, so the new stop is photographed where it was brought into view.
+            Set-Scroll $prevScrollers $moved
+            $null = Wait-Scroll $prevScrollers
+            Start-Sleep -Milliseconds 150
+        }
+        $prev.shots = Get-RingShots $drift $restored $scrollTolerance
+        $prev.scrollMoved = Format-Drift $drift
+        $prev.scrollRestored = Format-Drift $restored
         $prev.ringPixels = Get-RingChange $prevShot $after $pad
-        # The pair kept for the agent to look at wherever no ring was measured.
-        if ($prev.ringPixels -lt [Math]::Max(20, $prev.perimeter / 2)) {
+        # The pair kept for the agent to look at wherever no ring was measured, or none could be.
+        if ($prev.ringPixels -lt [Math]::Max(20, $prev.perimeter / 2) -or $prev.shots -eq 'not comparable') {
             $n = $stops.Count - 1
             $prevShot.Save("C:\qa\keys\$tag-$n-focused.png", [System.Drawing.Imaging.ImageFormat]::Png)
             $after.Save("C:\qa\keys\$tag-$n-unfocused.png", [System.Drawing.Imaging.ImageFormat]::Png)
@@ -3135,10 +3235,15 @@ foreach ($i in 1..400) {
     if ($seen.ContainsKey($key)) { $closedOn = "$($f.Current.ControlType.ProgrammaticName -replace 'ControlType\.', '') '$($f.Current.Name)' [$($f.Current.AutomationId)]"; break }
     $seen[$key] = $true
     if (-not $firstKey) { $firstKey = $key }
+    # Where the stop is once any scroll Tab started has finished, and the scroll its focused shot is at.
+    $prevScrollers = Get-Scrollers $f
+    $prevScroll = Wait-Scroll $prevScrollers
+    $r = $f.Current.BoundingRectangle
     $stop = [ordered]@{
         id = "$($f.Current.AutomationId)"; name = "$($f.Current.Name)"; type = "$($f.Current.ControlType.ProgrammaticName -replace 'ControlType\.', '')"
         left = [int]$r.Left; top = [int]$r.Top; width = [int]$r.Width; height = [int]$r.Height
         ringPixels = -1; perimeter = [int](2 * ($r.Width + $r.Height)); repeats = 0
+        shots = ''; scrollMoved = 0; scrollRestored = -1
         scroll = $(if ($scroller) { try { [Math]::Round($scroller[0].GetCurrentPattern([System.Windows.Automation.ScrollPattern]::Pattern).Current.VerticalScrollPercent, 1) } catch { -1 } } else { -1 })
         parent = ($(try { [System.Windows.Automation.TreeWalker]::ControlViewWalker.GetParent($f).GetRuntimeId() -join '.' } catch { '' }))
     }
@@ -3234,6 +3339,25 @@ Start-Sleep -Seconds 8
 [ordered]@{ theme = $theme; set = $set } | ConvertTo-Json -Compress
 '@
 
+# A11Y-2 from a walk's stops: the stops with no ring, and the detail that says how the rings were read.
+# Not the satellite rows: the list re-sorts as the sky turns, so the shot after the focus moves can be of
+# another row, which has its own ring, and the two compare as no ring at all. Their ring is the stock
+# list's, and the crops kept show it. Nor a stop whose two shots are not comparable (#754): Tab scrolled
+# the page and it would not go back, so its pixels say nothing either way - it is named, and its crops
+# are kept for the judge. A stop measured again after its scroll was put back is named as well.
+function Get-FocusRingFindings {
+    param($Stops)
+    $Stops = @($Stops)
+    $measured = @($Stops | Where-Object { $_.ringPixels -ge 0 -and "$($_.shots)" -ne 'not comparable' -and -not ($_.type -eq 'ListItem' -and $_.name -like 'PRN *') })
+    $noRing = @($measured | Where-Object { $_.ringPixels -lt [Math]::Max(20, $_.perimeter / 2) } | ForEach-Object { "$($_.type) '$($_.name)' [$($_.id)] $($_.ringPixels)/$($_.perimeter)" })
+    $retaken = @($Stops | Where-Object { "$($_.shots)" -eq 'retaken' } | ForEach-Object { "$($_.type) '$($_.name)' ($($_.scrollMoved) px, ring $($_.ringPixels)/$($_.perimeter))" })
+    $apart = @($Stops | Where-Object { "$($_.shots)" -eq 'not comparable' } | ForEach-Object { "$($_.type) '$($_.name)' (moved $($_.scrollMoved) px, $($_.scrollRestored) px off after putting back; crops $($_.shot))" })
+    $detail = "no ring at: $($noRing -join '; ')"
+    if ($retaken.Count) { $detail += ". Tab scrolled the page, so the unfocused shot was retaken with the scroll put back, at: $($retaken -join '; ')" }
+    if ($apart.Count) { $detail += ". NOT COMPARABLE - the scroll would not go back, so no ring was measured; judge the crops kept, at: $($apart -join '; ')" }
+    [pscustomobject]@{ NoRing = $noRing; Retaken = $retaken; NotComparable = $apart; Detail = $detail }
+}
+
 function Test-KeyboardFocus {
     param($Vm, $Result)
     $pipe = Get-QaSimulatorPipe -Vm $Vm
@@ -3267,14 +3391,11 @@ function Test-KeyboardFocus {
             $all[$surface] = $k
             $stops = @($k.stops)
             Check $Result "[A11Y-1] $($surface): every control that takes the keyboard is reached by Tab" (@($k.missed).Count -eq 0 -and $stops.Count -gt 0) "$($stops.Count) stops, the cycle closing on $($k.closedOn); missed: $(@($k.missed) -join '; ')"
-            # Not the satellite rows: the list re-sorts as the sky turns, so the shot after the focus moves can be of
-            # another row, which has its own ring, and the two compare as no ring at all. Their ring is the stock
-            # list's, and the crops kept show it.
-            $noRing = @($stops | Where-Object { $_.ringPixels -ge 0 -and $_.ringPixels -lt [Math]::Max(20, $_.perimeter / 2) -and -not ($_.type -eq 'ListItem' -and $_.name -like 'PRN *') } | ForEach-Object { "$($_.type) '$($_.name)' [$($_.id)] $($_.ringPixels)/$($_.perimeter)" })
+            $rings = Get-FocusRingFindings $stops
             $swallowed = @($stops | Where-Object { $_.repeats -gt 0 } | ForEach-Object { "$($_.type) '$($_.name)' held the focus for $($_.repeats + 1) Tabs" })
             if ($k.unnamed -gt 0) { $swallowed += "$($k.unnamed) more Tabs landed on elements already seen" }
             Check $Result "[A11Y-1] $($surface): no stretch of Tab presses goes where UI Automation cannot say" ($swallowed.Count -eq 0) "$($k.tabs) Tabs in the cycle. $($swallowed -join '; ')"
-            Check $Result "[A11Y-2] $($surface): a focus ring is drawn at every stop" ($noRing.Count -eq 0) "no ring at: $($noRing -join '; ')"
+            Check $Result "[A11Y-2] $($surface): a focus ring is drawn at every stop" ($rings.NoRing.Count -eq 0) $rings.Detail
             # §9.10.2 answers the sky-plot markers' flag; their own size is the plot's business.
             $small = @($stops | Where-Object { $_.width -gt 0 -and ($_.width -lt 32 -or $_.height -lt 32) -and $_.name -notlike 'Satellite*' -and $_.name -notlike 'PRN*' -and -not ($switchReach -and $_.id -like '*Switch') } | ForEach-Object { "$($_.type) '$($_.name)' [$($_.id)] $($_.width)x$($_.height)" })
             Check $Result "[A11Y-5] $($surface): every focus stop is at least 32 x 32" ($small.Count -eq 0) "under 32: $($small -join '; ')"
@@ -3304,8 +3425,8 @@ function Test-KeyboardFocus {
             foreach ($surface in 'main', 'Overview', 'Satellites', 'Position', 'Timing', 'Holdover', 'Time', 'Status Registers', 'Diagnostics', 'Settings') {
                 $k = Invoke-UiStep $Vm "keys-$theme-$($surface -replace ' ', '')" "`$surface = '$surface'; `$theme = '$theme'" $keyboardStep
                 if ($k.error) { Check $Result "[A11Y-2] $theme, $surface" $false $k.error; continue }
-                $noRing = @(@($k.stops) | Where-Object { $_.ringPixels -ge 0 -and $_.ringPixels -lt [Math]::Max(20, $_.perimeter / 2) -and -not ($_.type -eq 'ListItem' -and $_.name -like 'PRN *') } | ForEach-Object { "$($_.type) '$($_.name)' [$($_.id)] $($_.ringPixels)/$($_.perimeter)" })
-                Check $Result "[A11Y-2] $($theme), $($surface): a focus ring is drawn at every stop" ($noRing.Count -eq 0 -and @($k.stops).Count -gt 0) "$(@($k.stops).Count) stops; no ring at: $($noRing -join '; ')"
+                $rings = Get-FocusRingFindings $k.stops
+                Check $Result "[A11Y-2] $($theme), $($surface): a focus ring is drawn at every stop" ($rings.NoRing.Count -eq 0 -and @($k.stops).Count -gt 0) "$(@($k.stops).Count) stops; $($rings.Detail)"
             }
         }
         $null = Invoke-UiStep $Vm 'keys-theme-light' "`$theme = 'light'" $keyThemeStep
