@@ -287,7 +287,50 @@ public sealed class ReadoutTile : Control
         GetTemplateChild(ReserveValueRunPart) is Run run ? run.Text?.Length ?? 0 : 0;
 
     /// <summary>
-    /// Places the caption on the decimal axis, once every child has its final size.
+    /// Asks for the width the label and caption need to sit centred on the decimal axis without
+    /// crossing the tile's edges (#753).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The label and caption are centred on the axis, and the axis is not the middle of the tile, so a
+    /// text wider than the room on one side of it used to reach past the tile's edge by a render
+    /// transform nothing outside the tile could see. At 100 % text that was a few pixels into the
+    /// spacing between readouts; at 200 % it ate a card's padding on one side and moved the main
+    /// window's "satellites" towards the window's edge. A tile that asks for the width it draws in is
+    /// one its parent can lay out honestly, whatever the text size.
+    /// </para>
+    /// <para>
+    /// <b>Computed from the children's desired sizes, in the same pass that produced them</b>, which is
+    /// the ordinary shape of a measure override and invalidates nothing. None of the inputs depends on
+    /// the width returned here - the reserve, the point and the label are measured unconstrained by it -
+    /// so there is no loop to converge, unlike the margin the comment in <see cref="AlignToAxis"/>
+    /// records. Never more than the parent offers: when the room is not there, arrange clamps the text
+    /// inside the tile instead and centres it on the axis only as far as it fits.
+    /// </para>
+    /// </remarks>
+    protected override Size MeasureOverride(Size availableSize)
+    {
+        Size desired = base.MeasureOverride(availableSize);
+
+        if (!TryReadAxis(arranged: false, out AxisParts parts))
+        {
+            return desired;
+        }
+
+        double inset = ReadoutAxisMath.Inset(parts.Axis, parts.LabelWidth, parts.CaptionWidth);
+        double needed = ReadoutAxisMath.Width(parts.ValueWidth, parts.Axis, inset, parts.LabelWidth, parts.CaptionWidth);
+
+        if (needed > availableSize.Width)
+        {
+            needed = availableSize.Width;
+        }
+
+        return new Size(Math.Max(desired.Width, needed), desired.Height);
+    }
+
+    /// <summary>
+    /// Places the label, the value and the caption on the decimal axis, once every child has its
+    /// final size.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -302,65 +345,101 @@ public sealed class ReadoutTile : Control
     /// The offset is applied as a render transform, which runs after arrange and changes no desired
     /// size — so this cannot invalidate the layout that produced its inputs, and needs no guard. An
     /// earlier version applied it as a margin so it would participate in layout; the comment on the
-    /// transform in <see cref="AlignLabelToAxis"/> records why that could not stand.
+    /// transform in <see cref="AlignToAxis"/> records why that could not stand. The room the
+    /// transform needs is asked for in <see cref="MeasureOverride"/> instead (#753).
     /// </para>
     /// </remarks>
     protected override Size ArrangeOverride(Size finalSize)
     {
         Size arranged = base.ArrangeOverride(finalSize);
 
-        AlignLabelToAxis();
+        AlignToAxis();
 
         return arranged;
     }
 
-    private void AlignLabelToAxis()
+    /// <summary>The widths the axis arithmetic reads, from one moment of one layout pass.</summary>
+    /// <param name="Axis">The axis, from the value's left edge.</param>
+    /// <param name="ValueWidth">The value's own width, not the width it is stretched to.</param>
+    /// <param name="LabelWidth">The label's width; zero when it has none.</param>
+    /// <param name="CaptionWidth">The caption's width; zero when it is collapsed.</param>
+    /// <param name="TileWidth">The width the value grid is stretched to, which is the tile's.</param>
+    private readonly record struct AxisParts(
+        double Axis, double ValueWidth, double LabelWidth, double CaptionWidth, double TileWidth);
+
+    /// <summary>
+    /// Reads the widths the axis is computed from: desired sizes during measure, arranged sizes
+    /// during arrange.
+    /// </summary>
+    /// <remarks>
+    /// The value's width is its desired width in both, because the grid is stretched across the tile
+    /// and its arranged width is the tile's rather than its own.
+    /// </remarks>
+    private bool TryReadAxis(bool arranged, out AxisParts parts)
     {
+        parts = default;
+
         if (GetTemplateChild(LabelTextPart) is not FrameworkElement label ||
             GetTemplateChild(ValueGridPart) is not FrameworkElement grid ||
             GetTemplateChild(ReserveTextPart) is not FrameworkElement reserve)
         {
-            return;
+            return false;
         }
 
-        if (reserve.ActualWidth <= 0 || grid.ActualWidth <= 0)
+        double reserveWidth = arranged ? reserve.ActualWidth : reserve.DesiredSize.Width;
+        double gridWidth = arranged ? grid.ActualWidth : grid.DesiredSize.Width;
+
+        if (reserveWidth <= 0 || gridWidth <= 0)
         {
-            return;
+            return false;
         }
 
         // With a fractional part the axis is the MIDDLE of the decimal point, not the boundary
         // beside it — at 56 px that glyph is wide enough for the difference to read as an error.
+        //
+        // WITHOUT A DECIMAL POINT THE ANCHOR IS THE ONES DIGIT, which is the same rule: the column
+        // the eye returns to, and the one right-alignment holds still. Centring on the middle of the
+        // reserved column instead put the caption half a digit left of the number on every count,
+        // because the reserve is as wide as the largest value — two digits for "satellites" — while
+        // the usual reading is one, right-aligned into its right half. Reported as "satellites isn't
+        // centered", and it was. ReadoutAxisMath.Axis holds both rules.
         double point = GetTemplateChild(PointTextPart) is FrameworkElement separator
-            ? separator.ActualWidth
+            ? (arranged ? separator.ActualWidth : separator.DesiredSize.Width)
             : 0;
 
-        double axis;
-        if (point > 0)
-        {
-            axis = reserve.ActualWidth + (point / 2);
-        }
-        else
-        {
-            // WITHOUT A DECIMAL POINT THE ANCHOR IS THE ONES DIGIT, which is the same rule: the
-            // column the eye returns to, and the one right-alignment holds still.
-            //
-            // Centring on the middle of the reserved column instead put the caption half a digit
-            // left of the number on every count, because the reserve is as wide as the largest
-            // value — two digits for "satellites" — while the usual reading is one, right-aligned
-            // into its right half. Reported as "satellites isn't centered", and it was.
-            //
-            // Tabular figures are what make this arithmetic exact rather than approximate: every
-            // digit shares one advance (§9.5.3 rule 1), so a character's width is the reserve's
-            // width over its length. The sign, when reserved, is assumed to share that advance —
-            // true in Segoe UI Variable's tabular set, and a fraction of a pixel out if it ever
-            // is not.
-            int characters = ReserveLength();
-            double character = characters > 0 ? reserve.ActualWidth / characters : 0;
+        double captionWidth = GetTemplateChild(CaptionTextPart) is FrameworkElement caption
+            ? (arranged ? caption.ActualWidth : caption.DesiredSize.Width)
+            : 0;
 
-            axis = reserve.ActualWidth - (character / 2);
+        parts = new AxisParts(
+            ReadoutAxisMath.Axis(reserveWidth, point, ReserveLength()),
+            grid.DesiredSize.Width,
+            arranged ? label.ActualWidth : label.DesiredSize.Width,
+            captionWidth,
+            gridWidth);
+
+        return true;
+    }
+
+    private void AlignToAxis()
+    {
+        if (!TryReadAxis(arranged: true, out AxisParts parts) ||
+            GetTemplateChild(LabelTextPart) is not FrameworkElement label ||
+            GetTemplateChild(ValueGridPart) is not FrameworkElement grid)
+        {
+            return;
         }
 
-        double offset = axis - (grid.ActualWidth / 2);
+        // The value starts as far right as the widest centred text needs, which MeasureOverride has
+        // already made room for; zero in every case where the texts fit, so the value only moves for a
+        // label wider than twice the room left of the axis - "satellites" at large text sizes. That
+        // inset depends on the texts and the reserve, never on the reading, so the point stays still.
+        double inset = ReadoutAxisMath.ValueOffset(
+            ReadoutAxisMath.Inset(parts.Axis, parts.LabelWidth, parts.CaptionWidth),
+            parts.ValueWidth,
+            parts.TileWidth);
+
+        double axis = inset + parts.Axis;
 
         // A RENDER TRANSFORM, NOT A MARGIN, and this is the whole correctness story.
         //
@@ -371,28 +450,30 @@ public sealed class ReadoutTile : Control
         // back into the layout that produced it was fragile even while it appeared to work.
         //
         // A transform is applied after arrange and changes no desired size, so there is no loop to
-        // converge. The caption may now overhang its tile, which is harmless: §9.6's XXL spacing
-        // between readouts is far wider than half a digit.
-        if (label.RenderTransform is not TranslateTransform shift)
-        {
-            shift = new TranslateTransform();
-            label.RenderTransform = shift;
-        }
+        // converge. The text used to be free to overhang the tile; since #753 TextOffset clamps it
+        // inside, and MeasureOverride asks for the width that lets it be centred on the axis as well.
+        Shift(grid, inset);
+        Shift(label, ReadoutAxisMath.TextOffset(axis, parts.LabelWidth, parts.TileWidth));
 
-        shift.X = offset;
-
-        // The caption under the value hangs from the same axis, by the same transform and for the
+        // The caption under the value hangs from the same axis, by the same arithmetic and for the
         // same reason (#716).
         if (GetTemplateChild(CaptionTextPart) is FrameworkElement caption)
         {
-            if (caption.RenderTransform is not TranslateTransform captionShift)
-            {
-                captionShift = new TranslateTransform();
-                caption.RenderTransform = captionShift;
-            }
-
-            captionShift.X = offset;
+            Shift(caption, ReadoutAxisMath.TextOffset(axis, parts.CaptionWidth, parts.TileWidth));
         }
+    }
+
+    /// <summary>Moves an element sideways by a render transform, creating it the first time.</summary>
+    /// <remarks>Set instantly and never animated: §9.13 item 9 forbids animating a readout.</remarks>
+    private static void Shift(UIElement element, double x)
+    {
+        if (element.RenderTransform is not TranslateTransform shift)
+        {
+            shift = new TranslateTransform();
+            element.RenderTransform = shift;
+        }
+
+        shift.X = x;
     }
 
     /// <summary>Resolves a theme brush, or null when the key is absent.</summary>

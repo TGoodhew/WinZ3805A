@@ -197,6 +197,9 @@
     <Compile Include="..\..\src\WinZ3805A\ViewModels\LoadingIndicator.cs" Link="ViewModels\LoadingIndicator.cs" />
     <Compile Include="..\..\src\WinZ3805A\Controls\CardColumnMath.cs" Link="Controls\CardColumnMath.cs" />
     <Compile Include="..\..\src\WinZ3805A\Controls\FlowMath.cs" Link="Controls\FlowMath.cs" />
+    <!-- #753's axis arithmetic: where ReadoutTile's label and caption land against the tile's edges,
+         split out of the control because the control speaks WinUI and the sums do not. -->
+    <Compile Include="..\..\src\WinZ3805A\Controls\ReadoutAxisMath.cs" Link="Controls\ReadoutAxisMath.cs" />
 
     <!-- §10.7's sigma. A deviation is exactly the kind of figure that looks plausible while being
          wrong by a factor of the sample count, and the caption naming its window is a §9.11 honesty
