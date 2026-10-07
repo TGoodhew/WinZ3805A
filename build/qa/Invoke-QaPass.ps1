@@ -4501,6 +4501,9 @@ function Get-ScreenNumbers {
                     $n.prn = if ($group[$tracked].Count) { $group[$tracked][0].value } else { $n.value }
                     $group[$tracked] += $n
                 }
+                # The 1 PPS time interval wanders by tenths of a nanosecond between the app's read and
+                # the screen's: 1.4.0's pass saw -1.4 and -1.5 in the app against -1.6 on the screen.
+                elseif ($column -match '1PPS TI') { $n.field = 'ti' }
                 $n
             }
         }
@@ -4597,8 +4600,12 @@ function Test-ScreenFields {
             }
             $numbers = @(Get-ScreenNumbers (Get-Content $screenPath -Raw))
             $sky = Get-ShownSky $shownText
+            # The app's own 1 PPS readings, "1 PPS TI: -1.4 ns": the screen's figure must be within a
+            # nanosecond of one of them - room for the wander, none for a wrong sign, unit or field.
+            $tiShown = @([regex]::Matches(($shownText -replace [char]0x2212, '-'), '1 PPS TI: ([-+]?\d+(\.\d+)?) ns') | ForEach-Object { [double]$_.Groups[1].Value })
             $missing = @($numbers | Where-Object {
-                    if ($_.field) { -not (Test-ShownSatellite $_ $sky) } else { -not (Test-ShownValue $_.value $shown) }
+                    if ($_.field -eq 'ti') { $v = $_.value; -not @($tiShown | Where-Object { [Math]::Abs($_ - $v) -le 1 }).Count }
+                    elseif ($_.field) { -not (Test-ShownSatellite $_ $sky) } else { -not (Test-ShownValue $_.value $shown) }
                 } | Where-Object {
                 $n = $_; -not ($allowed | Where-Object { $n.line -match $_.pattern })
             })
