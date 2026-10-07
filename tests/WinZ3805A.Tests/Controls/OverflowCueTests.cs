@@ -98,15 +98,29 @@ public class OverflowCueTests
     }
 
     /// <summary>
-    /// Every satellite in view, but the buttons below are not: the dialog still scrolls, and the
-    /// sentence keeps its shape so that its height cannot change the view it is describing.
+    /// Every satellite in view, but the buttons below are not: the dialog still scrolls, so it says so,
+    /// without claiming there are more satellites than the 32 on screen (the Win11 VM's 150 % and
+    /// 200 % Medium photographs, 7 Oct 2026, read "Showing 32 of 32 satellites. Scroll for more.").
     /// </summary>
     [Fact]
-    public void EverySatelliteInViewStillSaysTheDialogScrolls()
+    public void EverySatelliteInViewSaysOnlyThatTheDialogScrolls()
     {
-        Assert.Equal(
-            "Showing 32 of 32 satellites. Scroll for more.",
-            OverflowCue.Describe(overflows: true, inView: 32, total: 32));
+        Assert.Equal("Scroll for more.", OverflowCue.Describe(overflows: true, inView: 32, total: 32));
+    }
+
+    /// <summary>
+    /// The shorter sentence is the longer one's own ending, so it can never wrap onto more lines and
+    /// shrink the view it describes: the switch cannot flip back and forth at the boundary.
+    /// </summary>
+    [Fact]
+    public void TheShortSentenceIsTheLongOnesEnding()
+    {
+        string? whole = OverflowCue.Describe(overflows: true, inView: 31, total: 32);
+        string? ending = OverflowCue.Describe(overflows: true, inView: 32, total: 32);
+
+        Assert.NotNull(whole);
+        Assert.NotNull(ending);
+        Assert.EndsWith(" " + ending, whole, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -139,10 +153,8 @@ public class OverflowCueTests
     }
 
     [Fact]
-    public void TheCountCannotExceedTheTotal()
+    public void ACountPastTheTotalReadsAsEverySatelliteInView()
     {
-        Assert.Equal(
-            "Showing 32 of 32 satellites. Scroll for more.",
-            OverflowCue.Describe(overflows: true, inView: 40, total: 32));
+        Assert.Equal("Scroll for more.", OverflowCue.Describe(overflows: true, inView: 40, total: 32));
     }
 }
