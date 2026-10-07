@@ -140,6 +140,37 @@ function Get-PassVerdict {
     switch ($LASTEXITCODE) { 0 { 'PASS' } 3 { 'AWAITING JUDGEMENT' } default { "FAIL (exit $LASTEXITCODE)" } }
 }
 
+# A run's report as GitHub will take it, which is at most 65,536 characters a body: 1.4.0's merged
+# report was 155,540 and its QA-run issue was refused (6 Oct 2026). The summary - everything before
+# the first per-scenario <details> - goes where the caller puts it; the details come back as chunks
+# under 60,000 characters each, split between whole <details> blocks, for comments of their own.
+function Split-Report {
+    param([string]$Path)
+    $text = Get-Content $Path -Raw
+    $at = $text.IndexOf('<details>')
+    $summary = if ($at -ge 0) { $text.Substring(0, $at).TrimEnd() } else { $text.TrimEnd() }
+    $chunks = New-Object System.Collections.Generic.List[string]
+    if ($at -ge 0) {
+        $current = ''
+        foreach ($block in [regex]::Split($text.Substring($at), '(?=<details>)') | Where-Object { $_.Trim() }) {
+            if ($current.Length + $block.Length -gt 60000 -and $current) { $chunks.Add($current.TrimEnd()); $current = '' }
+            $current += $block
+        }
+        if ($current.Trim()) { $chunks.Add($current.TrimEnd()) }
+    }
+    [pscustomobject]@{ Summary = $summary; Details = @($chunks) }
+}
+
+# The details as numbered comments on an issue.
+function Add-ReportDetails {
+    param([int]$Issue, $Details, [string]$What)
+    for ($i = 0; $i -lt $Details.Count; $i++) {
+        $file = Join-Path $home_ "details-$What-$($i + 1).md"
+        @("### $What, scenario by scenario ($($i + 1) of $($Details.Count))", '', $Details[$i]) | Set-Content $file -Encoding UTF8
+        gh issue comment $Issue --repo TGoodhew/WinZ3805A --body-file $file *>> $logPath
+    }
+}
+
 function Get-SoakRate {
     param([string]$OutDir)
     $results = Get-Content (Join-Path $OutDir 'results.json') -Raw | ConvertFrom-Json
@@ -204,6 +235,9 @@ while ($true) {
         'issue' {
             if (-not $state.issue) {
                 $body = Join-Path $home_ 'issue.md'
+                $report = Split-Report (Join-Path $home_ 'dry-run-pass\report.md')
+                # Scenarios re-run after a first-attempt failure, when the run says so (reruns.md).
+                $reruns = Join-Path $home_ 'dry-run-pass\reruns.md'
                 @(
                     "The release QA for **$tag**, built from PR #$($state.bumpPr) (dry run $($state.dryRun)). Run by ``build/qa/Invoke-Release.ps1``."
                     ''
@@ -211,7 +245,11 @@ while ($true) {
                     ''
                     '## The pass on the signed dry run'
                     ''
-                    (Get-Content (Join-Path $home_ 'dry-run-pass\report.md') -Raw)
+                    $report.Summary
+                    ''
+                    $(if (Test-Path $reruns) { (Get-Content $reruns -Raw) -replace '^# ', '### ' })
+                    ''
+                    "Every scenario's checks follow in the comments below ($($report.Details.Count))."
                     ''
                     '## Owed after the tag'
                     '- [ ] The pass on the published zips, with `release-assets`.'
@@ -219,7 +257,9 @@ while ($true) {
                     '🤖 Generated with [Claude Code](https://claude.com/claude-code)'
                 ) | Set-Content $body -Encoding UTF8
                 $url = gh issue create --repo TGoodhew/WinZ3805A --title "QA run: $tag" --label documentation --body-file $body
-                $state.issue = [int]($url -replace '.*/', '')
+                if ($LASTEXITCODE -ne 0 -or -not $url) { Stop-At $state 'failed' "the QA-run issue was not created: $url" }
+                $state.issue = [int]($url -replace '.*/', ''); Save-State $state
+                Add-ReportDetails $state.issue $report.Details 'The dry run''s pass'
                 Say "QA-run issue #$($state.issue)"
             }
             $state.stage = 'go'
@@ -264,14 +304,18 @@ while ($true) {
         }
         'close' {
             $comment = Join-Path $home_ 'close.md'
+            $report = Split-Report (Join-Path $home_ 'published-pass\report.md')
             @(
                 "## The pass on the published $tag zips: $($state.publishedVerdict)"
                 ''
-                (Get-Content (Join-Path $home_ 'published-pass\report.md') -Raw)
+                $report.Summary
+                ''
+                "Every scenario's checks follow in the next comments ($($report.Details.Count))."
                 ''
                 '🤖 Generated with [Claude Code](https://claude.com/claude-code)'
             ) | Set-Content $comment -Encoding UTF8
             gh issue comment $state.issue --repo TGoodhew/WinZ3805A --body-file $comment *>> $logPath
+            Add-ReportDetails $state.issue $report.Details 'The published pass'
             gh issue close $state.issue --repo TGoodhew/WinZ3805A *>> $logPath
             $state.status = 'done'; Save-State $state
             Say "$tag released and QA'd; #$($state.issue) closed"
