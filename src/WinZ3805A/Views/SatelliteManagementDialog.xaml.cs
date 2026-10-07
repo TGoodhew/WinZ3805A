@@ -193,7 +193,7 @@ public sealed partial class SatelliteManagementDialog : ContentDialog
         }
     }
 
-    /// <summary>How many PRN buttons are wholly inside the scrolling area's view.</summary>
+    /// <summary>How many PRN buttons are at least half inside the scrolling area's view.</summary>
     private int CountPrnsInView(double viewport)
     {
         List<(double Top, double Height)> items = new(_choices.Count);
