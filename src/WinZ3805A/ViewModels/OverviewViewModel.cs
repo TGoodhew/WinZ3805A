@@ -347,6 +347,37 @@ public sealed class OverviewViewModel : INotifyPropertyChanged, IDisposable
     public (string Value, string Unit) HoldoverThreshold =>
         ReadoutFormatter.Seconds(Connected(Status?.HoldThresholdSeconds), decimalPlaces: 3);
 
+    /// <summary>
+    /// Whether this family can ever fill the Predicted and Threshold rows (#751).
+    /// </summary>
+    /// <remarks>
+    /// The rows go, label and value together, when it cannot — the Position page's rule for its
+    /// fix-quality rows: a labelled blank reads as a field that failed to load. Duration is not
+    /// covered, because the mode answers it ("Not in holdover") whatever the family predicts.
+    /// </remarks>
+    public bool HoldoverUncertaintyReported => Driver.Reports(ReceiverReading.HoldoverUncertainty);
+
+    /// <summary>
+    /// The sentence that stands in for the Predicted and Threshold rows, or <see langword="null"/>
+    /// when there is nothing to say (#751).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A UCCM's card showed a bare dash beside each for as long as it was connected, while the
+    /// Health monitor card below it explained its own absence in words. §9.11's dash is a field that
+    /// has not arrived yet, and these never would.
+    /// </para>
+    /// <para>
+    /// <b>Null for a family that refuses holdover altogether</b>, because the page already replaces
+    /// the whole card with one sentence for that; a second one under it, about two rows that are no
+    /// longer shown, would be the same statement twice.
+    /// </para>
+    /// </remarks>
+    public string? HoldoverUncertaintyUnavailableText =>
+        Driver.Reports(ReceiverReading.Holdover) && !HoldoverUncertaintyReported
+            ? NotReported("a predicted holdover uncertainty or an uncertainty threshold")
+            : null;
+
     /// <summary>How long the receiver has been in holdover, or why that is not a number.</summary>
     /// <remarks>
     /// Never blank. "Not in holdover" is the useful answer for a receiver that is locked, and it is

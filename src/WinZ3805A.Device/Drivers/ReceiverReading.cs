@@ -173,4 +173,27 @@ public enum ReceiverReading
     /// interchangeable. NMEA carries it in <c>GBS</c>.
     /// </remarks>
     FixIntegrity,
+
+    // ---- The part of holdover a receiver predicts rather than merely enters (#751) ----------------
+
+    /// <summary>
+    /// The receiver's own holdover uncertainty figures (§10.4, §10.8): the predicted 24-hour
+    /// uncertainty, the present time error while in holdover, and the threshold the prediction is
+    /// compared against.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Narrower than <see cref="Holdover"/>, and separate from it on purpose.</b> That reading is
+    /// holdover in every form, including whether the receiver is <i>in</i> it — which a UCCM reports
+    /// perfectly well through its time code while having no prediction to offer at all. Declaring
+    /// the whole of <see cref="Holdover"/> absent for such a family would hide a state it reports to
+    /// describe figures it does not; leaving the figures under it drew two em dashes on the Overview
+    /// card that §9.11 reads as "not arrived yet" and that would never arrive.
+    /// </para>
+    /// <para>
+    /// A family that refuses <see cref="Holdover"/> refuses this too: there is no prediction about
+    /// an oscillator that is not there.
+    /// </para>
+    /// </remarks>
+    HoldoverUncertainty,
 }

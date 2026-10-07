@@ -203,7 +203,8 @@
                                 <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
 
-                            <TextBlock Grid.Row="0" Grid.Column="0"
+                            <TextBlock x:Name="HoldoverPredictedLabel"
+                                       Grid.Row="0" Grid.Column="0"
                                        Style="{ThemeResource WzBodyTextStyle}"
                                        Foreground="{ThemeResource WzTextSecondaryBrush}"
                                        Text="Predicted (24 h)" />
@@ -212,7 +213,8 @@
                                        Grid.Row="0" Grid.Column="1"
                                        Style="{ThemeResource WzMonoTextStyle}" />
 
-                            <TextBlock Grid.Row="1" Grid.Column="0"
+                            <TextBlock x:Name="HoldoverThresholdLabel"
+                                       Grid.Row="1" Grid.Column="0"
                                        Style="{ThemeResource WzBodyTextStyle}"
                                        Foreground="{ThemeResource WzTextSecondaryBrush}"
                                        Text="Threshold" />
@@ -229,6 +231,19 @@
                                        Grid.Row="2" Grid.Column="1"
                                        Style="{ThemeResource WzBodyTextStyle}" />
                         </Grid>
+
+                        <!--
+                            #751. A family that knows whether it is in holdover but predicts nothing
+                            about it - a UCCM - loses the Predicted and Threshold rows, label and
+                            value together, and this says why. Duration stays: the mode answers it.
+                        -->
+                        <TextBlock x:Name="HoldoverUncertaintyUnavailableText"
+                                   Style="{ThemeResource WzCaptionTextStyle}"
+                                   Foreground="{ThemeResource WzTextSecondaryBrush}"
+                                   MaxWidth="{ThemeResource WzProseMaxWidth}"
+                                   HorizontalAlignment="Left"
+                                   TextWrapping="Wrap"
+                                   Visibility="Collapsed" />
                     </StackPanel>
                 </Border>
 

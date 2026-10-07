@@ -3,6 +3,7 @@
 using WinZ3805A.Controls;
 using WinZ3805A.Device.Drivers;
 using WinZ3805A.Device.Drivers.Nmea;
+using WinZ3805A.Device.Drivers.Uccm;
 using WinZ3805A.Device.Models;
 using WinZ3805A.Services;
 using WinZ3805A.ViewModels;
@@ -482,6 +483,85 @@ public sealed class OverviewViewModelTests
 
         (OverviewViewModel smartClock, _) = Connected();
         Assert.False(smartClock.NoMeritsReported);
+    }
+
+    /// <summary>A UCCM with the same readings pushed in, for the holdover card (#751).</summary>
+    /// <remarks>
+    /// The real <c>UccmDriver</c>, for the reason <see cref="Talker"/> gives, and with a status that
+    /// carries a prediction and a threshold anyway — so the assertions below are about what the
+    /// family can report rather than about what happened to be in the store.
+    /// </remarks>
+    private static OverviewViewModel Uccm()
+    {
+        FakeTimeProvider clock = new(Captured);
+        ReceiverStateStore store = new(clock);
+
+        store.UpdateFull(Status());
+        // "1" is what LED:GPSL? answered throughout every sitting, locked (Uccm/Captures/).
+        store.UpdateFast("1", tfom: 2, ffom: 0, onePpsTiNanoseconds: 20.7,
+            oscillatorControl: 4.2, trackedCount: 7);
+
+        return new OverviewViewModel(store, new UccmDriver(clock))
+        {
+            Connection = ConnectionStatus.Connected,
+        };
+    }
+
+    /// <summary>
+    /// A family that cannot predict holdover says so in words instead of two dashes (#751).
+    /// </summary>
+    /// <remarks>
+    /// Found judging 1.4.0's release pass: a UCCM-P's card showed a bare dash beside Predicted (24 h)
+    /// and Threshold for as long as it was connected, while the Health monitor card below it gave its
+    /// own absence in exactly this sentence's form. The dash is §9.11's "not arrived yet".
+    /// </remarks>
+    [Fact]
+    public void AUccmSaysItReportsNoHoldoverPredictionRatherThanShowingDashes()
+    {
+        OverviewViewModel uccm = Uccm();
+
+        Assert.False(uccm.HoldoverUncertaintyReported);
+        Assert.Equal(
+            "This receiver does not report a predicted holdover uncertainty or an uncertainty threshold. "
+            + "The UCCM protocol does not carry it.",
+            uccm.HoldoverUncertaintyUnavailableText);
+    }
+
+    /// <summary>The Duration row is not part of it, because the mode answers it (#751).</summary>
+    [Fact]
+    public void AUccmKeepsTheDurationRow()
+    {
+        OverviewViewModel uccm = Uccm();
+
+        Assert.Equal(ReceiverMode.Locked, uccm.Mode);
+        Assert.Equal("Not in holdover", uccm.HoldoverDuration);
+    }
+
+    /// <summary>A SmartClock's card is unchanged: both rows, and no sentence.</summary>
+    [Fact]
+    public void ASmartClockKeepsBothHoldoverRows()
+    {
+        (OverviewViewModel smartClock, _) = Connected(Status());
+
+        Assert.True(smartClock.HoldoverUncertaintyReported);
+        Assert.Null(smartClock.HoldoverUncertaintyUnavailableText);
+        Assert.Equal(("2.7", "µs"), smartClock.HoldoverPredicted);
+    }
+
+    /// <summary>
+    /// A talker gets the card's own sentence and not a second one under it (#751).
+    /// </summary>
+    /// <remarks>
+    /// The page replaces the whole card for a family with no holdover at all. A second sentence about
+    /// two rows that are already gone with the rest would say the same thing twice.
+    /// </remarks>
+    [Fact]
+    public void ATalkerGetsNoSecondHoldoverSentence()
+    {
+        OverviewViewModel talker = Talker();
+
+        Assert.False(talker.HoldoverUncertaintyReported);
+        Assert.Null(talker.HoldoverUncertaintyUnavailableText);
     }
 
     /// <remarks>

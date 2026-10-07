@@ -355,9 +355,18 @@ public sealed class UccmDriver(TimeProvider timeProvider) : IReceiverDriver
     /// covers holdover "in every form" — including whether the receiver is <i>in</i> it, which the
     /// driver can now determine from the time code rather than from that query (see
     /// <see cref="UccmTimeCode.InHoldover"/>). Declaring the whole reading absent would hide a state
-    /// the module reports perfectly well, to describe a duration it does not. The duration, the
-    /// uncertainties and the threshold are absent fields within a reading that is present, which is
-    /// what §11.1's em dash is for.
+    /// the module reports perfectly well, to describe a duration it does not. The duration is an
+    /// absent field within a reading that is present, which is what §11.1's em dash is for.
+    /// </para>
+    /// <para>
+    /// <b>The uncertainties and the threshold were too, until #751, and they are now their own
+    /// reading.</b> The em dash promises a value in flight, and for these none is: no query for any
+    /// of them is in <see cref="UccmCommands"/>, so the driver cannot ask — the reasoning that put
+    /// <see cref="ReceiverReading.GpsEngineIdentity"/> here — and the status reply carries no such
+    /// field in any state a sitting has captured, the fourteen minutes of genuine holdover on
+    /// 13 Sep 2026 included. So <see cref="ReceiverReading.HoldoverUncertainty"/> is declared
+    /// absent while <see cref="ReceiverReading.Holdover"/> stays present, and the Overview card says
+    /// so in words where it drew two dashes, keeping the Duration row, which the mode answers.
     /// </para>
     /// </remarks>
     public bool Reports(ReceiverReading reading) => reading switch
@@ -387,6 +396,10 @@ public sealed class UccmDriver(TimeProvider timeProvider) : IReceiverDriver
         // TheErrorQueueQueryIsCatalogued holds the two to. Until this arm existed Diagnostics said
         // "No errors." about a queue this driver cannot see.
         ReceiverReading.ErrorQueue => false,
+
+        // No query in UccmCommands and no field on the status reply, locked or in holdover (#751).
+        // Holdover itself stays present: the time code says whether the module is in it.
+        ReceiverReading.HoldoverUncertainty => false,
 
         _ => true,
     };

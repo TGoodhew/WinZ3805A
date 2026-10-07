@@ -96,6 +96,7 @@ public sealed class ReceiverReadingTests
     [InlineData(ReceiverReading.OnePpsTimeInterval)]
     [InlineData(ReceiverReading.OscillatorControl)]
     [InlineData(ReceiverReading.Holdover)]
+    [InlineData(ReceiverReading.HoldoverUncertainty)]
     [InlineData(ReceiverReading.AntennaDelay)]
     [InlineData(ReceiverReading.OutputValidity)]
     [InlineData(ReceiverReading.DeviceIdentity)]
@@ -128,6 +129,12 @@ public sealed class ReceiverReadingTests
     /// The rest staying <c>true</c> is still pinned here, for the same reason as before: so nobody
     /// completes the switch on the way past with entries no sitting supports.
     /// </para>
+    /// <para>
+    /// <b>One more at #751, and it is the narrow half of holdover rather than holdover.</b> The
+    /// prediction and the threshold have no query in <c>UccmCommands</c> and no field on any status
+    /// reply, the holdover sitting of 13 Sep 2026 included — while whether the module is in holdover
+    /// is read from its time code, which is why <see cref="ReceiverReading.Holdover"/> stays present.
+    /// </para>
     /// </remarks>
     [Fact]
     public void AUccmRefusesOnlyTheReadingsMeasuredToBeAbsent()
@@ -135,8 +142,8 @@ public sealed class ReceiverReadingTests
         IReceiverDriver driver = new UccmDriver(new FakeTimeProvider(Whenever));
 
         // :DIAG:IDEN:GPS? is a SmartClock node and :SYST:ERR? is not in UccmCommands either - this
-        // family answers an error in place of the reply (#748); the other four never answered in
-        // any sitting.
+        // family answers an error in place of the reply (#748); the next four never answered in any
+        // sitting; and the holdover uncertainty has no query and no field on any status reply (#751).
         ReceiverReading[] absent =
         [
             ReceiverReading.GpsEngineIdentity,
@@ -145,6 +152,7 @@ public sealed class ReceiverReadingTests
             ReceiverReading.TimeCodeFormat,
             ReceiverReading.HealthMonitor,
             ReceiverReading.ErrorQueue,
+            ReceiverReading.HoldoverUncertainty,
         ];
 
         foreach (ReceiverReading reading in absent)
