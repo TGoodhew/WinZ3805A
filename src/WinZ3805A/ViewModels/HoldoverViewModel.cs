@@ -163,10 +163,38 @@ public sealed class HoldoverViewModel : INotifyPropertyChanged, IDisposable
     /// the form the time since power-up already uses on this page, and the Overview page's Duration
     /// row uses the same one.
     /// </para>
+    /// <para>
+    /// <b>A family that does not count its holdover gets the Overview card's rule instead (#751).</b>
+    /// A UCCM-P refuses its duration query in every state, so this row was a dash for as long as one
+    /// was connected. "Not in holdover" is the mode's answer and true whatever the family counts, so
+    /// it is given; in holdover the row is taken away (<see cref="DurationShown"/>) and
+    /// <see cref="StateAbsentText"/> says why. A SmartClock is unchanged, dash included, because its
+    /// screen does print the count.
+    /// </para>
     /// </remarks>
-    public string DurationText => Status?.HoldoverDuration is TimeSpan duration
-        ? Staleness.DescribeDuration(duration)
-        : ReadoutFormatter.NoValue;
+    public string DurationText
+    {
+        get
+        {
+            if (Status?.HoldoverDuration is TimeSpan duration)
+            {
+                return Staleness.DescribeDuration(duration);
+            }
+
+            return !DurationReported && Connection == ConnectionStatus.Connected && !IsInHoldover
+                ? "Not in holdover"
+                : ReadoutFormatter.NoValue;
+        }
+    }
+
+    /// <summary>Whether this family counts how long it has been in holdover (#751).</summary>
+    public bool DurationReported => Driver.Reports(ReceiverReading.HoldoverDuration);
+
+    /// <summary>
+    /// Whether the Duration row has anything to show: always for a family that counts, and only
+    /// outside holdover for one that does not (#751).
+    /// </summary>
+    public bool DurationShown => DurationReported || !IsInHoldover;
 
     /// <summary>
     /// Why the receiver is waiting rather than recovering.
@@ -201,23 +229,47 @@ public sealed class HoldoverViewModel : INotifyPropertyChanged, IDisposable
     /// </summary>
     /// <remarks>
     /// When it cannot, the page takes the rows away, label and value together, and puts
-    /// <see cref="UncertaintyUnavailableText"/> and <see cref="ThresholdUnavailableText"/> in their
-    /// place. Duration and the waiting reason are not covered: they are about the holdover itself,
-    /// which such a family may report perfectly well.
+    /// <see cref="StateAbsentText"/> and <see cref="ThresholdUnavailableText"/> in their place. The
+    /// duration has its own reading, <see cref="DurationReported"/>, and the waiting reason is the
+    /// receiver's own mode detail.
     /// </remarks>
     public bool UncertaintyReported => Driver.Reports(ReceiverReading.HoldoverUncertainty);
 
     /// <summary>
-    /// The sentence on the State card in place of the predicted uncertainty and the present time
-    /// error, or <see langword="null"/> when the family reports them (#751).
+    /// The sentence on the State card naming what it will never show, or <see langword="null"/> when
+    /// the family reports all of it (#751).
     /// </summary>
     /// <remarks>
-    /// A UCCM showed a dash in both for as long as it was connected. §9.11's dash is a field that
-    /// has not arrived yet; these never would, which is the Overview card's defect on a second page.
+    /// <para>
+    /// A UCCM showed a dash in Predicted, Present time error and Duration for as long as it was
+    /// connected. §9.11's dash is a field that has not arrived yet; these never would, which is the
+    /// Overview card's defect on a second page.
+    /// </para>
+    /// <para>
+    /// Fixed per family rather than per state, as the Overview's is: it names the duration even while
+    /// that row reads "Not in holdover", so the user learns before a holdover that the count will not
+    /// appear during one.
+    /// </para>
     /// </remarks>
-    public string? UncertaintyUnavailableText => UncertaintyReported
-        ? null
-        : NotReported("a predicted holdover uncertainty or a present time error");
+    public string? StateAbsentText
+    {
+        get
+        {
+            List<string> absent = [];
+            if (!UncertaintyReported)
+            {
+                absent.Add("a predicted holdover uncertainty");
+                absent.Add("a present time error");
+            }
+
+            if (!DurationReported)
+            {
+                absent.Add("a holdover duration");
+            }
+
+            return AbsentReadings.Join(absent) is string what ? NotReported(what) : null;
+        }
+    }
 
     /// <summary>
     /// The sentence on the Thresholds card in place of the uncertainty threshold, whether it is

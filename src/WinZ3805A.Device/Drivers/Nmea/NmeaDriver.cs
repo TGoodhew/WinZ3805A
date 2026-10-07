@@ -248,6 +248,7 @@ public sealed class NmeaDriver(TimeProvider timeProvider) : IReceiverDriver
         ReceiverReading.OscillatorControl => false,
         ReceiverReading.Holdover => false,
         ReceiverReading.HoldoverUncertainty => false,
+        ReceiverReading.HoldoverDuration => false,
         ReceiverReading.AntennaDelay => false,
         ReceiverReading.OutputValidity => false,
         ReceiverReading.DeviceIdentity => false,

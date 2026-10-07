@@ -351,31 +351,74 @@ public sealed class HoldoverViewModelTests
     [Fact]
     public void AUccmSaysItReportsNoHoldoverUncertaintyOnEitherCard()
     {
-        FakeTimeProvider clock = new(Captured);
-        HoldoverViewModel uccm = new(Store(), new UccmDriver(clock))
-        {
-            Connection = ConnectionStatus.Connected,
-        };
+        HoldoverViewModel uccm = Uccm();
 
         Assert.False(uccm.UncertaintyReported);
         Assert.Equal(
-            "This receiver does not report a predicted holdover uncertainty or a present time error. "
-            + "The UCCM protocol does not carry it.",
-            uccm.UncertaintyUnavailableText);
+            "This receiver does not report a predicted holdover uncertainty, a present time error or a "
+            + "holdover duration. The UCCM protocol does not carry it.",
+            uccm.StateAbsentText);
         Assert.Equal(
             "This receiver does not report an uncertainty threshold. The UCCM protocol does not carry it.",
             uccm.ThresholdUnavailableText);
     }
 
-    /// <summary>A SmartClock's page is unchanged: every row, and neither sentence.</summary>
+    /// <summary>
+    /// Locked, a UCCM's Duration says so rather than showing a dash (#751).
+    /// </summary>
+    /// <remarks>
+    /// The module refuses <c>:ROSC:HOLD:DUR?</c> in every state, so this row was a dash for as long
+    /// as one was connected. "Not in holdover" is the mode's answer — the Overview card's rule — and
+    /// is true whatever the family counts.
+    /// </remarks>
+    [Fact]
+    public void ALockedUccmSaysItIsNotInHoldover()
+    {
+        HoldoverViewModel uccm = Uccm();
+
+        Assert.Equal(ReceiverMode.Locked, uccm.Mode);
+        Assert.True(uccm.DurationShown);
+        Assert.Equal("Not in holdover", uccm.DurationText);
+    }
+
+    /// <summary>
+    /// In holdover, a UCCM's Duration row goes, and the State card's sentence has said why (#751).
+    /// </summary>
+    [Fact]
+    public void AUccmInHoldoverDropsTheDurationRow()
+    {
+        HoldoverViewModel uccm = Uccm("1 HOLDOVER");
+
+        Assert.True(uccm.IsInHoldover);
+        Assert.False(uccm.DurationShown);
+        Assert.Contains("a holdover duration", uccm.StateAbsentText, StringComparison.Ordinal);
+    }
+
+    /// <summary>A SmartClock's page is unchanged: every row, its dashes, and neither sentence.</summary>
     [Fact]
     public void ASmartClockKeepsItsUncertaintyRows()
     {
         HoldoverViewModel model = Connected();
 
         Assert.True(model.UncertaintyReported);
-        Assert.Null(model.UncertaintyUnavailableText);
+        Assert.True(model.DurationShown);
+        Assert.Null(model.StateAbsentText);
         Assert.Null(model.ThresholdUnavailableText);
         Assert.Equal(("2.0", "µs"), model.Predicted);
+
+        // Locked with no duration printed: still the dash it always showed, which #751 leaves alone.
+        Assert.Equal(ReadoutFormatter.NoValue, model.DurationText);
+        Assert.True(Connected(syncState: "HOLD").DurationShown);
     }
+
+    /// <summary>The real <c>UccmDriver</c>, over a store that carries every figure anyway.</summary>
+    /// <param name="syncState">
+    /// "1" is what <c>LED:GPSL?</c> answered, locked, in every sitting; the driver appends
+    /// <c>HOLDOVER</c> when the time code says the module is coasting.
+    /// </param>
+    private static HoldoverViewModel Uccm(string syncState = "1") =>
+        new(Store(syncState), new UccmDriver(new FakeTimeProvider(Captured)))
+        {
+            Connection = ConnectionStatus.Connected,
+        };
 }

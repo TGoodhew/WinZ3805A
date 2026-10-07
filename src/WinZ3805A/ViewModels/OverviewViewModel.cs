@@ -352,31 +352,72 @@ public sealed class OverviewViewModel : INotifyPropertyChanged, IDisposable
     /// </summary>
     /// <remarks>
     /// The rows go, label and value together, when it cannot — the Position page's rule for its
-    /// fix-quality rows: a labelled blank reads as a field that failed to load. Duration is not
-    /// covered, because the mode answers it ("Not in holdover") whatever the family predicts.
+    /// fix-quality rows: a labelled blank reads as a field that failed to load.
     /// </remarks>
     public bool HoldoverUncertaintyReported => Driver.Reports(ReceiverReading.HoldoverUncertainty);
 
     /// <summary>
-    /// The sentence that stands in for the Predicted and Threshold rows, or <see langword="null"/>
-    /// when there is nothing to say (#751).
+    /// Whether the Duration row has anything to show (#751).
+    /// </summary>
+    /// <remarks>
+    /// Always, for a family that counts its holdover. For one that does not, only while it is not in
+    /// holdover: "Not in holdover" comes from the mode and is true whatever the family counts, but
+    /// once it is in holdover the row could only hold a dash that will never fill, so it goes and
+    /// <see cref="HoldoverAbsentText"/> has already said why.
+    /// </remarks>
+    public bool HoldoverDurationShown =>
+        Driver.Reports(ReceiverReading.HoldoverDuration) || !IsInHoldover;
+
+    /// <summary>
+    /// The sentence naming what this card will never show, or <see langword="null"/> when there is
+    /// nothing to say (#751).
     /// </summary>
     /// <remarks>
     /// <para>
-    /// A UCCM's card showed a bare dash beside each for as long as it was connected, while the
-    /// Health monitor card below it explained its own absence in words. §9.11's dash is a field that
-    /// has not arrived yet, and these never would.
+    /// A UCCM's card showed a bare dash beside Predicted and Threshold for as long as it was
+    /// connected, and beside Duration through every holdover, while the Health monitor card below it
+    /// explained its own absence in words. §9.11's dash is a field that has not arrived yet, and
+    /// these never would.
+    /// </para>
+    /// <para>
+    /// <b>Fixed per family, not per state.</b> It names the duration even while the row reads
+    /// "Not in holdover", so the user learns before a holdover, rather than during one, that the
+    /// count will not appear.
     /// </para>
     /// <para>
     /// <b>Null for a family that refuses holdover altogether</b>, because the page already replaces
-    /// the whole card with one sentence for that; a second one under it, about two rows that are no
+    /// the whole card with one sentence for that; a second one under it, about rows that are no
     /// longer shown, would be the same statement twice.
     /// </para>
     /// </remarks>
-    public string? HoldoverUncertaintyUnavailableText =>
-        Driver.Reports(ReceiverReading.Holdover) && !HoldoverUncertaintyReported
-            ? NotReported("a predicted holdover uncertainty or an uncertainty threshold")
-            : null;
+    public string? HoldoverAbsentText
+    {
+        get
+        {
+            if (!Driver.Reports(ReceiverReading.Holdover))
+            {
+                return null;
+            }
+
+            List<string> absent = [];
+            if (!HoldoverUncertaintyReported)
+            {
+                absent.Add("a predicted holdover uncertainty");
+                absent.Add("an uncertainty threshold");
+            }
+
+            if (!Driver.Reports(ReceiverReading.HoldoverDuration))
+            {
+                absent.Add("a holdover duration");
+            }
+
+            return AbsentReadings.Join(absent) is string what ? NotReported(what) : null;
+        }
+    }
+
+    /// <summary>Either holdover, or the recovery after one — the Holdover page's rule (#642).</summary>
+    private bool IsInHoldover =>
+        Mode is ReceiverMode.Holdover or ReceiverMode.Waiting or ReceiverMode.Recovering;
 
     /// <summary>How long the receiver has been in holdover, or why that is not a number.</summary>
     /// <remarks>
@@ -395,7 +436,7 @@ public sealed class OverviewViewModel : INotifyPropertyChanged, IDisposable
             // The Holdover page's rule: either holdover, and the recovery after one, which the receiver
             // goes on counting. HOLD alone read "Not in holdover" through the commonest real holdover,
             // the one waiting for GPS (#642), and through every recovery.
-            if (Mode is not (ReceiverMode.Holdover or ReceiverMode.Waiting or ReceiverMode.Recovering))
+            if (!IsInHoldover)
             {
                 return "Not in holdover";
             }
