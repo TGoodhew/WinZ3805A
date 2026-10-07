@@ -3087,11 +3087,13 @@ function Get-RingChange($a, $b, [int]$pad, $valid = $null) {
 # now is. What lies outside a scroller's viewport does not move with what is inside it, so the band is
 # compared only where both crops are inside every scroller the stop sits in.
 #
-# A stop that did not move is measured exactly as before #754, at the focused shot's rectangle, whatever
-# its size does: the navigation items, the Position page's height box and Diagnostics' subsystem box all
-# reported another size once the focus had left them without moving, and calling that "not comparable"
-# skipped 20 stops of a walk that main measured (QA-Win11, 7 Oct 2026). Only a stop that moved and changed size by more than a few pixels, or that moved
-# and is not wholly in view in both shots, or that went, is not comparable, and is measured not at all.
+# Whether a stop moved is read from its rectangle's centre, not its corner: a focused navigation item's
+# rectangle takes in its focus visual's margin, 4 px each side and 2 px above and below, so when the focus
+# leaves, its corner shifts 4 px and it shrinks 8 x 4 about the same centre. A stop whose centre stayed
+# within a pixel is measured exactly as before #754, at the focused shot's rectangle, whatever its size did;
+# calling those "not comparable" skipped 20 stops of a walk that main measured (QA-Win11, 7 Oct 2026). Only
+# a stop that moved and changed size by more than a few pixels, or that moved and is not wholly in view in
+# both shots, or that went, is not comparable, and is measured not at all.
 
 # A rectangle UI Automation reported for something on screen: finite, with a size.
 function Test-RealRect($r) {
@@ -3099,12 +3101,20 @@ function Test-RealRect($r) {
     foreach ($v in $r.Left, $r.Top, $r.Width, $r.Height) { if ([double]::IsNaN($v) -or [double]::IsInfinity($v)) { return $false } }
     $r.Width -gt 0 -and $r.Height -gt 0
 }
-# How a stop's rectangle changed between its two shots: 'same' when its corner stayed within $tolerance,
+# How far a rectangle's centre moved between two readings, as x and y.
+function Get-CentreShift($before, $after) {
+    # Each difference in its own variable: PowerShell's comma binds tighter than binary minus.
+    $x = ($after.Left + $after.Width / 2) - ($before.Left + $before.Width / 2)
+    $y = ($after.Top + $after.Height / 2) - ($before.Top + $before.Height / 2)
+    , @($x, $y)
+}
+# How a stop's rectangle changed between its two shots: 'same' when its centre stayed within $tolerance,
 # whatever its size did; 'moved'; 'resized' when it moved and its size changed by more than $sizeTolerance;
 # or 'gone'.
 function Get-StopMove($before, $after, [double]$tolerance, [double]$sizeTolerance) {
     if (-not (Test-RealRect $before) -or -not (Test-RealRect $after)) { return 'gone' }
-    if ([Math]::Abs($after.Left - $before.Left) -le $tolerance -and [Math]::Abs($after.Top - $before.Top) -le $tolerance) { return 'same' }
+    $shift = Get-CentreShift $before $after
+    if ([Math]::Abs($shift[0]) -le $tolerance -and [Math]::Abs($shift[1]) -le $tolerance) { return 'same' }
     if ([Math]::Abs($after.Width - $before.Width) -gt $sizeTolerance -or [Math]::Abs($after.Height - $before.Height) -gt $sizeTolerance) { return 'resized' }
     'moved'
 }
@@ -3175,7 +3185,7 @@ function Wait-Still($e) {
 }
 # Half a pixel: anything further is still moving.
 $stillTolerance = 0.5
-# A stop whose corner stayed within a pixel did not move; one that moved may change size by a few pixels
+# A stop whose centre stayed within a pixel did not move; one that moved may change size by a few pixels
 # and still be followed.
 $placeTolerance = 1
 $sizeTolerance = 4
@@ -3212,7 +3222,9 @@ foreach ($i in 1..400) {
         if ($move -ne 'same') { $now = Wait-Still $prevElement; $move = Get-StopMove $prevBounds $now $placeTolerance $sizeTolerance }
         $target = $prevRect; $valid = $null; $covers = $move -eq 'same'
         if ($move -eq 'moved') {
-            $target = New-Object System.Drawing.Rectangle ([int]$now.Left - $pad), ([int]$now.Top - $pad), $prevRect.Width, $prevRect.Height
+            # The focused shot's crop, moved as far as the stop's centre moved.
+            $shift = Get-CentreShift $prevBounds $now
+            $target = New-Object System.Drawing.Rectangle ($prevRect.X + [int][Math]::Round($shift[0])), ($prevRect.Y + [int][Math]::Round($shift[1])), $prevRect.Width, $prevRect.Height
             $valid = Get-ValidRegion $prevRect $prevClip $target (Get-Clip $prevScrollers)
             $covers = Test-Covers $valid $pad $prevRect.Width $prevRect.Height
         }
@@ -3221,7 +3233,7 @@ foreach ($i in 1..400) {
         if (-not $after) { $after = Get-Shot $prevRect; $covers = $false }
         $prev.shots = Get-RingShots $move $covers
         # For information: how far it moved, and how its size changed whether it moved or not.
-        if ($move -eq 'moved' -or $move -eq 'resized') { $prev.moved = [int][Math]::Round([Math]::Sqrt([Math]::Pow($now.Left - $prevBounds.Left, 2) + [Math]::Pow($now.Top - $prevBounds.Top, 2))) }
+        if ($move -eq 'moved' -or $move -eq 'resized') { $shift = Get-CentreShift $prevBounds $now; $prev.moved = [int][Math]::Round([Math]::Sqrt([Math]::Pow($shift[0], 2) + [Math]::Pow($shift[1], 2))) }
         if ($move -ne 'gone') { $prev.widthChange = [int][Math]::Round($now.Width - $prevBounds.Width); $prev.heightChange = [int][Math]::Round($now.Height - $prevBounds.Height) }
         if ($prev.shots -eq 'not comparable') { $prev.why = $(switch ($move) { 'moved' { 'moved out of view' } 'resized' { "moved and changed size by $($prev.widthChange) x $($prev.heightChange) px" } default { $move } }) }
         else { $prev.ringPixels = Get-RingChange $prevShot $after $pad $valid }
