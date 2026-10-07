@@ -31,6 +31,20 @@ public static class ShellMode
     /// is required rather than nullable because <c>DeviceSessionService.Driver</c> always answers —
     /// it falls back to the first registered driver when nothing recognises the identity — so a null
     /// here would mean a caller that forgot, not a receiver nobody could name.
+    /// <para>
+    /// <b>Connected with no sweep stored is <see cref="ReceiverMode.AwaitingReading"/>, not
+    /// <see cref="ReceiverMode.Disconnected"/> (#752).</b> Every driver reads a missing sync state
+    /// as Disconnected, which is right for a token it cannot name and wrong for a token that has not
+    /// arrived: for the second or so between Connect and the first sweep, the medallion said
+    /// Disconnected beside a Disconnect button and a footer saying <i>updating…</i>. Whether a
+    /// sweep has been stored is the store's fact, so it is decided here and the drivers' mappings
+    /// are untouched. A sweep the driver rejects (#209) stores nothing, so a receiver whose answers
+    /// are never accepted stays here rather than claiming to be disconnected.
+    /// </para>
+    /// <para>
+    /// <b>Only a first reading.</b> Reconnecting to the same receiver keeps its readings (#492), so
+    /// the last sync state shows until the next sweep replaces it, as it always has.
+    /// </para>
     /// </remarks>
     public static ReceiverMode For(
         IReceiverDriver driver,
@@ -40,8 +54,13 @@ public static class ShellMode
         ArgumentNullException.ThrowIfNull(driver);
         ArgumentNullException.ThrowIfNull(store);
 
-        return connection == ConnectionStatus.Connected
-            ? driver.InterpretSyncState(store.SyncState)
-            : ReceiverMode.Disconnected;
+        if (connection != ConnectionStatus.Connected)
+        {
+            return ReceiverMode.Disconnected;
+        }
+
+        return store.LastFastPoll is null
+            ? ReceiverMode.AwaitingReading
+            : driver.InterpretSyncState(store.SyncState);
     }
 }

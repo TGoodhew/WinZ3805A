@@ -34,6 +34,7 @@ link, says **Connecting**, **Reconnecting** or **Connection lost**:
 | **Holdover** | red | pause inside a clock face | Holdover started from the Holdover page. The receiver runs on the oscillator alone until you recover it. |
 | **Power-up** | grey | clock | Just switched on; nothing to report yet. |
 | **Diagnostic / off** | grey | power symbol | The receiver is in a diagnostic mode or its outputs are off. |
+| **Connected** | grey | connected drive | Just connected, and the receiver's first reading has not arrived yet; the line under it says **Waiting for the first reading**. Usually about a second. |
 | **Disconnected** | grey | disconnected drive | The application is not talking to a receiver. |
 
 The **ring** around the centre is the last sixty seconds of the receiver's 1 PPS time interval —

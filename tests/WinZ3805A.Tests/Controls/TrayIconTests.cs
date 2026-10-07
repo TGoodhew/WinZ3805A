@@ -161,6 +161,7 @@ public sealed class TrayIconTests
     [InlineData(ReceiverMode.Waiting, Severity.Critical, "Holdover — waiting for GPS")]
     [InlineData(ReceiverMode.Holdover, Severity.Critical, "Holdover")]
     [InlineData(ReceiverMode.PowerUp, Severity.Neutral, "Power-up")]
+    [InlineData(ReceiverMode.AwaitingReading, Severity.Neutral, "Connected")]
     [InlineData(ReceiverMode.Disconnected, Severity.Neutral, "Disconnected")]
     public void TheStateCarriesTheShapeAndTheWords(
         ReceiverMode mode,

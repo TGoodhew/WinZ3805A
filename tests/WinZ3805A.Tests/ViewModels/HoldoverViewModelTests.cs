@@ -185,6 +185,21 @@ public sealed class HoldoverViewModelTests
         Assert.DoesNotContain("ago", holdover.DurationText, StringComparison.Ordinal);
     }
 
+    /// <summary>#752: connected with no sweep stored is not "Not connected".</summary>
+    [Fact]
+    public void ConnectedBeforeTheFirstReadingIsNotReportedAsNotConnected()
+    {
+        HoldoverViewModel model = new(new ReceiverStateStore(new FakeTimeProvider(Captured)), SmartClock())
+        {
+            Connection = ConnectionStatus.Connected,
+        };
+
+        Assert.Equal(ReceiverMode.AwaitingReading, model.Mode);
+        Assert.Equal("Connected — waiting for the first reading", model.StateText);
+        Assert.Equal(Severity.Neutral, model.StateSeverity);
+        Assert.False(model.IsInHoldover);
+    }
+
     [Fact]
     public void DisconnectedEmptiesEverything()
     {

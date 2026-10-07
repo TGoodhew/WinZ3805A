@@ -197,9 +197,14 @@ public sealed class OverviewViewModel : INotifyPropertyChanged, IDisposable
     /// </summary>
     /// <remarks>
     /// The full screen's own detail text, which is where "Stabilizing frequency" comes from — HP's
-    /// spelling, kept verbatim per Appendix B.
+    /// spelling, kept verbatim per Appendix B. Before the first sweep, what the page is waiting for,
+    /// as on the main window (#752).
     /// </remarks>
-    public string? ModeDetail => Connection == ConnectionStatus.Connected ? Status?.ModeDetail : null;
+    public string? ModeDetail => Connection != ConnectionStatus.Connected
+        ? null
+        : Mode == ReceiverMode.AwaitingReading
+            ? ReceiverModes.AwaitingReadingDetail
+            : Status?.ModeDetail;
 
     /// <summary>Whether the 10 MHz and 1 PPS outputs are to be trusted (§11.2).</summary>
     public OutputValidity Outputs => Connection == ConnectionStatus.Connected

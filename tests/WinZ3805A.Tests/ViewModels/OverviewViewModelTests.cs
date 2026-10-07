@@ -241,6 +241,25 @@ public sealed class OverviewViewModelTests
         Assert.True(model.HealthOk);
     }
 
+    // ---- Before the first reading (#752) ----------------------------------------------------
+
+    /// <summary>
+    /// The Synchronization card's medallion says what the main window's says: connected, and
+    /// waiting, rather than Disconnected under a title-bar pill saying Connected.
+    /// </summary>
+    [Fact]
+    public void ConnectedBeforeTheFirstReadingWaitsRatherThanSayingDisconnected()
+    {
+        OverviewViewModel model = new(new ReceiverStateStore(new FakeTimeProvider(Captured)), SmartClock())
+        {
+            Connection = ConnectionStatus.Connected,
+        };
+
+        Assert.Equal(ReceiverMode.AwaitingReading, model.Mode);
+        Assert.Equal("Connected", model.ModeText);
+        Assert.Equal("Waiting for the first reading", model.ModeDetail);
+    }
+
     // ---- Disconnected ----------------------------------------------------------------------
 
     /// <remarks>

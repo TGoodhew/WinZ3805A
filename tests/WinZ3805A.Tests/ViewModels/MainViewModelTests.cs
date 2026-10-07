@@ -79,6 +79,61 @@ public class MainViewModelTests
         Assert.Equal(expected, model.ModeDetail);
     }
 
+    /// <summary>
+    /// #752: between Connect and the first stored sweep, the window said Disconnected beside a
+    /// Disconnect button and a footer saying <i>updating…</i>. It says what is true instead.
+    /// </summary>
+    [Fact]
+    public void ConnectedBeforeTheFirstReadingSaysSoRatherThanDisconnected()
+    {
+        (MainViewModel model, _, _) = Build();
+
+        Assert.Equal(ReceiverMode.AwaitingReading, model.Mode);
+        Assert.Equal("Connected", model.ModeText);
+        Assert.Equal("Waiting for the first reading", model.ModeDetail);
+        Assert.False(model.CanConnect);
+        Assert.False(model.IsCoasting);
+    }
+
+    [Fact]
+    public void TheFirstReadingEndsTheWait()
+    {
+        (MainViewModel model, ReceiverStateStore store, _) = Build();
+
+        store.UpdateFast("LOCK", 3, 1, -5.4, -16.8, 6);
+
+        Assert.Equal(ReceiverMode.Locked, model.Mode);
+        Assert.Equal("Locked to GPS", model.ModeText);
+        Assert.Null(model.ModeDetail);
+    }
+
+    [Fact]
+    public void DisconnectedMeansTheSessionIsDisconnected()
+    {
+        (MainViewModel model, _, _) = Build();
+
+        model.Connection = ConnectionStatus.Disconnected;
+
+        Assert.Equal(ReceiverMode.Disconnected, model.Mode);
+        Assert.Equal("Disconnected", model.ModeText);
+        Assert.Null(model.ModeDetail);
+        Assert.True(model.CanConnect);
+    }
+
+    /// <summary>Reconnecting is unchanged by #752: no link, so Disconnected with the reason under it.</summary>
+    [Fact]
+    public void ReconnectingIsUnchanged()
+    {
+        (MainViewModel model, ReceiverStateStore store, _) = Build();
+        store.UpdateFast("LOCK", 3, 1, -5.4, -16.8, 6);
+
+        model.Connection = ConnectionStatus.Reconnecting;
+
+        Assert.Equal(ReceiverMode.Disconnected, model.Mode);
+        Assert.Equal("Disconnected", model.ModeText);
+        Assert.Equal("Reconnecting", model.ModeDetail);
+    }
+
     // -------------------------------------------------------------------------------------
     // The coasting diagnostic (§10.3)
     // -------------------------------------------------------------------------------------

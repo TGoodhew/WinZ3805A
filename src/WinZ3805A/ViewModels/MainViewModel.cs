@@ -127,7 +127,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// <remarks>
     /// A session that is not connected reports <see cref="ReceiverMode.Disconnected"/> whatever the
     /// store last held. The readings stay on screen and go stale honestly (§9.11), but the mode is
-    /// a claim about *now* and must not outlive the link that justified it.
+    /// a claim about *now* and must not outlive the link that justified it. A session that is
+    /// connected and has stored no sweep yet reports <see cref="ReceiverMode.AwaitingReading"/>
+    /// (#752), so Disconnected no longer covers a link that is up and has not been read yet.
     /// <para>
     /// Through <see cref="ShellMode.For"/>, which the notification area and the taskbar badge also
     /// call. This restated the expression instead until #319 — the third copy that type's own
@@ -143,12 +145,17 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// <summary>
     /// The sub-line under the mode: the parsed detail, or the reconnect state when there is no link.
     /// </summary>
+    /// <remarks>
+    /// Before the first sweep it says what the window is waiting for (#752), the sentence §10.3's
+    /// <c>Connected</c> label leaves to it.
+    /// </remarks>
     public string? ModeDetail => Connection switch
     {
         ConnectionStatus.Reconnecting => "Reconnecting",
         ConnectionStatus.Connecting => "Connecting",
         ConnectionStatus.Faulted => "Connection lost",
         ConnectionStatus.Disconnected => null,
+        _ when Mode == ReceiverMode.AwaitingReading => ReceiverModes.AwaitingReadingDetail,
         _ => _store.Status?.ModeDetail,
     };
 

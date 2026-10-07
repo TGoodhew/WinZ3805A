@@ -2129,6 +2129,7 @@ Two behavioural principles remain here because they are functional rather than v
   | `HOLD` | `WzCriticalBrush` ⬢ | custom Holdover icon — **built 30 Aug 2026 (#320)** with the rest of §9.9's set, and the reason it was authored: a Warning glyph says *something is wrong*, and holdover means the receiver is still producing a disciplined 10 MHz from the oscillator's memory. The stock glyph stays behind it (`Controls/ReceiverMode.cs`) | Holdover |
   | `POW` | `WzNeutralBrush` ○ | `\uE823` Clock | Power-up |
   | `OFF` | `WzNeutralBrush` ○ | `\uE7E8` PowerButton | Diagnostic / off |
+  | *(connected, no sweep stored yet)* | `WzNeutralBrush` ○ | `\uE8CE` MapDrive | Connected, with the sub-line *Waiting for the first reading* |
   | *(no connection)* | `WzNeutralBrush` ○ | `\uE8CD` DisconnectDrive | Disconnected |
 
   Severity is always the triple colour + shape + text (§9.4.3). The medallion changes all three at once; it never pulses or animates (§9.8.2, §9.13 item 7).
@@ -2141,6 +2142,17 @@ Two behavioural principles remain here because they are functional rather than v
   > deliberate one drew red, the Overview page said *Not in holdover*, and the lock notification for
   > the same holdover, which reads the screen, said *Receiver in holdover*. Both now draw as holdover;
   > the text keeps them apart, so a lost antenna can still be told from a forced holdover at a glance.
+
+  > **⚠ Amended 7 Oct 2026 (#752).** The table had no row for a session that is connected but has
+  > stored no sweep yet, so that second or so drew as *Disconnected*: every driver reads a missing
+  > sync state as it reads an unrecognised one, and the medallion said Disconnected beside a
+  > **Disconnect** button and a footer saying *updating…*. None of the seven fits — *Disconnected* is
+  > false about the link and *Power-up* is a claim about the receiver — so the table gains the row
+  > above, `ReceiverMode.AwaitingReading`, which **is the session's and never a driver's**:
+  > `ShellMode` shows it while the store holds no sweep, and `InterpretSyncState` must not return it.
+  > The closed set a driver chooses from is unchanged at seven. *Disconnected* now means only that
+  > the session is not connected (or that a stored token was not recognised); reconnecting to the
+  > same receiver keeps its readings and shows the last mode, as before.
 
 - **The figures of merit (#719, decided 5 Oct 2026).** The two `SeverityPill`s are judged by different rules, here and on the Overview page (§10.4), both in `MeritSeverity`:
 

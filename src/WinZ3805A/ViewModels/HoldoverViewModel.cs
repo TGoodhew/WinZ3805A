@@ -111,6 +111,10 @@ public sealed class HoldoverViewModel : INotifyPropertyChanged, IDisposable
         ReceiverMode.Recovering => "Recovering from holdover",
         ReceiverMode.PowerUp => "Powering up",
         ReceiverMode.Off => "Diagnostic or off",
+
+        // #752: connected, no sweep stored yet. "Not connected" here would contradict the
+        // connection pill in the same window's title bar.
+        ReceiverMode.AwaitingReading => "Connected — waiting for the first reading",
         _ => "Not connected",
     };
 

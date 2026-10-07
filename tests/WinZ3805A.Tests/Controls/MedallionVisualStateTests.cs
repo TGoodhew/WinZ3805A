@@ -27,7 +27,23 @@ public sealed class MedallionVisualStateTests
     private static readonly XNamespace X = "http://schemas.microsoft.com/winfx/2006/xaml";
 
     public static TheoryData<ReceiverMode> Modes => new(
-        [ReceiverMode.Locked, ReceiverMode.Recovering, ReceiverMode.Waiting, ReceiverMode.Holdover, ReceiverMode.PowerUp, ReceiverMode.Off]);
+        [ReceiverMode.Locked, ReceiverMode.Recovering, ReceiverMode.Waiting, ReceiverMode.Holdover, ReceiverMode.PowerUp, ReceiverMode.Off, ReceiverMode.AwaitingReading, ReceiverMode.Disconnected]);
+
+    /// <summary>
+    /// Every mode has a state, and draws the glyph the code gives it (#752). A mode with no state
+    /// would leave the medallion in whatever state it was last in: a new member added to the enum
+    /// and not here would draw a reading that is gone.
+    /// </summary>
+    [Fact]
+    public void EveryModeHasAStateDrawingItsOwnGlyph()
+    {
+        foreach (ReceiverMode mode in Enum.GetValues<ReceiverMode>())
+        {
+            string glyph = SettersOf(mode.ToString())["Glyph.Text"];
+
+            Assert.Equal(ReceiverModes.GlyphOf(mode), glyph);
+        }
+    }
 
     [Theory]
     [MemberData(nameof(Modes))]
