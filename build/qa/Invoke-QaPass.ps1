@@ -3063,12 +3063,14 @@ function Get-Shot($r) {
     $g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen([int]$r.X, [int]$r.Y, 0, 0, $bmp.Size); $g.Dispose()
     $bmp
 }
-# The pixels on a band either side of the element's edge that differ between two shots of it.
-function Get-RingChange($a, $b, [int]$pad) {
+# The pixels on a band either side of the element's edge that differ between two shots of it. With
+# $valid, a rectangle in the crops' own coordinates, only the pixels inside it are compared (#754).
+function Get-RingChange($a, $b, [int]$pad, $valid = $null) {
     $changed = 0
     for ($y = 0; $y -lt $a.Height; $y++) { for ($x = 0; $x -lt $a.Width; $x++) {
         $inBand = $x -lt 2 * $pad -or $y -lt 2 * $pad -or $x -ge $a.Width - 2 * $pad -or $y -ge $a.Height - 2 * $pad
         if (-not $inBand) { continue }
+        if ($null -ne $valid -and -not $valid.Contains($x, $y)) { continue }
         $p = $a.GetPixel($x, $y); $q = $b.GetPixel($x, $y)
         if ([Math]::Abs($p.R - $q.R) + [Math]::Abs($p.G - $q.G) + [Math]::Abs($p.B - $q.B) -gt 60) { $changed++ }
     } }
@@ -3077,36 +3079,51 @@ function Get-RingChange($a, $b, [int]$pad) {
 
 # #754: the two shots of a stop must be of the same content, and Tab moving on can scroll the page
 # between them - on Satellites the unfocused crop was of another row, so the ring was measured against
-# the wrong pixels. So each scroller the stop sits in is read with each shot, as an offset in pixels;
-# when Tab moved one, it is put back through ScrollPattern and the unfocused shot taken again, and a
-# pair whose offsets still differ is marked not comparable rather than measured.
-#
-# An offset in pixels from what ScrollPattern says: the scrolled share of the extent beyond the
-# viewport, the extent being the viewport over the share of it on view. Nothing to scroll is 0. A
-# scroller with no size on screen is compared by its percentage, a hundredth of one counting as a pixel.
-function Get-ScrollPixels([double]$percent, [double]$viewSize, [double]$viewport) {
-    if ($percent -lt 0 -or $viewSize -ge 100) { return 0.0 }
-    if (-not ($viewport -gt 0) -or [double]::IsInfinity($viewport) -or -not ($viewSize -gt 0)) { return 100 * $percent }
-    $percent / 100 * ($viewport * 100 / $viewSize - $viewport)
+# the wrong pixels. The first answer scrolled the page back through ScrollPattern for the unfocused shot,
+# and that cost the walk its Tab order: after each scroll back the focus was no longer where Tab had left
+# it, so the next Tab reached a stop already seen and the retaken shot still showed the ring (QA-Win11,
+# 7 Oct 2026). So nothing here writes to the app; everything below only reads. The stop is followed
+# instead: its rectangle is read again after Tab and, if it moved, the unfocused shot is taken where it
+# now is. What lies outside a scroller's viewport does not move with what is inside it, so the band is
+# compared only where both crops are inside every scroller the stop sits in; a stop that changed size,
+# went, or is not wholly inside that region in both shots is not comparable, and is measured not at all.
+
+# A rectangle UI Automation reported for something on screen: finite, with a size.
+function Test-RealRect($r) {
+    if ($null -eq $r) { return $false }
+    foreach ($v in $r.Left, $r.Top, $r.Width, $r.Height) { if ([double]::IsNaN($v) -or [double]::IsInfinity($v)) { return $false } }
+    $r.Width -gt 0 -and $r.Height -gt 0
 }
-# The furthest any scroller moved between two readings, in pixels. Readings of different scrollers are
-# infinitely far apart, and one that could not be read (NaN) is never near anything.
-function Get-ScrollDrift($before, $after) {
-    $a = @($before); $b = @($after)
-    if ($a.Count -ne $b.Count) { return [double]::PositiveInfinity }
-    $most = 0.0
-    for ($n = 0; $n -lt $a.Count; $n++) { $most = [Math]::Max($most, [Math]::Abs([double]$a[$n] - [double]$b[$n])) }
-    $most
+# How a stop's rectangle changed between its two shots: 'same', 'moved', 'resized' or 'gone'.
+function Get-StopMove($before, $after, [double]$tolerance) {
+    if (-not (Test-RealRect $before) -or -not (Test-RealRect $after)) { return 'gone' }
+    if ([Math]::Abs($after.Width - $before.Width) -gt $tolerance -or [Math]::Abs($after.Height - $before.Height) -gt $tolerance) { return 'resized' }
+    if ([Math]::Abs($after.Left - $before.Left) -le $tolerance -and [Math]::Abs($after.Top - $before.Top) -le $tolerance) { return 'same' }
+    'moved'
 }
-# What a stop's pair of shots can say: 'same' when nothing moved between them, 'retaken' when the
-# scroll was put back and the unfocused shot taken again, 'not comparable' when it would not go back.
-function Get-RingShots([double]$moved, [double]$restored, [double]$tolerance) {
-    if ($moved -le $tolerance) { return 'same' }
-    if ($restored -le $tolerance) { return 'retaken' }
+function ConvertTo-Rectangle($r) {
+    if (-not (Test-RealRect $r)) { return [System.Drawing.Rectangle]::Empty }
+    New-Object System.Drawing.Rectangle ([int][Math]::Round($r.Left)), ([int][Math]::Round($r.Top)), ([int][Math]::Round($r.Width)), ([int][Math]::Round($r.Height))
+}
+# The part of two crops where both show what is inside the stop's clip, in the crops' own coordinates.
+function Get-ValidRegion($crop0, $clip0, $crop1, $clip1) {
+    $v0 = [System.Drawing.Rectangle]::Intersect($crop0, $clip0)
+    $v1 = [System.Drawing.Rectangle]::Intersect($crop1, $clip1)
+    if ($v0.IsEmpty -or $v1.IsEmpty) { return [System.Drawing.Rectangle]::Empty }
+    [System.Drawing.Rectangle]::Intersect((New-Object System.Drawing.Rectangle ($v0.X - $crop0.X), ($v0.Y - $crop0.Y), $v0.Width, $v0.Height),
+        (New-Object System.Drawing.Rectangle ($v1.X - $crop1.X), ($v1.Y - $crop1.Y), $v1.Width, $v1.Height))
+}
+# Whether that region holds the whole of the stop itself, which sits $pad in from each edge of its crop.
+function Test-Covers($valid, [int]$pad, [int]$cropWidth, [int]$cropHeight) {
+    $valid.Contains((New-Object System.Drawing.Rectangle $pad, $pad, ($cropWidth - 2 * $pad), ($cropHeight - 2 * $pad)))
+}
+# What a stop's pair of shots can say: 'same' when it did not move, 'followed' when it moved and the
+# unfocused shot was taken where it went, 'not comparable' otherwise.
+function Get-RingShots([string]$move, [bool]$covers) {
+    if ($move -eq 'same') { return 'same' }
+    if ($move -eq 'moved' -and $covers) { return 'followed' }
     'not comparable'
 }
-# A drift for the JSON, which has no NaN or Infinity: -1 when it is not a number of pixels.
-function Format-Drift([double]$d) { if ([double]::IsNaN($d) -or [double]::IsInfinity($d)) { -1 } else { [Math]::Round($d, 1) } }
 # The scrollers that can carry an element's pixels: itself, if it scrolls, and each ancestor that does.
 function Get-Scrollers($e) {
     $found = New-Object System.Collections.Generic.List[object]
@@ -3122,40 +3139,29 @@ function Get-Scrollers($e) {
     catch { }
     , $found.ToArray()
 }
-function Read-Scroll($scrollers) {
-    $percent = New-Object System.Collections.Generic.List[double]; $pixels = New-Object System.Collections.Generic.List[double]
+# Where a stop can be seen: its window, cut to every scroller it sits in, as a screen rectangle.
+function Get-Clip($scrollers) {
+    $clip = ConvertTo-Rectangle $root.Current.BoundingRectangle
     foreach ($s in @($scrollers)) {
-        try {
-            $c = $s.GetCurrentPattern([System.Windows.Automation.ScrollPattern]::Pattern).Current; $b = $s.Current.BoundingRectangle
-            $percent.Add($c.HorizontalScrollPercent); $percent.Add($c.VerticalScrollPercent)
-            $pixels.Add((Get-ScrollPixels $c.HorizontalScrollPercent $c.HorizontalViewSize $b.Width)); $pixels.Add((Get-ScrollPixels $c.VerticalScrollPercent $c.VerticalViewSize $b.Height))
-        }
-        catch { $percent.Add(-1); $percent.Add(-1); $pixels.Add([double]::NaN); $pixels.Add([double]::NaN) }
+        try { $clip = [System.Drawing.Rectangle]::Intersect($clip, (ConvertTo-Rectangle $s.Current.BoundingRectangle)) } catch { return [System.Drawing.Rectangle]::Empty }
     }
-    [pscustomobject]@{ percent = $percent.ToArray(); pixels = $pixels.ToArray() }
+    $clip
 }
-# Read until two readings 100 ms apart agree, so a scroll Tab animates is photographed where it ends.
-function Wait-Scroll($scrollers) {
-    $last = Read-Scroll $scrollers
-    if (@($scrollers).Count -eq 0) { return $last }
+# An element's rectangle once it has stopped moving - two readings 100 ms apart that agree, for at most
+# 2 s - so a scroll Tab animates is photographed where it ends. $null when the element has gone.
+function Wait-Still($e) {
+    try { $last = $e.Current.BoundingRectangle } catch { return $null }
     for ($t = 0; $t -lt 20; $t++) {
+        if (-not (Test-RealRect $last)) { return $last }
         Start-Sleep -Milliseconds 100
-        $now = Read-Scroll $scrollers
-        if ((Get-ScrollDrift $last.pixels $now.pixels) -le $scrollTolerance) { return $now }
+        try { $now = $e.Current.BoundingRectangle } catch { return $null }
+        if ((Get-StopMove $last $now $stillTolerance) -eq 'same') { return $now }
         $last = $now
     }
     $last
 }
-# Each scroller to the percentages of a reading; -1 (NoScroll) leaves that axis alone.
-function Set-Scroll($scrollers, $reading) {
-    $n = 0
-    foreach ($s in @($scrollers)) {
-        try { $s.GetCurrentPattern([System.Windows.Automation.ScrollPattern]::Pattern).SetScrollPercent($reading.percent[$n], $reading.percent[$n + 1]) } catch { }
-        $n += 2
-    }
-}
 # Half a pixel: anything further is a different picture to the comparison above.
-$scrollTolerance = 0.5
+$stillTolerance = 0.5
 
 # Wide enough for focus visuals drawn outside the element, as a toggle switch's are.
 $pad = 8
@@ -3180,29 +3186,26 @@ foreach ($i in 1..400) {
     $f = $Ae::FocusedElement
     if (-not $f) { continue }
     $key = ($f.GetRuntimeId() -join '.')
-    # The ring on the previous stop, now that the focus has left it - at the scroll it was photographed
-    # focused at (#754).
+    # The ring on the previous stop, now that the focus has left it - photographed where the stop now is,
+    # if Tab scrolled it (#754). Only reads: nothing here may change where the next Tab goes.
     if ($prev -and $prevShot) {
-        $moved = Wait-Scroll $prevScrollers
-        $drift = Get-ScrollDrift $prevScroll.pixels $moved.pixels
-        $restored = [double]::NaN
-        if ($drift -le $scrollTolerance) { $after = Get-Shot $prevRect }
-        else {
-            Set-Scroll $prevScrollers $prevScroll
-            $back = Wait-Scroll $prevScrollers
-            Start-Sleep -Milliseconds 150
-            $after = Get-Shot $prevRect
-            # Both sides of the shot, so a scroll that drifted while it was taken is not called still.
-            $restored = [Math]::Max((Get-ScrollDrift $prevScroll.pixels $back.pixels), (Get-ScrollDrift $prevScroll.pixels (Read-Scroll $prevScrollers).pixels))
-            # And back to where Tab left the page, so the new stop is photographed where it was brought into view.
-            Set-Scroll $prevScrollers $moved
-            $null = Wait-Scroll $prevScrollers
-            Start-Sleep -Milliseconds 150
+        $now = $null; try { $now = $prevElement.Current.BoundingRectangle } catch { }
+        $move = Get-StopMove $prevBounds $now $stillTolerance
+        # Moved, or still moving: where it comes to rest.
+        if ($move -ne 'same') { $now = Wait-Still $prevElement; $move = Get-StopMove $prevBounds $now $stillTolerance }
+        $target = $prevRect; $valid = $null; $covers = $move -eq 'same'
+        if ($move -eq 'moved') {
+            $target = New-Object System.Drawing.Rectangle ([int]$now.Left - $pad), ([int]$now.Top - $pad), $prevRect.Width, $prevRect.Height
+            $valid = Get-ValidRegion $prevRect $prevClip $target (Get-Clip $prevScrollers)
+            $covers = Test-Covers $valid $pad $prevRect.Width $prevRect.Height
         }
-        $prev.shots = Get-RingShots $drift $restored $scrollTolerance
-        $prev.scrollMoved = Format-Drift $drift
-        $prev.scrollRestored = Format-Drift $restored
-        $prev.ringPixels = Get-RingChange $prevShot $after $pad
+        $after = $null
+        try { $after = Get-Shot $target } catch { }
+        if (-not $after) { $after = Get-Shot $prevRect; $covers = $false }
+        $prev.shots = Get-RingShots $move $covers
+        if ($move -eq 'moved') { $prev.moved = [int][Math]::Round([Math]::Sqrt([Math]::Pow($now.Left - $prevBounds.Left, 2) + [Math]::Pow($now.Top - $prevBounds.Top, 2))) }
+        if ($prev.shots -eq 'not comparable') { $prev.why = $(if ($move -eq 'moved') { 'moved out of view' } else { $move }) }
+        else { $prev.ringPixels = Get-RingChange $prevShot $after $pad $valid }
         # The pair kept for the agent to look at wherever no ring was measured, or none could be.
         if ($prev.ringPixels -lt [Math]::Max(20, $prev.perimeter / 2) -or $prev.shots -eq 'not comparable') {
             $n = $stops.Count - 1
@@ -3223,15 +3226,15 @@ foreach ($i in 1..400) {
     if ($seen.ContainsKey($key)) { $closedOn = "$($f.Current.ControlType.ProgrammaticName -replace 'ControlType\.', '') '$($f.Current.Name)' [$($f.Current.AutomationId)]"; break }
     $seen[$key] = $true
     if (-not $firstKey) { $firstKey = $key }
-    # Where the stop is once any scroll Tab started has finished, and the scroll its focused shot is at.
-    $prevScrollers = Get-Scrollers $f
-    $prevScroll = Wait-Scroll $prevScrollers
-    $r = $f.Current.BoundingRectangle
+    # Where the stop is once any scroll Tab started has finished, and what it can be seen through.
+    $r = Wait-Still $f
+    if ($null -eq $r) { $r = $f.Current.BoundingRectangle }
+    $prevElement = $f; $prevBounds = $r; $prevScrollers = Get-Scrollers $f
     $stop = [ordered]@{
         id = "$($f.Current.AutomationId)"; name = "$($f.Current.Name)"; type = "$($f.Current.ControlType.ProgrammaticName -replace 'ControlType\.', '')"
         left = [int]$r.Left; top = [int]$r.Top; width = [int]$r.Width; height = [int]$r.Height
         ringPixels = -1; perimeter = [int](2 * ($r.Width + $r.Height)); repeats = 0
-        shots = ''; scrollMoved = 0; scrollRestored = -1
+        shots = ''; moved = 0; why = ''
         scroll = $(if ($scroller) { try { [Math]::Round($scroller[0].GetCurrentPattern([System.Windows.Automation.ScrollPattern]::Pattern).Current.VerticalScrollPercent, 1) } catch { -1 } } else { -1 })
         parent = ($(try { [System.Windows.Automation.TreeWalker]::ControlViewWalker.GetParent($f).GetRuntimeId() -join '.' } catch { '' }))
     }
@@ -3239,6 +3242,7 @@ foreach ($i in 1..400) {
     $prev = $stop
     if (-not $r.IsEmpty) {
         $prevRect = New-Object System.Drawing.Rectangle ([int]$r.Left - $pad), ([int]$r.Top - $pad), ([int]$r.Width + 2 * $pad), ([int]$r.Height + 2 * $pad)
+        $prevClip = Get-Clip $prevScrollers
         $prevShot = Get-Shot $prevRect
     }
 }
@@ -3331,19 +3335,19 @@ Start-Sleep -Seconds 8
 # Not the satellite rows: the list re-sorts as the sky turns, so the shot after the focus moves can be of
 # another row, which has its own ring, and the two compare as no ring at all. Their ring is the stock
 # list's, and the crops kept show it. Nor a stop whose two shots are not comparable (#754): Tab scrolled
-# the page and it would not go back, so its pixels say nothing either way - it is named, and its crops
-# are kept for the judge. A stop measured again after its scroll was put back is named as well.
+# it out of view, or it changed size or went, so there was no second shot of the same thing - it is
+# named, and its crops are kept for the judge. A stop followed to where Tab scrolled it is named as well.
 function Get-FocusRingFindings {
     param($Stops)
     $Stops = @($Stops)
     $measured = @($Stops | Where-Object { $_.ringPixels -ge 0 -and "$($_.shots)" -ne 'not comparable' -and -not ($_.type -eq 'ListItem' -and $_.name -like 'PRN *') })
     $noRing = @($measured | Where-Object { $_.ringPixels -lt [Math]::Max(20, $_.perimeter / 2) } | ForEach-Object { "$($_.type) '$($_.name)' [$($_.id)] $($_.ringPixels)/$($_.perimeter)" })
-    $retaken = @($Stops | Where-Object { "$($_.shots)" -eq 'retaken' } | ForEach-Object { "$($_.type) '$($_.name)' ($($_.scrollMoved) px, ring $($_.ringPixels)/$($_.perimeter))" })
-    $apart = @($Stops | Where-Object { "$($_.shots)" -eq 'not comparable' } | ForEach-Object { "$($_.type) '$($_.name)' (moved $($_.scrollMoved) px, $($_.scrollRestored) px off after putting back; crops $($_.shot))" })
+    $followed = @($Stops | Where-Object { "$($_.shots)" -eq 'followed' } | ForEach-Object { "$($_.type) '$($_.name)' ($($_.moved) px, ring $($_.ringPixels)/$($_.perimeter))" })
+    $apart = @($Stops | Where-Object { "$($_.shots)" -eq 'not comparable' } | ForEach-Object { "$($_.type) '$($_.name)' ($($_.why)$(if ($_.moved) { ", $($_.moved) px" }); crops $($_.shot))" })
     $detail = "no ring at: $($noRing -join '; ')"
-    if ($retaken.Count) { $detail += ". Tab scrolled the page, so the unfocused shot was retaken with the scroll put back, at: $($retaken -join '; ')" }
-    if ($apart.Count) { $detail += ". NOT COMPARABLE - the scroll would not go back, so no ring was measured; judge the crops kept, at: $($apart -join '; ')" }
-    [pscustomobject]@{ NoRing = $noRing; Retaken = $retaken; NotComparable = $apart; Detail = $detail }
+    if ($followed.Count) { $detail += ". Tab scrolled the page, so the unfocused shot was taken where the stop moved to, at: $($followed -join '; ')" }
+    if ($apart.Count) { $detail += ". NOT COMPARABLE - no second shot of the same thing, so no ring was measured; judge the crops kept, at: $($apart -join '; ')" }
+    [pscustomobject]@{ NoRing = $noRing; Followed = $followed; NotComparable = $apart; Detail = $detail }
 }
 
 function Test-KeyboardFocus {
