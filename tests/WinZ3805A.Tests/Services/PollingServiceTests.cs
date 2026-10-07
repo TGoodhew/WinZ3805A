@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using Microsoft.Extensions.Time.Testing;
 using WinZ3805A.Device.Transport;
 using WinZ3805A.Services;
@@ -14,7 +14,9 @@ public class PollingServiceTests
     private static readonly TimeSpan TestTimeout = TimeSpan.FromSeconds(10);
 
     /// <summary>Answers every fast-tier query the way the reference unit does, leading space and all.</summary>
-    private static ControllableTransport Receiver(Func<string, string?>? overrides = null) =>
+    private static ControllableTransport Receiver(
+        Func<string, string?>? overrides = null,
+        Func<string, bool>? silentFor = null) =>
         new(command =>
         {
             string? overridden = overrides?.Invoke(command);
@@ -36,7 +38,10 @@ public class PollingServiceTests
                 _ => " 0",
             };
         })
-        { Banner = Identity };
+        {
+            Banner = Identity,
+            SilentFor = silentFor,
+        };
 
     /// <summary>The captured screen, so the poller is exercised against real device output.</summary>
     private static string StatusScreen()
@@ -597,6 +602,183 @@ public class PollingServiceTests
 
         // The rest of the sweep is unaffected, so one bad field does not blank the screen.
         Assert.Equal("LOCK", store.SyncState);
+    }
+
+    // -------------------------------------------------------------------------------------
+    // #733: a query that timed out is not a reading
+    // -------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// The receiver loses power just after <c>:SYNC:STAT?</c> answered, and the main window keeps
+    /// the last readings rather than blanking them (#733).
+    /// </summary>
+    /// <remarks>
+    /// The order that used to blank: the sync state was valid, so the sweep was accepted, and every
+    /// later query had timed out, so the store wrote <c>TFOM —</c>, <c>FFOM —</c> and the rest over
+    /// readings that had been good a second earlier. The state is answered as <c>POW</c> here, as it
+    /// was in the QA run that found it, so the assertion that the store still says <c>LOCK</c> is
+    /// also the assertion that nothing from the dying sweep was written.
+    /// </remarks>
+    [Fact]
+    public async Task APowerCutJustAfterTheSyncStateAnsweredKeepsTheLastReadings()
+    {
+        PowerCut cut = new();
+        ControllableTransport transport = Receiver(
+            command =>
+            {
+                if (command == ":SYNC:STAT?" && cut.Armed)
+                {
+                    // This answer goes out; nothing after it does.
+                    cut.SwitchOff();
+                    return " POW";
+                }
+
+                return null;
+            },
+            silentFor: _ => cut.IsOff);
+
+        await AssertAPowerCutKeepsTheLastReadings(transport, cut);
+    }
+
+    /// <summary>
+    /// The receiver loses power before <c>:SYNC:STAT?</c> answered, and the main window keeps the
+    /// last readings — the order that always did, pinned so the two cannot drift apart again (#733).
+    /// </summary>
+    [Fact]
+    public async Task APowerCutBeforeTheSyncStateAnsweredKeepsTheLastReadings()
+    {
+        PowerCut cut = new();
+        ControllableTransport transport = Receiver(
+            silentFor: command =>
+            {
+                if (command == ":SYNC:STAT?" && cut.Armed)
+                {
+                    cut.SwitchOff();
+                }
+
+                return cut.IsOff;
+            });
+
+        await AssertAPowerCutKeepsTheLastReadings(transport, cut);
+    }
+
+    /// <summary>Runs the poller to a good reading, cuts the power, and checks nothing was blanked.</summary>
+    private static async Task AssertAPowerCutKeepsTheLastReadings(ControllableTransport transport, PowerCut cut)
+    {
+        FakeTimeProvider clock = new();
+        (DeviceSessionService session, ReceiverStateStore store) = await ConnectedAsync(transport, clock);
+        await using DeviceSessionService _ = session;
+        await using PollingService poller = new(session, store, clock);
+        cut.Store = store;
+        cut.Poller = poller;
+
+        poller.Start();
+        await WaitFor(clock, () => poller.FastSweeps >= 2, () => poller.FastSweeps + poller.FullSweeps);
+        Assert.Equal(3, store.Tfom);
+
+        cut.Arm();
+
+        // Until the session has noticed the link is gone and the sweep the power went in has ended,
+        // which is when the window's picture of the outage is settled.
+        await WaitFor(
+            clock,
+            () => cut.SweepsBeforeTheCut is int before
+                && poller.FastSweeps > before
+                && session.Status != ConnectionStatus.Connected,
+            () => poller.FastSweeps + poller.FullSweeps);
+        await poller.StopAsync();
+
+        Assert.Equal("LOCK", store.SyncState);
+        Assert.Equal(3, store.Tfom);
+        Assert.Equal(1, store.Ffom);
+        Assert.NotNull(store.OnePpsTiNanoseconds);
+        Assert.NotNull(store.OscillatorControl);
+        Assert.Equal(1, store.TrackedCount);
+
+        // And they say how old they are: the timestamp is the last good sweep's, not the dying one's.
+        Assert.NotNull(cut.LastReadingBeforeTheCut);
+        Assert.Equal(cut.LastReadingBeforeTheCut, store.LastFastPoll);
+
+        // Held back, rather than rejected by the driver or never finished.
+        Assert.True(poller.HeldBackSweeps >= 1, "no sweep was held back");
+    }
+
+    /// <summary>
+    /// The moment a simulated receiver loses power, and what the store held at that moment.
+    /// </summary>
+    /// <remarks>
+    /// The store's timestamp is taken at the cut, from inside the transport, rather than by the test
+    /// before arming it: the poll loop runs while the test arms, so a sweep that was already under
+    /// way would land after a timestamp taken from outside and look like the dying sweep's.
+    /// </remarks>
+    private sealed class PowerCut
+    {
+        private int _armed;
+        private int _off;
+        private int _sweepsBeforeTheCut = -1;
+
+        public ReceiverStateStore? Store { get; set; }
+
+        public PollingService? Poller { get; set; }
+
+        public DateTimeOffset? LastReadingBeforeTheCut { get; private set; }
+
+        /// <summary>Fast sweeps completed when the power went, so not counting the one it went in.</summary>
+        /// <remarks>Published last and with a barrier, so a test that sees it sees the timestamp too.</remarks>
+        public int? SweepsBeforeTheCut =>
+            Volatile.Read(ref _sweepsBeforeTheCut) is int sweeps and >= 0 ? sweeps : null;
+
+        public bool Armed => Volatile.Read(ref _armed) == 1;
+
+        public bool IsOff => Volatile.Read(ref _off) == 1;
+
+        public void Arm() => Volatile.Write(ref _armed, 1);
+
+        public void SwitchOff()
+        {
+            if (Interlocked.Exchange(ref _off, 1) == 0)
+            {
+                LastReadingBeforeTheCut = Store?.LastFastPoll;
+                Volatile.Write(ref _sweepsBeforeTheCut, Poller?.FastSweeps ?? 0);
+            }
+        }
+    }
+
+    /// <summary>
+    /// A receiver that never answers one query does not freeze the store: after a few sweeps its
+    /// silence is taken as its answer, and the rest of the sweep is applied (#733).
+    /// </summary>
+    /// <remarks>
+    /// The risk of holding a sweep back for a timeout. The answers in between keep §7.2's count of
+    /// consecutive timeouts from ever reaching three, so the session stays connected; without a way
+    /// out, every sweep would be held back for as long as the application ran, and the window would
+    /// show readings growing older by the second from a receiver answering perfectly well.
+    /// </remarks>
+    [Fact]
+    public async Task AQueryTheReceiverNeverAnswersDoesNotFreezeTheStore()
+    {
+        FakeTimeProvider clock = new();
+        ControllableTransport transport = Receiver(silentFor: command => command == ":GPS:SAT:TRAC:COUN?");
+
+        (DeviceSessionService session, ReceiverStateStore store) = await ConnectedAsync(transport, clock);
+        await using DeviceSessionService _ = session;
+        await using PollingService poller = new(session, store, clock);
+
+        poller.Start();
+        await WaitFor(
+            clock,
+            () => store.LastFastPoll is not null,
+            () => poller.FastSweeps + poller.FullSweeps);
+        await poller.StopAsync();
+
+        Assert.Equal(ConnectionStatus.Connected, session.Status);
+        Assert.Equal(PollingService.SweepsBeforeSilenceIsAnAnswer - 1, poller.HeldBackSweeps);
+        Assert.Equal("LOCK", store.SyncState);
+        Assert.Equal(3, store.Tfom);
+
+        // The full screen had supplied a count; the sweep that asked and heard nothing blanks it,
+        // as a reading the receiver is not giving.
+        Assert.Null(store.TrackedCount);
     }
 
     /// <summary>

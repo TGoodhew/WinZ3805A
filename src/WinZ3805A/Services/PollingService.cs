@@ -73,6 +73,33 @@ public sealed class PollingService : IAsyncDisposable
     /// <summary>How many times a sweep has skipped a refusable query, for the tests to see.</summary>
     public long RefusedQuerySkips { get; private set; }
 
+    /// <summary>
+    /// How many consecutive sweeps a query must go unanswered, while the receiver answers the
+    /// others, before its silence is taken as the receiver's answer (#733).
+    /// </summary>
+    /// <remarks>
+    /// Three, the figure §7.2 already uses for the link: three timeouts in a row and the session
+    /// stops believing the link is there. A query that has gone unanswered through three sweeps in
+    /// which the same receiver answered the others is not a link dying under it — a dying link
+    /// takes the session to <c>Reconnecting</c> long before then — but a question this receiver
+    /// does not answer.
+    /// </remarks>
+    internal const int SweepsBeforeSilenceIsAnAnswer = 3;
+
+    /// <summary>
+    /// For each fast-tier query that has gone unanswered, how many consecutive sweeps it has been
+    /// silent in while the receiver answered something else, keyed by its index in the plan.
+    /// </summary>
+    /// <remarks>
+    /// See <see cref="PollFastAsync"/>. Counted only over sweeps in which something else answered,
+    /// so an outage — in which nothing answers — can never teach the poller that a query is one
+    /// the receiver does not answer.
+    /// </remarks>
+    private readonly Dictionary<int, int> _silentStreak = [];
+
+    /// <summary>How many fast sweeps were held back because a query did not answer (#733).</summary>
+    public int HeldBackSweeps { get; private set; }
+
     /// <summary>Creates a poller for one session.</summary>
     /// <param name="session">The session whose transport the sweeps run over.</param>
     /// <param name="store">Where each sweep's readings are published.</param>
@@ -383,9 +410,14 @@ public sealed class PollingService : IAsyncDisposable
 
         string?[] answers = new string?[plan.FastTier.Count];
 
+        // Which queries went unanswered - timed out, or lost with the link - as distinct from those
+        // the receiver answered, refused, or was not asked (#733).
+        bool[] silent = new bool[answers.Length];
+
         // The discriminator comes first in the plan's order, which is what makes this possible at
         // all: its answer keys the refusal suppression for the rest of the sweep.
-        answers[0] = await AskAsync(driver, plan.FastTier[0], cancellationToken).ConfigureAwait(false);
+        (answers[0], _, silent[0]) =
+            await AskWithStatusAsync(driver, plan.FastTier[0], cancellationToken).ConfigureAwait(false);
         string? state = ScalarParsers.ParseKeyword(answers[0]);
 
         for (int i = 1; i < answers.Length; i++)
@@ -399,7 +431,7 @@ public sealed class PollingService : IAsyncDisposable
                     continue;
                 }
 
-                (answers[i], bool refused) =
+                (answers[i], bool refused, silent[i]) =
                     await AskWithStatusAsync(driver, plan.FastTier[i], cancellationToken).ConfigureAwait(false);
 
                 if (refused)
@@ -414,11 +446,34 @@ public sealed class PollingService : IAsyncDisposable
                 continue;
             }
 
-            answers[i] = await AskAsync(driver, plan.FastTier[i], cancellationToken).ConfigureAwait(false);
+            (answers[i], _, silent[i]) =
+                await AskWithStatusAsync(driver, plan.FastTier[i], cancellationToken).ConfigureAwait(false);
         }
 
+        // Interpreted even when it will be held back below, because a driver may learn from a
+        // sweep something that stays true however the sweep ends - the UCCM driver settles the
+        // module's vendor from the loop reply's shape.
         SweepInterpretation sweep = driver.InterpretSweep(answers);
         FastReadings readings = sweep.Readings;
+
+        // A query that did not answer is not a reading (#733), so a sweep with one in it is held
+        // back whole, like a rejected one. See WhichQueryWentUnanswered for why whole, and for the
+        // one kind of silence that is let through.
+        string? unanswered = WhichQueryWentUnanswered(plan, silent);
+        if (unanswered is not null)
+        {
+            // Information, for the reason the dropped reading below gives: this is a second the
+            // trend will not have, and the line is what says why.
+            _logger.LogInformation(
+                "Held back a sweep: {Mnemonic} did not answer, so the readings on screen were kept "
+                + "rather than replaced with blanks. The receiver said its state was {SyncState}.",
+                unanswered,
+                readings.SyncState ?? "nothing");
+
+            HeldBackSweeps++;
+            FastSweeps++;
+            return;
+        }
 
         LogStateChange(readings.SyncState, readings.Tfom, readings.SatellitesTracked);
 
@@ -496,6 +551,79 @@ public sealed class PollingService : IAsyncDisposable
             readings.TimeOfDay);
 
         FastSweeps++;
+    }
+
+    /// <summary>
+    /// The first query in this sweep whose silence holds the sweep back, or <see langword="null"/>
+    /// when the sweep is a reading (#733).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>A query that timed out is not a reading.</b> Before this, a receiver losing power was shown
+    /// one of two ways depending only on where in the one-second sweep the power went. Before
+    /// <c>:SYNC:STAT?</c> answered, the sweep's sync state was empty, the driver rejected it as not
+    /// the receiver's (#209), and the last readings stayed on screen with their age climbing. Just
+    /// after, the rest of the sweep timed out, the sync state was valid, the sweep was accepted, and
+    /// the store blanked every fast-tier field with the nulls — <c>TFOM —</c>, <c>FFOM —</c>. One
+    /// event, two pictures. §9.11's rule — an old reading with an honest timestamp beats an empty
+    /// field — picks the first, and only a refusal or an answered "no value" may blank a field.
+    /// </para>
+    /// <para>
+    /// <b>The whole sweep, not the silent fields</b>, for the reason #237 gives the rejected sweep.
+    /// Keeping the silent fields' old values while writing the rest would stamp the old values with
+    /// this sweep's time, so a number the receiver did not give this second would be shown as one
+    /// it did. Holding the sweep back leaves every field with the timestamp it was actually read at.
+    /// It costs one second of trend when a single reply is merely slow, which §7.2 already treats
+    /// as ordinary.
+    /// </para>
+    /// <para>
+    /// <b>The one silence let through is a query this receiver does not answer.</b> Held back on
+    /// every sweep, one query a receiver never answers — a firmware that ignores a command rather
+    /// than refusing it, or a timeout that is too short for one model, which the UCCM driver's are
+    /// guesses that could be — would freeze the whole store while the session stayed connected,
+    /// because the answers in between keep §7.2's timeout count from reaching three. So a query
+    /// silent through <see cref="SweepsBeforeSilenceIsAnAnswer"/> consecutive sweeps in which the
+    /// receiver answered something else is taken at its word: the sweep is applied and its field
+    /// blanks, as it did before. A dying link never qualifies, because in an outage nothing answers
+    /// and the count does not move.
+    /// </para>
+    /// <para>
+    /// A broadcast family is unaffected in practice: a talker's absent sentence is answered as an
+    /// empty reply rather than a timeout, and a talker that has stopped times every key out at once.
+    /// </para>
+    /// </remarks>
+    private string? WhichQueryWentUnanswered(PollPlan plan, bool[] silent)
+    {
+        bool somethingAnswered = false;
+        for (int i = 0; i < silent.Length; i++)
+        {
+            somethingAnswered |= !silent[i];
+        }
+
+        string? holdsBack = null;
+        for (int i = 0; i < silent.Length; i++)
+        {
+            if (!silent[i])
+            {
+                // Answered, refused, or not asked: none of those says the query has stopped being
+                // answered, so the count starts again.
+                _silentStreak.Remove(i);
+                continue;
+            }
+
+            int streak = _silentStreak.GetValueOrDefault(i);
+            if (somethingAnswered)
+            {
+                _silentStreak[i] = ++streak;
+            }
+
+            if (streak < SweepsBeforeSilenceIsAnAnswer)
+            {
+                holdsBack ??= plan.FastTier[i];
+            }
+        }
+
+        return holdsBack;
     }
 
     /// <summary>Says once that the driver's plan sweeps nothing, then stays quiet.</summary>
@@ -586,6 +714,7 @@ public sealed class PollingService : IAsyncDisposable
 
         _observedDriver = driver;
         _refusedUnder.Clear();
+        _silentStreak.Clear();
         _warnedAboutEmptyPlan = false;
     }
 
@@ -745,8 +874,14 @@ public sealed class PollingService : IAsyncDisposable
     /// the prompt. A timeout, a dropped link or an uncatalogued mnemonic are all false: those say
     /// nothing about whether the receiver would have answered, and suppressing a reading because
     /// the cable was unplugged would keep it suppressed after it was plugged back in.
+    /// <para>
+    /// <c>Silent</c> is true when nothing came back — a timeout, or the link failing — which is
+    /// what holds a fast sweep back (#733). A refusal is an answer, and so is an empty reply. An
+    /// uncatalogued mnemonic is false too: it is a driver bug that would recur on every sweep, and
+    /// holding sweeps back for it would freeze the store rather than report it.
+    /// </para>
     /// </returns>
-    private async Task<(string? Text, bool Refused)> AskWithStatusAsync(
+    private async Task<(string? Text, bool Refused, bool Silent)> AskWithStatusAsync(
         IReceiverDriver driver,
         string mnemonic,
         CancellationToken cancellationToken)
@@ -761,7 +896,7 @@ public sealed class PollingService : IAsyncDisposable
             // the driver rather than a device condition — hence a warning rather than silence. The
             // contract tests assert the plan resolves, so a registered driver cannot get here.
             _logger.LogWarning("{Mnemonic} is not in the driver's command catalog and was not polled.", mnemonic);
-            return (null, false);
+            return (null, false, false);
         }
 
         try
@@ -772,7 +907,7 @@ public sealed class PollingService : IAsyncDisposable
             // WasRejected, not ErrorQueueNotEmpty: this drives the "do not ask again until the
             // sync state changes" suppression, and an unrelated queued error must not silence a
             // query that is answering perfectly well (#173).
-            return (transaction.Succeeded ? transaction.Text : null, transaction.WasRejected);
+            return (transaction.Succeeded ? transaction.Text : null, transaction.WasRejected, !transaction.Succeeded);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -781,7 +916,7 @@ public sealed class PollingService : IAsyncDisposable
         catch (Exception exception) when (TransportFaults.IsTransportFault(exception))
         {
             _logger.LogDebug(exception, "Polling {Mnemonic} failed.", mnemonic);
-            return (null, false);
+            return (null, false, true);
         }
     }
 }

@@ -95,6 +95,16 @@ public sealed class ControllableTransport : ITransport
     public Func<string, string?>? PromptFor { get; init; }
 
     /// <summary>
+    /// Commands the device accepts and never answers, or null to answer every one.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="TransportBehaviour.Silent"/> for one command rather than all of them: a receiver
+    /// whose firmware ignores one query outright while answering the rest, which is the case a
+    /// held-back sweep must not freeze the store on (#733).
+    /// </remarks>
+    public Func<string, bool>? SilentFor { get; init; }
+
+    /// <summary>
     /// What the device announces, unprompted, when DTR is asserted — followed by a prompt.
     /// </summary>
     /// <remarks>
@@ -155,7 +165,7 @@ public sealed class ControllableTransport : ITransport
             _written.Add(command);
             _writes.Writer.TryWrite(command);
 
-            if (Behaviour == TransportBehaviour.Silent)
+            if (Behaviour == TransportBehaviour.Silent || SilentFor?.Invoke(command) == true)
             {
                 continue;
             }
