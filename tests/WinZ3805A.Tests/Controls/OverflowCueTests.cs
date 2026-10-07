@@ -40,11 +40,45 @@ public class OverflowCueTests
     }
 
     [Fact]
-    public void AHalfVisibleRowIsNotCountedAsInView()
+    public void ARowExactlyHalfVisibleIsCounted()
     {
         double viewport = EndingOnRow(2) + RowSpacing + (RowHeight / 2);
 
+        Assert.Equal(18, OverflowCue.CountInView(Grid(), viewport));
+    }
+
+    [Fact]
+    public void ARowJustUnderHalfVisibleIsNotCounted()
+    {
+        double viewport = EndingOnRow(2) + RowSpacing + (RowHeight / 2) - 1;
+
         Assert.Equal(12, OverflowCue.CountInView(Grid(), viewport));
+    }
+
+    /// <summary>The 150 % Compact case: a row about 40 % visible stays out of the count.</summary>
+    [Fact]
+    public void ARowFortyPercentVisibleIsNotCounted()
+    {
+        double viewport = EndingOnRow(2) + RowSpacing + (RowHeight * 0.4);
+
+        Assert.Equal(12, OverflowCue.CountInView(Grid(), viewport));
+    }
+
+    /// <summary>
+    /// Win11, 640 × 432 at 200 % text: a view shorter than one row, six buttons showing about half
+    /// their height. Wholly-in-view counted none of them and the line read "Showing 0 of 32".
+    /// </summary>
+    [Fact]
+    public void AViewShorterThanOneRowCountsTheRowItShows()
+    {
+        double viewport = RowHeight * 0.55;
+
+        int inView = OverflowCue.CountInView(Grid(offset: GridTop), viewport);
+
+        Assert.Equal(6, inView);
+        Assert.Equal(
+            "Showing 6 of 32 satellites. Scroll for more.",
+            OverflowCue.Describe(overflows: true, inView, total: 32));
     }
 
     [Fact]
@@ -87,14 +121,14 @@ public class OverflowCueTests
     [InlineData(-0.34)]
     public void ASubPixelRoundingIsAbsorbed(double error)
     {
-        Assert.True(OverflowCue.IsInView(top: error, height: 48, viewport: 48));
+        Assert.True(OverflowCue.IsInView(top: 24 + error, height: 48, viewport: 48));
         Assert.False(OverflowCue.Overflows(extent: 600 + Math.Abs(error), viewport: 600));
     }
 
     [Fact]
     public void AWholePixelIsNotAbsorbed()
     {
-        Assert.False(OverflowCue.IsInView(top: 1, height: 48, viewport: 48));
+        Assert.False(OverflowCue.IsInView(top: 25, height: 48, viewport: 48));
         Assert.True(OverflowCue.Overflows(extent: 601, viewport: 600));
     }
 

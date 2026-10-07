@@ -47,19 +47,34 @@ public static class OverflowCue
 
     /// <summary>
     /// Whether an item whose top is <paramref name="top"/> below the view's top, and which is
-    /// <paramref name="height"/> tall, is wholly inside a view <paramref name="viewport"/> tall.
+    /// <paramref name="height"/> tall, has at least half its height inside a view
+    /// <paramref name="viewport"/> tall.
     /// </summary>
     /// <remarks>
-    /// Wholly, not partly: a PRN button cut through its label is a satellite the user cannot read,
-    /// which is the thing the cue exists to admit. An item with no height has not been laid out and is
-    /// not in view.
+    /// <para>
+    /// Half, not wholly. The first rule was wholly in view, and in a 640 × 432 window at 200 % text the
+    /// view was shorter than one row: six buttons showed, each cut about half way, and the line read
+    /// "Showing 0 of 32" over them (Win11 VM, 7 Oct 2026). A count that contradicts what is on screen
+    /// is worse than none.
+    /// </para>
+    /// <para>
+    /// Half, not any part: a row with a sliver showing is a row the user cannot read, and at 150 % text
+    /// in the Compact window a row about 40 % visible is still rightly left out. An item with no height
+    /// has not been laid out and is not in view.
+    /// </para>
     /// </remarks>
-    public static bool IsInView(double top, double height, double viewport) =>
-        height > 0
-        && top >= -Tolerance
-        && top + height <= viewport + Tolerance;
+    public static bool IsInView(double top, double height, double viewport)
+    {
+        if (height <= 0)
+        {
+            return false;
+        }
 
-    /// <summary>How many of <paramref name="items"/> are wholly in a view <paramref name="viewport"/> tall.</summary>
+        double visible = Math.Min(top + height, viewport) - Math.Max(top, 0);
+        return visible >= (height / 2) - Tolerance;
+    }
+
+    /// <summary>How many of <paramref name="items"/> are at least half in a view <paramref name="viewport"/> tall.</summary>
     /// <param name="items">Each item's top relative to the view's top, and its height.</param>
     /// <param name="viewport">The view's height.</param>
     public static int CountInView(IEnumerable<(double Top, double Height)> items, double viewport)
@@ -73,7 +88,7 @@ public static class OverflowCue
     /// The sentence to show, or null when the content fits and nothing needs saying.
     /// </summary>
     /// <param name="overflows">Whether the content is taller than its view.</param>
-    /// <param name="inView">How many satellites are wholly in view.</param>
+    /// <param name="inView">How many satellites are at least half in view.</param>
     /// <param name="total">How many there are; zero before the receiver has been read.</param>
     public static string? Describe(bool overflows, int inView, int total)
     {
