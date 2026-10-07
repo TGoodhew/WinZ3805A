@@ -2735,7 +2735,10 @@ function Measure-Window($element, [string]$label) {
     # visible frame, so the invisible resize borders do not count against it.
     $frame = [QaCaption]::Frame($h); $work = [System.Windows.Forms.Screen]::FromHandle($h).WorkingArea
     $m.frame = "$($frame.Left),$($frame.Top) $($frame.Right - $frame.Left)x$($frame.Bottom - $frame.Top)"; $m.work = "$($work.Left),$($work.Top) $($work.Width)x$($work.Height)"
-    $m.inside = $frame.Left -ge $work.Left - 1 -and $frame.Top -ge $work.Top - 1 -and $frame.Right -le $work.Right + 1 -and $frame.Bottom -le $work.Bottom + 1
+    # A frame with no size is no window, and is trivially "inside": 1.4.0's pass read 0,0 0x0 for the
+    # main window at 150 % on QA-Win10 and passed this (6 Oct 2026).
+    $m.inside = ($frame.Right - $frame.Left) -gt 0 -and ($frame.Bottom - $frame.Top) -gt 0 -and
+        $frame.Left -ge $work.Left - 1 -and $frame.Top -ge $work.Top - 1 -and $frame.Right -le $work.Right + 1 -and $frame.Bottom -le $work.Bottom + 1
     # The caption buttons from UI Automation's Minimize button; failing that, from the window's own
     # title-bar information. DWMWA_CAPTION_BUTTON_BOUNDS came back empty for these windows (3 Oct 2026).
     $minimise = $element.FindFirst([System.Windows.Automation.TreeScope]::Descendants, (New-Object System.Windows.Automation.AndCondition($buttonType, (New-Object System.Windows.Automation.PropertyCondition($script:Ae::NameProperty, 'Minimize')))))
