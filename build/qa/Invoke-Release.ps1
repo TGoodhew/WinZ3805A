@@ -220,12 +220,22 @@ while ($true) {
             $sha = git -C $repo rev-parse origin/main
             $manifest = git -C $repo show "${sha}:src/WinZ3805A/Package.appxmanifest"
             if (($manifest -join "`n") -notmatch "Version=""$([regex]::Escape($full))""") { Stop-At $state 'failed' "main at $sha does not carry $full" }
-            if (-not (git -C $repo tag -l $tag)) { git -C $repo tag $tag $sha }
+            # A release tagged again after a fault - its draft deleted, the fix merged, -Restart tag - must
+            # not meet the first attempt's leftovers (8 Oct 2026, 1.4.1 held for #773). A release still
+            # carrying the tag would be found here as if it were the new one, and a local tag left on the
+            # old commit would be pushed as it stands, building the release that was held. Both stop.
+            gh release view $tag --repo TGoodhew/WinZ3805A --json tagName *> $null
+            if ($LASTEXITCODE -eq 0) { Stop-At $state 'failed' "a release $tag exists already - delete it and its tag (gh release delete $tag --cleanup-tag) before tagging again" }
+            $existing = git -C $repo rev-parse -q --verify "refs/tags/$tag^{commit}"
+            if ($existing -and $existing -ne $sha) { Stop-At $state 'failed' "the local tag $tag is on $existing, not main's ${sha}: delete it (git tag -d $tag) before tagging again" }
+            if (-not $existing) { git -C $repo tag $tag $sha }
             git -C $repo push origin $tag *>> $logPath
             $state.tagged = $sha; Save-State $state
             Say "tagged $tag on $sha; release.yml makes it a draft"
+            # The run for this commit, not the latest under the tag's name: after a re-tag that is the
+            # first attempt's, finished long ago, and watching it would pass at once.
             $run = $null
-            for ($i = 0; $i -lt 60 -and -not $run; $i++) { Start-Sleep -Seconds 10; $run = gh run list --repo TGoodhew/WinZ3805A --workflow release.yml --branch $tag --limit 1 --json databaseId | ConvertFrom-Json | Select-Object -First 1 }
+            for ($i = 0; $i -lt 60 -and -not $run; $i++) { Start-Sleep -Seconds 10; $run = gh run list --repo TGoodhew/WinZ3805A --workflow release.yml --branch $tag --limit 5 --json databaseId,headSha | ConvertFrom-Json | Where-Object { $_.headSha -eq $sha } | Select-Object -First 1 }
             if (-not $run) { Stop-At $state 'failed' "release.yml did not start for $tag" }
             $state.build = $run.databaseId; Save-State $state
             gh run watch --repo TGoodhew/WinZ3805A $run.databaseId --exit-status --interval 30 *> $null
