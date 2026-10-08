@@ -130,7 +130,10 @@ failed with one VM running (#711 and #707, both since fixed), and `upgrade-1.2.0
 run before and after. What two passes share on the host is guarded where it is shared: the
 simulator build (one at a time, since `obj` is common to every `-o`), the host's temporary copies of
 guest steps (named with the process), and release downloads (written to a file of their own, then
-moved into place).
+moved into place). `Invoke-Release.ps1` merges the halves into one run (`Merge-QaRuns`), and a half
+with no `results.json` - one that died, or is still running - is reported as an error naming its
+machine rather than left out, so the merged run is FAIL. Until 8 Oct 2026 it was silent, and
+1.4.1's pass came out awaiting judgement on QA-Win11 alone (#772).
 
 **Known nondeterminism**, so it is not mistaken for a defect:
 - **The simulator's first 30 seconds after a power cycle.** It refuses the GPS engine's identity and
