@@ -99,7 +99,8 @@ elseif ((Test-Path $statePath) -and -not $Resume -and -not $BumpPr) { throw "A r
 if ($Go) { $state.go = (Get-Date -Format 'yyyy-MM-dd HH:mm'); Say "Tony's go recorded" }
 Save-State $state
 
-# The pass's verdict: 0 PASS, 3 AWAITING JUDGEMENT, anything else a failure.
+# The machines whose pass exited with an error, as "QA-Win10 (exit 1)"; none when every one ended
+# 0 PASS or 3 AWAITING JUDGEMENT. The verdict itself is read from the run folder (Get-PassVerdict).
 #
 # Both VMs at once unless the arguments name the machines (the soak does): one Invoke-QaPass per VM,
 # each into its own folder under <OutDir>.parts, merged into OutDir as one run (Merge-QaRuns). Halves a
@@ -110,7 +111,8 @@ function Invoke-Pass {
     $script = Join-Path $repo 'build\qa\Invoke-QaPass.ps1'
     if ($Arguments -contains '-Machines') {
         & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $script @Arguments -OutDir $OutDir *>> $logPath
-        return $LASTEXITCODE
+        if ($LASTEXITCODE -notin 0, 3) { return "$($Arguments[[array]::IndexOf($Arguments, '-Machines') + 1]) (exit $LASTEXITCODE)" }
+        return
     }
     $parts = "$OutDir.parts"
     $quoted = @($Arguments | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } })
@@ -136,9 +138,21 @@ function Invoke-Pass {
     Say "pass running on both VMs at once: $(($procs | ForEach-Object Id) -join ', '); logs in $parts"
     $procs | Wait-Process
     foreach ($machine in 'QA-Win10', 'QA-Win11') { Get-Content (Join-Path $parts "$machine.log") -ErrorAction SilentlyContinue | Add-Content $logPath }
+    # Each half's exit code, which until #772 nobody read: waiting was all this did, so a half that
+    # died went unnoticed here and was caught - or not - only by what the merge made of its folder.
+    # Read in the order the halves were started, which is the order of $procs. An exit code that
+    # cannot be read is $null, which is not 0 or 3, so it counts as an error rather than a pass
+    # (PowerShell 7.6 reads all three of 0, 1 and 3 from these processes, measured 8 Oct 2026).
+    $failed = @(for ($i = 0; $i -lt $procs.Count; $i++) {
+            $machine = @('QA-Win10', 'QA-Win11')[$i]
+            if ($procs[$i].ExitCode -notin 0, 3) { "$machine (exit $($procs[$i].ExitCode))" }
+        })
+    foreach ($f in $failed) { Say "the pass on $f exited with an error; its output is in $parts" }
+    # Merged even so: the report says what the other half found, and Merge-QaRuns marks a half with
+    # no results as untested rather than leaving it out.
     $merge = "Import-Module '$(Join-Path $repo 'build\qa\QaJudging.psm1')' -Force; `$s = Merge-QaRuns -Parts '$(Join-Path $parts 'QA-Win10')', '$(Join-Path $parts 'QA-Win11')' -RunDir '$OutDir'; `"merged: `$(`$s.Verdict)`"; exit `$(switch (`$s.Verdict) { 'PASS' { 0 } 'AWAITING JUDGEMENT' { 3 } default { 1 } })"
     & powershell.exe -NoProfile -ExecutionPolicy Bypass -Command $merge *>> $logPath
-    $LASTEXITCODE
+    $failed
 }
 
 # Through Windows PowerShell, as the pass itself runs: QaJudging.psm1 compiles against System.Drawing's
@@ -225,7 +239,10 @@ while ($true) {
             $out = Join-Path $home_ 'draft-pass'
             if ($state.status -ne 'waiting for judgement' -or -not (Test-Path (Join-Path $out 'results.json'))) {
                 $state.passStarted = (Get-Date -Format 'yyyy-MM-dd HH:mm'); Save-State $state
-                $null = Invoke-Pass @('-Release', $tag, '-Draft') $out
+                $failed = @(Invoke-Pass @('-Release', $tag, '-Draft') $out)
+                # A half that exited with an error stops the stage here, by name, whatever the merged
+                # verdict says (#772). Exit 1 is also a pass whose checks failed, which stops it anyway.
+                if ($failed.Count) { $state.passVerdict = "FAIL ($($failed -join ', '))"; Stop-At $state 'failed' "the pass on $($failed -join ' and ') exited with an error: $out\report.md, and each half's log in $out.parts" }
             }
             $verdict = Get-PassVerdict $out
             $state.passVerdict = $verdict
