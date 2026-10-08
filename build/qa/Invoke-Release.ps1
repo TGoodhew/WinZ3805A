@@ -147,7 +147,7 @@ function Invoke-Pass {
             $machine = @('QA-Win10', 'QA-Win11')[$i]
             if ($procs[$i].ExitCode -notin 0, 3) { "$machine (exit $($procs[$i].ExitCode))" }
         })
-    foreach ($f in $failed) { Say "the pass on $f exited with an error; its output is in $parts" }
+    foreach ($f in $failed) { Say "the pass on $f ended neither PASS nor AWAITING JUDGEMENT - a failed check, or the pass itself failing; its output is in $parts" }
     # Merged even so: the report says what the other half found, and Merge-QaRuns marks a half with
     # no results as untested rather than leaving it out.
     $merge = "Import-Module '$(Join-Path $repo 'build\qa\QaJudging.psm1')' -Force; `$s = Merge-QaRuns -Parts '$(Join-Path $parts 'QA-Win10')', '$(Join-Path $parts 'QA-Win11')' -RunDir '$OutDir'; `"merged: `$(`$s.Verdict)`"; exit `$(switch (`$s.Verdict) { 'PASS' { 0 } 'AWAITING JUDGEMENT' { 3 } default { 1 } })"
@@ -242,7 +242,7 @@ while ($true) {
                 $failed = @(Invoke-Pass @('-Release', $tag, '-Draft') $out)
                 # A half that exited with an error stops the stage here, by name, whatever the merged
                 # verdict says (#772). Exit 1 is also a pass whose checks failed, which stops it anyway.
-                if ($failed.Count) { $state.passVerdict = "FAIL ($($failed -join ', '))"; Stop-At $state 'failed' "the pass on $($failed -join ' and ') exited with an error: $out\report.md, and each half's log in $out.parts" }
+                if ($failed.Count) { $state.passVerdict = "FAIL ($($failed -join ', '))"; Stop-At $state 'failed' "the pass on $($failed -join ' and ') failed - a check, or the pass itself, which exits 1 too: $out\report.md, and each half's log in $out.parts" }
             }
             $verdict = Get-PassVerdict $out
             $state.passVerdict = $verdict
