@@ -184,45 +184,6 @@ public sealed class NmeaSessionTests
         private const int TickBudget = 300;
 
         /// <summary>
-        /// How long an emit may block before it counts as nothing reading. <b>A deadlock detector,
-        /// not a performance assertion (#510).</b>
-        /// </summary>
-        /// <remarks>
-        /// <para>
-        /// <b>Measured, at last.</b> The recurrence was caught on 13 Sep 2026 — once in 200
-        /// full-suite runs, with the output kept this time — and it says: <i>"A talker cycle was
-        /// never consumed, so the emit blocked for 15 s… the session is <b>Connected</b>."</i> The
-        /// <c>Bench</c>'s own prediction was that this shape meant the session had faulted and the
-        /// listener had stopped. It had not. Nothing was wrong with the session at all.
-        /// </para>
-        /// <para>
-        /// <b>What actually happens.</b> <c>BroadcastListener</c> starts its read loop with
-        /// <c>Task.Run</c>, so draining depends on a thread-pool thread being scheduled, and
-        /// <c>WaitForReaderToConsume</c> builds the pipe with a one-byte <c>pauseWriterThreshold</c>
-        /// so the writer blocks the instant the reader falls behind. Under xUnit's parallel
-        /// collections the pool is saturated, the read loop is not scheduled promptly, and the emit
-        /// waits — while being timed against the wall clock.
-        /// </para>
-        /// <para>
-        /// <b>So this is the same defect as the one already fixed above, in the one place that was
-        /// left.</b> The loops were changed from wall time to counting ticks because what they wait
-        /// for advances on the fake clock; this bound stayed real because "a hung emit is a
-        /// real-time event". True, and incomplete: a <i>starved</i> emit is a real-time event too,
-        /// and at fifteen seconds the two are indistinguishable.
-        /// </para>
-        /// <para>
-        /// <b>Why more time rather than a cleverer rule.</b> A real hang here is <i>infinite</i> —
-        /// nothing will ever drain a pipe whose reader has stopped — so any finite bound catches it
-        /// and the only question is how long a starved reader may reasonably take. Sixty seconds is
-        /// far beyond any scheduling delay seen and still reports a genuine deadlock inside a test
-        /// run rather than hanging the host, which is the failure #445 and #381 were about. The cost
-        /// is that a true hang takes a minute to report instead of fifteen seconds, which is a
-        /// trade worth making against a test that fails once in a few hundred runs for being slow.
-        /// </para>
-        /// </remarks>
-        private static readonly TimeSpan EmitBudget = TimeSpan.FromSeconds(60);
-
-        /// <summary>
         /// Ticks until <paramref name="pending"/> completes, then hands back its result.
         /// </summary>
         /// <remarks>
@@ -293,6 +254,17 @@ public sealed class NmeaSessionTests
         /// they wait for advances on the fake clock. Giving both the same kind of budget is what
         /// made one of them fail for being slow.
         /// </para>
+        /// <para>
+        /// <b>The bound is the transport's own, and the message names it (#782).</b> This used to
+        /// wrap the emit in a second, sixty-second <c>WaitAsync</c> and say "blocked for 60 s" —
+        /// but <see cref="FakeTransport.PausedWriteTimeout"/> ends a paused write at thirty and
+        /// throws the same <see cref="TimeoutException"/>, so every failure took thirty seconds and
+        /// reported sixty. The sixty had been chosen on the theory that the listener was starved of
+        /// a thread; it was not starved, it had stopped. <c>LineProtocol</c>'s timed-out connect read
+        /// could leave a cancellation on the pipe for the next read, and the listener's first read
+        /// took it for its own disposal. That is fixed in <c>BroadcastListener</c>, so a timeout
+        /// here is a reader that has really gone, and no length of wait would have been enough.
+        /// </para>
         /// </remarks>
         private async Task TickAsync()
         {
@@ -300,13 +272,13 @@ public sealed class NmeaSessionTests
             {
                 try
                 {
-                    await Transport.EmitAsync(Talker.NextCycleText()).AsTask().WaitAsync(EmitBudget);
+                    await Transport.EmitAsync(Talker.NextCycleText());
                 }
                 catch (TimeoutException)
                 {
                     Assert.Fail(
                         "A talker cycle was never consumed, so the emit blocked for "
-                        + $"{EmitBudget.TotalSeconds:N0} s. The pipe pauses its writer after one byte, "
+                        + $"{Transport.PausedWriteTimeout.TotalSeconds:N0} s. The pipe pauses its writer after one byte, "
                         + $"so nothing is reading the transport — the session is {Session.Status}.");
                 }
             }

@@ -802,6 +802,11 @@ public sealed class LineProtocol
         // transports expose, SerialTransport deliberately so — but cancelling the pending read as
         // well means a reader implementation that treats its token loosely still cannot hang a
         // transaction past its §7.2 deadline.
+        //
+        // It can outlive the read it was aimed at (#782). The token's own registration inside
+        // ReadAsync runs first and can complete the read before this one fires, and a cancel with
+        // no read pending is kept for the next read on the pipe. The loop below reads past such a
+        // stray; any other consumer of this pipe has to as well — BroadcastListener reads next.
         using CancellationTokenRegistration registration = cancellationToken.UnsafeRegister(
             static state => ((PipeReader)state!).CancelPendingRead(), reader);
 
