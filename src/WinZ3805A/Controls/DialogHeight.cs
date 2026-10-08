@@ -71,7 +71,15 @@ public static class DialogHeight
     /// bar includes the title strip. In a window as short as its cap the dialog reaches the very top,
     /// and in one narrow enough that a centred dialog reaches across to the caption buttons, they are
     /// drawn over its corner - the Manage satellites dialog in a 640 × 480 Details window, 5 Oct 2026.
-    /// There the cap is lowered so that, centred, the dialog starts below the title bar.
+    /// There the cap is lowered so that the dialog starts below the title bar.
+    /// </para>
+    /// <para>
+    /// <b>Below it, not centred under it.</b> #725 lowered the cap by two title bars, so that a
+    /// centred dialog cleared the strip - and left the same 48 px empty at the foot, where nothing
+    /// needed clearing. #767's cue line then took its 35 px out of what was left, and at 200 % text in
+    /// the Minimal window no whole row of PRNs remained (#773). A dialog tall enough to reach the strip
+    /// is now placed under it (<see cref="TopForDialog"/>) and may run to half the clearance from the
+    /// foot: 32 px more for every dialog that needs it.
     /// </para>
     /// <para>
     /// <b>Only where the dialog can reach the buttons.</b> In a wider window it never comes near them,
@@ -84,12 +92,26 @@ public static class DialogHeight
     public static double MaxForWindow(double availableHeight, double availableWidth)
     {
         double cap = MaxFor(availableHeight);
-        if (availableHeight <= 0 || availableWidth <= 0)
-        {
-            return cap;
-        }
-
-        bool reachesTheButtons = (availableWidth - StockWidth) / 2 < CaptionButtons;
-        return reachesTheButtons ? Math.Min(cap, availableHeight - (2 * TitleBar)) : cap;
+        return ReachesTheButtons(availableHeight, availableWidth)
+            ? Math.Min(cap, availableHeight - TitleBar - (Clearance / 2))
+            : cap;
     }
+
+    /// <summary>
+    /// Where the top of a dialog <paramref name="dialogHeight"/> tall goes, or null to leave WinUI's
+    /// centring alone (#773).
+    /// </summary>
+    /// <remarks>
+    /// Only a dialog that, centred, would start under the title bar is moved: a short one stays where
+    /// every other Windows dialog is. It is asked again whenever the dialog's height changes, because
+    /// Manage satellites opens small and grows once the receiver has answered.
+    /// </remarks>
+    public static double? TopForDialog(double dialogHeight, double availableHeight, double availableWidth)
+    {
+        bool centredReachesTheStrip = (availableHeight - dialogHeight) / 2 < TitleBar;
+        return ReachesTheButtons(availableHeight, availableWidth) && centredReachesTheStrip ? TitleBar : null;
+    }
+
+    private static bool ReachesTheButtons(double availableHeight, double availableWidth) =>
+        availableHeight > 0 && availableWidth > 0 && (availableWidth - StockWidth) / 2 < CaptionButtons;
 }
