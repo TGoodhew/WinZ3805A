@@ -546,6 +546,11 @@ public sealed partial class DetailsWindow : Window
         // two more keys nobody asked for. There is no Ctrl+10 to bind instead.
         int accelerated = Math.Min(DetailsDestinations.Numbered.Count, DetailsDestinations.MaxAccelerated);
 
+        // Hidden, for the main window's reason (#775): left to WinUI, the pane would show its first
+        // accelerator, a bare "Ctrl+1", wherever it has no tooltip of its own. Each item's tooltip
+        // already names its shortcut.
+        Nav.KeyboardAcceleratorPlacementMode = KeyboardAcceleratorPlacementMode.Hidden;
+
         for (int number = 1; number <= accelerated; number++)
         {
             int target = number;
