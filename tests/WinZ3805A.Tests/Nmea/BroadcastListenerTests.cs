@@ -243,6 +243,43 @@ public sealed class BroadcastListenerTests : IAsyncDisposable
         Assert.Equal(TransactionOutcome.Faulted, listener.Answer("$--RMC", Silence).Outcome);
     }
 
+    /// <summary>
+    /// A read cancelled by somebody else is read past, not taken as the listener being stopped.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The flake in <c>NmeaSessionTests</c> for two months (#510, #782).</b> The connect probe's
+    /// last read on a talker times out, and <c>LineProtocol</c> cancels the pending read when it
+    /// does. When that cancel lands after the read has already returned, the pipe keeps it for the
+    /// next read — this listener's first. The listener took it for its own disposal and stopped,
+    /// with the session reporting Connected and nothing reading the pipe.
+    /// </para>
+    /// <para>
+    /// The stray is left on the pipe directly here, because the race that leaves it in the session
+    /// is a thread-pool continuation against a timer callback and cannot be scheduled from a test.
+    /// The consume-wait makes the failure an exception rather than an empty answer: before the fix
+    /// the emit waited for a reader that had gone, and the transport's own bound ended it.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AReadCancelledBySomebodyElseDoesNotStopTheListener()
+    {
+        _transport = new FakeTransport { Silent = true, EchoCommands = false, EmitPrompt = false, WaitForReaderToConsume = true };
+        await _transport.OpenAsync();
+        _transport.Input.CancelPendingRead();
+
+        _listener = new BroadcastListener(_transport, _driver, _clock);
+        _listener.Start();
+
+        await _transport.EmitAsync(_talker.NextCycleText());
+        _clock.Advance(TimeSpan.FromSeconds(1));
+        await _transport.EmitAsync(_talker.NextCycleText());
+
+        Assert.False(_listener.Ended);
+        Assert.Equal(1, _listener.CyclesHeard);
+        Assert.Equal(3, _listener.Answer("$--GSV", Silence).Lines.Count);
+    }
+
     [Fact]
     public void ADriverWithAnEmptyPlanCannotBeListenedFor() =>
         Assert.Throws<ArgumentException>(() => new BroadcastListener(new FakeTransport(), new EmptyPlanDriver(), _clock));

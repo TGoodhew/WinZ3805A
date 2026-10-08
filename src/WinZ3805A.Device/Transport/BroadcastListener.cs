@@ -390,9 +390,25 @@ public sealed class BroadcastListener : IAsyncDisposable
 
                 reader.AdvanceTo(consumed, buffer.End);
 
+                // ------------------------------------------------------------------------------------
+                // A CANCELLED READ IS NOT A STOP UNLESS THIS LISTENER ASKED FOR ONE (#782). It used to
+                // break here, on the assumption that only DisposeAsync cancels a read. It is not the
+                // only one: LineProtocol cancels the pending read when a transaction times out, and a
+                // CancelPendingRead that lands after the read it was aimed at has already returned is
+                // not lost — the pipe keeps it and cancels the NEXT read instead. The connect probe's
+                // last read on a talker always times out, and the next read is this loop's first. So
+                // now and then — 13 runs in 2,000 of the end-to-end test under load — the listener
+                // heard nothing, ended without marking itself ended, and the session said Connected
+                // over a link nobody was reading. In the app that reads as a talker gone silent, and
+                // three timed-out polls later the session reconnects a link that was fine.
+                //
+                // The stop token is what decides, and DisposeAsync cancels it before the pending read,
+                // so a cancellation it caused is seen by the loop condition and one it did not is
+                // read past — which is what LineProtocol already does with the same stray.
+                // ------------------------------------------------------------------------------------
                 if (result.IsCanceled)
                 {
-                    break;
+                    continue;
                 }
 
                 if (result.IsCompleted)
