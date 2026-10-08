@@ -70,8 +70,47 @@ public class DialogHeightTests
     {
         double cap = DialogHeight.MaxForWindow(height, width);
 
-        double top = (height - cap) / 2;
-        Assert.True(top >= DialogHeight.TitleBar, $"a {cap} px dialog centred in {height} px starts at {top}");
+        // Every height the dialog can take there, from a one-line question to the cap: placed where
+        // DialogFit puts it, it starts below the strip and ends inside the window.
+        for (double dialog = 0; dialog <= cap; dialog++)
+        {
+            double top = DialogHeight.TopForDialog(dialog, height, width) ?? (height - dialog) / 2;
+            Assert.True(top >= DialogHeight.TitleBar, $"a {dialog} px dialog in {width} × {height} starts at {top}");
+            Assert.True(top + dialog <= height, $"a {dialog} px dialog in {width} × {height} ends at {top + dialog}");
+        }
+    }
+
+    /// <summary>
+    /// #773: the cap gives back the foot of the window. #725's centred cap left a title bar's height
+    /// empty below the dialog as well as above it, and at 200 % text in the Minimal window #767's cue
+    /// line then took the last whole row of PRNs.
+    /// </summary>
+    [Theory]
+    [InlineData(640, 480)]
+    [InlineData(800, 600)]
+    [InlineData(553, 504)]
+    public void ANarrowWindowsCapRunsToHalfTheClearanceFromTheFoot(double width, double height)
+    {
+        double centredCap = height - (2 * DialogHeight.TitleBar);
+
+        Assert.Equal(height - DialogHeight.TitleBar - (DialogHeight.Clearance / 2), DialogHeight.MaxForWindow(height, width));
+        Assert.Equal(DialogHeight.TitleBar - (DialogHeight.Clearance / 2), DialogHeight.MaxForWindow(height, width) - centredCap);
+    }
+
+    /// <summary>
+    /// Only a dialog that would reach the strip moves. A short one stays centred, where every other
+    /// Windows dialog is, and so does any dialog in a window where it cannot reach the buttons.
+    /// </summary>
+    [Theory]
+    [InlineData(200, 640, 480, null)]                       // a confirmation: centred, at 140
+    [InlineData(480 - 96, 640, 480, null)]                  // exactly clears the strip centred
+    [InlineData(480 - 95, 640, 480, DialogHeight.TitleBar)]
+    [InlineData(480 - 64, 640, 480, DialogHeight.TitleBar)] // at the cap
+    [InlineData(700, 1024, 720, null)]                      // wide: #506's window, untouched
+    [InlineData(300, 0, 0, null)]                           // window not known: no opinion
+    public void OnlyADialogThatWouldReachTheStripIsMoved(double dialog, double width, double height, double? expected)
+    {
+        Assert.Equal(expected, DialogHeight.TopForDialog(dialog, height, width));
     }
 
     /// <summary>
