@@ -208,7 +208,21 @@ function Get-DraftZips {
     Say "downloading the draft $Tag's zips"
     gh release download $Tag --repo TGoodhew/WinZ3805A --pattern '*.zip' --dir $staging --clobber 2>&1 | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "the draft $Tag's zips did not download" }
-    foreach ($zip in Get-ChildItem $staging -Filter *.zip) { Move-Item $zip.FullName (Join-Path $cache $zip.Name) -Force }
+    # One placing at a time, and a cached zip with the same bytes left where it is. Move-Item -Force
+    # deletes the target before renaming, and every scenario reads its zip from the cache: the pass on
+    # the other VM, started at the same moment, put its copy in place and QA-Win10's pass found no zip
+    # there 6 s into 1.4.1's run (7 Oct 2026). A zip that differs is still replaced, which is a draft
+    # deleted and tagged again; no pass is using that one.
+    $cacheLock = New-Object System.Threading.Mutex($false, 'Global\WinZ3805A-QA-cache')
+    try {
+        try { [void]$cacheLock.WaitOne() } catch [System.Threading.AbandonedMutexException] { }
+        foreach ($zip in Get-ChildItem $staging -Filter *.zip) {
+            $target = Join-Path $cache $zip.Name
+            if ((Test-Path $target) -and (Get-FileHash $target).Hash -eq (Get-FileHash $zip.FullName).Hash) { continue }
+            Move-Item $zip.FullName $target -Force
+        }
+    }
+    finally { $cacheLock.ReleaseMutex(); $cacheLock.Dispose() }
     Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
 }
 
