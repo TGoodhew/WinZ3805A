@@ -412,6 +412,12 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        // Hidden, or WinUI shows the first accelerator's keys as a tooltip on whatever owns them -
+        // here the whole window, so a pointer resting anywhere without a tooltip of its own got a bare
+        // "Ctrl+D" over the readings (#775, found by the 1.4.1 pass's whole-layout photographs). The
+        // shortcuts are named where they belong: each button's own tooltip and the guide.
+        root.KeyboardAcceleratorPlacementMode = Microsoft.UI.Xaml.Input.KeyboardAcceleratorPlacementMode.Hidden;
+
         Add(Windows.System.VirtualKey.D, Windows.System.VirtualKeyModifiers.Control, () =>
         {
             ShowDetails();
