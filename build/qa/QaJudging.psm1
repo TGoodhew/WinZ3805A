@@ -251,10 +251,37 @@ function Merge-QaRuns {
     $runs = @()
     $verdicts = [ordered]@{}
     foreach ($part in $Parts) {
+        # A part with no results is a machine that was never tested, and it must not merge as
+        # silence (#772). Invoke-QaPass writes results.json only once every scenario has run, so a
+        # part without one died or is still running; Read-QaJson returns nothing for either, and on
+        # 8 Oct 2026 1.4.1's merge came out AWAITING JUDGEMENT on QA-Win11 alone while QA-Win10's
+        # half was still being re-run (#770). Judging those photographs and resuming would have
+        # reached the go with Windows 10 untested. So the missing part becomes a scenario row of its
+        # own with an error - which makes the run FAIL, names the machine in the report, and stays
+        # in results.json, so every later Write-QaReport on the merged run says FAIL too.
+        # Nulls dropped: an empty results.json - which a pass that ran nothing writes - reads back
+        # under Windows PowerShell as one $null, and merged as a nameless row that failed by accident.
+        $partResults = @()
+        $why = $null
+        try { $partResults = @(Read-QaJson (Join-Path $part 'results.json') | Where-Object { $null -ne $_ }) }
+        catch { $why = "its results.json could not be read ($($_.Exception.Message))" }
+        if (-not $why -and -not $partResults.Count) {
+            $why = if (Test-Path (Join-Path $part 'results.json')) { 'its results.json holds no scenarios' } else { 'it has no results.json: its pass died or had not finished' }
+        }
+        if ($why) {
+            # The part's folder is named for its machine (Invoke-Release.ps1's Invoke-Pass), and its
+            # run.json is written after results.json, so it cannot be asked.
+            $machine = Split-Path $part -Leaf
+            Write-Warning "merging ${part}: $why; $machine is reported as an error, not left out (#772)"
+            $results += [pscustomobject]@{ Scenario = '(whole pass)'; Machine = $machine; Checks = @(); Error = "not tested: $why ($part)"; Folder = $null }
+            # Nor are its scenario folders copied: they are a pass's leftovers, and 1.4.1's merge
+            # put 39 half-run photographs up for judging.
+            continue
+        }
         foreach ($dir in Get-ChildItem $part -Directory | Where-Object { $_.Name -ne 'judging' }) {
             Copy-Item $dir.FullName (Join-Path $RunDir $dir.Name) -Recurse -Force
         }
-        $results += @(Read-QaJson (Join-Path $part 'results.json'))
+        $results += $partResults
         $run = Read-QaJson (Join-Path $part 'run.json')
         if ($run) { $runs += $run }
         # Verdicts already recorded on a part are kept: its photographs' paths are the merged run's.
