@@ -140,6 +140,29 @@ public sealed class ScpiEngineTests
         Assert.Equal("-3.56E-008", ScpiEngine.Short(-35.6e-9));
     }
 
+    [Theory]
+    [InlineData(-0.01e-9)]
+    [InlineData(-0.049e-9)]
+    [InlineData(-0.0)]
+    [InlineData(0.01e-9)]
+    public void AnIntervalThatRoundsToZeroFromBelowIsPlainZero(double seconds)
+    {
+        // #776: rounding to 0.1 ns made negative zero, which is not below zero and so took a "+",
+        // and .NET then wrote its own "-" — "+-0.0E+000", which the app rightly read as a dash.
+        Assert.Equal("+0.0E+000", ScpiEngine.Short(seconds));
+    }
+
+    [Fact]
+    public void ZeroIsNeverSignedTwiceInAnyFormat()
+    {
+        // #776's shape in the other two signed reals: negative zero is not below zero, and the
+        // uncertainty below zero rounds to zero at one decimal.
+        Assert.Equal("+0.00000E+000", ScpiEngine.Real(-0.0));
+        Assert.Equal("+0.0E-006", ScpiEngine.Micro(-0.0));
+        Assert.Equal("+0.0E-006", ScpiEngine.Micro(-0.01));
+        Assert.Equal("-0.1E-006", ScpiEngine.Micro(-0.06));
+    }
+
     [Fact]
     public void ValuesCarryNoLeadingSpace()
     {

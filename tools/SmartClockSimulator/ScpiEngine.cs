@@ -793,6 +793,8 @@ public sealed class ScpiEngine
     /// <summary><c>+6.00000E+002</c>: five decimals and a three-digit exponent (<c>:SYNC:HOLD:DUR?</c>).</summary>
     public static string Real(double value)
     {
+        // Negative zero is not below zero, and .NET writes its "-" anyway: "+-0.00000E+000" (#776).
+        value = value == 0 ? 0 : value;
         string text = value.ToString("0.00000E+000", Invariant);
         return value < 0 ? text : "+" + text;
     }
@@ -804,13 +806,20 @@ public sealed class ScpiEngine
     public static string Short(double value)
     {
         value = Math.Round(value * 1e10) / 1e10;
+
+        // Anything in (-0.05 ns, 0) rounds to negative zero, which would answer "+-0.0E+000" (#776).
+        value = value == 0 ? 0 : value;
         string text = value.ToString("0.0##E+000", Invariant);
         return value < 0 ? text : "+" + text;
     }
 
     /// <summary><c>+0.8E-006</c>: microseconds to one decimal over a fixed exponent, as the uncertainties are.</summary>
-    public static string Micro(double microseconds) =>
-        (microseconds < 0 ? "-" : "+") + Math.Abs(microseconds).ToString("0.0", Invariant) + "E-006";
+    public static string Micro(double microseconds)
+    {
+        // The sign is decided by what was written, so a value that rounds to zero is "+0.0" (#776).
+        string text = Math.Abs(microseconds).ToString("0.0", Invariant);
+        return (microseconds < 0 && text != "0.0" ? "-" : "+") + text + "E-006";
+    }
 
     /// <summary>Booleans unsigned: the lamps, the leap state and the survey and hold states all answered <c>0</c> or <c>1</c>.</summary>
     public static string Bool(bool value) => value ? "1" : "0";

@@ -166,6 +166,7 @@ records.
 | Cancelling a survey (`:GPS:POS LAST`) going back to the position held before it, and adopting one (`:GPS:POS SURV`) holding its estimate as it stood; a manual position simply ending it | **Guess**, from the manual and `docs/manual-qa.md` section 6 (5 Oct 2026, #633). Until then both did the same thing here. The bench unit's survey has never been cancelled or adopted |
 | The error queue's capacity, 30 | **Guess**. Five were read back as five; overflow to `-350` was seen but not counted |
 | A holdover past 99 minutes; a day of the month below ten; satellites beyond twelve rows | **Guess** |
+| A reading that rounds to zero from below answered as a plain zero: `+0.0E+000` for the time interval, `+0.0E-006` for an uncertainty, `+0.00000E+000` for a real | **Guess**: the bench unit has never been seen answering a zero. Until #776 the time interval answered `+-0.0E+000`, which no receiver writes |
 | How long each state lasts; the sky; the noise on the time interval and the control voltage | **Made up**, to be plausible |
 
 ## Comparing it with the bench unit
