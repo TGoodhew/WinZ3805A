@@ -3295,10 +3295,15 @@ foreach ($i in 1..400) {
     $r = Wait-Still $f
     if ($null -eq $r) { $r = $f.Current.BoundingRectangle }
     $prevElement = $f; $prevBounds = $r; $prevScrollers = Get-Scrollers $f
+    # Its rectangle in whole pixels, or zeros where it has none. An element with no place on screen is
+    # reported as Rect.Empty, whose coordinates are infinite, and casting those to [int] threw - ending
+    # the Dark Satellites walk of 1.5.0's pass on QA-Win11 (8 Oct 2026) before #777's "no rectangle"
+    # below could name the stop.
+    $px = if (Test-RealRect $r) { @{ l = [int]$r.Left; t = [int]$r.Top; w = [int]$r.Width; h = [int]$r.Height } } else { @{ l = 0; t = 0; w = 0; h = 0 } }
     $stop = [ordered]@{
         id = "$($f.Current.AutomationId)"; name = "$($f.Current.Name)"; type = "$($f.Current.ControlType.ProgrammaticName -replace 'ControlType\.', '')"
-        left = [int]$r.Left; top = [int]$r.Top; width = [int]$r.Width; height = [int]$r.Height
-        ringPixels = -1; perimeter = [int](2 * ($r.Width + $r.Height)); repeats = 0
+        left = $px.l; top = $px.t; width = $px.w; height = $px.h
+        ringPixels = -1; perimeter = 2 * ($px.w + $px.h); repeats = 0
         shots = ''; moved = 0; widthChange = 0; heightChange = 0; why = ''
         scroll = $(if ($scroller) { try { [Math]::Round($scroller[0].GetCurrentPattern([System.Windows.Automation.ScrollPattern]::Pattern).Current.VerticalScrollPercent, 1) } catch { -1 } } else { -1 })
         parent = ($(try { [System.Windows.Automation.TreeWalker]::ControlViewWalker.GetParent($f).GetRuntimeId() -join '.' } catch { '' }))
