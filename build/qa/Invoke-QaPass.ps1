@@ -3222,6 +3222,11 @@ $pad = 8
 # than over them.
 $tag = "$(if ($theme) { "$theme-" })$($surface -replace ' ', '')"
 New-Item -ItemType Directory -Force 'C:\qa\keys' | Out-Null
+# This walk's crops and no other's (#777). A page whose walk missed a control is walked again, and both
+# walks name their crops by stop number; the second overwrote only the stops it kept crops for, so the
+# first's others stayed and were judged as the second's - two 16 x 16 crops of the desktop filed as a
+# Satellites stop that the recorded walk had measured with a ring (QA-Win11, 7 Oct 2026).
+Get-ChildItem 'C:\qa\keys' -Filter '*.png' | Where-Object { $_.Name -match "^$([regex]::Escape($tag))-\d+-(un)?focused\.png$" } | Remove-Item -Force
 $closedOn = ''
 $stops = New-Object System.Collections.Generic.List[object]
 $seen = @{}
@@ -3263,11 +3268,14 @@ foreach ($i in 1..400) {
         if ($move -ne 'gone') { $prev.widthChange = [int][Math]::Round($now.Width - $prevBounds.Width); $prev.heightChange = [int][Math]::Round($now.Height - $prevBounds.Height) }
         if ($prev.shots -eq 'not comparable') { $prev.why = $(switch ($move) { 'moved' { 'moved out of view' } 'resized' { "moved and changed size by $($prev.widthChange) x $($prev.heightChange) px" } default { $move } }) }
         else { $prev.ringPixels = Get-RingChange $prevShot $after $pad $valid }
-        # The pair kept for the agent to look at wherever no ring was measured, or none could be.
+        # The pair kept for the agent to look at wherever no ring was measured, or none could be. A stop
+        # that is not comparable keeps its focused crop alone: the unfocused one is by definition not of the
+        # same thing - a row scrolled away, or another control where it was - and every one of them was
+        # judged a harness artefact in both of 1.4.1's passes (#777). The focused crop is what shows a ring.
         if ($prev.ringPixels -lt [Math]::Max(20, $prev.perimeter / 2) -or $prev.shots -eq 'not comparable') {
             $n = $stops.Count - 1
             $prevShot.Save("C:\qa\keys\$tag-$n-focused.png", [System.Drawing.Imaging.ImageFormat]::Png)
-            $after.Save("C:\qa\keys\$tag-$n-unfocused.png", [System.Drawing.Imaging.ImageFormat]::Png)
+            if ($prev.shots -ne 'not comparable') { $after.Save("C:\qa\keys\$tag-$n-unfocused.png", [System.Drawing.Imaging.ImageFormat]::Png) }
             $prev.shot = "$tag-$n"
         }
         $after.Dispose(); $prevShot.Dispose(); $prevShot = $null
@@ -3297,11 +3305,15 @@ foreach ($i in 1..400) {
     }
     $stops.Add($stop)
     $prev = $stop
-    if (-not $r.IsEmpty) {
+    # Only a stop with somewhere to photograph. Rect.IsEmpty is true only of Rect.Empty, so a zero-sized
+    # rectangle passed it and was cropped as the pad alone, 16 x 16, wherever its corner happened to be
+    # (#777). A stop UI Automation gives no size is named as not comparable, and nothing is cropped.
+    if (Test-RealRect $r) {
         $prevRect = New-Object System.Drawing.Rectangle ([int]$r.Left - $pad), ([int]$r.Top - $pad), ([int]$r.Width + 2 * $pad), ([int]$r.Height + 2 * $pad)
         $prevClip = Get-Clip $prevScrollers
         $prevShot = Get-Shot $prevRect
     }
+    else { $stop.shots = 'not comparable'; $stop.why = 'no rectangle on screen' }
 }
 if ($prevShot) { $prevShot.Dispose() }
 
@@ -3392,18 +3404,19 @@ Start-Sleep -Seconds 8
 # Not the satellite rows: the list re-sorts as the sky turns, so the shot after the focus moves can be of
 # another row, which has its own ring, and the two compare as no ring at all. Their ring is the stock
 # list's, and the crops kept show it. Nor a stop whose two shots are not comparable (#754): Tab scrolled
-# it out of view, or it changed size or went, so there was no second shot of the same thing - it is
-# named, and its crops are kept for the judge. A stop followed to where Tab scrolled it is named as well.
+# it out of view, or it changed size or went, or had no rectangle at all, so there was no second shot of
+# the same thing - it is named, and its focused crop, if it had one, is kept for the judge (#777). A stop
+# followed to where Tab scrolled it is named as well.
 function Get-FocusRingFindings {
     param($Stops)
     $Stops = @($Stops)
     $measured = @($Stops | Where-Object { $_.ringPixels -ge 0 -and "$($_.shots)" -ne 'not comparable' -and -not ($_.type -eq 'ListItem' -and $_.name -like 'PRN *') })
     $noRing = @($measured | Where-Object { $_.ringPixels -lt [Math]::Max(20, $_.perimeter / 2) } | ForEach-Object { "$($_.type) '$($_.name)' [$($_.id)] $($_.ringPixels)/$($_.perimeter)" })
     $followed = @($Stops | Where-Object { "$($_.shots)" -eq 'followed' } | ForEach-Object { "$($_.type) '$($_.name)' ($($_.moved) px, ring $($_.ringPixels)/$($_.perimeter))" })
-    $apart = @($Stops | Where-Object { "$($_.shots)" -eq 'not comparable' } | ForEach-Object { "$($_.type) '$($_.name)' ($($_.why)$(if ($_.moved) { ", $($_.moved) px" }); crops $($_.shot))" })
+    $apart = @($Stops | Where-Object { "$($_.shots)" -eq 'not comparable' } | ForEach-Object { "$($_.type) '$($_.name)' ($($_.why)$(if ($_.moved) { ", $($_.moved) px" })$(if ($_.shot) { "; focused crop $($_.shot)" }))" })
     $detail = "no ring at: $($noRing -join '; ')"
     if ($followed.Count) { $detail += ". Tab scrolled the page, so the unfocused shot was taken where the stop moved to, at: $($followed -join '; ')" }
-    if ($apart.Count) { $detail += ". NOT COMPARABLE - no second shot of the same thing, so no ring was measured; judge the crops kept, at: $($apart -join '; ')" }
+    if ($apart.Count) { $detail += ". NOT COMPARABLE - no second shot of the same thing, so no ring was measured; judge the focused crop kept, where there is one, at: $($apart -join '; ')" }
     [pscustomobject]@{ NoRing = $noRing; Followed = $followed; NotComparable = $apart; Detail = $detail }
 }
 
