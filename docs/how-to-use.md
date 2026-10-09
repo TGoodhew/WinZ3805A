@@ -325,7 +325,7 @@ Everything from the main window, with the words behind the numbers:
   pill at all. A GPS talker has no health monitor otherwise, so on one of those this is the only
   entry on the card — and it is the most useful one a timing receiver has.
 
-  ![The lower half of the Overview page: the end of the Health monitor card, an Oscillator control (EFC) card with the current value, −16.73 %, 1 h, 6 h, 24 h and 7 d choices and a trend, and a Receiver card with the model, manufacturer, serial number and firmware](images/how-to-use/page-overview-2.png)
+  ![The lower half of the Overview page: the end of the Health monitor card, an Oscillator control (EFC) card with the current value, −16.89 %, 1 h, 6 h, 24 h and 7 d choices with 1 h selected, and an hour's trend, and a Receiver card with the model, manufacturer, serial number and firmware](images/how-to-use/page-overview-2.png)
 
   **Integrity** — a second extra pill appears for a receiver that checks its own solution for a
   satellite that disagrees with the others, reading *Integrity checked — no fault* or naming the
