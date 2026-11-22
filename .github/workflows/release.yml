@@ -25,9 +25,18 @@
 # installing has to trust anything by hand. The key never leaves Azure. This
 # job signs in through azure/login with GitHub's OIDC token, as an Entra app
 # ("WinZ3805A GitHub release signing") that trusts exactly one subject -
-# repo:TGoodhew/WinZ3805A:environment:release - and holds exactly one role,
-# Artifact Signing Certificate Profile Signer, on the one certificate profile.
-# Nothing is stored that could sign anything outside this job.
+# repo:TGoodhew@8283956/WinZ3805A@1331542274:environment:release - and holds
+# exactly one role, Artifact Signing Certificate Profile Signer, on the one
+# certificate profile. Nothing is stored that could sign anything outside this
+# job.
+#
+# THE SUBJECT CARRIES IDS, NOT ONLY NAMES. This repository uses GitHub's
+# immutable OIDC subject (owner ID 8283956, repository ID 1331542274), so a
+# repository deleted and recreated under the same name cannot present it. The
+# name-only form, repo:TGoodhew/WinZ3805A:..., is what GPIB-MCP's repository
+# presents and what the first dry run here was refused for (AADSTS700213,
+# 22 Nov 2026). If the subject setting ever changes, the federated credential
+# has to change with it.
 #
 # The 'release' environment is the gate: it needs Tony's approval before the
 # job starts, and deploys only from a v* tag or main. Its VARIABLES (not
