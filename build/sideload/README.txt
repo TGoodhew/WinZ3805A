@@ -9,36 +9,29 @@ TO INSTALL
 
   Double-click Install.cmd.
 
-  Windows will ask for administrator permission once. Read the next section
-  before you agree to it.
-
   WinZ3805A needs Microsoft's free .NET 10 Runtime. If this folder has a
   Runtime\dotnet-runtime-...exe file (the "offline" download), the installer
-  installs .NET from it when your machine does not have it, in that same
-  permission prompt. Otherwise it opens Microsoft's download page for you.
+  installs .NET from it when your machine does not have it, which needs
+  administrator permission once. Otherwise it opens Microsoft's download page
+  for you.
 
 
-ABOUT THAT PERMISSION PROMPT
+ABOUT THE SIGNATURE
 
-  Windows only installs an application whose signature it trusts, and it has
-  no reason to trust this one until you say it can. The installer asks for
-  administrator rights once, to add this application's signature to a
-  certificate store called "Trusted People".
+  WinZ3805A is signed by The Schnauzer Group LLC through Microsoft's Azure
+  Artifact Signing, so Windows can check it the same way it checks any other
+  signed application. You do not have to trust a certificate by hand, and
+  the installer adds nothing to any certificate store. Its log records who
+  signed the package and who vouched for that.
 
-  That store is narrower than it sounds, and the distinction matters:
+  If this PC has never been connected to the internet, Windows may not yet
+  have the Microsoft root certificate the signature chains to. The installer
+  checks before it changes anything and says so; connecting the PC once
+  fixes it.
 
-    - A certificate in "Trusted People" can vouch for applications you choose
-      to install by hand. That is all it can do.
-
-    - It CANNOT vouch for a website, and it CANNOT make code you did not
-      choose to run look like it came from a company you trust. Those would
-      require the "Trusted Root" store, which this installer does not touch.
-
-  If you would rather check before agreeing, the certificate is the .cer file
-  in this folder - double-click it to see who issued it and when it expires.
-
-  Nothing else in this installation needs administrator rights. The
-  application installs for your account only.
+  The application installs for your account only. Administrator permission
+  is asked for only to install .NET, or to remove a certificate an earlier
+  release added (see below).
 
 
 WHAT GETS INSTALLED
@@ -78,8 +71,9 @@ IF SOMETHING GOES WRONG
 
 IF AN EARLIER WINZ3805A IS INSTALLED
 
-  Releases up to 1.3.0 were signed under an earlier publisher identity, so
-  Windows cannot upgrade them in place. The installer handles it: it asks
+  Releases up to 1.5.x were signed under earlier publisher identities -
+  up to 1.3.0 under one, 1.3.1 to 1.5.x under another - so Windows cannot
+  upgrade them in place. The installer handles it: it asks
   you to close the earlier copy if it is running, and lists what it will
   remove before changing anything. After installing, it saves the earlier
   copy's history, settings and logs to a "WinZ3805A earlier copy ..." folder
@@ -87,8 +81,8 @@ IF AN EARLIER WINZ3805A IS INSTALLED
   Windows 10 cannot install the two side by side, so there it saves the data
   and removes the earlier copy first, then installs and moves the data in.
   The saved folder stays in Documents either way.
-  The certificate earlier releases were signed with is removed from Trusted
-  People in the same permission prompt.
+  The certificates earlier releases asked you to trust are removed from
+  Trusted People, which needs administrator permission once.
 
   If the new version was already installed and has history of its own, it
   is not overwritten. Import the earlier history from Settings > Import
@@ -116,7 +110,7 @@ TO REMOVE IT
   on the application's Settings page first, and Import history... after
   installing again.
 
-  Uninstalling leaves the certificate and the installer's logs behind. To
+  Uninstalling leaves the installer's logs behind. To
   remove everything this installer has put on the machine, follow
   https://github.com/TGoodhew/WinZ3805A/blob/main/docs/remove-winz3805a.md
   Its script saves your history to Documents before removing anything.

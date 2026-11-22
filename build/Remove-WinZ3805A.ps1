@@ -11,7 +11,8 @@
     It REMOVES, after showing a list and asking:
       - every WinZ3805A package for this account, whatever its publisher - the
         placeholder identity before v1.0.1, the one v1.0.1 to v1.3.0 used, the
-        current one, and development registrations - and with each package,
+        self-signed one v1.3.1 to v1.5.x used, the Artifact-Signed one from
+        2.0.0 (#793), and development registrations - and with each package,
         everything it stored: history (trend.db), settings and logs;
       - a WinZ3805A data folder outside any package, if one exists;
       - the certificates the releases were signed with, from Trusted People and
@@ -70,8 +71,12 @@ $ErrorActionPreference = 'Stop'
 # A known certificate is described by the releases it signed, never by its subject: the earlier
 # one's subject carries the misspelling of the company's name that v1.3.1 corrected, and nothing
 # new repeats it.
+#
+# From 2.0.0 nothing is added to any store (#793): Artifact Signing chains to a public root, so there
+# is no certificate of this release to find. Its subject, the company's full DN, is deliberately NOT
+# matched either - a certificate issued to it by a public authority is one nobody here put there.
 $knownThumbprints = @{
-    '7F47E8D75FB856C5A1665900293EDB491E278B3C' = 'the certificate v1.3.1 and later are signed with'
+    '7F47E8D75FB856C5A1665900293EDB491E278B3C' = 'the certificate v1.3.1 to v1.5.x were signed with'
     '655D07E31BDA80CBF6AAC2F2635EA6664B9399DD' = 'the certificate v1.0.1 to v1.3.0 were signed with'
 }
 $knownSubjects = @('CN=The Schnauzer Group LLC')

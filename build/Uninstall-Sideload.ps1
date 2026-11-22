@@ -8,12 +8,13 @@
     zip it produces between them changed.
 
         the application package, and everything it has stored
-        the signing certificate, from LocalMachine\TrustedPeople
+        a self-signed certificate an earlier release put in LocalMachine\TrustedPeople
         optionally, the zip and any folder it was extracted to
 
     Written because the alternative is remembering four commands and a
-    certificate thumbprint, and the thumbprint changes whenever the certificate
-    is regenerated.
+    certificate thumbprint. Since 2.0.0 (#793) the package is signed with Azure
+    Artifact Signing and puts nothing in Trusted People, so the certificate step
+    only ever finds what a 1.5.x or earlier install left behind.
 
     This is the DEVELOPER'S tool: it reads the publisher from the manifest in
     the clone and can delete build artefacts. For a user's machine, use
@@ -25,10 +26,10 @@
     Also delete dist\ and any WinZ3805A-install folder on the Desktop.
 
 .PARAMETER IncludeCertificateFile
-    Also delete build\devcert.pfx and build\devcert.cer. The next build
-    regenerates them - as a NEW certificate, with a new thumbprint, which
-    everyone who installed the old one has to trust again. Off by default for
-    that reason.
+    Also delete build\devcert.pfx and build\devcert.cer, left over from the
+    self-signed releases (1.3.1 to 1.5.x). Nothing builds with them since #793;
+    the .pfx is a private key that can still sign a package 1.5.x machines trust,
+    so delete it once no 1.5.x hotfix could be needed.
 
 .NOTES
     The Windows App Runtime is deliberately left alone. It is a shared framework
@@ -95,9 +96,10 @@ else {
 # ---------------------------------------------------------------------------
 # 2. The certificate
 # ---------------------------------------------------------------------------
-# Found by subject rather than by a remembered thumbprint: the certificate is
-# regenerated whenever the publisher changes, and a hard-coded thumbprint would
-# then quietly remove nothing.
+# Found by subject rather than by a remembered thumbprint: the self-signed certificate was
+# regenerated whenever the publisher changed, and a hard-coded thumbprint would then quietly remove
+# nothing. The manifest's own publisher matches nothing since 2.0.0 (#793) - no certificate of an
+# Artifact-Signed release is ever in Trusted People - so it is the installed copies' that count.
 [xml]$manifest = Get-Content (Join-Path $repo 'src\WinZ3805A\Package.appxmanifest')
 $publisher = $manifest.Package.Identity.Publisher
 
@@ -165,9 +167,6 @@ if ($IncludeCertificateFile) {
         }
     }
 
-    Write-Host ''
-    Write-Host '  The next build generates a NEW certificate with a new thumbprint.' -ForegroundColor Yellow
-    Write-Host '  Anyone who trusted the old one has to trust that one too.' -ForegroundColor Yellow
 }
 
 # ---------------------------------------------------------------------------
@@ -177,7 +176,7 @@ Write-Host ''
 Write-Kept 'the Windows App Runtime - shared, and other applications may need it'
 
 if (-not $IncludeArtifacts) { Write-Kept 'dist\ and the extracted folder - pass -IncludeArtifacts' }
-if (-not $IncludeCertificateFile) { Write-Kept 'build\devcert.pfx - pass -IncludeCertificateFile' }
+if (-not $IncludeCertificateFile -and (Test-Path (Join-Path $PSScriptRoot 'devcert.pfx'))) { Write-Kept 'build\devcert.pfx, the retired self-signed key - pass -IncludeCertificateFile' }
 
 Write-Host ''
 Write-Host '  The development registration is gone too, since it shares the identity.' -ForegroundColor Gray

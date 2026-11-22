@@ -3,43 +3,47 @@
     Installs WinZ3805A on a machine that has never had a developer tool on it.
 
 .DESCRIPTION
-    Four things have to happen, and at most two of them need administrator rights:
+    Three things have to happen, and at most one of them needs administrator rights:
 
-      1. Trust the certificate the application is signed with. Needs elevation,
-         because the certificate store it goes into belongs to the machine.
-      2. Make sure .NET 10 is installed (#588). The OFFLINE zip carries
+      1. Make sure .NET 10 is installed (#588). The OFFLINE zip carries
          Microsoft's own runtime installer and runs it here, machine-wide, which
-         needs elevation too - asked for in the same prompt as step 1, so there
-         is still only one. The ONLINE zip carries no runtime: it opens
+         needs elevation. The ONLINE zip carries no runtime: it opens
          Microsoft's download page instead. Either way .NET ends up installed the
          ordinary way, by Microsoft's installer, which is what lets Microsoft
          Update keep it patched; this application never carries or services a
          runtime of its own (#586, #588).
-      3. Install the Windows App Runtime, if it is not already there.
-      4. Install the application itself.
-      5. Replace any EARLIER COPY that this version cannot upgrade (#590). A
+      2. Install the Windows App Runtime, if it is not already there.
+      3. Install the application itself.
+      4. Replace any EARLIER COPY that this version cannot upgrade (#590). A
          release signed under a different publisher is a different package
          family to Windows, so it installs alongside rather than over the old
          one - as v1.3.1 did over every release from v1.0.1 to v1.3.0, and as
-         the Store identity will again. Its data is saved to Documents and moved
-         into the new copy, then the earlier copy is removed; the certificates
-         earlier releases were signed with come out of Trusted People in the
-         same administrator prompt as step 1. A release under the SAME publisher
-         needs none of this: Windows upgrades it in place.
+         2.0.0 does over 1.3.1 to 1.5.x (#793). Its data is saved to Documents
+         and moved into the new copy, then the earlier copy is removed; the
+         certificates earlier releases were signed with come out of Trusted
+         People, in the same single administrator prompt as step 1's .NET
+         install when both are needed. A release under the SAME publisher needs
+         none of this: Windows upgrades it in place.
 
          ON WINDOWS 10 THE ORDER IS DIFFERENT (#617). Windows 10 will not
          install the two side by side, and the refused attempt leaves the app
          unable to start until a restart (#614). So there the earlier copy's
-         data is saved and the copy removed BEFORE step 4, and the data is
+         data is saved and the copy removed BEFORE step 3, and the data is
          moved in after it.
-      6. Start it once and check it opened (#592, #599). If it does not, and it
+      5. Start it once and check it opened (#592, #599). If it does not, and it
          is a copy of this same version that was already installed - which
-         step 4 cannot touch, installing a version over itself being a no-op -
+         step 3 cannot touch, installing a version over itself being a no-op -
          REPAIR it (#600): register it again from its own folder, and if that
          is not enough, save its data to Documents, remove it, install it again
          and move the data back. Each is followed by the start check again.
 
-    Steps 3 to 6 run as the person who started this, NOT elevated, and that is
+    NOTHING HAS TO BE TRUSTED BY HAND since 2.0.0 (#793). The package is signed
+    with Azure Artifact Signing, whose certificate chains to a Microsoft root
+    Windows already trusts. Releases up to 1.5.x were self-signed, and this
+    installer used to add their certificate to Trusted People; now it only takes
+    those certificates out again.
+
+    Steps 2 to 5 run as the person who started this, NOT elevated, and that is
     deliberate. Installing an app is a per-user operation: elevating the whole
     script would install it for whichever administrator the UAC prompt
     authenticated, which on a shared machine is not the person at the keyboard.
@@ -66,10 +70,11 @@
     whether the application then started - so "it didn't work" arrives with
     the file that says why.
 
-    The certificate is self-signed, and this script says so plainly rather than
-    hurrying the user past it. What it grants is narrow - see the TrustedPeople
-    comment below - but it is still a decision the user is entitled to make with
-    their eyes open.
+    THE SIGNATURE IS CHECKED BEFORE ANYTHING CHANGES: the bundle must be validly
+    signed by exactly the publisher its own manifest declares. A machine that
+    cannot build the chain - an offline PC whose root store has never been
+    updated is the case worth naming - is told so in words, rather than left to
+    Windows' 0x800B0109 after the earlier copy has already been touched.
 #>
 
 [CmdletBinding()]
@@ -85,7 +90,6 @@ param(
     # file - became a [string] holding its bare name, so its path was empty. Found
     # on a clean VM on 30 Sep 2026 (#588). Hence names nothing else would use.
     [switch]$AsAdministrator,
-    [switch]$TrustCertificate,
     # For a run nobody is watching (see .PARAMETER Unattended).
     [switch]$Unattended,
     [string]$DotNetInstallerPath,
@@ -136,8 +140,7 @@ trap {
     }
     break
 }
-$certificate = Get-ChildItem -Path $here -Filter '*.cer' | Select-Object -First 1
-$bundle = Get-ChildItem -Path $here -Filter '*.msixbundle' | Select-Object -First 1
+$bundle =Get-ChildItem -Path $here -Filter '*.msixbundle' | Select-Object -First 1
 $runtime = Get-ChildItem -Path (Join-Path $here 'Runtime') -Filter '*.msix' -ErrorAction SilentlyContinue |
     Select-Object -First 1
 # Present in the offline zip only, and that presence is the whole difference between the two.
@@ -159,8 +162,11 @@ $microsoftUpdateId = '7971f918-a847-4430-9279-4a52d1efe18d'
 # app in Settings never touches Trusted People. Measured on the development machine on
 # 30 Sep 2026: the first entry was still trusted there, a day after its application had gone.
 $retiredThumbprints = @(
-    # Every release from v1.0.1 to v1.3.0, under the earlier publisher identity.
-    '655D07E31BDA80CBF6AAC2F2635EA6664B9399DD'
+    # Every release from v1.0.1 to v1.3.0, under the first publisher identity.
+    '655D07E31BDA80CBF6AAC2F2635EA6664B9399DD',
+    # Every release from v1.3.1 to v1.5.x: the self-signed build\devcert.pfx, CN=The Schnauzer Group LLC.
+    # 2.0.0 is signed with Azure Artifact Signing and puts nothing in Trusted People (#793).
+    '7F47E8D75FB856C5A1665900293EDB491E278B3C'
 )
 
 # What the person sees also goes in the log, so the log reads as the run did.
@@ -320,8 +326,9 @@ function Get-PackageIdentity {
 
     $identity = if ($manifest.Package) { $manifest.Package.Identity } else { $manifest.Bundle.Identity }
     [pscustomobject]@{
-        Name    = $identity.Name
-        Version = [version]$identity.Version
+        Name      = $identity.Name
+        Version   = [version]$identity.Version
+        Publisher = $identity.Publisher
     }
 }
 
@@ -350,27 +357,17 @@ function Test-MicrosoftUpdate {
 }
 
 # ---------------------------------------------------------------------------
-# The elevated half: one certificate into one store, and - offline only - one
-# Microsoft installer, and the certificates earlier releases left behind.
-# Exit codes: 10, the certificate; 20, the runtime installer failed; 21, the
-# runtime installer is not signed by Microsoft; 30, an earlier certificate
-# could not be removed.
+# The elevated half: offline only, one Microsoft installer; and the
+# certificates earlier releases left behind. Nothing is ever ADDED to a
+# certificate store (#793). Exit codes: 20, the runtime installer failed; 21,
+# the runtime installer is not signed by Microsoft; 30, an earlier certificate
+# could not be removed. (10 was "the certificate could not be trusted", before
+# there was no certificate to trust.)
 # ---------------------------------------------------------------------------
 if ($AsAdministrator) {
-    if ($TrustCertificate) {
-        # LocalMachine\TrustedPeople, never Root. The distinction is the whole
-        # reason this is defensible: a certificate in TrustedPeople is trusted to
-        # sign *applications you install by hand* and nothing else. It cannot vouch
-        # for a website, and it cannot make arbitrary code look like it came from
-        # Microsoft. Root would do both.
-        $certutil = certutil.exe -addstore TrustedPeople $certificate.FullName
-        Write-Log "certutil -addstore exited $LASTEXITCODE"
-        if ($LASTEXITCODE -ne 0) { Write-Log "certutil said: $($certutil -join ' ')"; exit 10 }
-    }
-
     if ($RemoveCertificates) {
         # Only ever from TrustedPeople, only by exact thumbprint, and only thumbprints the
-        # unelevated half chose and showed the person before asking - see step 1.
+        # unelevated half chose and showed the person before asking - see 'Before anything changes'.
         foreach ($stale in ($RemoveCertificates -split ',')) {
             $path = "Cert:\LocalMachine\TrustedPeople\$($stale.Trim())"
             if (Test-Path $path) {
@@ -413,18 +410,38 @@ Write-Log "WinZ3805A installer, run from $here"
 Write-Log ("download      {0}, {1}" -f $(if ($bundle) { $bundle.Name } else { 'NO BUNDLE' }),
     $(if ($dotnetInstaller) { "offline, with $($dotnetInstaller.Name)" } else { 'online, no .NET installer' }))
 
-if (-not $certificate) { throw 'The certificate is missing from this folder. Download the release again.' }
 if (-not $bundle) { throw 'The application package is missing from this folder. Download the release again.' }
 
-$signingCertificate = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2 `
-    -ArgumentList $certificate.FullName
-$thumbprint = $signingCertificate.Thumbprint
-
-# The package's publisher IS the certificate's subject - New-SideloadPackage.ps1 refuses to build
-# otherwise - so this is the identity being installed, read off what is in the folder.
-$publisher = $signingCertificate.Subject
-Write-Log "signing       $thumbprint, expires $($signingCertificate.NotAfter.ToString('yyyy-MM-dd'))"
+# The identity being installed, read from the bundle's own manifest, and the signature over it, read
+# from the bundle - checked here, before anything on the machine changes (#793). Windows installs the
+# package only if the signature is valid AND its signer's subject is exactly the declared publisher.
+$bundleIdentity = Get-PackageIdentity $bundle.FullName
+$publisher = $bundleIdentity.Publisher
+$bundleSignature = Get-AuthenticodeSignature -FilePath $bundle.FullName
+$signingCertificate = $bundleSignature.SignerCertificate
+# Never in any certificate store - Artifact Signing's certificates last three days and chain to a
+# public root - but Write-State and the stale-certificate rule below compare against it, so that a
+# certificate that IS this release's could never be taken for an earlier one.
+$thumbprint = if ($signingCertificate) { $signingCertificate.Thumbprint } else { '' }
+Write-Log ("signing       {0}, {1}, signer {2}, issuer {3}, timestamped {4}" -f $bundleSignature.Status, $thumbprint,
+    $(if ($signingCertificate) { $signingCertificate.Subject } else { 'none' }),
+    $(if ($signingCertificate) { $signingCertificate.Issuer } else { 'none' }), [bool]$bundleSignature.TimeStamperCertificate)
 Write-State 'before'
+
+if ($bundleSignature.Status -eq 'NotSigned') {
+    throw "$($bundle.Name) is not signed, so Windows will not install it. This is a development build, not a release; download the release from GitHub."
+}
+if ($bundleSignature.Status -ne 'Valid') {
+    # Most often an offline PC: Windows checks a signature against Microsoft's list of trusted roots,
+    # and a PC that has never been online since Windows was installed may not have this one yet.
+    throw ("Windows cannot verify the signature on $($bundle.Name) ($($bundleSignature.Status): $($bundleSignature.StatusMessage)) " +
+           'Nothing has been changed. If this PC has never been connected to the internet, connect it once - Windows then ' +
+           'fetches the Microsoft root certificate the signature chains to - and run this installer again. ' +
+           'Otherwise, download the release again: the file may be damaged.')
+}
+if ($signingCertificate.Subject -ne $publisher) {
+    throw "$($bundle.Name) is signed by '$($signingCertificate.Subject)', not by its declared publisher '$publisher', so Windows will not install it. Download the release again."
+}
 
 # The oldest Windows this release declares and is tested on (#705): Windows 10 22H2, build 19045.
 # On anything older Windows itself would refuse the package, with a code and no explanation; said here
@@ -455,8 +472,7 @@ $keptPublishers = @($allCopies | Where-Object { $earlier.PackageFullName -notcon
 # leave it broken. It is repaired after the start check, and only if the start check fails: Windows
 # reported a copy with a damaged file as Ok on both Windows 10 and 11 (2 Oct 2026), so its status is
 # no evidence either way. A development registration is reported, never repaired.
-$bundleIdentity = Get-PackageIdentity $bundle.FullName
-$sameVersion = $allCopies | Where-Object {
+$sameVersion =$allCopies | Where-Object {
     $_.Publisher -eq $publisher -and [version]$_.Version -eq $bundleIdentity.Version -and -not $_.IsDevelopmentMode
 } | Select-Object -First 1
 if ($sameVersion) {
@@ -485,7 +501,7 @@ $staleCertificates = @(Get-ChildItem Cert:\LocalMachine\TrustedPeople -ErrorActi
 # So on Windows 10 the attempt is never made: the earlier copy is saved and removed BEFORE this one
 # is installed. That is decided here, by build number, because reacting to the refusal is already
 # too late - the damage is done by the attempt. Windows 11 is build 22000 and later. The marker
-# covers a Windows 11 that refuses after all: one refusal, recorded by step 4, makes every later run
+# covers a Windows 11 that refuses after all: one refusal, recorded by step 3, makes every later run
 # on this machine take the Windows 10 order.
 $refusedMarker = Join-Path $env:LOCALAPPDATA 'WinZ3805A Installer\side-by-side-refused'
 try { $osBuild = [int](Get-CimInstance Win32_OperatingSystem -ErrorAction Stop).BuildNumber }
@@ -582,35 +598,16 @@ if ($earlier.Count -gt 0 -or $staleCertificates.Count -gt 0 -or $sameVersion) {
 }
 
 # ---------------------------------------------------------------------------
-# 1. Trust
+# The signature, said once. There used to be a step here that added a self-signed certificate to
+# Trusted People; since 2.0.0 there is nothing to trust (#793), so it is reported, not asked.
 # ---------------------------------------------------------------------------
-Write-Step '1 of 4  Trusting the signature'
-
-$trustNeeded = -not (Test-Path "Cert:\LocalMachine\TrustedPeople\$thumbprint")
-
-if (-not $trustNeeded) {
-    Write-Ok 'Already trusted. Nothing to do.'
-}
-else {
-    Write-Info 'Windows will ask for administrator permission once, after the steps'
-    Write-Info 'below have said what they need.'
-    Write-Info ''
-    Write-Info 'It is being asked so this app''s signature can be added to the'
-    Write-Info '"Trusted People" store, which is what lets Windows install an'
-    Write-Info 'application that did not come from the Microsoft Store.'
-    Write-Info ''
-    Write-Info 'That store is narrow on purpose. A certificate in it can vouch'
-    Write-Info 'for applications you install by hand, and for nothing else - it'
-    Write-Info 'cannot vouch for a website or for code you did not choose to run.'
-    Write-Info ''
-    Write-Info "The certificate is $($certificate.Name) in this folder. Double-click it"
-    Write-Info 'if you would rather look at it first.'
-}
+Write-Host ''
+Write-Ok "Signed by $(($signingCertificate.Subject -split ',')[0] -replace '^CN=', ''), verified by Windows."
 
 # ---------------------------------------------------------------------------
-# 2. .NET 10
+# 1. .NET 10
 # ---------------------------------------------------------------------------
-Write-Step '2 of 4  .NET 10'
+Write-Step '1 of 3  .NET 10'
 
 $dotnet = Get-DotNet10
 $dotnetNeeded = (-not $dotnet) -and $dotnetInstaller
@@ -651,7 +648,7 @@ else {
 # ---------------------------------------------------------------------------
 # The one administrator prompt, for whichever of the above need it.
 # ---------------------------------------------------------------------------
-$elevationNeeded = $trustNeeded -or $dotnetNeeded -or ($staleCertificates.Count -gt 0)
+$elevationNeeded = $dotnetNeeded -or ($staleCertificates.Count -gt 0)
 
 if (-not $elevationNeeded -and ($earlier.Count -gt 0 -or $sameVersion)) {
     # Nothing needs administrator rights, but an earlier copy is about to be replaced, or this one
@@ -678,14 +675,13 @@ if ($elevationNeeded) {
         '-File', "`"$($MyInvocation.MyCommand.Path)`"",
         '-AsAdministrator'
     )
-    if ($trustNeeded) { $arguments += '-TrustCertificate' }
     if ($dotnetNeeded) { $arguments += @('-DotNetInstallerPath', "`"$($dotnetInstaller.FullName)`"") }
     if ($staleCertificates.Count -gt 0) { $arguments += @('-RemoveCertificates', (($staleCertificates | ForEach-Object Thumbprint) -join ',')) }
     $arguments += @('-LogPath', "`"$LogPath`"")
 
     if ($dotnetNeeded) { Write-Info 'Installing .NET 10 can take a minute or two.' }
 
-    Write-Log "elevating for:$(if ($trustNeeded) { ' certificate' })$(if ($dotnetNeeded) { ' .NET' })$(if ($staleCertificates.Count) { ' earlier certificates' })"
+    Write-Log "elevating for:$(if ($dotnetNeeded) { ' .NET' })$(if ($staleCertificates.Count) { ' earlier certificates' })"
     try {
         $elevation = Start-Process powershell.exe -Verb RunAs -Wait -PassThru -ArgumentList $arguments
     }
@@ -704,15 +700,10 @@ if ($elevationNeeded) {
 
     switch ($elevation.ExitCode) {
         0 { }
-        10 { throw 'The certificate was not trusted, so the application cannot be installed. Nothing else has been changed.' }
         21 { throw "$($dotnetInstaller.Name) is not validly signed by Microsoft, so it was not run. Download the release again." }
         20 { throw ".NET 10 did not install. Microsoft's installer wrote what happened to dotnet-install.log in this folder. You can also install it from $dotnetPage and run this again." }
         30 { throw 'An earlier release''s certificate could not be removed from Trusted People. Nothing else was changed; run this installer again, or remove it in certlm.msc.' }
         default { throw 'The administrator step did not complete - most likely the permission prompt was declined. Run this installer again and agree to it.' }
-    }
-
-    if ($trustNeeded) {
-        Write-Ok "Trusted. Certificate $($thumbprint.Substring(0, 8))..., issued to $((New-Object System.Security.Cryptography.X509Certificates.X509Certificate2 -ArgumentList $certificate.FullName).Subject)"
     }
 
     if ($dotnetNeeded) {
@@ -731,7 +722,7 @@ if ($elevationNeeded) {
 # ---------------------------------------------------------------------------
 # 2. The runtime
 # ---------------------------------------------------------------------------
-Write-Step '3 of 4  Windows App Runtime'
+Write-Step '2 of 3  Windows App Runtime'
 
 # THE ZIP'S RUNTIME IS A MINIMUM, NOT A REQUIREMENT (#595). The package declares
 # MinVersion, and in Windows App SDK 2.x the family name carries only the major
@@ -921,7 +912,7 @@ if ($removeFirst) {
     }
 }
 
-Write-Step '4 of 4  WinZ3805A'
+Write-Step '3 of 3  WinZ3805A'
 
 try {
     Add-AppxPackage -Path $bundle.FullName -ErrorAction Stop
@@ -952,10 +943,11 @@ catch {
 
     # Windows reports an untrusted signature as 0x80073CF0, "Package could not
     # be opened", with the real reason - 0x800B0109 - buried in the second
-    # sentence. Left alone, that sends someone off to download the file again,
-    # which will not help: the download is fine and the trust is not. Measured,
-    # not assumed: this is exactly what installing the package without the
-    # certificate produces.
+    # sentence. Measured, not assumed, with the self-signed releases, where it
+    # meant the certificate had not been trusted. Since 2.0.0 there is nothing
+    # to trust (#793) and the signature was verified before anything changed,
+    # so reaching this means Windows refused a chain it had just accepted -
+    # most likely a root-store or policy setting on this PC, which is said.
     # 0x80073CFB: something is already registered under this identity. On a
     # machine that has never built the application that cannot happen — but the
     # person most likely to run this installer repeatedly is whoever is
@@ -976,10 +968,11 @@ catch {
     }
 
     if ($_.Exception.Message -match '0x800B0109|0x80073CF0') {
-        throw 'Windows will not install the application because it does not trust the signature. ' +
-              'That usually means the certificate step above was skipped or declined. ' +
-              'Run this installer again and agree to the administrator prompt. ' +
-              'The download itself is fine - re-downloading will not change anything.'
+        throw 'Windows will not install the application because it does not trust the signature, ' +
+              'although the signature checked out when this installer started. The usual cause is a ' +
+              'policy on this PC that limits which publishers or root certificates are trusted - ' +
+              'one set by an organisation, for example. ' +
+              'Windows said: ' + $_.Exception.Message
     }
 
     throw
@@ -987,7 +980,7 @@ catch {
 
 # ---------------------------------------------------------------------------
 # The earlier copy (#590), now that the new one is safely installed - where Windows allows the two
-# side by side. On Windows 10 it was saved and removed before step 4 instead (#617).
+# side by side. On Windows 10 it was saved and removed before step 3 instead (#617).
 # ---------------------------------------------------------------------------
 # In this order and no other: save the data, move it across, and only then remove the package -
 # removing a package deletes everything it stored, and Tony's own move off the earlier identity
@@ -1021,7 +1014,7 @@ if ($earlier.Count -gt 0 -and -not $removeFirst) {
     }
 }
 
-# Windows 10's order: the earlier copy was saved and removed before step 4, so its data comes in now.
+# Windows 10's order: the earlier copy was saved and removed before step 3, so its data comes in now.
 if ($removeFirst -and $savedFolders.Count -gt 0) {
     Write-Step 'Moving the earlier copy''s data in'
     [void](Move-IntoNewCopy -Saved $savedFolders[0])
@@ -1433,11 +1426,11 @@ switch (Test-MicrosoftUpdate) {
 }
 Write-Host ''
 # The Settings path differs between the two Windows this supports, and the old text gave only
-# Windows 11's. Removing the app there leaves the certificate and these logs, so the page that
-# removes everything (#618) is named too.
+# Windows 11's. Removing the app there leaves these logs, so the page that removes everything
+# (#618) is named too. Since 2.0.0 there is no certificate left behind (#793).
 $appsPath = if ($osBuild -ge 22000) { 'Settings > Apps > Installed apps' } else { 'Settings > Apps > Apps & features' }
 Write-Host "  To remove it later: $appsPath > WinZ3805A." -ForegroundColor Gray
-Write-Host '  That leaves its certificate and the installer''s logs; to remove everything,' -ForegroundColor Gray
+Write-Host '  That leaves the installer''s logs; to remove everything,' -ForegroundColor Gray
 Write-Host '  see https://github.com/TGoodhew/WinZ3805A/blob/main/docs/remove-winz3805a.md' -ForegroundColor Gray
 Write-Host ''
 Write-Host "  A record of this install is at $LogPath" -ForegroundColor Gray
