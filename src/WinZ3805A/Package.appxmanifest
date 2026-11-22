@@ -9,11 +9,20 @@
   IgnorableNamespaces="uap rescap uap5">
 
   <!--
-    IDENTITY. Name and Publisher are final. The application is a signed MSIX
-    package installed from the release zips (§6.3); a Microsoft Store listing,
-    which would have issued its own, was dropped on 2 Oct 2026 (#575). Publisher
-    must equal the signing certificate's subject exactly, and
-    build\New-SideloadPackage.ps1 refuses to build otherwise.
+    IDENTITY. The application is a signed MSIX package installed from the
+    release zips (§6.3); a Microsoft Store listing, which would have issued its
+    own, was dropped on 2 Oct 2026 (#575). Publisher must equal the signing
+    certificate's subject exactly - the whole distinguished name, not only its
+    CN - and build\New-SideloadPackage.ps1 fails a build whose signer differs.
+
+    Publisher became the full DN in 2.0.0 (#793), when signing moved from a
+    self-signed certificate (subject "CN=The Schnauzer Group LLC") to Azure
+    Artifact Signing, whose certificate carries the organisation's validated
+    O, L, S and C as well. That changed the package family, so 2.0.0 installs
+    beside 1.5.x rather than over it; the installer saves the earlier copy's
+    data, moves it in and removes the earlier copy (#590), as it did for
+    v1.3.1. The subject is set by the identity validation behind the
+    certificate profile, so it does not change as the certificate renews.
 
     Identity/@Name is effectively permanent: changing it later creates a new app
     with no upgrade path for existing users. Properties
@@ -39,8 +48,8 @@
   -->
   <Identity
     Name="WinZ3805A"
-    Publisher="CN=The Schnauzer Group LLC"
-    Version="1.5.0.0" />
+    Publisher="CN=The Schnauzer Group LLC, O=The Schnauzer Group LLC, L=Renton, S=Washington, C=US"
+    Version="2.0.0.0" />
 
   <mp:PhoneIdentity PhoneProductId="DB5D1AF4-65FD-41CA-91F9-D83D5ACEB3B0" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
 
