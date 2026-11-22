@@ -392,18 +392,18 @@ it. It rides on section 5's antenna pull.
 > - replacing a used v1.2.0;
 > - a leftover certificate;
 > - this version installed, then damaged, and repaired by running the installer again (#600);
-> - **since 5 Oct 2026**, `upgrade-previous`: the previous release installed and used, then this one over it - the in-place upgrade most users make, with history, a changed setting and the remembered port kept; and `release-assets`, on the host: the zips' version, signer and certificate, and for a published release its notes' hashes, thumbprint and .NET row;
+> - **since 5 Oct 2026**, `upgrade-previous`: the previous release installed and used, then this one over it - the in-place upgrade most users make, with history, a changed setting and the remembered port kept (a replacement instead when the publisher changed, as from 1.5.x to 2.0.0, #793); and `release-assets`, on the host: the zips' version, a valid timestamped signature by the declared publisher and no `.cer`, and for a published release its notes' hashes, signer, thumbprint and .NET row;
 > - **since 5 Oct 2026, the three download rows below**:
->   - `unblocked-download`: the online zip given the mark a browser leaves, unblocked, extracted by Explorer's own copy engine, then the notes' thumbprint, one prompt, the .NET page named, the Microsoft Update line against Windows' own setting, and the app started once .NET is in;
+>   - `unblocked-download`: the online zip given the mark a browser leaves, unblocked, extracted by Explorer's own copy engine, then the signature verified against the notes' thumbprint, no administrator prompt, the .NET page named, the Microsoft Update line against Windows' own setting, and the app started once .NET is in;
 >   - `offline-no-network`: the offline zip with the VM's network adapter disconnected;
 >   - `blocked-zip`: the zip left blocked, and `Install.cmd` started as a double-click starts it, through ShellExecute.
 >
-> Two parts of those rows are reproduced rather than performed. The browser download is reproduced by the mark it leaves. The administrator prompt is on the secure desktop, so the thumbprint is read from the installer's log, which is what was actually trusted. The row for a machine an earlier installer left unable to start the app was retired on 4 Oct 2026: #614 is closed, fixed by #619 in v1.3.3, and the Windows 10 replacement row below, automated as `upgrade-1.2.0`, is what guards that fix. The harness was shown to fail: given v1.3.2 as the candidate, the Windows 10 upgrade fails as #617 did.
+> Two parts of those rows are reproduced rather than performed. The browser download is reproduced by the mark it leaves. The signature's thumbprint is read from the installer's log, which records what Windows actually verified (until 2.0.0 it was what the administrator prompt trusted; there is no such prompt since #793). The row for a machine an earlier installer left unable to start the app was retired on 4 Oct 2026: #614 is closed, fixed by #619 in v1.3.3, and the Windows 10 replacement row below, automated as `upgrade-1.2.0`, is what guards that fix. The harness was shown to fail: given v1.3.2 as the candidate, the Windows 10 upgrade fails as #617 did.
 
 **Why.** Everything else here tests the application. This tests the *download* — and it is the only
 check with a stranger at the other end of it. The failure modes are all invisible from a developer
-machine, because a developer machine already has the runtime, already trusts the certificate, and
-never sees the mark Windows puts on a downloaded file.
+machine, because a developer machine already has the runtime, has long since fetched every root
+certificate a signature could chain to, and never sees the mark Windows puts on a downloaded file.
 
 Do it on the artifact from the **release page**, not on `dist\` — downloading is half of what is
 being tested.
@@ -421,13 +421,13 @@ There are **two zips** since #588. Run both, each on a machine that has never ha
 | | |
 |---|---|
 | **Do** | **Online zip**, on a machine with no Visual Studio, no Windows App SDK and no .NET, connected to the internet: download `WinZ3805A-<version>-x64.zip` from the release, right-click it → *Properties* → **Unblock**, extract, double-click `Install.cmd`. Install .NET from the page it opens, then start the app. |
-| **Watch** | The certificate thumbprint in the UAC/trust prompt. |
-| **Pass** | The thumbprint matches the one in the release notes. One administrator prompt, for the certificate. Step 2 says .NET 10 is not installed and opens `dotnet.microsoft.com`'s .NET 10 page. Once .NET is installed from that page, the app appears in Start and launches. The last lines say whether Microsoft Update is on, and that matches *Settings › Windows Update › Advanced options*. |
+| **Watch** | The installer's *Signed by The Schnauzer Group LLC, verified by Windows* line, and the `signing` line of its log. |
+| **Pass** | The log's thumbprint matches the one in the release notes, with status `Valid`. **No** administrator prompt at all: there is no certificate to trust since 2.0.0 (#793), and the online zip installs no .NET. Step 1 says .NET 10 is not installed and opens `dotnet.microsoft.com`'s .NET 10 page. Once .NET is installed from that page, the app appears in Start and launches. The last lines say whether Microsoft Update is on, and that matches *Settings › Windows Update › Advanced options*. |
 
 | | |
 |---|---|
 | **Do** | **Offline zip**, on a second such machine, **disconnected from the network**: the same steps with `WinZ3805A-<version>-x64-offline.zip`. |
-| **Pass** | **One** administrator prompt, for the certificate **and** .NET together, and no other. Step 2 names the installer and reports *.NET 10.0.x installed*. The version matches the release notes' row for the offline zip. The app launches with no network and no download prompt. *Settings › Apps* lists *Microsoft .NET Runtime - 10.0.x (x64)*: an ordinary Microsoft install, which is what Microsoft Update services. v1.3.1's single zip installed and then stopped at first launch on a .NET download prompt (#586). |
+| **Pass** | **One** administrator prompt, for .NET alone, and no other. The signature verifies with the network off: if this machine's root store lacks the Microsoft root it chains to, the installer must say so in words before changing anything, and that is a finding to record (#793). Step 1 names the installer and reports *.NET 10.0.x installed*. The version matches the release notes' row for the offline zip. The app launches with no network and no download prompt. *Settings › Apps* lists *Microsoft .NET Runtime - 10.0.x (x64)*: an ordinary Microsoft install, which is what Microsoft Update services. v1.3.1's single zip installed and then stopped at first launch on a .NET download prompt (#586). |
 
 | | |
 |---|---|
@@ -437,7 +437,7 @@ There are **two zips** since #588. Run both, each on a machine that has never ha
 | | |
 |---|---|
 | **Do** | `build\Uninstall-Sideload.ps1`, then `Get-AppxPackage -Name WinZ3805A` and `certlm.msc` → *Trusted People*. |
-| **Pass** | Neither the package nor the certificate is left behind. |
+| **Pass** | No package is left behind, and no certificate of any release is in *Trusted People*. |
 | **Do** | **Removing everything (#618).** On a machine where this release's `Install.cmd` replaced an earlier-identity copy (v1.2.0), so there is a saved copy in Documents and the installer's logs, and where an earlier release's `WinZ3805A.cer` was also added to the account's own *Trusted People* (double-click it and accept the wizard): download `build/Remove-WinZ3805A.ps1` from the page `docs/remove-winz3805a.md` and run it with `-ListOnly`, then without. Accept saving the data; decline deleting the saved copies. |
 | **Pass** | `-ListOnly` changes nothing. The real run asks once for administrator permission. Afterwards: <ul><li>`Get-AppxPackage -Name WinZ3805A` lists nothing;</li><li>*Trusted People* holds neither `7F47E8D7…` nor `655D07E3…`, in `certlm.msc` or in `certmgr.msc`;</li><li>`%LOCALAPPDATA%\WinZ3805A Installer` is gone;</li><li>Documents has a *WinZ3805A saved data …* folder with `trend.db`, and the earlier saved copies are still there;</li><li>the Windows App Runtime and .NET are untouched;</li><li>its own *Checking* step reports nothing left, and its log is on the Desktop.</li></ul> After a restart, this release's `Install.cmd` installs and starts. |
 
@@ -451,7 +451,7 @@ There are **two zips** since #588. Run both, each on a machine that has never ha
 > — which finds the certificate by the manifest's *current* publisher — will not remove the old
 > certificate. It happened at v1.0.1, when the placeholder `CN=AppPublisher` was replaced, and
 > again at v1.3.1, when a misspelling of the company's name was corrected to
-> `CN=The Schnauzer Group LLC`. Since then `Uninstall-Sideload.ps1` also removes the certificate
+> `CN=The Schnauzer Group LLC`, and at 2.0.0, when Artifact Signing made it the full DN (#793). Since v1.3.1 `Uninstall-Sideload.ps1` also removes the certificate
 > of every installed copy's publisher, whatever that publisher was. **Since #590, `Install.cmd`
 > replaces an earlier copy itself.** The next row checks that on a machine with a real earlier
 > copy.
@@ -459,11 +459,11 @@ There are **two zips** since #588. Run both, each on a machine that has never ha
 | | |
 |---|---|
 | **Do** | **Replacing an earlier copy (#590).** On a machine with **v1.3.0** installed from its own release page, with some history recorded and the app running: run this release's `Install.cmd`. |
-| **Pass** | It asks for the running copy to be closed and waits. *Before anything changes* lists version 1.3.0.0 and the certificate `655D07E3…`, and only then asks, in **one** administrator prompt. Afterwards: <ul><li>`Get-AppxPackage -Name WinZ3805A` lists only this release;</li><li>`certlm.msc` → *Trusted People* holds only this release's certificate;</li><li>Documents has a *WinZ3805A earlier copy 1.3.0.0 …* folder containing `trend.db`;</li><li>the app opens with 1.3.0's history and its remembered connection.</li></ul> |
+| **Pass** | It asks for the running copy to be closed and waits. *Before anything changes* lists version 1.3.0.0 and the certificate `655D07E3…`, and only then asks, in **one** administrator prompt. Afterwards: <ul><li>`Get-AppxPackage -Name WinZ3805A` lists only this release;</li><li>`certlm.msc` → *Trusted People* holds no certificate of any release (#793);</li><li>Documents has a *WinZ3805A earlier copy 1.3.0.0 …* folder containing `trend.db`;</li><li>the app opens with 1.3.0's history and its remembered connection.</li></ul> |
 | **Do** | **Replacing an earlier copy on Windows 10 (#617).** The same as the row above, on a **Windows 10** x64 machine: an earlier-identity copy (v1.2.0 or v1.3.0) installed from its own release page, started, used for a minute, then closed. Run this release's `Install.cmd`. |
-| **Pass** | *Before anything changes* says this version of Windows cannot install the two side by side, and lists save, remove, install. The log has `decide order  save and remove the earlier copy, then install: build 19045`. A *Removing the earlier copy* step saves the data to Documents and removes the copy **before** *4 of 4*. Step 4 installs **without** `0x80073CF3`, the data is moved in afterwards, and **the start check reports the app running**. The start check is the real test, because the refused install this replaces left the app unable to start (#614). |
+| **Pass** | *Before anything changes* says this version of Windows cannot install the two side by side, and lists save, remove, install. The log has `decide order  save and remove the earlier copy, then install: build 19045`. A *Removing the earlier copy* step saves the data to Documents and removes the copy **before** *3 of 3*. Step 3 installs **without** `0x80073CF3`, the data is moved in afterwards, and **the start check reports the app running**. The start check is the real test, because the refused install this replaces left the app unable to start (#614). |
 | **Do** | **A newer Windows App Runtime already installed (#594, #595).** On a **Windows 10** x64 machine whose only `Microsoft.WindowsAppRuntime.2` is a newer, Store-serviced one (2.5.1.0 or later, typically brought by a Photos update): run `Install.cmd`. |
-| **Pass** | Step 3 says the runtime is *already present (2.5.x), which is this version or newer* and installs nothing. The companion line names the newest framework and gives both companions' versions. The app installs, the start check reports it running, and its window opens. The start check is the real test here, because missing companions fail silently (#473). On Windows 11 with the zip's runtime beside a newer one, the companions follow the newer. |
+| **Pass** | Step 2 says the runtime is *already present (2.5.x), which is this version or newer* and installs nothing. The companion line names the newest framework and gives both companions' versions. The app installs, the start check reports it running, and its window opens. The start check is the real test here, because missing companions fail silently (#473). On Windows 11 with the zip's runtime beside a newer one, the companions follow the newer. |
 | **Do** | **The runtime's companions missing (#625).** With this release installed and closed, remove them: `Get-AppxPackage MicrosoftCorporationII.WinAppRuntime.Main.2 \| Remove-AppxPackage`, and the same for `MicrosoftCorporationII.WinAppRuntime.Singleton`. Start WinZ3805A, then run `Install.cmd` again and start it once more. |
 | **Pass** | It opens and works without them. `app.log` has `FAIL  Runtime  Windows App Runtime: PackageInstallFailed, 0x80070005` with the advice to run the installer again, where v1.3.3 exited silently with that code. After the rerun, both companions are back and the next start logs *its parts are in place*. |
 | **Do** | **A certificate left behind.** On a machine where v1.3.0 was uninstalled from *Settings › Apps*, so its certificate is still trusted: run `Install.cmd`. |

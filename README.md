@@ -168,7 +168,7 @@ two zips:
 > survives extraction. Skip it and Windows 11 asks whether to run `Install.cmd`,
 > saying the publisher could not be verified; choose *Run* and it carries on.
 
-Both zips carry the signed package, its certificate and the x64 Windows App
+Both zips carry the signed package and the x64 Windows App
 Runtime. The package carries **no .NET runtime** of its own (§6.3). .NET 10 is
 installed by Microsoft's installer and kept patched by Microsoft Update, which
 it could not do for a runtime inside the package (#586, #588). Windows applies
@@ -176,26 +176,27 @@ those patches only when *Receive updates for other Microsoft products* is on,
 and `Install.cmd` says whether it is. So a bench machine with neither Visual
 Studio nor an internet connection installs and runs from the offline zip.
 
-The package is signed with a **self-signed certificate** (`build/devcert.pfx`,
-generated from the manifest on first use so its subject cannot drift from the
-declared publisher), so the person installing trusts it once: `Install.cmd`
-asks for administrator permission for exactly that step — adding the
-certificate to *Trusted People* and nothing wider — and the
-[README in the zip](build/sideload/README.txt) explains what that does and does
-not grant before asking. In the offline zip, the same single prompt also
-installs .NET. Every release publishes the certificate thumbprint and each zip's
-SHA-256, so both can be checked against what Windows shows you.
+From 2.0.0 the package is signed with **Azure Artifact Signing** (#793), as
+`CN=The Schnauzer Group LLC, O=The Schnauzer Group LLC, L=Renton, S=Washington, C=US`.
+The certificate chains to a Microsoft root Windows already trusts, so **there is
+no certificate to trust by hand**: `Install.cmd` checks the signature before it
+changes anything and adds nothing to any certificate store. It asks for
+administrator permission only to install .NET from the offline zip, or to remove
+a certificate an earlier release added. Every release publishes who signed it and
+each zip's SHA-256. A PC that has never been online may not have that Microsoft
+root yet; the installer says so, in words, and connecting it once fixes it.
 
-**Coming from 1.3.0 or earlier?** Those releases were signed under a misspelling
-of the company's name, corrected to **The Schnauzer Group LLC** in 1.3.1. The
-publisher is part of the package's identity, so 1.3.1 cannot upgrade the old copy
-in place. `Install.cmd` handles that (#590). It saves the old copy's data to
-Documents, moves the data into the new copy, then removes the old copy and the
-certificate earlier releases were signed with. On Windows 10, which will not
-install the two side by side, it saves the data and removes the old copy
-*before* installing, then moves the data in (#617). That certificate is removed in the
-same single administrator prompt, even if the old app was already uninstalled by
-hand, since removing an app never removes its certificate.
+**Coming from 1.5.x or earlier?** Releases 1.3.1 to 1.5.x were signed with a
+self-signed certificate as `CN=The Schnauzer Group LLC` alone, and releases up to
+1.3.0 under a misspelling of the company's name. The publisher is part of the
+package's identity, so 2.0.0 cannot upgrade the old copy in place. `Install.cmd`
+handles that (#590). It saves the old copy's data to Documents, moves the data
+into the new copy, then removes the old copy and the certificates earlier
+releases asked you to trust. On Windows 10, which will not install the two side
+by side, it saves the data and removes the old copy *before* installing, then
+moves the data in (#617). Those certificates are removed in one administrator
+prompt, even if the old app was already uninstalled by hand, since removing an
+app never removes its certificate.
 
 **Installed, but it does not start?** If `Install.cmd` reports that WinZ3805A did not
 stay open, [docs/diagnose-start.md](docs/diagnose-start.md) gives you a script to
@@ -218,7 +219,7 @@ same `dist\WinZ3805A-<version>-x64.zip` from a clone.
 
 Releases are built by [`.github/workflows/release.yml`](.github/workflows/release.yml)
 on a `v*` tag — it runs the gates and the tests, builds and signs, then attaches
-the zip with its thumbprint and checksum to a draft release.
+the zips with their signer and checksums to a draft release.
 
 **The tag does not set the version.** `Package.appxmanifest` does, and the
 workflow refuses to build when the two disagree rather than restamping either:
@@ -238,11 +239,19 @@ the soak, the QA-run issue, then on the go the publish and a check that the publ
 tested ones - is `build\qa\Invoke-Release.ps1`; see
 [build/qa/README.md](build/qa/README.md#running-a-release).
 
-Signing on the runner needs `SIGNING_PFX_BASE64` and `SIGNING_PFX_PASSWORD` as
-repository secrets; [`build/New-SigningSecrets.ps1`](build/New-SigningSecrets.ps1)
-sets both from the local PFX and explains what rotating the key costs. Use the
-workflow's **Run workflow** button for a dry run — it builds and signs and
-attaches the zip as an artifact without publishing anything.
+Signing on the runner stores **no secrets** (#793). The job runs in the `release`
+environment, which needs the owner's approval and deploys only from a `v*` tag or
+`main`; it signs in to Azure with GitHub's OIDC token as an Entra app that trusts
+only that environment and may only sign with the one certificate profile. The
+environment's variables name the app, the tenant and the signing account, and
+[`build/Sign-ArtifactSigning.ps1`](build/Sign-ArtifactSigning.ps1) does the
+signing. Use the workflow's **Run workflow** button for a dry run — it builds and
+signs and attaches the zips as an artifact without publishing anything.
+
+A local build signs the same way given `-SignScript`, or `WINZ3805A_SIGN_SCRIPT`
+naming a script that takes file paths and signs them with the Artifact Signing
+account; that script and the account's details stay outside the repository.
+Without one, `New-SideloadPackage.ps1` still builds, unsigned, and says so.
 
 ## Building from source
 

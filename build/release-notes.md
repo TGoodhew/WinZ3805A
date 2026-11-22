@@ -14,27 +14,30 @@ Download **one** of the two zips below, unblock it, extract it, and double-click
 > `Install.cmd`, saying the publisher could not be verified; choose *Run* and the
 > install carries on.
 
-Both carry the signed package, its certificate and the x64 Windows App Runtime.
+Both carry the signed package and the x64 Windows App Runtime.
 The application carries **no .NET runtime of its own**. .NET is installed by
 Microsoft's installer and kept patched by Microsoft Update, so a .NET security fix
 reaches you from Microsoft without waiting for this project. Windows applies them
 only when *Settings › Windows Update › Advanced options › Receive updates for
 other Microsoft products* is on, and the installer tells you whether it is.
 
-### Upgrading from 1.3.0 or earlier
+### Upgrading from 1.5.x or earlier
 
-From **1.3.1** the package is signed as **The Schnauzer Group LLC**. Earlier releases were signed
-under a misspelling of the company's name. The publisher is part of a package's identity, so
-Windows treats this release as a **different application** that cannot upgrade the old one.
-**`Install.cmd` handles it** (#590), for every release from 1.0.1 on:
+From **2.0.0** the package is signed through **Azure Artifact Signing** (#793), and the publisher
+is the company's full verified name, `CN=The Schnauzer Group LLC, O=The Schnauzer Group LLC,
+L=Renton, S=Washington, C=US`. Releases 1.3.1 to 1.5.x were self-signed as `CN=The Schnauzer
+Group LLC` alone, and releases up to 1.3.0 under a misspelling of the company's name. The
+publisher is part of a package's identity, so Windows treats this release as a **different
+application** that cannot upgrade the old one. **`Install.cmd` handles it** (#590), for every
+release from 1.0.1 on:
 
 1. It asks you to exit the old copy if it is running (right-click its notification-area icon →
    **Exit**).
-2. Before changing anything, it lists the old copy and the old certificate it will remove.
+2. Before changing anything, it lists the old copy and the old certificates it will remove.
 3. After installing this release, it saves the old copy's history, settings and logs to a
    *WinZ3805A earlier copy …* folder in **Documents**. It moves them into the new copy, then
-   removes the old copy. The old certificate comes out of *Trusted People* in the same single
-   administrator prompt as the new one goes in.
+   removes the old copy. The old certificates come out of *Trusted People* in one administrator
+   prompt — nothing new goes in.
 
 **On Windows 10 the order is different** (#617). Windows 10 cannot install the two side by side,
 so the installer saves the old copy's data to Documents and removes the old copy *before*
@@ -67,20 +70,16 @@ again, saving your history and settings to Documents first and moving them back 
 Windows' *Settings › Apps › WinZ3805A › Advanced options ›
 **Repair*** is also safe. **Reset** in the same place deletes your history and settings.
 
-### About the certificate prompt
+### About the signature
 
-The package is signed with a **self-signed certificate**, so `Install.cmd` asks
-once for administrator permission to add it to the *Trusted People* store. That
-is the only thing it asks for, and the README inside the zip explains what it
-does and does not grant before asking.
+The package is signed by **The Schnauzer Group LLC** through Microsoft's **Azure Artifact
+Signing**, whose certificate chains to a Microsoft root that Windows already trusts. There is
+**no certificate to trust by hand** and no prompt for one: `Install.cmd` checks the signature
+before changing anything, and asks for administrator permission only to install .NET or to remove
+an earlier release's certificate.
 
-What that trust means, plainly: a certificate in *Trusted People* can vouch for
-packages **you choose to install**. It does not let anything install itself, and
-it is not a root authority. `build/Uninstall-Sideload.ps1` removes the
-certificate along with the app, which is what puts a machine back to clean.
-
-There is no code-signing authority behind this certificate — that is the cost of
-not paying one — so the thumbprint below is what you check it against.
+A PC that has never been online may not yet have that Microsoft root. The installer says so, in
+words, before changing anything; connecting the PC once fixes it.
 
 ### Requirements
 
@@ -97,7 +96,7 @@ not paying one — so the thumbprint below is what you check it against.
 *Settings › Apps* removes the application and everything it stored. To keep the history, use
 **Export history…** on its Settings page first.
 
-Uninstalling leaves the certificate and the installer's logs behind. To remove everything any
+Uninstalling leaves the installer's logs behind. To remove everything any
 release has put on the machine, follow
 [Removing WinZ3805A completely](https://github.com/TGoodhew/WinZ3805A/blob/main/docs/remove-winz3805a.md).
 Its script saves your history to Documents first, and never removes the shared Windows App

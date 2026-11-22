@@ -1,8 +1,10 @@
 # Removing WinZ3805A completely
 
-*Settings › Apps* removes the app, but it leaves behind the certificate the app
-was signed with, the installer's logs, and any copies of your data the installer
-saved. This page gives you a script that removes **everything any WinZ3805A
+*Settings › Apps* removes the app, but it leaves behind the installer's logs, any
+copies of your data the installer saved, and - if a release before 2.0.0 was ever
+installed - the certificate that release asked you to trust. (From 2.0.0 the app
+is signed through Azure Artifact Signing and nothing is added to any certificate
+store.) This page gives you a script that removes **everything any WinZ3805A
 installer has put on your PC, from the first release to the current one**, and
 explains each thing it does.
 
@@ -15,7 +17,7 @@ an upgrade that went wrong, or because you have stopped using WinZ3805A.
 |---|---|---|
 | **Removes** | Every copy of WinZ3805A installed for your Windows account, whichever release it came from | Windows' list of installed apps |
 | **Removes** | With each copy, everything it stored: your history (`trend.db`), settings, remembered connection and logs | Inside the app's own folder under `%LOCALAPPDATA%\Packages` |
-| **Removes** | The certificates WinZ3805A releases were signed with | *Trusted People* (and *Trusted Root*, if one was put there), for the whole PC and for your account |
+| **Removes** | The self-signed certificates releases up to 1.5.x were signed with | *Trusted People* (and *Trusted Root*, if one was put there), for the whole PC and for your account |
 | **Removes** | The installer's logs and settings | `%LOCALAPPDATA%\WinZ3805A Installer` |
 | **Asks first** | Whether to save your history and settings to Documents before removing them. **The answer is yes unless you say no.** | Saved as `Documents\WinZ3805A saved data <version> <date>` |
 | **Asks first** | Whether to delete the copies the installer saved when it replaced an older WinZ3805A. **The answer is no unless you say yes.** | `Documents\WinZ3805A earlier copy <version> <date>` |

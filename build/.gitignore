@@ -1,4 +1,4 @@
-# The signing key, and the one file in this repository that must never be in it.
+# The retired signing key, and the one file in this repository that must never be in it.
 #
 # The root .gitignore already has *.pfx. This is deliberately the second rule
 # rather than a redundant one: the root file is long, general, and edited for
@@ -7,9 +7,10 @@
 # public repository. This rule sits beside the key it protects, is four lines
 # long, and has exactly one reason to be edited.
 #
-# What the key is: a self-signed certificate, so nothing trusts it until a
-# person chooses to. But everyone who has installed a release HAS chosen to, and
-# anyone holding this PFX can sign a package that installs under that trust as an
-# upgrade. build\New-SigningSecrets.ps1 is how it reaches CI, and the rotation
-# note there says what replacing it costs.
+# What the key is: the self-signed certificate releases 1.3.1 to 1.5.x were
+# signed with. Nothing builds with it since 2.0.0, which is signed with Azure
+# Artifact Signing and keeps no key anywhere near this repository (#793). It
+# stays dangerous while any 1.5.x machine still trusts it - anyone holding this
+# PFX can sign a package that installs there as an upgrade - so the rule stays
+# for as long as a copy of the file might.
 devcert.pfx
