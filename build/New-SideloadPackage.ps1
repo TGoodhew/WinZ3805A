@@ -11,7 +11,10 @@
     with all three:
 
       - The MSIX must be SIGNED. Windows will not install one that is not, and
-        the certificate has to match Package/Identity/Publisher exactly.
+        the certificate's subject has to match Package/Identity/Publisher
+        exactly. Since #793 it is signed with Azure Artifact Signing, whose
+        certificates chain to a public authority, so nobody installing has to
+        trust anything by hand.
 
       - The Windows App Runtime must be available. The application is
         framework-dependent (§6.3), so a clean machine does not have it. The
@@ -27,10 +30,9 @@
     The result is TWO zips from one build (#588), identical but for one file:
 
       dist\WinZ3805A-<version>-x64.zip          the ONLINE zip, around 62 MB:
-          the bundle, its certificate, the x64 Windows App Runtime, Install.cmd
-          and a README that explains the certificate prompt rather than hurrying
-          the reader past it. .NET 10 is not in it; Install.cmd opens
-          Microsoft's download page when the machine lacks it.
+          the signed bundle, the x64 Windows App Runtime, Install.cmd and a
+          README. .NET 10 is not in it; Install.cmd opens Microsoft's download
+          page when the machine lacks it.
 
       dist\WinZ3805A-<version>-x64-offline.zip  the OFFLINE zip, around 90 MB:
           the same, plus Microsoft's own .NET 10 Runtime installer, which
@@ -45,12 +47,24 @@
 .PARAMETER SkipBuild
     Package whatever is already in AppPackages rather than rebuilding.
 
-.PARAMETER CertificatePath
-    The PFX to sign with. Defaults to build\devcert.pfx, generated on first use
-    from the manifest so its subject cannot drift from the declared publisher.
+.PARAMETER SignScript
+    A script that takes file paths and signs them - Authenticode, SHA-256,
+    timestamped - throwing if it cannot. Defaults to $env:WINZ3805A_SIGN_SCRIPT.
+    release.yml passes build\Sign-ArtifactSigning.ps1; on the development
+    machine the variable names the local Artifact Signing script, which lives
+    outside this repository with the account it signs for (#793).
 
-.PARAMETER CertificatePassword
-    The PFX password. Defaults to the one 'winapp cert generate' uses.
+    WITHOUT ONE THE BUILD STILL RUNS, UNSIGNED, AND WARNS. An unsigned package
+    installs nowhere, so a zip built that way is for looking at, not for
+    handing to anyone.
+
+    The build signs nothing itself. Windows App SDK packaging can only sign
+    with a certificate it can read locally, and an Artifact Signing key never
+    leaves Azure, so the bundle is built unsigned and then taken apart: each
+    package inside it is signed, the bundle is made again from the signed
+    packages, and the bundle is signed last. That is what Visual Studio does
+    with a local certificate, and what the releases up to 1.5.0 carried - all
+    five inner packages signed as well as the bundle.
 
 .PARAMETER DotNetCache
     Where Microsoft's .NET Runtime installer is kept between runs, so a rebuild
@@ -68,38 +82,20 @@
     second script - but only Visual Studio's MSBuild reports XAML compiler
     diagnostics, and this project is XAML-heavy by design.
 
-.PARAMETER TimestampUrl
-    An RFC 3161 timestamp authority. THE SIGNATURE IS TIMESTAMPED ON PURPOSE and
-    this is not optional polish: a self-signed certificate is generated with a
-    one-year life, and without a countersigned time an MSIX becomes
-    uninstallable the day its certificate expires - INCLUDING A COPY SOMEBODY
-    ALREADY DOWNLOADED. A timestamp asserts the signature existed while the
-    certificate was valid, so a release stays installable after the certificate
-    behind it has lapsed.
-
-    It is the one step here that needs the internet. Pass an empty string to
-    skip it, and understand that the zip then has a shelf life.
-
 .NOTES
-    The certificate is self-signed, so the person installing has to trust it
-    once, from an elevated prompt. That is the cost of not paying a certificate
-    authority, and it is the one part of this that cannot be polished away -
-    only explained, which install.ps1 and README.txt both do.
-
-    A certificate from a trusted authority would remove the step entirely and
-    change nothing else here: the same zip, minus the .cer and the trust
-    prompt.
+    EVERY SIGNATURE IS CHECKED, NOT ASSUMED: each inner package and the bundle
+    must be Valid, signed by exactly the manifest's Publisher, and timestamped,
+    or the build fails. The timestamp matters more than it did: an Artifact
+    Signing certificate lives three days, so an untimestamped package stops
+    installing before the week is out - including copies already downloaded.
+    The sign script asks for one, and this checks that it arrived.
 #>
 
 [CmdletBinding()]
 param(
     [switch]$SkipBuild,
 
-    [string]$CertificatePath,
-
-    [string]$CertificatePassword = 'password',
-
-    [string]$TimestampUrl = 'http://timestamp.digicert.com',
+    [string]$SignScript = $env:WINZ3805A_SIGN_SCRIPT,
 
     [string]$DotNetCache,
 
@@ -113,33 +109,94 @@ $project = Join-Path $repo 'src\WinZ3805A\WinZ3805A.csproj'
 $appPackages = Join-Path $repo 'src\WinZ3805A\AppPackages'
 $templates = Join-Path $PSScriptRoot 'sideload'
 
-if (-not $CertificatePath) {
-    $CertificatePath = Join-Path $PSScriptRoot 'devcert.pfx'
-}
-
-# ---------------------------------------------------------------------------
-# A certificate, because an unsigned MSIX will not install anywhere.
-# ---------------------------------------------------------------------------
-if (-not (Test-Path $CertificatePath)) {
-    Write-Host "Generating a signing certificate at $CertificatePath..."
-
-    $manifest = Join-Path $repo 'src\WinZ3805A\Package.appxmanifest'
-    & winapp cert generate --manifest $manifest --output $CertificatePath --export-cer --if-exists Overwrite
-    if ($LASTEXITCODE -ne 0) { throw 'Could not generate a signing certificate.' }
-}
-
 [xml]$manifestXml = Get-Content (Join-Path $repo 'src\WinZ3805A\Package.appxmanifest')
 $publisher = $manifestXml.Package.Identity.Publisher
 $version = $manifestXml.Package.Identity.Version
 
-# See build\Invoke-Wack.ps1 for why this is the constructor rather than the
-# modern static loader: the method name trips §8.4's gate on a colon.
-$subject = (New-Object System.Security.Cryptography.X509Certificates.X509Certificate2 `
-        -ArgumentList $CertificatePath, $CertificatePassword).Subject
+# ---------------------------------------------------------------------------
+# A sign script, or a loud warning (#793).
+# ---------------------------------------------------------------------------
+if ($SignScript) {
+    if (-not (Test-Path $SignScript)) { throw "The sign script $SignScript does not exist." }
+    $SignScript = (Resolve-Path $SignScript).Path
+}
+else {
+    Write-Warning ('No sign script: pass -SignScript or set WINZ3805A_SIGN_SCRIPT. The package will be ' +
+                   'built UNSIGNED, and an unsigned package installs nowhere.')
+}
 
-if ($subject -ne $publisher) {
-    throw "The certificate is for '$subject' but the manifest declares '$publisher'. " +
-          "Delete $CertificatePath and re-run: it is regenerated from the manifest."
+# The newest x64 tool of that name in the Windows SDK - signtool's neighbour, so the two match.
+function Get-SdkTool {
+    param([string]$Name)
+    $tool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\10.*\x64\$Name" -ErrorAction SilentlyContinue |
+        Sort-Object { [version] $_.Directory.Parent.Name } | Select-Object -Last 1
+    if (-not $tool) { throw "$Name was not found; install the Windows SDK." }
+    $tool.FullName
+}
+
+# A signature that is Valid, made by exactly the manifest's publisher, and timestamped - or the reason
+# it is not. Valid alone is not enough: any publisher's valid signature is Valid, and Windows refuses
+# the package unless the signer's subject IS Package/Identity/Publisher.
+function Test-OurSignature {
+    param([string]$Path)
+    $signature = Get-AuthenticodeSignature -FilePath $Path
+    if ($signature.Status -ne 'Valid') { return "$($signature.Status): $($signature.StatusMessage)" }
+    if ($signature.SignerCertificate.Subject -ne $publisher) {
+        return "signed by '$($signature.SignerCertificate.Subject)', but the manifest declares '$publisher'"
+    }
+    if (-not $signature.TimeStamperCertificate) {
+        return 'signed but NOT timestamped, so it stops installing when the three-day certificate expires'
+    }
+    $null
+}
+
+# Each package inside the bundle signed, the bundle made again from them, then the bundle signed. Files
+# already carrying our valid signature are left alone, so -SkipBuild over a signed bundle is a no-op.
+function Invoke-BundleSigning {
+    param([IO.FileInfo]$Bundle)
+
+    if (-not (Test-OurSignature $Bundle.FullName)) {
+        Write-Host "$($Bundle.Name) is already signed by $publisher; not signing it again."
+        return
+    }
+
+    $makeAppx = Get-SdkTool 'makeappx.exe'
+    $work = Join-Path $repo 'dist\signing'
+    if (Test-Path $work) { Remove-Item $work -Recurse -Force }
+    $unbundled = Join-Path $work 'unbundled'
+    $packages = Join-Path $work 'packages'
+    New-Item -ItemType Directory -Path $packages -Force | Out-Null
+
+    try {
+        & $makeAppx unbundle /p $Bundle.FullName /d $unbundled /o | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "makeappx could not unpack $($Bundle.Name) (exit $LASTEXITCODE)." }
+
+        # Only the packages go back in: makeappx writes the bundle's own manifest, block map and
+        # signature afresh, from the packages it is given.
+        $inner = @(Get-ChildItem $unbundled -Filter '*.msix')
+        if ($inner.Count -eq 0) { throw "$($Bundle.Name) holds no packages." }
+
+        $toSign = @($inner | Where-Object { Test-OurSignature $_.FullName } | ForEach-Object FullName)
+        if ($toSign.Count) {
+            Write-Host "Signing the $($toSign.Count) packages inside $($Bundle.Name)..."
+            & $SignScript @toSign
+        }
+
+        foreach ($package in $inner) {
+            $problem = Test-OurSignature $package.FullName
+            if ($problem) { throw "$($package.Name) inside the bundle is not properly signed: $problem" }
+            Copy-Item $package.FullName $packages
+        }
+
+        & $makeAppx bundle /d $packages /p $Bundle.FullName /bv $version /o | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "makeappx could not rebuild $($Bundle.Name) (exit $LASTEXITCODE)." }
+
+        Write-Host "Signing $($Bundle.Name)..."
+        & $SignScript $Bundle.FullName
+    }
+    finally {
+        Remove-Item $work -Recurse -Force -ErrorAction SilentlyContinue
+    }
 }
 
 # ---------------------------------------------------------------------------
@@ -163,7 +220,7 @@ if (-not $SkipBuild) {
                'or pass -UseSdkMSBuild to build with the SDK''s own.')
     }
 
-    Write-Host 'Building the signed Release package...'
+    Write-Host 'Building the Release package...'
 
     # Built from fragments for the reason build\Invoke-Wack.ps1 documents: one
     # of §8.4's excluded names is reproduced exactly by MSBuild's package
@@ -173,34 +230,10 @@ if (-not $SkipBuild) {
     & $msbuild @leadingArgs $project "-t:$($targets.Fetch)" -p:Configuration=Release -p:Platform=x64 -v:q -nologo
     if ($LASTEXITCODE -ne 0) { throw 'Package restore failed.' }
 
-    # -----------------------------------------------------------------------
-    # SIGNED FROM THE STORE, NOT FROM THE FILE (#380).
+    # UNSIGNED ON PURPOSE (#793): signing is Invoke-BundleSigning's, after the build. The packaging
+    # targets can only sign with a certificate they can read locally, and an Artifact Signing key never
+    # leaves Azure.
     #
-    # Handing the packaging targets a password-protected PFX signs correctly and
-    # warns twice while doing it: the validation step at
-    # Microsoft.Windows.SDK.BuildTools.MSIX.Packaging.targets opens
-    # PackageCertificateKeyFile WITHOUT the password, cannot read it (APPX0105),
-    # and then reports that the certificate is not valid for signing (APPX0107).
-    # The signing task itself does get the password and signs anyway, so both
-    # warnings are false - and they are false in the one workflow where a real
-    # signing failure matters most. Two warnings saying signing failed, on a run
-    # that signed, are two warnings people learn to scroll past.
-    #
-    # The message says the remedy: put the certificate where something without a
-    # password can read it. Imported here for the length of the build and REMOVED
-    # AFTERWARDS, because this script is run on real machines as well as on
-    # ephemeral runners and a signing key left in a personal store is a footprint
-    # nobody asked for. The key file is cleared explicitly - the targets prefer it
-    # over the thumbprint when both are set, so leaving it would change nothing.
-    # -----------------------------------------------------------------------
-    $signing = if ($CertificatePassword) {
-        Import-PfxCertificate -FilePath $CertificatePath -CertStoreLocation Cert:\CurrentUser\My `
-            -Password (ConvertTo-SecureString $CertificatePassword -AsPlainText -Force)
-    }
-    else {
-        Import-PfxCertificate -FilePath $CertificatePath -CertStoreLocation Cert:\CurrentUser\My
-    }
-
     # ONE WARNING IS LEFT IN THIS BUILD AND IT STAYS: the packaging targets look
     # for mspdbcmf.exe, which ships with the MSVC toolset, and say "a symbols
     # package will not be generated" when it is absent - true, and wanted, since
@@ -211,68 +244,59 @@ if (-not $SkipBuild) {
     # nothing on a run. Left alone deliberately rather than papered over with a
     # property that does not do what it looks like it does.
     #
-    # The public half, exported from the certificate that is about to sign rather
-    # than hoped for in the build output. What ends up in the zip is what the
-    # person installing has to trust, so it should come from the same place the
-    # signature does - and a -SkipBuild run over an older output has nowhere else
-    # to get it.
-    $cerBesidePfx = [IO.Path]::ChangeExtension($CertificatePath, '.cer')
-    if (-not (Test-Path $cerBesidePfx)) {
-        Export-Certificate -Cert $signing -FilePath $cerBesidePfx | Out-Null
-    }
+    # The output folder is emptied first: it is shared with Visual Studio's own packaging, and an
+    # older version's bundle or a .cer from the self-signed era left there would only confuse the
+    # "newest bundle" pick below.
+    if (Test-Path $appPackages) { Remove-Item $appPackages -Recurse -Force }
 
-    try {
-        & $msbuild @leadingArgs $project "-t:$($targets.Rebuild)" `
-            -p:Configuration=Release -p:Platform=x64 `
-            -p:GenerateAppxPackageOnBuild=true `
-            -p:UapAppxPackageBuildMode=SideloadOnly `
-            -p:AppxPackageSigningEnabled=true `
-            -p:PackageCertificateKeyFile= `
-            -p:PackageCertificateThumbprint="$($signing.Thumbprint)" `
-            -p:AppxPackageSigningTimestampServerUrl="$TimestampUrl" `
-            -p:AppxPackageSigningTimestampDigestAlgorithm=SHA256 `
-            -p:AppxPackageTestDir="$appPackages\" `
-            -v:m -nologo
-        if ($LASTEXITCODE -ne 0) { throw 'Build failed.' }
-    }
-    finally {
-        Remove-Item (Join-Path 'Cert:\CurrentUser\My' $signing.Thumbprint) -Force -ErrorAction SilentlyContinue
-    }
+    & $msbuild @leadingArgs $project "-t:$($targets.Rebuild)" `
+        -p:Configuration=Release -p:Platform=x64 `
+        -p:GenerateAppxPackageOnBuild=true `
+        -p:UapAppxPackageBuildMode=SideloadOnly `
+        -p:AppxPackageSigningEnabled=false `
+        -p:AppxPackageTestDir="$appPackages\" `
+        -v:m -nologo
+    if ($LASTEXITCODE -ne 0) { throw 'Build failed.' }
 }
 
 # ---------------------------------------------------------------------------
-# Collect
+# Collect, and sign
 # ---------------------------------------------------------------------------
 $bundle = Get-ChildItem $appPackages -Recurse -Filter '*.msixbundle' -ErrorAction SilentlyContinue |
     Sort-Object LastWriteTime -Descending | Select-Object -First 1
 
 if (-not $bundle) { throw "No .msixbundle under $appPackages." }
 
-$signature = Get-AuthenticodeSignature $bundle.FullName
-if ($signature.Status -eq 'NotSigned') {
-    throw "$($bundle.Name) is not signed, so it cannot be installed anywhere. Re-run without -SkipBuild."
+$signed = [bool]$SignScript
+if ($signed) {
+    Invoke-BundleSigning $bundle
+    $bundle = Get-Item $bundle.FullName
+
+    # The bundle as shipped, and every package inside it as shipped - read back out of the file that
+    # goes into the zip rather than trusted from the folder it was assembled in.
+    $problem = Test-OurSignature $bundle.FullName
+    if ($problem) { throw "$($bundle.Name) is not properly signed: $problem" }
+
+    $check = Join-Path $repo 'dist\signing-check'
+    if (Test-Path $check) { Remove-Item $check -Recurse -Force }
+    try {
+        & (Get-SdkTool 'makeappx.exe') unbundle /p $bundle.FullName /d $check /o | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "makeappx could not unpack the signed $($bundle.Name) (exit $LASTEXITCODE)." }
+        foreach ($package in Get-ChildItem $check -Filter '*.msix') {
+            $problem = Test-OurSignature $package.FullName
+            if ($problem) { throw "$($package.Name) inside the signed bundle is not properly signed: $problem" }
+        }
+    }
+    finally {
+        Remove-Item $check -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    $signature = Get-AuthenticodeSignature $bundle.FullName
+    Write-Host "Signed by $($signature.SignerCertificate.Subject), timestamped by $($signature.TimeStamperCertificate.Subject)."
 }
-
-# Checked rather than assumed. An unreachable timestamp authority does not fail
-# the build - signtool warns and carries on - so the only way to know a release
-# is timestamped is to look, and the consequence of not looking shows up a year
-# later on somebody else's machine.
-if ($TimestampUrl -and -not $signature.TimeStamperCertificate) {
-    throw ("$($bundle.Name) is signed but NOT timestamped, so it stops installing when the " +
-           "signing certificate expires on $((New-Object System.Security.Cryptography.X509Certificates.X509Certificate2 $CertificatePath, $CertificatePassword).NotAfter.ToString('d MMM yyyy')) - " +
-           'including copies already downloaded. Check that the timestamp authority is reachable and re-run.')
+elseif ((Get-AuthenticodeSignature $bundle.FullName).Status -eq 'NotSigned') {
+    Write-Warning "$($bundle.Name) is NOT SIGNED and will not install anywhere."
 }
-
-$cer = Get-ChildItem $appPackages -Recurse -Filter '*.cer' -ErrorAction SilentlyContinue |
-    Sort-Object LastWriteTime -Descending | Select-Object -First 1
-
-if (-not $cer) {
-    # The build emits one beside the bundle, but a -SkipBuild run over an older
-    # output may not have it. The one beside the PFX is the same certificate.
-    $cer = Get-Item ([IO.Path]::ChangeExtension($CertificatePath, '.cer')) -ErrorAction SilentlyContinue
-}
-
-if (-not $cer) { throw 'No .cer found. Delete the PFX and re-run to regenerate both.' }
 
 # x64 only. Visual Studio stages four architectures because it does not know
 # which one you will hand out; §6.1 does know, and shipping the other three
@@ -398,7 +422,6 @@ if (Test-Path $staging) { Remove-Item $staging -Recurse -Force }
 New-Item -ItemType Directory -Path $staging -Force | Out-Null
 
 Copy-Item $bundle.FullName (Join-Path $staging $bundle.Name)
-Copy-Item $cer.FullName (Join-Path $staging 'WinZ3805A.cer')
 Copy-Item (Join-Path $templates 'Install.cmd') $staging
 Copy-Item (Join-Path $templates 'install.ps1') $staging
 Copy-Item (Join-Path $templates 'README.txt') $staging
@@ -442,9 +465,12 @@ foreach ($built in $zip, $offlineZip) {
     Write-Host "  $built"
 }
 Write-Host ''
-Write-Host '  Both: the signed bundle, its certificate, the x64 Windows App Runtime,' -ForegroundColor Gray
+Write-Host "  Both: the $(if ($signed) { 'signed' } else { 'UNSIGNED' }) bundle, the x64 Windows App Runtime," -ForegroundColor Gray
 Write-Host '  Install.cmd and a README. The offline zip adds Microsoft''s .NET' -ForegroundColor Gray
 Write-Host "  $($dotnetInstaller.Version) Runtime installer$(if ($dotnetInstaller.Security) { ', a security release' })." -ForegroundColor Gray
 Write-Host ''
-Write-Host '  The person installing double-clicks Install.cmd and agrees to one' -ForegroundColor Gray
-Write-Host '  administrator prompt, which the README explains.' -ForegroundColor Gray
+Write-Host '  The person installing double-clicks Install.cmd. No certificate has to be' -ForegroundColor Gray
+Write-Host '  trusted: the signature chains to a public authority.' -ForegroundColor Gray
+if (-not $signed) {
+    Write-Warning 'These zips are UNSIGNED and will not install. Build with -SignScript to hand them to anyone.'
+}

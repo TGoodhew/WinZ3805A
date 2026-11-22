@@ -4,12 +4,12 @@
 
 .DESCRIPTION
     build\release-notes.md is the half that does not change between releases -
-    how to install, what the certificate prompt means, what the application is.
-    This adds the half that must never be written down in advance: the
-    certificate the package was signed with, and the hash of the file people
-    will download.
+    how to install, what the signature means, what the application is.
+    This adds the half that must never be written down in advance: who signed
+    the package, through whom, and when, and the hash of the file people will
+    download.
 
-    BOTH ARE READ OFF THE ARTIFACT, not typed. A thumbprint or a checksum that a
+    BOTH ARE READ OFF THE ARTIFACT, not typed. A signer or a checksum that a
     human copies from the last release is one that eventually describes a
     different file than the one attached, and the failure is silent - it looks
     exactly like a correct release until somebody checks, which is the one thing
@@ -107,20 +107,23 @@ $verification = @"
 | | |
 |---|---|
 | Signed by | ``$($signer.Subject)`` |
+| Certificate issued by | ``$($signer.Issuer)`` |
 | Certificate thumbprint (SHA-1) | ``$($signer.Thumbprint)`` |
-| Certificate expires | $($signer.NotAfter.ToString('d MMMM yyyy')) |
+| Timestamped by | ``$(($signature.TimeStamperCertificate.Subject -split ',')[0] -replace '^CN=', '')`` |
 $($rows -join [Environment]::NewLine)
 
-Windows shows you the thumbprint in the trust prompt; it should match the row
-above. To check the download itself, with the name of the zip you downloaded:
+To check the download itself, with the name of the zip you downloaded:
 
 ``````powershell
 Get-FileHash .\WinZ3805A-<version>-x64.zip -Algorithm SHA256
 ``````
 
-The signature is **timestamped**, so this release stays installable after the
-certificate expires — a signature countersigned while the certificate was valid
-stays valid. Nothing here needs re-downloading on that date.
+The signature is made through **Azure Artifact Signing**, whose certificates last
+three days and are renewed daily, so the thumbprint differs from release to
+release while the *Signed by* name stays the same. The signature is
+**timestamped**, which is what keeps this release installable long after that
+certificate has expired: a signature countersigned while the certificate was
+valid stays valid.
 
 "@
 
