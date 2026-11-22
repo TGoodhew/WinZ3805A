@@ -12,12 +12,13 @@
 
     Scenarios (manual-qa.md §12, and §8 on the host):
       binary-audit       §8   no excluded command in the shipped assemblies (host, no VM)
-      release-assets     §12  the zips are what they say: version, signer, certificate, Microsoft's .NET
-                              installer; with -Release, the notes' hashes, thumbprint and .NET row (host)
+      release-assets     §12  the zips are what they say: version, a valid timestamped signer that is the declared
+                              publisher and no .cer, Microsoft's .NET installer; with -Release, the notes'
+                              hashes, signer, thumbprint and .NET row (host)
       fresh-online       §12  the online zip on a machine with no .NET: exit 3, app installed
       fresh-offline      §12  the offline zip installs .NET too: exit 0, the start check passes
       unblocked-download §12  the online zip marked as a browser marks it, unblocked, extracted by Explorer:
-                              the notes' thumbprint, one prompt, the .NET page named, Microsoft Update's
+                              the notes' signature verified, no prompt, the .NET page named, Microsoft Update's
                               line true; then .NET installed and the app started from Start
       offline-no-network §12  the offline zip with the VM's network adapter disconnected: .NET from the zip,
                               one prompt, the app started, .NET listed as an ordinary Microsoft install
@@ -25,7 +26,8 @@
                               installer must fail legibly
       upgrade-1.2.0      §12  a used v1.2.0 replaced: data moved, old copy and certificate gone
       upgrade-previous   §12  the last release installed and used - history, a setting changed, a port
-                              remembered - then this one over it: one copy, all of it kept
+                              remembered - then this one over it: one copy, all of it kept (a replacement
+                              rather than an upgrade in place when the publisher changed, as at 2.0.0)
       leftover-cert      §12  v1.2.0 uninstalled by hand: its certificate is still removed
       replace-v130       §12  v1.3.0 used, with a remembered port, and RUNNING: the installer must ask and
                               wait, then replace it in one prompt with its data and port moved (#590)
@@ -174,9 +176,60 @@ if (-not $OutDir) { $OutDir = Join-Path $env:LOCALAPPDATA ('WinZ3805A QA\runs\{0
 New-Item -ItemType Directory -Force $OutDir | Out-Null
 $vmRoot = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'Virtual Machines\QA'
 
-# The certificates every release has been signed with. Named by thumbprint, as the installer does.
-$currentCert = '7F47E8D75FB856C5A1665900293EDB491E278B3C'
-$retiredCert = '655D07E31BDA80CBF6AAC2F2635EA6664B9399DD'
+# The self-signed certificates earlier releases asked people to trust. Named by thumbprint, as the
+# installer does. Both are retired: from 2.0.0 the package is signed with Azure Artifact Signing, which
+# chains to a public root, and the installer adds nothing to any store (#793) - so a candidate passes
+# only when NEITHER is in Trusted People after it installs.
+$devCert = '7F47E8D75FB856C5A1665900293EDB491E278B3C'      # v1.3.1 to v1.5.x
+$retiredCert = '655D07E31BDA80CBF6AAC2F2635EA6664B9399DD'  # v1.0.1 to v1.3.0
+
+# Windows' publisher ID: the first 64 bits of the SHA-256 of the UTF-16 publisher, as 13 Crockford
+# base-32 characters. It is the suffix of a package family name.
+function Get-PublisherId {
+    param([string]$Publisher)
+    $hash = [Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::Unicode.GetBytes($Publisher))
+    $bits = (($hash[0..7] | ForEach-Object { [Convert]::ToString($_, 2).PadLeft(8, '0') }) -join '') + '0'
+    $alphabet = '0123456789abcdefghjkmnpqrstvwxyz'
+    -join (0..12 | ForEach-Object { $alphabet[[Convert]::ToInt32($bits.Substring($_ * 5, 5), 2)] })
+}
+
+# What the candidate installs as, read from the bundle inside its own zip rather than written here: the
+# publisher changed at 2.0.0 (#793), and a family suffix written down is right for one side of a change
+# like that only. Read once, on first use, by which time -Release has resolved the zips.
+$script:candidateIdentity = $null
+function Get-CandidateIdentity {
+    if ($script:candidateIdentity) { return $script:candidateIdentity }
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $zip = [IO.Compression.ZipFile]::OpenRead($Offline)
+    try {
+        $entry = $zip.Entries | Where-Object { $_.Name -like '*.msixbundle' } | Select-Object -First 1
+        $memory = New-Object IO.MemoryStream
+        $stream = $entry.Open(); try { $stream.CopyTo($memory) } finally { $stream.Dispose() }
+        # The signature is read from a file: Get-AuthenticodeSignature takes nothing else.
+        $bundleFile = Join-Path $OutDir 'candidate.msixbundle'
+        [IO.File]::WriteAllBytes($bundleFile, $memory.ToArray())
+        $memory.Position = 0
+        $bundle = New-Object IO.Compression.ZipArchive($memory)
+        try {
+            $reader = New-Object IO.StreamReader($bundle.GetEntry('AppxMetadata/AppxBundleManifest.xml').Open())
+            try { [xml]$manifest = $reader.ReadToEnd() } finally { $reader.Dispose() }
+        }
+        finally { $bundle.Dispose() }
+    }
+    finally { $zip.Dispose() }
+    $signature = Get-AuthenticodeSignature -FilePath $bundleFile
+    Remove-Item $bundleFile -ErrorAction SilentlyContinue
+    $identity = $manifest.Bundle.Identity
+    $script:candidateIdentity = [pscustomobject]@{
+        Publisher       = $identity.Publisher
+        Family          = "$($identity.Name)_$(Get-PublisherId $identity.Publisher)"
+        SignatureStatus = "$($signature.Status)"
+        Signer          = "$($signature.SignerCertificate.Subject)"
+        Thumbprint      = "$($signature.SignerCertificate.Thumbprint)"
+        Timestamped     = [bool]$signature.TimeStamperCertificate
+    }
+    $script:candidateIdentity
+}
 
 function Say { param([string]$Text) Write-Host ('{0:HH:mm:ss}  {1}' -f (Get-Date), $Text) }
 
@@ -421,8 +474,11 @@ function Test-FreshOnline {
     $log = Save-Evidence $Vm $Result.Folder
     $facts = Get-Facts $Vm
     Check $Result 'exit code 3 (installed, .NET missing)' ($code -eq 3) "exit $code"
-    Check $Result 'this release installed' (@($facts.packages | Where-Object { $_.family -like '*c2j642r4w54xr' }).Count -eq 1)
-    Check $Result 'its certificate trusted' ($facts.certificates -contains $currentCert)
+    Check $Result 'this release installed' (@($facts.packages | Where-Object { $_.family -eq (Get-CandidateIdentity).Family }).Count -eq 1)
+    Check $Result 'no certificate added to Trusted People (#793)' (-not ($facts.certificates -contains $devCert -or $facts.certificates -contains $retiredCert)) ($facts.certificates -join ', ')
+    # -not over -match rather than -notmatch: $log may be the log's lines, and on an array -notmatch
+    # filters rather than tests, so it would pass whenever any line did not elevate.
+    Check $Result 'no administrator prompt: nothing needed one' (-not ($log -match 'elevating for:')) ''
     Check $Result 'start check skipped for .NET' ($log -match 'start check   skipped: \.NET 10 is not installed yet')
 }
 
@@ -434,7 +490,7 @@ function Test-FreshOffline {
     $facts = Get-Facts $Vm
     Check $Result 'exit code 0 (installed and started)' ($code -eq 0) "exit $code"
     Check $Result '.NET 10 installed' (@($facts.dotnet | Where-Object { $_ -like '10.*' }).Count -gt 0) ($facts.dotnet -join ', ')
-    Check $Result 'one elevation, for the certificate and .NET' (([regex]::Matches($log, 'elevating for:')).Count -eq 1 -and $log -match 'elevating for: certificate \.NET')
+    Check $Result 'one elevation, for .NET alone (#793)' (([regex]::Matches($log, 'elevating for:')).Count -eq 1 -and $log -match 'elevating for: \.NET\s*$')
     Check $Result 'start check passed' ($log -match 'finished      started ok: True')
     # Section 12's runtime rows (#594, #595), as each VM has them: QA-Win11's Clean snapshot carries the
     # Store's newer Microsoft.WindowsAppRuntime.2, so the installer must leave it and the companions
@@ -475,10 +531,10 @@ function Test-Upgrade120 {
     $expectedOrder = if ($facts.build -lt 22000) { 'save and remove the earlier copy, then install' } else { 'install, then save and remove the earlier copy' }
     Check $Result 'exit code 0' ($code -eq 0) "exit $code"
     Check $Result "order for build $($facts.build)" ($log -match [regex]::Escape("decide order  $expectedOrder"))
-    Check $Result 'only this release installed' (@($facts.packages).Count -eq 1 -and $facts.packages[0].family -like '*c2j642r4w54xr') (($facts.packages | ForEach-Object { "$($_.family) $($_.version)" }) -join ', ')
+    Check $Result 'only this release installed' (@($facts.packages).Count -eq 1 -and $facts.packages[0].family -eq (Get-CandidateIdentity).Family) (($facts.packages | ForEach-Object { "$($_.family) $($_.version)" }) -join ', ')
     Check $Result 'earlier certificate removed' (-not ($facts.certificates -contains $retiredCert))
     Check $Result 'earlier data saved to Documents' (@($facts.savedCopies | Where-Object { $_.trendDb }).Count -ge 1)
-    Check $Result 'history moved into the new copy' (@($facts.data | Where-Object { $_.family -like '*c2j642r4w54xr' -and $_.trendDb }).Count -eq 1)
+    Check $Result 'history moved into the new copy' (@($facts.data | Where-Object { $_.family -eq (Get-CandidateIdentity).Family -and $_.trendDb }).Count -eq 1)
     Check $Result 'start check passed' ($log -match 'finished      started ok: True')
 }
 
@@ -492,7 +548,7 @@ function Test-LeftoverCert {
     $facts = Get-Facts $Vm
     Check $Result 'exit code 0' ($code -eq 0) "exit $code"
     Check $Result 'leftover certificate removed' (-not ($facts.certificates -contains $retiredCert))
-    Check $Result 'this release trusted' ($facts.certificates -contains $currentCert)
+    Check $Result 'and nothing added in its place (#793)' (-not ($facts.certificates -contains $devCert)) ($facts.certificates -join ', ')
 }
 
 
@@ -4313,15 +4369,37 @@ function Test-UpgradePrevious {
         Check $Result "[12] $candidateVersion installed over $previous (exit 0)" ($code -eq 0) "exit $code"
         $facts = Get-Facts $Vm
         $packages = @($facts.packages)
-        Check $Result '[12] one copy, upgraded in place: the same package family, at the new version' ($packages.Count -eq 1 -and $packages[0].version -eq $candidateVersion -and $packages[0].family -eq $before.family) (($packages | ForEach-Object { "$($_.family) $($_.version)" }) -join '; ')
+        # ACROSS A CHANGE OF PUBLISHER - 1.5.x to 2.0.0 (#793) - the previous release is an earlier
+        # identity, so this is the installer's replacement (#590) rather than Windows' upgrade in place:
+        # a new package family, whose history is a copy of the old file rather than the old file. What
+        # the person had must survive either way, and that is what the checks below hold to.
+        $replaced = $before.family -ne (Get-CandidateIdentity).Family
+        if ($replaced) {
+            Check $Result "[12] one copy: $previous, under the earlier publisher, replaced by the new package family at the new version" ($packages.Count -eq 1 -and $packages[0].version -eq $candidateVersion -and $packages[0].family -eq (Get-CandidateIdentity).Family) (($packages | ForEach-Object { "$($_.family) $($_.version)" }) -join '; ')
+        }
+        else {
+            Check $Result '[12] one copy, upgraded in place: the same package family, at the new version' ($packages.Count -eq 1 -and $packages[0].version -eq $candidateVersion -and $packages[0].family -eq $before.family) (($packages | ForEach-Object { "$($_.family) $($_.version)" }) -join '; ')
+        }
         $seen = Wait-AppLog $Vm 'State: LOCK' $mark 120 'relocked'
         Check $Result '[12] the upgraded app reconnected to the remembered port by itself, and locked' $seen.found "$($seen.line)$(if (-not $seen.found) { $seen.tail })"
         $read = Invoke-UiStep $Vm 'upgraded-setting' "`$mode = 'read'" $lockSwitchStep
         Check $Result '[12] the setting changed on the old version is still changed' (-not $read.error -and $read.before -eq 'Off') "$($read.error) the switch reads $($read.before)"
         $after = (Invoke-QaGuestScript $Vm -Name 'after-upgrade' -Script $dataFactsStep).Output -split "`r?`n" | Where-Object { $_.StartsWith('{') } | Select-Object -Last 1 | ConvertFrom-Json
-        Check $Result '[12] the history is the same file, with every reading kept and the oldest still first' ($after.dbCreated -eq $before.dbCreated -and $after.rows -ge $before.rows -and $after.oldest -eq $before.oldest) "created $(if ($after.dbCreated -eq $before.dbCreated) { 'unchanged' } else { 'CHANGED' }); $($before.rows) -> $($after.rows) readings; oldest $(if ($after.oldest -eq $before.oldest) { 'unchanged' } else { "$($before.oldest) -> $($after.oldest)" })"
+        $readings = "$($before.rows) -> $($after.rows) readings; oldest $(if ($after.oldest -eq $before.oldest) { 'unchanged' } else { "$($before.oldest) -> $($after.oldest)" })"
+        if ($replaced) {
+            Check $Result '[12] the history moved across, with every reading kept and the oldest still first' ($after.rows -ge $before.rows -and $after.oldest -eq $before.oldest) $readings
+        }
+        else {
+            Check $Result '[12] the history is the same file, with every reading kept and the oldest still first' ($after.dbCreated -eq $before.dbCreated -and $after.rows -ge $before.rows -and $after.oldest -eq $before.oldest) "created $(if ($after.dbCreated -eq $before.dbCreated) { 'unchanged' } else { 'CHANGED' }); $readings"
+        }
         Check $Result '[12] the remembered port is untouched' ($after.connection -eq $before.connection) ''
-        Check $Result '[12] no data saved aside: an upgrade in place has no earlier copy to replace' ($log -notmatch 'Replacing the earlier copy')
+        if ($replaced) {
+            # Windows 11 replaces after installing, Windows 10 before (#617); either way it is said.
+            Check $Result '[12] the earlier copy was saved aside and removed, as a replacement must' ($log -match 'Replacing the earlier copy|Removing the earlier copy' -and @($facts.savedCopies | Where-Object { $_.trendDb }).Count -ge 1) ''
+        }
+        else {
+            Check $Result '[12] no data saved aside: an upgrade in place has no earlier copy to replace' ($log -notmatch 'Replacing the earlier copy')
+        }
     }
     finally {
         if (-not $simulator.HasExited) { $simulator.Kill() }
@@ -4434,11 +4512,11 @@ function Test-UninstallSideload {
     Copy-QaFile $Vm -Source (Join-Path $repo 'build\Uninstall-Sideload.ps1') -Destination 'C:\qa\clone\build\Uninstall-Sideload.ps1' -ToGuest
     Copy-QaFile $Vm -Source (Join-Path $repo 'src\WinZ3805A\Package.appxmanifest') -Destination 'C:\qa\clone\src\WinZ3805A\Package.appxmanifest' -ToGuest
     $before = Get-Facts $Vm
-    Check $Result 'the package and its certificate are there before' (@($before.packages).Count -eq 1 -and $before.certificates -contains $currentCert) ''
+    Check $Result 'the package is there before, with no certificate of its own in Trusted People (#793)' (@($before.packages).Count -eq 1 -and -not ($before.certificates -contains $devCert)) ''
     $run = Invoke-QaGuestScript $Vm -Name 'uninstall-sideload' -Script "Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue | Stop-Process -Force; & 'C:\qa\clone\build\Uninstall-Sideload.ps1'; exit `$LASTEXITCODE"
     $after = Get-Facts $Vm
     Check $Result '[12] Uninstall-Sideload.ps1 leaves no package' (@($after.packages).Count -eq 0) (($after.packages | ForEach-Object { "$($_.family) $($_.version)" }) -join ', ')
-    Check $Result '[12] and no certificate in Trusted People' (-not ($after.certificates -contains $currentCert)) "exit $($run.ExitCode)"
+    Check $Result '[12] and no certificate of any release in Trusted People' (-not ($after.certificates -contains $devCert -or $after.certificates -contains $retiredCert)) "exit $($run.ExitCode)"
     try { $null = Save-Evidence $Vm $Result.Folder } catch { }
 }
 
@@ -4505,8 +4583,8 @@ Start-Sleep -Seconds 15
     Check $Result '[12] one administrator prompt' ($elevations.Count -eq 1) ($elevations -join ' | ')
     Check $Result '[12] it finished, and the start check found the app running' ($r.exit -eq 0 -and $log -match 'finished      started ok: True') "exit $($r.exit)"
     $facts = Get-Facts $Vm
-    Check $Result '[12] only this release is installed' (@($facts.packages).Count -eq 1 -and $facts.packages[0].family -like '*c2j642r4w54xr') (($facts.packages | ForEach-Object { "$($_.family) $($_.version)" }) -join ', ')
-    Check $Result "[12] Trusted People holds only this release's certificate" (($facts.certificates -contains $currentCert) -and -not ($facts.certificates -contains $retiredCert)) ''
+    Check $Result '[12] only this release is installed' (@($facts.packages).Count -eq 1 -and $facts.packages[0].family -eq (Get-CandidateIdentity).Family) (($facts.packages | ForEach-Object { "$($_.family) $($_.version)" }) -join ', ')
+    Check $Result '[12] Trusted People holds no certificate of any release (#793)' (-not ($facts.certificates -contains $devCert -or $facts.certificates -contains $retiredCert)) ($facts.certificates -join ', ')
     Check $Result '[12] Documents has a "WinZ3805A earlier copy 1.3.0.0" folder with trend.db' (@($facts.savedCopies | Where-Object { $_.name -like 'WinZ3805A earlier copy 1.3.0.0*' -and $_.trendDb }).Count -ge 1) (($facts.savedCopies | ForEach-Object { $_.name }) -join ', ')
     $moved = Invoke-QaGuestScript $Vm -Name 'moved-data' -Script @'
 $pkg = Get-AppxPackage -Name WinZ3805A | Select-Object -First 1
@@ -4546,7 +4624,9 @@ $docs = [Environment]::GetFolderPath('MyDocuments')
 '@
     function Read-State { (Invoke-QaGuestScript $Vm -Name 'remove-state' -Script $state).Output -split "`r?`n" | Where-Object { $_.StartsWith('{') } | Select-Object -Last 1 | ConvertFrom-Json }
     $before = Read-State
-    Check $Result 'the starting state: a package, both certificates, a saved earlier copy, installer logs' ($before.packages -eq 1 -and $before.machine -match $currentCert -and $before.user -match $retiredCert -and $before.earlierCopies -ge 1 -and $before.installerFolder) ($before | ConvertTo-Json -Compress)
+    # Since 2.0.0 the machine's store holds nothing of ours once the installer has run (#793): it took
+    # v1.2.0's certificate out and added none. The account's copy of it is what is left to remove.
+    Check $Result "the starting state: a package, v1.2.0's certificate in the account's store, a saved earlier copy, installer logs" ($before.packages -eq 1 -and $before.user -match $retiredCert -and $before.earlierCopies -ge 1 -and $before.installerFolder) ($before | ConvertTo-Json -Compress)
     $list = Invoke-QaGuestScript $Vm -Name 'remove-list-only' -Script "& 'C:\qa\Remove-WinZ3805A.ps1' -ListOnly; exit `$LASTEXITCODE"
     $listed = Read-State
     # Every run writes its log to the Desktop, -ListOnly included; everything else must be as it was.
@@ -4559,7 +4639,7 @@ $docs = [Environment]::GetFolderPath('MyDocuments')
     $run = Invoke-QaGuestScript $Vm -Name 'remove-everything' -Script "Get-Process -Name WinZ3805A -ErrorAction SilentlyContinue | Stop-Process -Force; Start-Sleep -Seconds 2; @('y', 'n', '', '', '', '') | & cmd.exe /c powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\qa\Remove-WinZ3805A.ps1; exit `$LASTEXITCODE"
     $after = Read-State
     Check $Result '[12] the package is gone' ($after.packages -eq 0) "exit $($run.ExitCode)"
-    Check $Result '[12] Trusted People holds neither 7F47E8D7... nor 655D07E3..., for the machine or the account' ($after.machine -notmatch "$currentCert|$retiredCert" -and $after.user -notmatch "$currentCert|$retiredCert") "machine '$($after.machine)'; account '$($after.user)'"
+    Check $Result '[12] Trusted People holds neither 7F47E8D7... nor 655D07E3..., for the machine or the account' ($after.machine -notmatch "$devCert|$retiredCert" -and $after.user -notmatch "$devCert|$retiredCert") "machine '$($after.machine)'; account '$($after.user)'"
     Check $Result "[12] the installer's folder is gone" (-not $after.installerFolder) ''
     Check $Result '[12] Documents has a "WinZ3805A saved data" folder with trend.db, and the earlier saved copies are still there' ($after.savedData -ge 1 -and $after.earlierCopies -eq $before.earlierCopies) "saved data $($after.savedData); earlier copies $($before.earlierCopies) -> $($after.earlierCopies)"
     Check $Result '[12] the Windows App Runtime and .NET are untouched' ($after.runtime -eq $before.runtime -and $after.dotnet -eq $before.dotnet) "runtime packages $($before.runtime) -> $($after.runtime); .NET $($before.dotnet) -> $($after.dotnet)"
@@ -4952,14 +5032,15 @@ function Send-MarkedZip {
     Invoke-UiStep $Vm "marked-$Label" "`$zipName = '$name'; `$label = '$Label'; `$unblock = '$(if ($Unblock) { 'yes' } else { 'no' })'" $markedExtractStep
 }
 
-# The thumbprint the published notes give, or for a dry run the certificate the zip carries.
+# The thumbprint the published notes give, or for a dry run the one on the candidate's own bundle.
+# Artifact Signing renews its certificate daily, so no thumbprint can be written down here (#793).
 function Get-ExpectedThumbprint {
     if ($Release) {
         # Joined: gh prints lines, and -match on an array filters it without setting $Matches.
         $body = (gh release view $Release --repo TGoodhew/WinZ3805A --json body -q .body 2>$null) -join "`n"
         if ($body -match 'Certificate thumbprint \(SHA-1\) \| `([0-9A-F]{40})`') { return $Matches[1] }
     }
-    $currentCert
+    (Get-CandidateIdentity).Thumbprint
 }
 
 # Section 12, the online row: downloaded, unblocked, extracted by Explorer, installed on a machine
@@ -4973,9 +5054,9 @@ function Test-UnblockedDownload {
     $log = (Save-Evidence $Vm $Result.Folder) -join "`n"
     $expected = Get-ExpectedThumbprint
     Check $Result 'exit code 3 (installed, .NET missing)' ($code -eq 3) "exit $code"
-    Check $Result "[12] the certificate trusted is the one the notes give ($($expected.Substring(0, 8))...)" ($log -match "signing\s+$expected" -and $log -match "ok    Trusted\. Certificate $($expected.Substring(0, 8))") "expected $expected"
+    Check $Result "[12] the signature Windows verified is the one the notes give ($($expected.Substring(0, 8))...)" ($log -match "signing\s+Valid, $expected, signer $([regex]::Escape((Get-CandidateIdentity).Publisher)),") "expected $expected"
     $elevations = @($log -split "`r?`n" | Where-Object { $_ -match 'elevating for:' })
-    Check $Result '[12] one administrator prompt, for the certificate alone' ($elevations.Count -eq 1 -and $elevations[0] -match 'elevating for: certificate\s*$') ($elevations -join ' | ')
+    Check $Result '[12] no administrator prompt: nothing to trust, and .NET comes from the page (#793)' ($elevations.Count -eq 0) ($elevations -join ' | ')
     Check $Result '[12] step 2 says .NET 10 is missing and names the page' ($log -match 'Not installed\. WinZ3805A needs the free \.NET 10 Runtime' -and $log -match 'Opening https://dotnet\.microsoft\.com/download/dotnet/10\.0')
     $mu = Invoke-QaGuestScript $Vm -Name 'mu-setting' -Script @'
 try { $m = New-Object -ComObject Microsoft.Update.ServiceManager; $on = @($m.Services | Where-Object { $_.ServiceID -eq '7971f918-a847-4430-9279-4a52d1efe18d' -and $_.IsRegisteredWithAU }).Count -gt 0; "MU=$(if ($on) { 'on' } else { 'off' })" } catch { 'MU=unknown' }
@@ -5014,7 +5095,7 @@ $reach = try { [bool](Invoke-WebRequest -UseBasicParsing 'https://dotnet.microso
         $log = Save-Evidence $Vm $Result.Folder
         $facts = Get-Facts $Vm
         Check $Result 'exit code 0 (installed and started)' ($code -eq 0) "exit $code"
-        Check $Result '[12] one administrator prompt, for the certificate and .NET together' (([regex]::Matches($log, 'elevating for:')).Count -eq 1 -and $log -match 'elevating for: certificate \.NET')
+        Check $Result '[12] one administrator prompt, for .NET alone (#793)' (([regex]::Matches($log, 'elevating for:')).Count -eq 1 -and $log -match 'elevating for: \.NET\s*$')
         $dotnet = if ($log -match 'ok    \.NET (10\.\d+\.\d+) installed') { $Matches[1] } else { $null }
         Check $Result '[12] step 2 reports .NET 10.0.x installed, from the zip' ([bool]$dotnet) "$dotnet"
         if ($Release) {
@@ -5315,9 +5396,11 @@ if ($Scenarios -contains 'release-assets') {
             Expand-Archive $zip -DestinationPath $unpacked -Force
             $bundle = Get-ChildItem $unpacked -Filter *.msixbundle | Select-Object -First 1
             $cer = Get-ChildItem $unpacked -Filter *.cer | Select-Object -First 1
-            $cerThumb = if ($cer) { (New-Object System.Security.Cryptography.X509Certificates.X509Certificate2 $cer.FullName).Thumbprint } else { '' }
-            $signer = if ($bundle) { (Get-AuthenticodeSignature $bundle.FullName).SignerCertificate.Thumbprint } else { '' }
-            Check $result "[$label] the bundle is signed with this release's certificate, and the zip's certificate is that one" ($signer -eq $currentCert -and $cerThumb -eq $currentCert) "signer $signer; WinZ3805A.cer $cerThumb"
+            $signature = if ($bundle) { Get-AuthenticodeSignature $bundle.FullName } else { $null }
+            $declared = (Get-CandidateIdentity).Publisher
+            # Valid on this host with nothing of ours trusted: the chain is to a public root (#793).
+            Check $result "[$label] the bundle is validly signed, timestamped, by exactly its declared publisher" ($signature -and $signature.Status -eq 'Valid' -and $signature.TimeStamperCertificate -and $signature.SignerCertificate.Subject -eq $declared) "$(if ($signature) { "$($signature.Status), signer $($signature.SignerCertificate.Subject), timestamped $([bool]$signature.TimeStamperCertificate)" } else { 'no bundle' }); declared $declared"
+            Check $result "[$label] the zip carries no certificate to trust (#793)" (-not $cer) "$(if ($cer) { $cer.Name })"
             # The bundle's own manifest says what version Windows will install.
             Copy-Item $bundle.FullName (Join-Path $unpacked 'bundle.zip')
             Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -5348,7 +5431,7 @@ if ($Scenarios -contains 'release-assets') {
             foreach ($name in $hashes.Keys) {
                 Check $result "[published] the notes give $name's SHA-256, and it matches the download" ($body -match "``$([regex]::Escape($name))`` SHA-256 \| ``$($hashes[$name])``") "downloaded $($hashes[$name].Substring(0, 16))..."
             }
-            Check $result '[published] the notes give this release''s certificate thumbprint' ($body -match "Certificate thumbprint \(SHA-1\) \| ``$currentCert``") ''
+            Check $result '[published] the notes give the signer and thumbprint on the bundle' ($body -match "Signed by \| ``$([regex]::Escape((Get-CandidateIdentity).Signer))``" -and $body -match "Certificate thumbprint \(SHA-1\) \| ``$((Get-CandidateIdentity).Thumbprint)``") "bundle $((Get-CandidateIdentity).Thumbprint)"
             Check $result "[published] the notes' .NET row names the runtime the offline zip carries ($dotnetVersion)" ($dotnetVersion -and $body -match "\.NET Runtime in ``WinZ3805A-$([regex]::Escape($version))-x64-offline\.zip`` \| $([regex]::Escape($dotnetVersion))") ''
         }
     }
