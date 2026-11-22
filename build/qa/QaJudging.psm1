@@ -22,7 +22,17 @@
 #   judging\        the triptychs to judge from
 #   report.md       the report, regenerated whenever a verdict is recorded
 
-Add-Type -ReferencedAssemblies System.Drawing -TypeDefinition @"
+# THE REFERENCES ARE READ FROM THE RUNTIME, NOT LISTED (22 Nov 2026). From PowerShell 7.7, on .NET 11,
+# naming the System.Drawing facade alone fails with CS1069 - it only forwards Bitmap to
+# System.Drawing.Common - and naming that fails next with CS0012, because Bitmap's base types now live
+# in System.Private.Windows.Core and .GdiPlus, which no earlier runtime has. So the list is whatever the
+# loaded System.Drawing.Common itself references, which is right on every runtime. Either failure
+# stopped the whole QA pass at import, before any VM started.
+Add-Type -AssemblyName System.Drawing
+$drawingReferences = @('System.Drawing', 'System.Drawing.Common', 'System.Drawing.Primitives') +
+    @([System.Drawing.Bitmap].Assembly.GetReferencedAssemblies() |
+        Where-Object { $_.Name -like 'System.Private.Windows.*' } | ForEach-Object Name) | Select-Object -Unique
+Add-Type -ReferencedAssemblies $drawingReferences -TypeDefinition @"
 using System; using System.Drawing; using System.Drawing.Imaging; using System.Runtime.InteropServices;
 public static class QaJudge {
     static int[] Pixels(Bitmap b) {
