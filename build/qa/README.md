@@ -194,6 +194,53 @@ answered with newlines and its outcome read from its log, so older releases can 
 That is how the harness was shown to fail: given v1.3.2, `upgrade-1.2.0` fails on Windows 10
 exactly as #617 did.
 
+## The install rows in Windows Sandbox, without the VMs
+
+`Invoke-SandboxQa.ps1` runs the installer's Windows 11 rows in **Windows Sandbox**, which needs
+nothing provisioned: turn on the *Windows Sandbox* optional feature and give it the candidate's zips.
+It was written for #793, when the move to Artifact Signing needed its install rows run and neither
+VMware nor the QA VMs were on the development machine.
+
+```powershell
+.\build\qa\Invoke-SandboxQa.ps1 -Online dist\WinZ3805A-2.0.0.0-x64.zip -Offline dist\WinZ3805A-2.0.0.0-x64-offline.zip
+```
+
+Each scenario gets a fresh sandbox, one at a time, and judges itself: PASS and FAIL lines as it goes,
+`results.json` and every job's output, installer log and facts under `-OutDir`, and exit 1 if any
+check failed. Each sandbox opens a window on the desktop for the few minutes it runs; leave it alone.
+
+| Scenario | What it holds the candidate to |
+|---|---|
+| `offline-no-network` | The offline zip with the sandbox's networking **disabled**: the signature verifies, one prompt for .NET alone, installed in the candidate's family, the app running, nothing in Trusted People. The sandbox starts *without* Microsoft's Identity Verification root in its store, so this is the sharpest offline test there is: on 26100 Windows supplied the root itself |
+| `fresh-online` | The online zip: exit 3, no prompt, nothing in Trusted People; then the offline zip over it: one prompt for .NET, the app running |
+| `tampered` | One byte of the bundle changed: `HashMismatch`, exit 1, nothing installed, and the person told to download again |
+| `upgrade-previous` | The previous release (newest published below the candidate, or `-Previous`) installed and given a marker file in its data, then the candidate: one copy at the new version, the marker moved across, replaced with the earlier copy saved aside when the publisher changed and upgraded in place when it did not, and no certificate of any release left. Then `Remove-WinZ3805A.ps1`: `-ListOnly` changes nothing, the real run leaves no package and saves the data |
+| `leftover-cert` | The previous release removed in Settings, then the candidate: any certificate it left in Trusted People is gone |
+
+**What it cannot cover**, and `Invoke-QaPass.ps1` on the VMs still must:
+- **Windows 10**: the sandbox is always a Windows 11 build (26100 Enterprise in Nov 2026), so neither #617's order nor whether a never-online Windows 10 carries the Microsoft root;
+- **the UAC prompt**, since the sandbox has UAC off;
+- the receiver simulator, anything needing a restart, and the app-level scenarios.
+
+**A launch can hang on a black screen, and the cause is not known.** The sandbox boots, its window
+opens black, and nobody is ever signed in (`query session` from SYSTEM shows session 1 *Down*), so
+the agent never runs. On 22 Nov 2026 the first sandbox of a run nearly always signed in and most
+later ones hung, while sandboxes started by hand - even 20 seconds apart, and with the configuration
+that had just hung - signed in. Clicking *Reconnect* did not help. Two things are in the script
+because each helped once and neither cured it: the configuration sets `<VGpu>Disable</VGpu>`, and
+every launch first ends the previous sandbox's window, the sandbox and its lingering
+`WindowsSandboxServer`. A launch that has not signed in after three minutes is retried, three times
+in all, and a scenario whose sandbox never signs in fails that scenario alone; run it again with
+`-Scenarios <name>`. Do not close a black sandbox window by hand: closing it ends the sandbox the
+script is waiting on.
+
+Two things worth not rediscovering. **`wsb exec --run-as ExistingLogin` finds no session**, even with
+the sandbox's window open, and SYSTEM cannot install a per-user package; so the configuration's
+`LogonCommand` starts `sandbox\agent.ps1` in the signed-in session, and it runs each job from a mapped
+folder. And **cmd strips the outer quotes of a `/c` line that starts with one**, which broke the
+quoted path and the redirection together: Install.cmd never ran and every scenario read as exit 1.
+`sandbox\lib.ps1` wraps the whole line in one more pair.
+
 ## Running a release
 
 ```powershell
