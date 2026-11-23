@@ -116,8 +116,9 @@ oldest Windows the app will install and run on, the second is the API surface it
 against. `Install.cmd` says so in words on anything older, before changing anything.
 
 > **The floor is what is tested** (#705, 5 Oct 2026). It was Windows 10 1809 - the Windows App
-> SDK's own floor - but nothing ever ran the application there, while every release's QA pass runs
-> on Windows 10 22H2 and Windows 11 (`build/qa`). So the declared minimum is the oldest Windows the
+> SDK's own floor - but nothing ever ran the application there, while the release QA pass runs
+> on Windows 10 22H2 and Windows 11 (`build/qa`); 2.0.0 is the one release tested on Windows 11
+> only (see above). So the declared minimum is the oldest Windows the
 > pass covers. Server 2019 (build 17763) went with 1809. Anyone choosing a machine for this
 > application should be on Windows 11.
 
@@ -146,7 +147,14 @@ this application does not use; its comment explains why `Microsoft.WindowsAppSDK
 excluded - a framework-dependent build refuses to restore without it.
 
 **It is confirmed by running the application on Windows 10 22H2**: QA-Win10, a VM provisioned from
-Microsoft's 22H2 media, runs every scenario of every release's QA pass.
+Microsoft's 22H2 media, runs every scenario of the release QA pass.
+
+> **2.0.0 is the exception: it was tested on Windows 11 only** (#793, 22 Nov 2026). Its install rows
+> ran in Windows Sandbox (Windows 11 26100) because the QA VMs were not on the development machine,
+> and the Windows 10 rows were deliberately skipped. 2.0.0 still declares and installs on Windows 10
+> 22H2, but nothing has run it there - in particular, whether a Windows 10 PC that has never been
+> online can verify the new Artifact Signing signature, which Windows 11 could. The next release's
+> pass on QA-Win10 closes the gap.
 
 Sources: [Windows App SDK and supported Windows releases](https://learn.microsoft.com/en-us/windows/apps/windows-app-sdk/support),
 [Windows App SDK 2.0 release notes](https://learn.microsoft.com/en-us/windows/apps/windows-app-sdk/release-notes/windows-app-sdk-2-0).
