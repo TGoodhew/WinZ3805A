@@ -84,7 +84,7 @@ words, before changing anything; connecting the PC once fixes it.
 ### Requirements
 
 - **Windows 10 version 22H2 (build 19045) or later, or Windows 11, x64.** That is the floor the
-  package declares and the oldest Windows every release is tested on; the installer stops, and
+  package declares and the oldest Windows the release QA pass covers; the installer stops, and
   says why, on anything older. From **1.3.6** this was raised from Windows 10 1809.
 - **.NET 10 Runtime**, free from Microsoft. The offline zip installs it if it is
   missing, and the online zip opens its [download page](https://dotnet.microsoft.com/download/dotnet/10.0).
