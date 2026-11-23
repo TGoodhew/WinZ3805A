@@ -431,6 +431,12 @@ Write-State 'before'
 if ($bundleSignature.Status -eq 'NotSigned') {
     throw "$($bundle.Name) is not signed, so Windows will not install it. This is a development build, not a release; download the release from GitHub."
 }
+if ($bundleSignature.Status -eq 'HashMismatch') {
+    # The file is not what was signed: damaged in the download, or changed since. Measured in Windows
+    # Sandbox on 22 Nov 2026 with one byte of the bundle flipped. Nothing about the PC would fix it.
+    throw ("$($bundle.Name) is not the file that was signed: it was damaged in the download or changed since. " +
+           'Nothing has been changed. Download the release again.')
+}
 if ($bundleSignature.Status -ne 'Valid') {
     # Most often an offline PC: Windows checks a signature against Microsoft's list of trusted roots,
     # and a PC that has never been online since Windows was installed may not have this one yet.
