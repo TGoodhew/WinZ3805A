@@ -148,7 +148,6 @@ C:\Users\Tony\source\WinZ3805A\
 │   │                                  Watch-UccmTransitions.ps1 (#544) for the other two
 │   │                                  families, Capture-GuideImages.ps1, Watch-Soak.ps1;
 │   │                                  the sideload packager, Sign-ArtifactSigning.ps1,
-│   │                                  New-SigningSecrets.ps1 (retired, #793),
 │   │                                  New-ReleaseNotes.ps1, Invoke-Wack.ps1, New-AppAssets.ps1;
 │   │                                  fluent-stock-colours.txt (§9.4.1's measured stock values)
 │   ├── palette/                       The §9.4.4 palette derivation and its validator (#87)

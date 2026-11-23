@@ -45,7 +45,8 @@
 # ARTIFACT_SIGNING_PROFILE, which build/Sign-ArtifactSigning.ps1 reads.
 #
 # Releases up to 1.5.x were signed with a self-signed build\devcert.pfx held in
-# two repository secrets. Its certificate is now retired: install.ps1 removes it
+# two repository secrets, deleted with the script that set them once 2.0.0 was
+# published (23 Nov 2026). Its certificate is retired too: install.ps1 removes it
 # from Trusted People.
 #
 # THE ACTION PINS ARE EXPLAINED IN ci.yml, above its jobs (#377). They have to
