@@ -490,7 +490,7 @@ function Test-FreshOffline {
     $facts = Get-Facts $Vm
     Check $Result 'exit code 0 (installed and started)' ($code -eq 0) "exit $code"
     Check $Result '.NET 10 installed' (@($facts.dotnet | Where-Object { $_ -like '10.*' }).Count -gt 0) ($facts.dotnet -join ', ')
-    Check $Result 'one elevation, for .NET alone (#793)' (([regex]::Matches($log, 'elevating for:')).Count -eq 1 -and $log -match 'elevating for: \.NET\s*$')
+    Check $Result 'one elevation, for .NET alone (#793)' (([regex]::Matches($log, 'elevating for:')).Count -eq 1 -and $log -match '(?m)elevating for: \.NET\s*$')
     Check $Result 'start check passed' ($log -match 'finished      started ok: True')
     # Section 12's runtime rows (#594, #595), as each VM has them: QA-Win11's Clean snapshot carries the
     # Store's newer Microsoft.WindowsAppRuntime.2, so the installer must leave it and the companions
@@ -5095,7 +5095,7 @@ $reach = try { [bool](Invoke-WebRequest -UseBasicParsing 'https://dotnet.microso
         $log = Save-Evidence $Vm $Result.Folder
         $facts = Get-Facts $Vm
         Check $Result 'exit code 0 (installed and started)' ($code -eq 0) "exit $code"
-        Check $Result '[12] one administrator prompt, for .NET alone (#793)' (([regex]::Matches($log, 'elevating for:')).Count -eq 1 -and $log -match 'elevating for: \.NET\s*$')
+        Check $Result '[12] one administrator prompt, for .NET alone (#793)' (([regex]::Matches($log, 'elevating for:')).Count -eq 1 -and $log -match '(?m)elevating for: \.NET\s*$')
         $dotnet = if ($log -match 'ok    \.NET (10\.\d+\.\d+) installed') { $Matches[1] } else { $null }
         Check $Result '[12] step 2 reports .NET 10.0.x installed, from the zip' ([bool]$dotnet) "$dotnet"
         if ($Release) {
